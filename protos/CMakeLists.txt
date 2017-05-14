@@ -1,6 +1,7 @@
 # Proto file
 set(proto_files
     "helloworld.proto"
+    "route_guide.proto"
 )
 
 # Generated sources
