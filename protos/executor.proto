@@ -1,0 +1,59 @@
+syntax = "proto3";
+
+package executor;
+
+service IExecEngine {
+    rpc run(RunRequest) returns (RunResponse) {}
+    rpc allocate(AllocRequest) returns (AllocResponse) {}
+    rpc deallocate(DeallocRequest) returns (DeallocResponse) {}
+}
+
+message RunRequest {
+    OpKernel opkernel = 1;
+    OpContext context = 2;
+}
+
+message RunResponse {
+    ResultCode result = 1;
+    OpContext context = 2;
+}
+
+message DeallocRequest {
+    uint64 addr_handle = 1;
+}
+
+message DeallocResponse {
+    ResultCode result = 1;
+}
+
+message AllocRequest {
+    uint64 alignment = 1;
+    uint64 num_bytes = 2;
+}
+
+message AllocResponse {
+    ResultCode result = 1;
+    uint64 addr_handle = 2;
+}
+
+message OpKernel {
+    enum OpLibraryType {
+        TENSORFLOW = 0;
+    }
+    OpLibraryType oplibrary = 1;
+    string id = 2;
+}
+
+message OpContext {
+    int64 host_temp_memory_size = 1;
+    int64 device_temp_memory_size = 2;
+    repeated int64 host_persistent_alloc_ids = 3;
+    repeated int64 device_persistent_alloc_ids = 4;
+    int64 host_persistent_memory_allocated = 5;
+    int64 device_persistent_memory_allocated = 6;
+    bool is_output_dead = 7;
+}
+
+message ResultCode {
+    int32 code = 1;
+}

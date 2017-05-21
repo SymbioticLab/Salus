@@ -2,6 +2,7 @@
 set(proto_files
     "helloworld.proto"
     "route_guide.proto"
+    "executor.proto"
 )
 
 # Generated sources
