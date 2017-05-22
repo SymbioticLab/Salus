@@ -39,7 +39,18 @@ ITask * TFOpLibrary::createTask(const rpc::OpKernelDef& opdef, const rpc::OpCont
     return new TFTask(kernel, context);
 }
 
+TFTask::TFTask(tensorflow::OpKernel *kernel, tensorflow::OpKernelContext *context)
+    : m_opkernel(kernel)
+    , m_context(context)
+{ }
+
 rpc::ResultCode TFTask::run()
 {
     m_opkernel->Compute(m_context.get());
+}
+
+rpc::OpContextDef TFTask::contextDef()
+{
+    // TODO: serialize context to def
+    return {};
 }

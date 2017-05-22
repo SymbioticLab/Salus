@@ -35,6 +35,7 @@ public:
     TFTask(tensorflow::OpKernel *kernel, tensorflow::OpKernelContext *context);
 
     executor::ResultCode run() override;
+    executor::OpContextDef contextDef() override;
 
 private:
     std::unique_ptr<tensorflow::OpKernel> m_opkernel;

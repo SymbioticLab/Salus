@@ -26,6 +26,7 @@ class ITask
 {
 public:
     virtual executor::ResultCode run() = 0;
+    virtual executor::OpContextDef contextDef() = 0;
 };
 
 /**

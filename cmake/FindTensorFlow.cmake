@@ -63,19 +63,6 @@ find_path(TensorFlow_INCLUDE_DIR
     third_party
 )
 
-# include dir for generated files
-find_path(TensorFlow_GEN_INCLUDE_DIR
-    NAMES
-    tensorflow/core/framework/node_def.pb.h
-    PATHS ${TensorFlow_ROOT}
-    PATH_SUFFIXES bazel-genfiles
-    NO_DEFAULT_PATH
-)
-find_path(TensorFlow_GEN_INCLUDE_DIR
-    NAMES
-    tensorflow/core/framework/node_def.pb.h
-)
-
 find_library(TensorFlow_LIBRARY NAMES tensorflow
     PATHS ${TensorFlow_ROOT}
     PATH_SUFFIXES bazel-bin/tensorflow
@@ -94,7 +81,11 @@ find_package_handle_standard_args(TensorFlow DEFAULT_MSG
 # set external variables for usage in CMakeLists.txt
 if(TensorFlow_FOUND)
     set(TensorFlow_LIBRARIES ${TensorFlow_LIBRARY})
-    set(TensorFlow_INCLUDE_DIRS ${TensorFlow_INCLUDE_DIR} ${TensorFlow_GEN_INCLUDE_DIR})
+    set(TensorFlow_INCLUDE_DIRS
+        ${TensorFlow_INCLUDE_DIR}
+        ${TensorFlow_INCLUDE_DIR}/bazel-genfiles
+        ${TensorFlow_INCLUDE_DIR}/bazel-tensorflow/external/eigen_archive
+    )
     # This is the same as the include dir
     set(TensorFlow_PROTO_DIRS ${TensorFlow_INCLUDE_DIR})
 
