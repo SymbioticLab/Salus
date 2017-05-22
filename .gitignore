@@ -12,3 +12,6 @@ CMakeLists.txt.user*
 # Build dir
 build/*
 build-kdev/*
+
+# Vagrant
+.vagrant
