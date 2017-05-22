@@ -1,6 +1,6 @@
 /*
  * <one line to give the library's name and an idea of what it does.>
- * Copyright (C) 2017 Peifeng Yu <peifeng@umich.edu>
+ * Copyright (C) 2017  Aetf <aetf@unlimitedcodeworks.xyz>
  * 
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -17,25 +17,29 @@
  * 
  */
 
-#ifndef IOPLIBRARY_H
-#define IOPLIBRARY_H
+#include "tfoplibrary.h"
 
 #include "executor.grpc.pb.h"
 
-class ITask
+#include "tensorflow/core/framework/op_kernel.h"
+
+namespace rpc = executor;
+
+bool TFOpLibrary::accepts(const rpc::OpKernelDef& operation)
 {
-    virtual executor::ResultCode run() = 0;
-};
+    return operation.oplibrary() == rpc::OpKernelDef::TENSORFLOW;
+}
 
-/**
- * @todo write docs
- */
-class IOpLibrary
+ITask * TFOpLibrary::createTask(const rpc::OpKernelDef& opdef, const rpc::OpContextDef& contextdef)
 {
-public:
-    virtual bool accepts(const executor::OpKernel &operation) = 0;
+    tensorflow::OpKernel *kernel = nullptr;
+    tensorflow::OpKernelContext *context = nullptr;
+    // TODO: construct kernel and context from def
 
-    virtual ITask *createTask(const executor::OpKernel &opeartion) = 0;
-};
+    return new TFTask(kernel, context);
+}
 
-#endif // IOPLIBRARY_H
+rpc::ResultCode TFTask::run()
+{
+    m_opkernel->Compute(m_context.get());
+}

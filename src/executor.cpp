@@ -1,6 +1,6 @@
 #include "executor.grpc.pb.h"
 
-#include "ioplibrary.h"
+#include "oplibraries/ioplibrary.h"
 
 #include <grpc++/grpc++.h>
 
@@ -29,7 +29,7 @@ public:
     void registerOpLibrary(unique_ptr<IOpLibrary> library);
 
 private:
-    unordered_map<OpKernel::OpLibraryType, unique_ptr<IOpLibrary>> m_opLibraries;
+    unordered_map<OpKernelDef::OpLibraryType, unique_ptr<IOpLibrary>> m_opLibraries;
 };
 } // namespace executor
 

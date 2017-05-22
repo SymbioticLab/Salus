@@ -2,6 +2,8 @@ syntax = "proto3";
 
 package executor;
 
+import "tensorflow/core/framework/node_def.proto";
+
 service IExecEngine {
     rpc run(RunRequest) returns (RunResponse) {}
     rpc allocate(AllocRequest) returns (AllocResponse) {}
@@ -9,13 +11,13 @@ service IExecEngine {
 }
 
 message RunRequest {
-    OpKernel opkernel = 1;
-    OpContext context = 2;
+    OpKernelDef opkernel = 1;
+    OpContextDef context = 2;
 }
 
 message RunResponse {
     ResultCode result = 1;
-    OpContext context = 2;
+    OpContextDef context = 2;
 }
 
 message DeallocRequest {
@@ -36,15 +38,16 @@ message AllocResponse {
     uint64 addr_handle = 2;
 }
 
-message OpKernel {
+message OpKernelDef {
     enum OpLibraryType {
         TENSORFLOW = 0;
     }
     OpLibraryType oplibrary = 1;
     string id = 2;
+    tensorflow.NodeDef tfnode = 3;
 }
 
-message OpContext {
+message OpContextDef {
     int64 host_temp_memory_size = 1;
     int64 device_temp_memory_size = 2;
     repeated int64 host_persistent_alloc_ids = 3;
