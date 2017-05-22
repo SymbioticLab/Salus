@@ -29,3 +29,16 @@ target_link_libraries(rg_client
     protobuf::libprotobuf
     gRPC::grpc++
 )
+
+add_executable(executor
+    "executor.cpp"
+    "ioplibrary.cpp"
+    "executionengine.cpp"
+)
+target_link_libraries(executor
+    protos_gen
+
+    protobuf::libprotobuf
+    gRPC::grpc++
+    TensorFlow
+)

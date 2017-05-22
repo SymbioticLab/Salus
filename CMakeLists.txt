@@ -19,7 +19,6 @@ include(FeatureSummary)
 option(WITH_TESTS "Build test suite in default target" OFF)
 add_feature_info(Tests WITH_TESTS "build test suite with default target")
 
-
 #---------------------------------------------------------------------------------------
 # Find packages
 #---------------------------------------------------------------------------------------
@@ -29,6 +28,9 @@ find_package(Protobuf REQUIRED)
 # gRPC
 find_package(GRPC REQUIRED)
 
+# TensorFlow
+# TensorFlow root must be passed in command line as -DTensorFlow_ROOT=/path/to/tensorflow
+find_package(TensorFlow REQUIRED)
 
 #---------------------------------------------------------------------------------------
 # Print summary

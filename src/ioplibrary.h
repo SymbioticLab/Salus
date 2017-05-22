@@ -24,7 +24,7 @@
 
 class ITask
 {
-    virtual executor::Result run() = 0;
+    virtual executor::ResultCode run() = 0;
 };
 
 /**
@@ -33,9 +33,9 @@ class ITask
 class IOpLibrary
 {
 public:
-    virtual bool accepts(const executor::Operation &operation) = 0;
+    virtual bool accepts(const executor::OpKernel &operation) = 0;
 
-    virtual ITask *createTask(const executor::Operation &opeartion) = 0;
+    virtual ITask *createTask(const executor::OpKernel &opeartion) = 0;
 };
 
 #endif // IOPLIBRARY_H
