@@ -8,6 +8,7 @@ target_link_libraries(executor
     protos_gen
 
     protobuf::libprotobuf
-    gRPC::grpc++
+    #gRPC::grpc++
+    ZeroMQ::zmq
     tensorflow::all
 )

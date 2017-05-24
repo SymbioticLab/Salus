@@ -30,18 +30,32 @@ bool TFOpLibrary::accepts(const rpc::OpKernelDef& operation)
     return operation.oplibrary() == rpc::OpKernelDef::TENSORFLOW;
 }
 
-ITask * TFOpLibrary::createTask(const rpc::OpKernelDef& opdef, const rpc::OpContextDef& contextdef)
+tensorflow::OpKernel *TFOpLibrary::kernelFromDef(const executor::OpKernelDef &opdef)
 {
-    tensorflow::OpKernel *kernel = nullptr;
-    tensorflow::OpKernelContext *context = nullptr;
-    // TODO: construct kernel and context from def
-
-    return new TFTask(kernel, context);
+    // TODO: create opkernel from def
 }
 
-TFTask::TFTask(tensorflow::OpKernel *kernel, tensorflow::OpKernelContext *context)
+tensorflow::OpKernelContext *TFOpLibrary::contextFromDef(const executor::OpContextDef &ctxdef)
+{
+    // TODO: create kernel context from def
+}
+
+executor::OpContextDef TFOpLibrary::contextToDef(const tensorflow::OpKernelContext *context)
+{
+    // TODO: create def from kernel context
+}
+
+ITask * TFOpLibrary::createTask(const rpc::OpKernelDef& opdef, const rpc::OpContextDef& ctxdef)
+{
+    tensorflow::OpKernel *kernel = kernelFromDef(opdef);
+    tensorflow::OpKernelContext *context = contextFromDef(ctxdef);
+    return new TFTask(this, kernel, context);
+}
+
+TFTask::TFTask(TFOpLibrary *library, tensorflow::OpKernel *kernel, tensorflow::OpKernelContext *context)
     : m_opkernel(kernel)
     , m_context(context)
+    , m_library(library)
 { }
 
 rpc::ResultCode TFTask::run()
@@ -51,6 +65,5 @@ rpc::ResultCode TFTask::run()
 
 rpc::OpContextDef TFTask::contextDef()
 {
-    // TODO: serialize context to def
-    return {};
+    return m_library->contextToDef(m_context.get());
 }

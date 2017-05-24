@@ -18,10 +18,9 @@
 # Usage Documentation
 #
 # Cache Variables: (not for direct use in CMakeLists.txt)
-#  TensorFlow_ROOT
+#  TENSORFLOW_ROOT
 #  TensorFlow_LIBRARY
 #  TensorFlow_INCLUDE_DIR
-#  TensorFlow_GEN_INCLUDE_DIR
 #
 # Non-cache variables you might use in your CMakeLists.txt:
 #  TensorFlow_FOUND
@@ -33,6 +32,7 @@
 # Adds the following targets:
 #  tensorflow::headers - A header only interface library
 #  tensorflow::all - The whole tensorflow library
+#  tensorflow::kernels - All kernels
 #
 # Use this module this way:
 #  find_package(TensorFlow)
@@ -45,7 +45,7 @@
 include(FindPackageHandleStandardArgs)
 unset(TensorFlow_FOUND)
 
-set(TensorFlow_ROOT "${TensorFlow_ROOT}" CACHE PATH "Root directory to look in")
+set(TENSORFLOW_ROOT "${TENSORFLOW_ROOT}" CACHE PATH "Root directory to look in")
 
 find_path(TensorFlow_INCLUDE_DIR
     NAMES
@@ -71,11 +71,18 @@ find_library(TensorFlow_LIBRARY NAMES tensorflow
 # fall back to system paths
 find_library(TensorFlow_LIBRARY NAMES tensorflow)
 
+find_library(TensorFlow_Kernel_LIBRARY NAMES tensorflow_kernels
+    PATHS ${TensorFlow_ROOT}
+    PATH_SUFFIXES bazel-bin/tensorflow
+    NO_DEFAULT_PATH
+)
+find_library(TensorFlow_Kernel_LIBRARY NAMES tensorflow_kernels)
+
 # set TensorFlow_FOUND
 find_package_handle_standard_args(TensorFlow DEFAULT_MSG
     TensorFlow_INCLUDE_DIR
-    TensorFlow_GEN_INCLUDE_DIR
     TensorFlow_LIBRARY
+    TensorFlow_Kernel_LIBRARY
 )
 
 # set external variables for usage in CMakeLists.txt
@@ -97,6 +104,12 @@ if(TensorFlow_FOUND)
 
     add_library(tensorflow::all SHARED IMPORTED)
     set_target_properties(tensorflow::all PROPERTIES
+        INTERFACE_LINK_LIBRARIES tensorflow::headers
+        IMPORTED_LOCATION ${TensorFlow_LIBRARIES}
+    )
+
+    add_library(tensorflow::kernels SHARED IMPORTED)
+    set_target_properties(tensorflow::kernels PROPERTIES
         INTERFACE_LINK_LIBRARIES tensorflow::headers
         IMPORTED_LOCATION ${TensorFlow_LIBRARIES}
     )

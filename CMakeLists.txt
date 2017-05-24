@@ -25,12 +25,17 @@ add_feature_info(Tests WITH_TESTS "build test suite with default target")
 # Protobuf
 find_package(Protobuf REQUIRED)
 
-# gRPC
-find_package(GRPC REQUIRED)
 
 # TensorFlow
 # TensorFlow root must be passed in command line as -DTensorFlow_ROOT=/path/to/tensorflow
 find_package(TensorFlow REQUIRED)
+
+# ZeroMQ or gRPC
+find_package(ZeroMQ REQUIRED)
+# gRPC
+if(NOT ZeroMQ_FOUND)
+    find_package(GRPC REQUIRED)
+endif()
 
 #---------------------------------------------------------------------------------------
 # Print summary

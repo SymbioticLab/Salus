@@ -68,7 +68,8 @@ Status executor::ExecServiceImpl::run(grpc::ServerContext *context,
     assert(oplib->accepts(opdef));
 
     auto task = oplib->createTask(opdef, ctxdef);
-    // TODO: run the task right away
+
+    // run the task right away
     auto res = response->mutable_result();
     auto newctxdef = response->mutable_context();
 

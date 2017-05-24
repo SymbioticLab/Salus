@@ -29,10 +29,12 @@ class OpKernel;
 class OpKernelContext;
 }
 
+class TFOpLibrary;
+
 class TFTask : public ITask
 {
 public:
-    TFTask(tensorflow::OpKernel *kernel, tensorflow::OpKernelContext *context);
+    TFTask(TFOpLibrary *library, tensorflow::OpKernel *kernel, tensorflow::OpKernelContext *context);
 
     executor::ResultCode run() override;
     executor::OpContextDef contextDef() override;
@@ -40,6 +42,7 @@ public:
 private:
     std::unique_ptr<tensorflow::OpKernel> m_opkernel;
     std::unique_ptr<tensorflow::OpKernelContext> m_context;
+    TFOpLibrary *m_library;
 };
 
 /**
@@ -49,7 +52,12 @@ class TFOpLibrary : public IOpLibrary
 {
 public:
     bool accepts(const executor::OpKernelDef &operation) override;
-    ITask *createTask(const executor::OpKernelDef &opeartion, const executor::OpContextDef &context) override;
+    ITask *createTask(const executor::OpKernelDef &opdef, const executor::OpContextDef &ctxdef) override;
+
+    tensorflow::OpKernel *kernelFromDef(const executor::OpKernelDef &opdef);
+    tensorflow::OpKernelContext *contextFromDef(const executor::OpContextDef &ctxdef);
+    executor::OpContextDef contextToDef(const tensorflow::OpKernelContext *context);
+private:
 };
 
 #endif // TFOPLIBRARY_H
