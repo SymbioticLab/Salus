@@ -22,6 +22,8 @@
 
 #include "ioplibrary.h"
 
+#include "executor.pb.h"
+
 #include <memory>
 
 namespace tensorflow {

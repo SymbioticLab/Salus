@@ -33,7 +33,7 @@ GRpcServer::GRpcServer() { }
 
 GRpcServer::~GRpcServer() = default;
 
-void GRpcServer::start(std::unique_ptr<RpcServerCore> logic, const std::string &address, bool block)
+void GRpcServer::start(std::unique_ptr<RpcServerCore> &&logic, const std::string &address, bool block)
 {
     // Take ownership of the logic
     m_pLogic = std::move(logic);

@@ -22,7 +22,7 @@
 
 #include "rpcservercore.h"
 #include "platform/logging.h"
-#include "protoutils/protoutils.h"
+#include "utils/protoutils.h"
 
 #include "executor.pb.h"
 
@@ -82,7 +82,7 @@ void ZmqServer::adjustNumWorkers(size_t num)
     }
 }
 
-void ZmqServer::start(std::unique_ptr<RpcServerCore> logic, const std::string& address, bool block)
+void ZmqServer::start(std::unique_ptr<RpcServerCore> &&logic, const std::string& address, bool block)
 {
     m_pLogic = std::move(logic);
 
@@ -166,7 +166,7 @@ void ServerWorker::work() {
             }
 
             std::string type(static_cast<char *>(evenlop.data()), evenlop.size());
-            auto pRequest = protoutils::createMessage(type, body.data(), body.size());
+            auto pRequest = utils::createMessage(type, body.data(), body.size());
             if (!pRequest) {
                 ERROR("Skipped one iteration due to malformatted request received. Evenlop data '{}'."
                       " Body size {}", type, body.size());

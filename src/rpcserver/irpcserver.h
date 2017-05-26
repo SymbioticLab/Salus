@@ -33,7 +33,7 @@ class IRpcServer
 public:
     virtual ~IRpcServer();
 
-    virtual void start(std::unique_ptr<RpcServerCore> logic, const std::string &address, bool block = true) = 0;
+    virtual void start(std::unique_ptr<RpcServerCore> &&logic, const std::string &address, bool block = true) = 0;
     virtual void join() = 0;
     virtual void stop() = 0;
 };

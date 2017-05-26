@@ -19,7 +19,8 @@
 
 #include "tfoplibrary.h"
 
-#include "protoutils/protoutils.h"
+#include "utils/protoutils.h"
+#include "utils/pointerutils.h"
 #include "platform/logging.h"
 
 #include "executor.pb.h"
@@ -28,6 +29,8 @@
 #include "tensorflow/core/framework/op_kernel.h"
 
 namespace rpc = executor;
+using ::tensorflow::NodeDef;
+using ::google::protobuf::Message;
 
 bool TFOpLibrary::accepts(const rpc::OpKernelDef& operation)
 {
@@ -36,6 +39,12 @@ bool TFOpLibrary::accepts(const rpc::OpKernelDef& operation)
 
 tensorflow::OpKernel *TFOpLibrary::kernelFromDef(const executor::OpKernelDef &opdef)
 {
+    auto msg = utils::createMessage("", opdef.extra().data(), opdef.extra().size());
+    if (!msg) {
+        return nullptr;
+    }
+
+    auto nodedef = utils::static_unique_ptr_cast<NodeDef>(std::move(msg));
     // FIXME: create opkernel from def
 }
 

@@ -46,7 +46,7 @@ public:
 class OpLibraryRegistary
 {
 public:
-    void registerOpLibrary(executor::OpKernelDef::OpLibraryType libraryType, std::unique_ptr<IOpLibrary> library);
+    void registerOpLibrary(executor::OpKernelDef::OpLibraryType libraryType, std::unique_ptr<IOpLibrary> &&library);
     IOpLibrary *findSuitableOpLibrary(const executor::OpKernelDef &opdef) const;
 
     static OpLibraryRegistary &instance();

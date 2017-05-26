@@ -38,7 +38,7 @@ public:
 
     ~ZmqServer() override;
 
-    void start(std::unique_ptr<RpcServerCore> logic, const std::string &address, bool block = true) override;
+    void start(std::unique_ptr<RpcServerCore> &&logic, const std::string &address, bool block = true) override;
     void join() override;
     void stop() override;
 

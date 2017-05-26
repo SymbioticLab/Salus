@@ -19,13 +19,16 @@
 
 #include "ioplibrary.h"
 
+#include "platform/logging.h"
+
 OpLibraryRegistary &OpLibraryRegistary::instance()
 {
     static OpLibraryRegistary registary;
     return registary;
 }
 
-void OpLibraryRegistary::registerOpLibrary(executor::OpKernelDef::OpLibraryType libraryType, std::unique_ptr<IOpLibrary> library)
+void OpLibraryRegistary::registerOpLibrary(executor::OpKernelDef::OpLibraryType libraryType,
+                                           std::unique_ptr<IOpLibrary> &&library)
 {
     m_opLibraries[libraryType] = std::move(library);
 }
@@ -37,4 +40,6 @@ IOpLibrary * OpLibraryRegistary::findSuitableOpLibrary(const executor::OpKernelD
             return elem.second.get();
         }
     }
+    WARN("No suitable OpLibrary found for {}", opdef);
+    return nullptr;
 }

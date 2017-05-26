@@ -21,7 +21,7 @@
 
 #include "platform/logging.h"
 
-ProtoPtr protoutils::createMessage(const std::string type, const void* data, size_t len)
+ProtoPtr utils::createMessage(const std::string type, const void* data, size_t len)
 {
     auto desc = ::google::protobuf::DescriptorPool::generated_pool()->FindMessageTypeByName(type);
     if (!desc) {

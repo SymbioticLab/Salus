@@ -20,7 +20,7 @@
 #ifndef RPCSERVER_H
 #define RPCSERVER_H
 
-#include "protoutils/protoutils.h"
+#include "utils/protoutils.h"
 
 #include <memory>
 
