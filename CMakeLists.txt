@@ -17,7 +17,8 @@ include(FeatureSummary)
 # Available options
 #---------------------------------------------------------------------------------------
 option(WITH_TESTS "Build test suite in default target" OFF)
-add_feature_info(Tests WITH_TESTS "build test suite with default target")
+
+option(WITH_BUNDLED_SPDLOG "Use bundled spdlog library instead of system provided version" OFF)
 
 #---------------------------------------------------------------------------------------
 # Find packages
@@ -37,11 +38,28 @@ if(NOT ZeroMQ_FOUND)
     find_package(GRPC REQUIRED)
 endif()
 
+# spdlog
+if(NOT WITH_BUNDLED_SPDLOG)
+    find_package(spdlog QUIET)
+endif(NOT WITH_BUNDLED_SPDLOG)
+
+## fallback to bundled spdlog
+if(NOT TARGET spdlog::spdlog)
+    SET(WITH_BUNDLED_SPDLOG ON CACHE BOOL "Use bundled spdlog library instead of system provided version" FORCE)
+    message(WARNING "spdlog requested but not found, fallback to use bundled version.")
+
+    SET(SPDLOG_BUILD_TESTING OFF CACHE BOOL "Build spdlog tests" FORCE)
+    add_subdirectory(thirdparty/spdlog)
+    add_library(spdlog::spdlog ALIAS spdlog)
+endif(NOT TARGET spdlog::spdlog)
+
 #---------------------------------------------------------------------------------------
 # Print summary
 #---------------------------------------------------------------------------------------
+add_feature_info(TESTS WITH_TESTS "build test suite with default target")
+add_feature_info("BUNDLED_SPDLOG" WITH_BUNDLED_SPDLOG
+                 "use bundled spdlog library instead of system provided version")
 feature_summary(INCLUDE_QUIET_PACKAGES FATAL_ON_MISSING_REQUIRED_PACKAGES WHAT ALL)
-
 
 #---------------------------------------------------------------------------------------
 # Put code together

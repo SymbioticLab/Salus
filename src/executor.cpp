@@ -2,6 +2,8 @@
 #include "rpcserver/zmqserver.h"
 #include "rpcserver/rpcservercore.h"
 
+#include "spdlog/spdlog.h"
+
 #include <iostream>
 #include <memory>
 #include <string>

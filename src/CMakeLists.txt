@@ -13,6 +13,8 @@ add_executable(executor
 target_link_libraries(executor
     protos_gen
 
+    spdlog::spdlog
+
     protobuf::libprotobuf
     #gRPC::grpc++
     ZeroMQ::zmq
