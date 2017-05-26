@@ -21,6 +21,8 @@
 #include "zmqserver_p.h"
 
 #include "rpcservercore.h"
+#include "platform/logging.h"
+#include "protoutils/protoutils.h"
 
 #include "executor.pb.h"
 
@@ -85,12 +87,15 @@ void ZmqServer::start(std::unique_ptr<RpcServerCore> logic, const std::string& a
     m_pLogic = std::move(logic);
 
     try {
-        std::cout << "Binding frontend socket" << std::endl;
+        INFO("Binding frontend socket to address: {}", address);
         m_frontend_sock.bind(address);
-        std::cout << "Binding backend socket" << std::endl;
-        m_backend_sock.bind("inproc://backend");
+
+        auto baddr = "inproc://backend";
+        DEBUG("Binding backend socket to address: {}", baddr);
+        m_backend_sock.bind(baddr);
     } catch (zmq::error_t &err) {
-        // TODO: handle error
+        FATAL("Error while binding sockets: {}", err.what());
+        // re-throw to stop the process
         throw;
     }
 
@@ -104,22 +109,22 @@ void ZmqServer::start(std::unique_ptr<RpcServerCore> logic, const std::string& a
 
 void ZmqServer::join()
 {
-    std::cout << "Serving..." << std::endl;
+    INFO("Started serving loop");
     try {
         zmq::proxy(m_frontend_sock, m_backend_sock, nullptr);
     } catch (zmq::error_t &err) {
-        // TODO: handle error
-        throw;
+        ERROR("Exiting serving loop due to error: {}", err.what());
     }
     stop();
 }
 
 void ZmqServer::stop()
 {
-    std::cout << "Stopped" << std::endl;
+    INFO("Stopping ZMQ context");
     m_started = false;
     m_zmqCtx.close();
 
+    INFO("Stopping all workers");
     adjustNumWorkers(0);
     m_pLogic.reset();
 }
@@ -127,7 +132,7 @@ void ZmqServer::stop()
 ServerWorker::ServerWorker(zmq::context_t &ctx, RpcServerCore &logic)
     : m_thread(nullptr)
     , m_zmqCtx(ctx)
-    , m_sock(m_zmqCtx, ZMQ_REP)
+    , m_sock(m_zmqCtx, ZMQ_DEALER)
     , m_shouldStop(false)
     , m_logic(logic)
 {}
@@ -144,26 +149,42 @@ void ServerWorker::stop()
 }
 
 void ServerWorker::work() {
-    m_sock.connect("inproc://backend");
+    auto baddr = "inproc://backend";
+    INFO("ServerWorker started (thread {}), connecting to address: {}", m_thread->get_id(), baddr);
+    m_sock.connect(baddr);
 
     try {
         while (!m_shouldStop) {
             zmq::message_t evenlop;
             zmq::message_t body;
-            m_sock.recv(&evenlop);
-            m_sock.recv(&body);
+            try {
+                m_sock.recv(&evenlop);
+                m_sock.recv(&body);
+            } catch (zmq::error_t &err) {
+                ERROR("Skipped one iteration due to error when receiving: {}", err.what());
+                continue;
+            }
 
-            std::string type(reinterpret_cast<char *>(evenlop.data()), evenlop.size());
-            auto pRequest = m_logic.createMessage(type, body.data(), body.size());
+            std::string type(static_cast<char *>(evenlop.data()), evenlop.size());
+            auto pRequest = protoutils::createMessage(type, body.data(), body.size());
             if (!pRequest) {
-                // TODO: log bad request
-                throw std::string("Bad request");
+                ERROR("Skipped one iteration due to malformatted request received. Evenlop data '{}'."
+                      " Body size {}", type, body.size());
+                continue;
             }
             auto pResponse = m_logic.dispatch(type, pRequest.get());
 
             zmq::message_t reply(pResponse->ByteSizeLong());
             pResponse->SerializeToArray(reply.data(), reply.size());
-            m_sock.send(reply);
+
+            try {
+                m_sock.send(reply);
+            } catch (zmq::error_t &err) {
+                ERROR("Sending error when serving request {}: {}", type, err.what());
+                continue;
+            }
         }
-    } catch (std::exception &e) {}
+    } catch (std::exception &e) {
+        ERROR("Catched exception: {}", e.what());
+    }
 }

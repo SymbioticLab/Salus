@@ -19,7 +19,11 @@
 
 #include "tfoplibrary.h"
 
+#include "protoutils/protoutils.h"
+#include "platform/logging.h"
+
 #include "executor.pb.h"
+#include "tfoplibrary.pb.h"
 
 #include "tensorflow/core/framework/op_kernel.h"
 

@@ -21,6 +21,7 @@
 
 #include "oplibraries/ioplibrary.h"
 #include "platform/memory.h"
+#include "platform/logging.h"
 
 #include "executor.pb.h"
 
@@ -29,26 +30,6 @@
 
 using namespace executor;
 using ::google::protobuf::Message;
-
-ProtoPtr RpcServerCore::createMessage(const std::string type, const void* data, size_t len)
-{
-    auto desc = ::google::protobuf::DescriptorPool::generated_pool()->FindMessageTypeByName(type);
-    if (!desc) {
-        return {};
-    }
-
-    auto message = ::google::protobuf::MessageFactory::generated_factory()->GetPrototype(desc)->New();
-    if (!message) {
-        return {};
-    }
-
-    auto ok = message->ParseFromArray(data, len);
-    if (!ok) {
-        return {};
-    }
-
-    return ProtoPtr(message);
-}
 
 ProtoPtr RpcServerCore::dispatch(const std::string &type, const Message *request)
 {
@@ -74,8 +55,11 @@ ProtoPtr RpcServerCore::dispatch(const std::string &type, const Message *request
 
 void RpcServerCore::Run(const RunRequest *request, RunResponse *response)
 {
-    auto opdef = request->opkernel();
-    auto ctxdef = request->context();
+    const auto &opdef = request->opkernel();
+    const auto &ctxdef = request->context();
+
+    INFO("Serving RunRequest with opkernel id {} and oplibrary {}",
+         opdef.id(), OpKernelDef::OpLibraryType_Name(opdef.oplibrary()));
 
     auto oplib = OpLibraryRegistary::instance().findSuitableOpLibrary(opdef);
     assert(oplib->accepts(opdef));
@@ -97,9 +81,13 @@ void RpcServerCore::Alloc(const AllocRequest *request, AllocResponse *response)
     auto alignment = request->alignment();
     auto num_bytes = request->num_bytes();
 
+    INFO("Serving AllocRequest with alignment {} and num_bytes {}", alignment, num_bytes);
+
     // TODO: use more appropriate memroy allocation
     uint64_t addr_handle = reinterpret_cast<uint64_t>(mem::alignedAlloc(num_bytes, alignment));
     response->set_addr_handle(addr_handle);
+
+    INFO("Allocated address handel: {:x}", addr_handle);
 
     response->mutable_result()->set_code(0);
 }
@@ -108,6 +96,9 @@ void RpcServerCore::Dealloc(const DeallocRequest *request, DeallocResponse *resp
 {
     auto addr_handle = request->addr_handle();
 
+    INFO("Serving DeallocRequest with address handel: {:x}", addr_handle);
+
+    // TODO: use more appropriate memroy deallocation
     mem::alignedFree(reinterpret_cast<void*>(addr_handle));
 
     response->mutable_result()->set_code(0);

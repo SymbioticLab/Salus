@@ -1,0 +1,5 @@
+syntax = "proto3";
+
+package executor;
+
+import "tensorflow/core/framework/node_def.proto";

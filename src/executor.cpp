@@ -1,8 +1,7 @@
 #include "oplibraries/ioplibrary.h"
 #include "rpcserver/zmqserver.h"
 #include "rpcserver/rpcservercore.h"
-
-#include "spdlog/spdlog.h"
+#include "platform/logging.h"
 
 #include <iostream>
 #include <memory>
@@ -17,7 +16,7 @@ int main(int argc, char **argv)
     ZmqServer server;
     server.setNumWorkers(1);
 
-    cout << "Starting server" << endl;
+    INFO("Starting server");
     server.start(make_unique<RpcServerCore>(), "tcp://127.0.0.1:5501", false);
     server.join();
     server.stop();

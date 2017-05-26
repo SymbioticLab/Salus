@@ -7,6 +7,8 @@ add_executable(executor
     "rpcserver/rpcservercore.cpp"
     "rpcserver/zmqserver.cpp"
     "platform/memory.cpp"
+    "platform/logging.cpp"
+    "protoutils/protoutils.cpp"
     "executionengine.cpp"
     "executor.cpp"
 )

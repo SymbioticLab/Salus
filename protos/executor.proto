@@ -2,8 +2,6 @@ syntax = "proto3";
 
 package executor;
 
-import "tensorflow/core/framework/node_def.proto";
-
 service IExecEngine {
     rpc run(RunRequest) returns (RunResponse) {}
     rpc allocate(AllocRequest) returns (AllocResponse) {}
@@ -44,7 +42,7 @@ message OpKernelDef {
     }
     OpLibraryType oplibrary = 1;
     string id = 2;
-    tensorflow.NodeDef tfnode = 3;
+    bytes extra = 3;
 }
 
 message OpContextDef {
