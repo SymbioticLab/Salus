@@ -19,7 +19,7 @@
 
 #include "tfoplibrary.h"
 
-#include "executor.grpc.pb.h"
+#include "executor.pb.h"
 
 #include "tensorflow/core/framework/op_kernel.h"
 
@@ -32,17 +32,17 @@ bool TFOpLibrary::accepts(const rpc::OpKernelDef& operation)
 
 tensorflow::OpKernel *TFOpLibrary::kernelFromDef(const executor::OpKernelDef &opdef)
 {
-    // TODO: create opkernel from def
+    // FIXME: create opkernel from def
 }
 
 tensorflow::OpKernelContext *TFOpLibrary::contextFromDef(const executor::OpContextDef &ctxdef)
 {
-    // TODO: create kernel context from def
+    // FIXME: create kernel context from def
 }
 
 executor::OpContextDef TFOpLibrary::contextToDef(const tensorflow::OpKernelContext *context)
 {
-    // TODO: create def from kernel context
+    // FIXME: create def from kernel context
 }
 
 ITask * TFOpLibrary::createTask(const rpc::OpKernelDef& opdef, const rpc::OpContextDef& ctxdef)

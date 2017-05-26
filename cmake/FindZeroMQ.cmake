@@ -84,15 +84,14 @@ if(ZeroMQ_INCLUDE_DIR)
         IMPORTED_LOCATION "${ZeroMQ_LIBRARY}"
     )
 
-    add_library(ZeroMQ::zmq-static SHARED IMPORTED)
+    add_library(ZeroMQ::zmq-static STATIC IMPORTED)
     set_target_properties(ZeroMQ::zmq-static PROPERTIES
         INTERFACE_INCLUDE_DIRECTORIES "${ZeroMQ_INCLUDE_DIRS}"
         IMPORTED_LOCATION "${ZeroMQ_STATIC_LIBRARY}"
     )
 
-    add_library(ZeroMQ::zmq SHARED IMPORTED)
+    add_library(ZeroMQ::zmq INTERFACE IMPORTED)
     set_target_properties(ZeroMQ::zmq PROPERTIES
-        INTERFACE_INCLUDE_DIRECTORIES "${ZeroMQ_INCLUDE_DIRS}"
         INTERFACE_LINK_LIBRARIES ZeroMQ::zmq-shared
     )
 endif(ZeroMQ_INCLUDE_DIR)

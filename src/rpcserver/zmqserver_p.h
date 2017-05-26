@@ -1,6 +1,6 @@
 /*
  * <one line to give the library's name and an idea of what it does.>
- * Copyright (C) 2017 Peifeng Yu <peifeng@umich.edu>
+ * Copyright (C) 2017  Aetf <aetf@unlimitedcodeworks.xyz>
  * 
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -17,24 +17,36 @@
  * 
  */
 
-#include "ioplibrary.h"
+#ifndef ZMQSERVER_P_H
+#define ZMQSERVER_P_H
 
-OpLibraryRegistary &OpLibraryRegistary::instance()
-{
-    static OpLibraryRegistary registary;
-    return registary;
-}
+#include "zmq.hpp"
 
-void OpLibraryRegistary::registerOpLibrary(executor::OpKernelDef::OpLibraryType libraryType, std::unique_ptr<IOpLibrary> library)
-{
-    m_opLibraries[libraryType] = std::move(library);
-}
+#include <memory>
+#include <thread>
 
-IOpLibrary * OpLibraryRegistary::findSuitableOpLibrary(const executor::OpKernelDef& opdef) const
+class RpcServerCore;
+
+class ServerWorker
 {
-    for (const auto &elem : m_opLibraries) {
-        if (elem.first == opdef.oplibrary() && elem.second->accepts(opdef)) {
-            return elem.second.get();
-        }
-    }
-}
+public:
+    ServerWorker(zmq::context_t &ctx, RpcServerCore &logic);
+
+    void start();
+    void stop();
+
+private:
+    void work();
+
+private:
+    std::unique_ptr<std::thread> m_thread;
+
+    zmq::context_t &m_zmqCtx;
+    zmq::socket_t m_sock;
+
+    bool m_shouldStop;
+
+    RpcServerCore &m_logic;
+};
+
+#endif // ZMQSERVER_P_H

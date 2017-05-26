@@ -1,6 +1,6 @@
 /*
  * <one line to give the library's name and an idea of what it does.>
- * Copyright (C) 2017 Peifeng Yu <peifeng@umich.edu>
+ * Copyright (C) 2017  Aetf <aetf@unlimitedcodeworks.xyz>
  * 
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -17,24 +17,25 @@
  * 
  */
 
-#include "ioplibrary.h"
+#ifndef IRPCSERVER_H
+#define IRPCSERVER_H
 
-OpLibraryRegistary &OpLibraryRegistary::instance()
-{
-    static OpLibraryRegistary registary;
-    return registary;
-}
+#include <memory>
+#include <string>
 
-void OpLibraryRegistary::registerOpLibrary(executor::OpKernelDef::OpLibraryType libraryType, std::unique_ptr<IOpLibrary> library)
-{
-    m_opLibraries[libraryType] = std::move(library);
-}
+class RpcServerCore;
 
-IOpLibrary * OpLibraryRegistary::findSuitableOpLibrary(const executor::OpKernelDef& opdef) const
+/**
+ * @todo write docs
+ */
+class IRpcServer
 {
-    for (const auto &elem : m_opLibraries) {
-        if (elem.first == opdef.oplibrary() && elem.second->accepts(opdef)) {
-            return elem.second.get();
-        }
-    }
-}
+public:
+    virtual ~IRpcServer();
+
+    virtual void start(std::unique_ptr<RpcServerCore> logic, const std::string &address, bool block = true) = 0;
+    virtual void join() = 0;
+    virtual void stop() = 0;
+};
+
+#endif // IRPCSERVER_H

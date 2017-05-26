@@ -1,8 +1,14 @@
+include_directories(${CMAKE_CURRENT_SOURCE_DIR})
+
 add_executable(executor
-    "executor.cpp"
-    "executionengine.cpp"
     "oplibraries/ioplibrary.cpp"
     "oplibraries/tfoplibrary.cpp"
+    "rpcserver/irpcserver.cpp"
+    "rpcserver/rpcservercore.cpp"
+    "rpcserver/zmqserver.cpp"
+    "platform/memory.cpp"
+    "executionengine.cpp"
+    "executor.cpp"
 )
 target_link_libraries(executor
     protos_gen
@@ -10,5 +16,5 @@ target_link_libraries(executor
     protobuf::libprotobuf
     #gRPC::grpc++
     ZeroMQ::zmq
-    tensorflow::all
+    tensorflow::kernels
 )

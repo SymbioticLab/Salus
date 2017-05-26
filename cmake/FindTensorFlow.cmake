@@ -52,7 +52,7 @@ find_path(TensorFlow_INCLUDE_DIR
     tensorflow/core
     tensorflow/cc
     third_party
-    PATHS ${TensorFlow_ROOT}
+    PATHS ${TENSORFLOW_ROOT}
     NO_DEFAULT_PATH
 )
 # fall back to system paths
@@ -64,7 +64,7 @@ find_path(TensorFlow_INCLUDE_DIR
 )
 
 find_library(TensorFlow_LIBRARY NAMES tensorflow
-    PATHS ${TensorFlow_ROOT}
+    PATHS ${TENSORFLOW_ROOT}
     PATH_SUFFIXES bazel-bin/tensorflow
     NO_DEFAULT_PATH
 )
@@ -72,7 +72,7 @@ find_library(TensorFlow_LIBRARY NAMES tensorflow
 find_library(TensorFlow_LIBRARY NAMES tensorflow)
 
 find_library(TensorFlow_Kernel_LIBRARY NAMES tensorflow_kernels
-    PATHS ${TensorFlow_ROOT}
+    PATHS ${TENSORFLOW_ROOT}
     PATH_SUFFIXES bazel-bin/tensorflow
     NO_DEFAULT_PATH
 )
@@ -111,7 +111,7 @@ if(TensorFlow_FOUND)
     add_library(tensorflow::kernels SHARED IMPORTED)
     set_target_properties(tensorflow::kernels PROPERTIES
         INTERFACE_LINK_LIBRARIES tensorflow::headers
-        IMPORTED_LOCATION ${TensorFlow_LIBRARIES}
+        IMPORTED_LOCATION ${TensorFlow_Kernel_LIBRARY}
     )
 
 endif()

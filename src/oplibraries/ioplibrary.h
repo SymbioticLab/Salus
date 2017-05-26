@@ -20,7 +20,10 @@
 #ifndef IOPLIBRARY_H
 #define IOPLIBRARY_H
 
-#include "executor.grpc.pb.h"
+#include "executor.pb.h"
+
+#include <memory>
+#include <unordered_map>
 
 class ITask
 {
@@ -38,6 +41,18 @@ public:
     virtual bool accepts(const executor::OpKernelDef &operation) = 0;
 
     virtual ITask *createTask(const executor::OpKernelDef &opeartion, const executor::OpContextDef &context) = 0;
+};
+
+class OpLibraryRegistary
+{
+public:
+    void registerOpLibrary(executor::OpKernelDef::OpLibraryType libraryType, std::unique_ptr<IOpLibrary> library);
+    IOpLibrary *findSuitableOpLibrary(const executor::OpKernelDef &opdef) const;
+
+    static OpLibraryRegistary &instance();
+
+private:
+    std::unordered_map<executor::OpKernelDef::OpLibraryType, std::unique_ptr<IOpLibrary>> m_opLibraries;
 };
 
 #endif // IOPLIBRARY_H
