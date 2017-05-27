@@ -36,7 +36,8 @@ class TFOpLibrary;
 class TFTask : public ITask
 {
 public:
-    TFTask(TFOpLibrary *library, tensorflow::OpKernel *kernel, tensorflow::OpKernelContext *context);
+    TFTask(TFOpLibrary *library, std::unique_ptr<tensorflow::OpKernel> &&kernel,
+           std::unique_ptr<tensorflow::OpKernelContext> &&context);
 
     executor::ResultCode run() override;
     executor::OpContextDef contextDef() override;
@@ -56,8 +57,8 @@ public:
     bool accepts(const executor::OpKernelDef &operation) override;
     ITask *createTask(const executor::OpKernelDef &opdef, const executor::OpContextDef &ctxdef) override;
 
-    tensorflow::OpKernel *kernelFromDef(const executor::OpKernelDef &opdef);
-    tensorflow::OpKernelContext *contextFromDef(const executor::OpContextDef &ctxdef);
+    std::unique_ptr<tensorflow::OpKernel> kernelFromDef(const executor::OpKernelDef &opdef);
+    std::unique_ptr<tensorflow::OpKernelContext> contextFromDef(const executor::OpContextDef &ctxdef);
     executor::OpContextDef contextToDef(const tensorflow::OpKernelContext *context);
 private:
 };

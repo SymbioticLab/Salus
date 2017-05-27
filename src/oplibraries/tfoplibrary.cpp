@@ -31,49 +31,58 @@
 namespace rpc = executor;
 using ::tensorflow::NodeDef;
 using ::google::protobuf::Message;
+using std::unique_ptr;
 
 bool TFOpLibrary::accepts(const rpc::OpKernelDef& operation)
 {
     return operation.oplibrary() == rpc::OpKernelDef::TENSORFLOW;
 }
 
-tensorflow::OpKernel *TFOpLibrary::kernelFromDef(const executor::OpKernelDef &opdef)
+unique_ptr<tensorflow::OpKernel> TFOpLibrary::kernelFromDef(const executor::OpKernelDef &opdef)
 {
-    auto msg = utils::createMessage("", opdef.extra().data(), opdef.extra().size());
+    auto msg = utils::createMessage("tensorflow.NodeDef", opdef.extra().data(), opdef.extra().size());
     if (!msg) {
-        return nullptr;
+        return {};
     }
 
     auto nodedef = utils::static_unique_ptr_cast<NodeDef>(std::move(msg));
+    DEBUG("Got NodeDef {}", nodedef->DebugString());
     // FIXME: create opkernel from def
+    return {};
 }
 
-tensorflow::OpKernelContext *TFOpLibrary::contextFromDef(const executor::OpContextDef &ctxdef)
+unique_ptr<tensorflow::OpKernelContext> TFOpLibrary::contextFromDef(const executor::OpContextDef &ctxdef)
 {
     // FIXME: create kernel context from def
+    return {};
 }
 
 executor::OpContextDef TFOpLibrary::contextToDef(const tensorflow::OpKernelContext *context)
 {
     // FIXME: create def from kernel context
+    return {};
 }
 
 ITask * TFOpLibrary::createTask(const rpc::OpKernelDef& opdef, const rpc::OpContextDef& ctxdef)
 {
-    tensorflow::OpKernel *kernel = kernelFromDef(opdef);
-    tensorflow::OpKernelContext *context = contextFromDef(ctxdef);
-    return new TFTask(this, kernel, context);
+    return new TFTask(this, kernelFromDef(opdef), contextFromDef(ctxdef));
 }
 
-TFTask::TFTask(TFOpLibrary *library, tensorflow::OpKernel *kernel, tensorflow::OpKernelContext *context)
-    : m_opkernel(kernel)
-    , m_context(context)
+TFTask::TFTask(TFOpLibrary *library, unique_ptr<tensorflow::OpKernel> &&kernel,
+               unique_ptr<tensorflow::OpKernelContext> &&context)
+    : m_opkernel(std::move(kernel))
+    , m_context(std::move(context))
     , m_library(library)
 { }
 
 rpc::ResultCode TFTask::run()
 {
-    m_opkernel->Compute(m_context.get());
+    if (m_opkernel && m_context) {
+        m_opkernel->Compute(m_context.get());
+    } else {
+        ERR("Got nullptr for opkernel or context: m_opkernel = {:x}, m_context = {:x}",
+            reinterpret_cast<uint64_t>(m_opkernel.get()), reinterpret_cast<uint64_t>(m_context.get()));
+    }
 }
 
 rpc::OpContextDef TFTask::contextDef()

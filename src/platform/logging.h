@@ -51,7 +51,7 @@ std::ostream &operator<<(std::ostream &os, const executor::OpKernelDef &c);
 #define DEBUG(...) logging::LoggerWrapper::logger()->debug(__VA_ARGS__)
 #define INFO(...) logging::LoggerWrapper::logger()->info(__VA_ARGS__)
 #define WARN(...) logging::LoggerWrapper::logger()->warn(__VA_ARGS__)
-#define ERROR(...) logging::LoggerWrapper::logger()->error(__VA_ARGS__)
+#define ERR(...) logging::LoggerWrapper::logger()->error(__VA_ARGS__)
 #define FATAL(...) logging::LoggerWrapper::logger()->critical(__VA_ARGS__)
 
 #endif // LOGGING_H

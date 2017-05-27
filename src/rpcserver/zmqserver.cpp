@@ -113,7 +113,7 @@ void ZmqServer::join()
     try {
         zmq::proxy(m_frontend_sock, m_backend_sock, nullptr);
     } catch (zmq::error_t &err) {
-        ERROR("Exiting serving loop due to error: {}", err.what());
+        ERR("Exiting serving loop due to error: {}", err.what());
     }
     stop();
 }
@@ -161,7 +161,7 @@ void ServerWorker::work() {
                 m_sock.recv(&evenlop);
                 m_sock.recv(&body);
             } catch (zmq::error_t &err) {
-                ERROR("Skipped one iteration due to error when receiving: {}", err.what());
+                ERR("Skipped one iteration due to error when receiving: {}", err.what());
                 continue;
             }
 
@@ -171,11 +171,12 @@ void ServerWorker::work() {
 
             auto pRequest = utils::createMessage(type, body.data(), body.size());
             if (!pRequest) {
-                ERROR("Skipped one iteration due to malformatted request received. Evenlop data '{}'."
-                      " Body size {}", type, body.size());
+                ERR("Skipped one iteration due to malformatted request received. Evenlop data '{}'."
+                    " Body size {}", type, body.size());
                 continue;
             }
-            TRACE("Created request proto object from message at {:x}", static_cast<void*>(pRequest.get()));
+            TRACE("Created request proto object from message at {:x}",
+                  reinterpret_cast<uint64_t>(pRequest.get()));
 
             auto pResponse = m_logic.dispatch(type, pRequest.get());
 
@@ -187,11 +188,11 @@ void ServerWorker::work() {
                 m_sock.send(reply);
                 TRACE("Response sent");
             } catch (zmq::error_t &err) {
-                ERROR("Sending error when serving request {}: {}", type, err.what());
+                ERR("Sending error when serving request {}: {}", type, err.what());
                 continue;
             }
         }
     } catch (std::exception &e) {
-        ERROR("Catched exception: {}", e.what());
+        ERR("Catched exception: {}", e.what());
     }
 }

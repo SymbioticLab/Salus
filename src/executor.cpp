@@ -17,7 +17,7 @@ int main(int argc, char **argv)
     server.setNumWorkers(1);
 
     INFO("Starting server");
-    server.start(make_unique<RpcServerCore>(), "tcp://127.0.0.1:5501", false);
+    server.start(make_unique<RpcServerCore>(), "tcp://*:5501", false);
     server.join();
     server.stop();
 

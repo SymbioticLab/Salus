@@ -19,12 +19,19 @@
 
 #include "ioplibrary.h"
 
+#include "tfoplibrary.h"
+
 #include "platform/logging.h"
 
 OpLibraryRegistary &OpLibraryRegistary::instance()
 {
     static OpLibraryRegistary registary;
     return registary;
+}
+
+OpLibraryRegistary::OpLibraryRegistary()
+{
+    registerOpLibrary(executor::OpKernelDef::TENSORFLOW, std::make_unique<TFOpLibrary>());
 }
 
 void OpLibraryRegistary::registerOpLibrary(executor::OpKernelDef::OpLibraryType libraryType,
