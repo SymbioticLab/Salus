@@ -150,8 +150,8 @@ void ServerWorker::stop()
 
 void ServerWorker::work() {
     auto baddr = "inproc://backend";
-    INFO("ServerWorker started (thread {}), connecting to address: {}", m_thread->get_id(), baddr);
     m_sock.connect(baddr);
+    INFO("ServerWorker started (thread {}), connected to address: {}", m_thread->get_id(), baddr);
 
     try {
         while (!m_shouldStop) {
@@ -166,19 +166,26 @@ void ServerWorker::work() {
             }
 
             std::string type(static_cast<char *>(evenlop.data()), evenlop.size());
+            DEBUG("Received request of proto type {}", type);
+            DEBUG("Received request byte array size {}", body.size());
+
             auto pRequest = utils::createMessage(type, body.data(), body.size());
             if (!pRequest) {
                 ERROR("Skipped one iteration due to malformatted request received. Evenlop data '{}'."
                       " Body size {}", type, body.size());
                 continue;
             }
+            TRACE("Created request proto object from message at {:x}", static_cast<void*>(pRequest.get()));
+
             auto pResponse = m_logic.dispatch(type, pRequest.get());
 
             zmq::message_t reply(pResponse->ByteSizeLong());
             pResponse->SerializeToArray(reply.data(), reply.size());
+            TRACE("Response proto object have size {}", reply.size());
 
             try {
                 m_sock.send(reply);
+                TRACE("Response sent");
             } catch (zmq::error_t &err) {
                 ERROR("Sending error when serving request {}: {}", type, err.what());
                 continue;
