@@ -11,6 +11,7 @@ set(SRC_LIST
     "platform/crashhandler/logcapture.cpp"
     "utils/protoutils.cpp"
     "utils/pointerutils.cpp"
+    "utils/stringutils.cpp"
     "executionengine.cpp"
     "executor.cpp"
 )

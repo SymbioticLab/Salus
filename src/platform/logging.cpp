@@ -20,8 +20,11 @@
 #include "logging.h"
 
 #include "crashhandler/crashhandler.hpp"
+#include "utils/stringutils.h"
 
 #include "executor.pb.h"
+
+#include <zmq.hpp>
 
 logging::LoggerWrapper::LoggerWrapper()
 {
@@ -46,4 +49,10 @@ std::ostream &operator<<(std::ostream &os, const executor::OpKernelDef &c)
 {
     return os << "OpKernelDef(" << c.id() << ", "
               << executor::OpKernelDef::OpLibraryType_Name(c.oplibrary()) << ")";
+}
+
+std::ostream &operator<<(std::ostream &os, const zmq::message_t &c)
+{
+    return os << "zmq::message_t(len=" << c.size()
+              << ", data='" << utils::bytesToHexString(c.data<uint8_t>(), c.size()) << "')";
 }

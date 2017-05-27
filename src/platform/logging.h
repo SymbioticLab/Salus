@@ -47,6 +47,11 @@ class OpKernelDef;
 }
 std::ostream &operator<<(std::ostream &os, const executor::OpKernelDef &c);
 
+namespace zmq {
+class message_t;
+}
+std::ostream &operator<<(std::ostream &os, const zmq::message_t &c);
+
 #define TRACE(...) logging::LoggerWrapper::logger()->trace(__VA_ARGS__)
 #define DEBUG(...) logging::LoggerWrapper::logger()->debug(__VA_ARGS__)
 #define INFO(...) logging::LoggerWrapper::logger()->info(__VA_ARGS__)

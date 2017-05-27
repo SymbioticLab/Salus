@@ -155,13 +155,32 @@ void ServerWorker::work() {
 
     try {
         while (!m_shouldStop) {
+            std::vector<zmq::message_t> identities;
             zmq::message_t evenlop;
             zmq::message_t body;
             try {
+                // First receive all identity frames added by ZMQ_ROUTER socket
+                TRACE("Receiving identity frame {}", identities.size());
+                identities.emplace_back();
+                m_sock.recv(&identities.back());
+                TRACE("Identity frame {}: ", identities.size() - 1, identities.back());
+                // Identity frames stop at an empty message
+                while (identities.back().size() != 0 && m_sock.getsockopt<bool>(ZMQ_RCVMORE)) {
+                    TRACE("Receiving identity frame {}", identities.size());
+                    identities.emplace_back();
+                    m_sock.recv(&identities.back());
+                    TRACE("Identity frame {}: ", identities.size() - 1, identities.back());
+                }
+                if (!m_sock.getsockopt<bool>(ZMQ_RCVMORE)) {
+                    ERR("Skipped one iteration due to no body message part found after identity frames");
+                    continue;
+                }
+                TRACE("Receiving body frames...");
+                // Now receive our message
                 m_sock.recv(&evenlop);
                 m_sock.recv(&body);
             } catch (zmq::error_t &err) {
-                ERR("Skipped one iteration due to error when receiving: {}", err.what());
+                ERR("Skipped one iteration due to error while receiving: {}", err.what());
                 continue;
             }
 
@@ -185,6 +204,12 @@ void ServerWorker::work() {
             TRACE("Response proto object have size {}", reply.size());
 
             try {
+                // First send out all saved identity frames, including the empty part
+                for (auto &id : identities) {
+                    m_sock.send(id, ZMQ_SNDMORE);
+                }
+
+                // Then send our message
                 m_sock.send(reply);
                 TRACE("Response sent");
             } catch (zmq::error_t &err) {
