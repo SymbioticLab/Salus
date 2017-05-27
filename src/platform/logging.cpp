@@ -19,6 +19,8 @@
 
 #include "logging.h"
 
+#include "crashhandler/crashhandler.hpp"
+
 #include "executor.pb.h"
 
 logging::LoggerWrapper::LoggerWrapper()
@@ -28,6 +30,8 @@ logging::LoggerWrapper::LoggerWrapper()
 
     m_logger->flush_on(spdlog::level::err);
     m_logger->set_level(spdlog::level::trace);
+
+    g3::installCrashHandler();
 }
 
 logging::LoggerWrapper::~LoggerWrapper() = default;
