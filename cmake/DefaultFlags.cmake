@@ -13,31 +13,65 @@ set(CMAKE_CXX_STANDARD 14)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 # Set compiler flags
-set(CLOSS_COMPILER_FLAGS)
+## First some basic compiler flags
+if ("${CMAKE_CXX_COMPILER_ID}" MATCHES "Clang")
+    # using Clang or AppleClang
+
+    # reasonable and standard
+    add_compile_options_with_check(-Weverything)
+    add_compile_options_with_check(-Werror)
+
+    add_compile_options_with_check(-Wno-c++98-compat)
+
+    add_compile_options_with_check(-Wold-style-cast)
+    # helps catch hard to track down memory errors
+    add_compile_options_with_check(-Wnon-virtual-dtor)
+    # warn for potential performance problem casts
+    add_compile_options_with_check(-Wcast-align)
+    # warn if you overload (not override) a virtual function
+    add_compile_options_with_check(-Woverloaded-virtual)
+elseif ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "GNU")
+    # using GCC
+
+    # reasonable and standard
+    add_compile_options_with_check(-Wall)
+    add_compile_options_with_check(-Wextra)
+    add_compile_options_with_check(-pedantic)
+    add_compile_options_with_check(-Werror)
+
+    add_compile_options_with_check(-Wold-style-cast)
+    # helps catch hard to track down memory errors
+    add_compile_options_with_check(-Wnon-virtual-dtor)
+    # warn for potential performance problem casts
+    add_compile_options_with_check(-Wcast-align)
+    # warn if you overload (not override) a virtual function
+    add_compile_options_with_check(-Woverloaded-virtual)
+elseif ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "Intel")
+    # using Intel C++
+elseif ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "MSVC")
+    # using Visual Studio C++
+
+    # all reasonable warnings
+    add_compile_options_with_check(/W4)
+    # treat warnings as errors
+    add_compile_options_with_check(/Wx)
+    # enable warning on thread un-safe static member initialization
+    add_compile_options_with_check(/W44640)
+endif()
+
 if(${CMAKE_BUILD_TYPE} STREQUAL Debug)
   message(STATUS "Using configuration: Debug")
   if(CMAKE_COMPILER_IS_GNUCXX)
-    compiler_check_add_flag("-ggdb")
-    compiler_check_add_flag("-fno-default-inline")
+    add_compile_options_with_check("-ggdb")
+    add_compile_options_with_check("-fno-default-inline")
   endif()
 elseif(${CMAKE_BUILD_TYPE} STREQUAL Release)
   message(STATUS "Using configuration: Release")
   if(CMAKE_COMPILER_IS_GNUCXX)
-    compiler_check_add_flag("-g0")
-    compiler_check_add_flag("-s")
-    compiler_check_add_flag("-O3")
-    compiler_check_add_flag("-msse")
-    compiler_check_add_flag("-msse2")
-    compiler_check_add_flag("-msse3")
-    compiler_check_add_flag("-mssse3")
-    compiler_check_add_flag("-msse4.1")
-    compiler_check_add_flag("-msse4.2")
+    add_compile_options_with_check("-g0")
+    add_compile_options_with_check("-O3")
+    add_compile_options_with_check("-march=native")
   endif()
 else()
   message(FATAL_ERROR "Unknown configuration, set CMAKE_BUILD_TYPE to Debug or Release")
 endif()
-if(CMAKE_COMPILER_IS_GNUCXX)
-  set(COMPILER_WARNING_FLAGS "-Wall -Wextra -pedantic -Wno-long-long -Wno-enum-compare")
-endif()
-
-

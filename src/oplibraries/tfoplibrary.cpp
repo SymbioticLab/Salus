@@ -75,7 +75,7 @@ TFTask::TFTask(TFOpLibrary *library, unique_ptr<tensorflow::OpKernel> &&kernel,
     , m_library(library)
 { }
 
-rpc::ResultCode TFTask::run()
+rpc::Status TFTask::run()
 {
     if (m_opkernel && m_context) {
         m_opkernel->Compute(m_context.get());
@@ -83,6 +83,8 @@ rpc::ResultCode TFTask::run()
         ERR("Got nullptr for opkernel or context: m_opkernel = {:x}, m_context = {:x}",
             reinterpret_cast<uint64_t>(m_opkernel.get()), reinterpret_cast<uint64_t>(m_context.get()));
     }
+
+    return {};
 }
 
 rpc::OpContextDef TFTask::contextDef()

@@ -56,3 +56,9 @@ std::ostream &operator<<(std::ostream &os, const zmq::message_t &c)
     return os << "zmq::message_t(len=" << c.size()
               << ", data='" << utils::bytesToHexString(c.data<uint8_t>(), c.size()) << "')";
 }
+
+std::ostream &operator<<(std::ostream &os, const zmq::error_t &c)
+{
+    return os << "zmq::error_t(code=" << c.num()
+              << ", msg='" << c.what() << "')";
+}

@@ -94,7 +94,7 @@ void ZmqServer::start(std::unique_ptr<RpcServerCore> &&logic, const std::string&
         DEBUG("Binding backend socket to address: {}", baddr);
         m_backend_sock.bind(baddr);
     } catch (zmq::error_t &err) {
-        FATAL("Error while binding sockets: {}", err.what());
+        FATAL("Error while binding sockets: {}", err);
         // re-throw to stop the process
         throw;
     }
@@ -113,7 +113,7 @@ void ZmqServer::join()
     try {
         zmq::proxy(m_frontend_sock, m_backend_sock, nullptr);
     } catch (zmq::error_t &err) {
-        ERR("Exiting serving loop due to error: {}", err.what());
+        ERR("Exiting serving loop due to error: {}", err);
     }
     stop();
 }
@@ -163,15 +163,16 @@ void ServerWorker::work() {
                 TRACE("Receiving identity frame {}", identities.size());
                 identities.emplace_back();
                 m_sock.recv(&identities.back());
-                TRACE("Identity frame {}: ", identities.size() - 1, identities.back());
+                TRACE("Identity frame {}: {}", identities.size() - 1, identities.back());
                 // Identity frames stop at an empty message
-                while (identities.back().size() != 0 && m_sock.getsockopt<bool>(ZMQ_RCVMORE)) {
+                // ZMQ_RCVMORE is a int64_t according to doc, not a bool
+                while (identities.back().size() != 0 && m_sock.getsockopt<int64_t>(ZMQ_RCVMORE)) {
                     TRACE("Receiving identity frame {}", identities.size());
                     identities.emplace_back();
                     m_sock.recv(&identities.back());
-                    TRACE("Identity frame {}: ", identities.size() - 1, identities.back());
+                    TRACE("Identity frame {}: {}", identities.size() - 1, identities.back());
                 }
-                if (!m_sock.getsockopt<bool>(ZMQ_RCVMORE)) {
+                if (!m_sock.getsockopt<int64_t>(ZMQ_RCVMORE)) {
                     ERR("Skipped one iteration due to no body message part found after identity frames");
                     continue;
                 }
@@ -180,7 +181,7 @@ void ServerWorker::work() {
                 m_sock.recv(&evenlop);
                 m_sock.recv(&body);
             } catch (zmq::error_t &err) {
-                ERR("Skipped one iteration due to error while receiving: {}", err.what());
+                ERR("Skipped one iteration due to error while receiving: {}", err);
                 continue;
             }
 
@@ -213,7 +214,7 @@ void ServerWorker::work() {
                 m_sock.send(reply);
                 TRACE("Response sent");
             } catch (zmq::error_t &err) {
-                ERR("Sending error when serving request {}: {}", type, err.what());
+                ERR("Sending error when serving request {}: {}", type, err);
                 continue;
             }
         }

@@ -29,7 +29,7 @@ std::string utils::bytesToHexString(const uint8_t *info, size_t infoLength)
 
     std::string result(infoLength * 2, ' ');
 
-    for (int i = 0; i < infoLength; i++) {
+    for (size_t i = 0; i < infoLength; i++) {
         int nNibble = info[i] >> 4;
         result[2 * i] = pszNibbleToHex[nNibble];
         nNibble = info[i] & 0x0F;

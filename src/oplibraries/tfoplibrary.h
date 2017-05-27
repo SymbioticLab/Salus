@@ -36,10 +36,13 @@ class TFOpLibrary;
 class TFTask : public ITask
 {
 public:
+
+    ~TFTask() override = default;
+
     TFTask(TFOpLibrary *library, std::unique_ptr<tensorflow::OpKernel> &&kernel,
            std::unique_ptr<tensorflow::OpKernelContext> &&context);
 
-    executor::ResultCode run() override;
+    executor::Status run() override;
     executor::OpContextDef contextDef() override;
 
 private:

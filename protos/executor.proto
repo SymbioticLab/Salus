@@ -14,7 +14,7 @@ message RunRequest {
 }
 
 message RunResponse {
-    ResultCode result = 1;
+    Status result = 1;
     OpContextDef context = 2;
 }
 
@@ -23,7 +23,7 @@ message DeallocRequest {
 }
 
 message DeallocResponse {
-    ResultCode result = 1;
+    Status result = 1;
 }
 
 message AllocRequest {
@@ -32,7 +32,7 @@ message AllocRequest {
 }
 
 message AllocResponse {
-    ResultCode result = 1;
+    Status result = 1;
     uint64 addr_handle = 2;
 }
 
@@ -55,6 +55,6 @@ message OpContextDef {
     bool is_output_dead = 7;
 }
 
-message ResultCode {
+message Status {
     int32 code = 1;
 }

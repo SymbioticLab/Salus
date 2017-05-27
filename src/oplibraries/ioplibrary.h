@@ -28,7 +28,9 @@
 class ITask
 {
 public:
-    virtual executor::ResultCode run() = 0;
+    virtual ~ITask() = default;
+
+    virtual executor::Status run() = 0;
     virtual executor::OpContextDef contextDef() = 0;
 };
 
@@ -38,12 +40,14 @@ public:
 class IOpLibrary
 {
 public:
+    virtual ~IOpLibrary() = default;
+
     virtual bool accepts(const executor::OpKernelDef &operation) = 0;
 
     virtual ITask *createTask(const executor::OpKernelDef &opeartion, const executor::OpContextDef &context) = 0;
 };
 
-class OpLibraryRegistary
+class OpLibraryRegistary final
 {
 public:
     OpLibraryRegistary();
