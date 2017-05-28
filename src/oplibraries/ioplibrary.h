@@ -44,7 +44,8 @@ public:
 
     virtual bool accepts(const executor::OpKernelDef &operation) = 0;
 
-    virtual ITask *createTask(const executor::OpKernelDef &opeartion, const executor::OpContextDef &context) = 0;
+    virtual std::unique_ptr<ITask> createTask(const executor::OpKernelDef &opeartion,
+                                              const executor::OpContextDef &context) = 0;
 };
 
 class OpLibraryRegistary final

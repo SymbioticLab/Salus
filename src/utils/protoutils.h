@@ -36,6 +36,12 @@ namespace utils {
  */
 ProtoPtr createMessage(const std::string &type, const void *data, size_t len);
 
+template<typename T>
+std::unique_ptr<T> createMessage(const std::string &type, const void *data, size_t len)
+{
+    return static_unique_ptr_cast<T, ::google::protobuf::Message>(createMessage(type, data, len));
+}
+
 /**
  * Create the protobuf message from a coded input stream. The stream is expected to contains first a
  * varint of length and followed by that length of bytes as the message.

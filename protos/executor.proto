@@ -42,18 +42,11 @@ message OpKernelDef {
     }
     OpLibraryType oplibrary = 1;
     string id = 2;
-    int32 graph_def_version = 3;
-    bytes extra = 4;
+    bytes extra = 3;
 }
 
 message OpContextDef {
-    int64 host_temp_memory_size = 1;
-    int64 device_temp_memory_size = 2;
-    repeated int64 host_persistent_alloc_ids = 3;
-    repeated int64 device_persistent_alloc_ids = 4;
-    int64 host_persistent_memory_allocated = 5;
-    int64 device_persistent_memory_allocated = 6;
-    bool is_output_dead = 7;
+    bytes extra = 1;
 }
 
 message Status {

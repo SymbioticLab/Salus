@@ -19,13 +19,16 @@
 
 #include "tfdevice.h"
 
+#include "tfallocator.h"
+
 #include "platform/logging.h"
 
 TFDevice::TFDevice()
-: Device(nullptr,
-         Device::BuildDeviceAttributes("/device:CPU:0", tensorflow::DEVICE_CPU,
-                                       tensorflow::Bytes(256 << 20), tensorflow::DeviceLocality()),
-         nullptr)
+    : Device(nullptr,
+            Device::BuildDeviceAttributes("/device:CPU:0", tensorflow::DEVICE_CPU,
+                                        tensorflow::Bytes(256 << 20), tensorflow::DeviceLocality()),
+            nullptr)
+    , m_allocator(new TFAllocator)
 {
     
 }
@@ -39,13 +42,24 @@ void TFDevice::Compute(tensorflow::OpKernel* op_kernel, tensorflow::OpKernelCont
 
 tensorflow::Allocator* TFDevice::GetAllocator(tensorflow::AllocatorAttributes attr)
 {
-    ERR("Not implemented: TFDEvice::GetAllocator");
-    return nullptr;
+    return m_allocator.get();
 }
 
 tensorflow::Status TFDevice::MakeTensorFromProto(const tensorflow::TensorProto& tensor_proto,
                             const tensorflow::AllocatorAttributes alloc_attrs,
                             tensorflow::Tensor* tensor)
 {
-    return tensorflow::Status::OK();
+    INFO("TFDevice::MakeTensorFromProto got tensor_proto {}", tensor_proto.DebugString());
+    INFO("TFDevice::MakeTensorFromProto got alloc_attrs {}", alloc_attrs);
+
+    if (tensor_proto.dtype() > 0 && tensor_proto.dtype() <= tensorflow::DataType_MAX) {
+        tensorflow::Tensor parsed(tensor_proto.dtype());
+        if (parsed.FromProto(m_allocator.get(), tensor_proto)) {
+            *tensor = parsed;
+            return tensorflow::Status::OK();
+        }
+    }
+    ERR("Cannot parse tensor from proto: {}", tensor_proto.DebugString());
+    return tensorflow::errors::InvalidArgument("Cannot parse tensor from proto: ",
+                                               tensor_proto.DebugString());
 }

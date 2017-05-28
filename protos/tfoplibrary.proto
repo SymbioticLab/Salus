@@ -3,3 +3,22 @@ syntax = "proto3";
 package executor;
 
 import "tensorflow/core/framework/node_def.proto";
+import "tensorflow/core/framework/function.proto";
+import "tensorflow/core/protobuf/config.proto";
+
+message TFOpKernelDef {
+    int32 graph_def_version = 1;
+    tensorflow.NodeDef nodedef = 2;
+    tensorflow.ConfigProto cfgProto = 3;
+    tensorflow.FunctionDefLibrary funcDef = 4;
+}
+
+message TFOpContextDef {
+    int64 host_temp_memory_size = 1;
+    int64 device_temp_memory_size = 2;
+    repeated int64 host_persistent_alloc_ids = 3;
+    repeated int64 device_persistent_alloc_ids = 4;
+    int64 host_persistent_memory_allocated = 5;
+    int64 device_persistent_memory_allocated = 6;
+    bool is_output_dead = 7;
+}

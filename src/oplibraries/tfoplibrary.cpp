@@ -19,7 +19,7 @@
 
 #include "tfoplibrary.h"
 
-#include "tfdevice.h"
+#include "tfmocks/tfdevice.h"
 
 #include "utils/protoutils.h"
 #include "utils/pointerutils.h"
@@ -48,32 +48,6 @@ bool TFOpLibrary::accepts(const rpc::OpKernelDef& operation)
     return operation.oplibrary() == rpc::OpKernelDef::TENSORFLOW;
 }
 
-unique_ptr<tensorflow::OpKernel> TFOpLibrary::kernelFromDef(const executor::OpKernelDef &opdef)
-{
-    google::protobuf::io::ArrayInputStream raw_input(opdef.extra().data(), opdef.extra().size());
-    google::protobuf::io::CodedInputStream coded_input(&raw_input);
-
-    auto nodedef = utils::createLenLimitedMessage<NodeDef>("tensorflow.NodeDef", &coded_input);
-    if (!nodedef) { return {}; }
-    DEBUG("Got NodeDef {}", nodedef->DebugString());
-
-    auto configproto = utils::createLenLimitedMessage<ConfigProto>("tensorflow.ConfigProto", &coded_input);
-    if (!configproto) { return {}; }
-    DEBUG("Got ConfigProto {}", configproto->DebugString());
-
-    auto funcdeflib = utils::createLenLimitedMessage<FunctionDefLibrary>("tensorflow.FunctionDefLibrary", &coded_input);
-    if (!funcdeflib) { return {}; }
-    DEBUG("Got funcdeflib {}", funcdeflib->DebugString());
-
-    // TODO: compute session id
-    std::string session_id = "session_id";
-
-    auto sess = getOrCreateSession(session_id, opdef.graph_def_version(), *configproto, *funcdeflib);
-    if (!sess) { return {}; }
-
-    return sess->createKernel(*nodedef);
-}
-
 TFSession *TFOpLibrary::getOrCreateSession(const std::string& sess_id, int graph_def_version,
                                            const tensorflow::ConfigProto& cfgProto,
                                            const tensorflow::FunctionDefLibrary& fDefLib)
@@ -89,9 +63,32 @@ TFSession *TFOpLibrary::getOrCreateSession(const std::string& sess_id, int graph
     return sess.get();
 }
 
+unique_ptr<tensorflow::OpKernel> TFOpLibrary::kernelFromDef(const executor::OpKernelDef &opdef)
+{
+    auto def = utils::createMessage<executor::TFOpKernelDef>("executor.TFOpKernelDef",
+                                                             opdef.extra().data(),
+                                                             opdef.extra().size());
+
+    if (!def) { return {}; }
+
+    DEBUG("Got NodeDef {}", def->nodedef().DebugString());
+    DEBUG("Got ConfigProto {}", def->cfgproto().DebugString());
+    DEBUG("Got funcdeflib {}", def->funcdef().DebugString());
+
+    // TODO: compute session id
+    std::string session_id = "session_id";
+
+    auto sess = getOrCreateSession(session_id, def->graph_def_version(), def->cfgproto(), def->funcdef());
+    if (!sess) { return {}; }
+
+    return sess->createKernel(def->nodedef());
+}
 
 unique_ptr<tensorflow::OpKernelContext> TFOpLibrary::contextFromDef(const executor::OpContextDef &ctxdef)
 {
+    auto def = utils::createMessage<executor::TFOpContextDef>("executor.TFOpContextDef",
+                                                              ctxdef.extra().data(),
+                                                              ctxdef.extra().size());
     // FIXME: create kernel context from def
     return {};
 }
@@ -102,9 +99,9 @@ executor::OpContextDef TFOpLibrary::contextToDef(const tensorflow::OpKernelConte
     return {};
 }
 
-ITask * TFOpLibrary::createTask(const rpc::OpKernelDef& opdef, const rpc::OpContextDef& ctxdef)
+std::unique_ptr<ITask> TFOpLibrary::createTask(const rpc::OpKernelDef& opdef, const rpc::OpContextDef& ctxdef)
 {
-    return new TFTask(this, kernelFromDef(opdef), contextFromDef(ctxdef));
+    return std::make_unique<TFTask>(this, kernelFromDef(opdef), contextFromDef(ctxdef));
 }
 
 TFSession::TFSession(TFOpLibrary *opLibrary, const tensorflow::FunctionDefLibrary &fDefLib,
@@ -151,7 +148,36 @@ TFTask::TFTask(TFOpLibrary *library, unique_ptr<tensorflow::OpKernel> &&kernel,
     : m_opkernel(std::move(kernel))
     , m_context(std::move(context))
     , m_library(library)
-{ }
+{
+    INFO("Created TFTask.");
+    if (m_opkernel) {
+        INFO("m_opkernel.def() {}", m_opkernel->def().DebugString());
+        INFO("m_opkernel.name() {}", m_opkernel->name());
+        INFO("m_opkernel.type_string() {}", m_opkernel->type_string());
+        INFO("m_opkernel.is_internal() {}", m_opkernel->is_internal());
+        INFO("m_opkernel.num_inputs() {}", m_opkernel->num_inputs());
+        for (int i = 0; i != m_opkernel->num_inputs(); i++) {
+            INFO("m_opkernel.input_type({}) {}", i, m_opkernel->input_type(i));
+        }
+        for (int i = 0; i != m_opkernel->input_memory_types().size(); i++) {
+            INFO("m_opkernel.input_memory_types()[{}] {}", i, m_opkernel->input_memory_types()[i]);
+        }
+
+        INFO("m_opkernel.num_outputs() {}", m_opkernel->num_outputs());
+        for (int i = 0; i != m_opkernel->num_outputs(); i++) {
+            INFO("m_opkernel.output_type({}) {}", i, m_opkernel->output_type(i));
+        }
+        for (int i = 0; i != m_opkernel->output_memory_types().size(); i++) {
+            INFO("m_opkernel.output_memory_types()[{}] {}", i, m_opkernel->output_memory_types()[i]);
+        }
+
+        INFO("m_opkernel.IsExpensive() {}", m_opkernel->IsExpensive());
+    }
+
+    if (m_context) {
+        INFO("");
+    }
+}
 
 rpc::OpContextDef TFTask::contextDef()
 {
@@ -167,6 +193,7 @@ rpc::Status TFTask::run()
             reinterpret_cast<uint64_t>(m_opkernel.get()), reinterpret_cast<uint64_t>(m_context.get()));
     }
 
+    // TODO: proper return code
     return {};
 }
 

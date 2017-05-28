@@ -20,8 +20,8 @@
 #include "rpcservercore.h"
 
 #include "oplibraries/ioplibrary.h"
-#include "platform/memory.h"
 #include "platform/logging.h"
+#include "memorymgr/memorymgr.h"
 
 #include "executor.pb.h"
 
@@ -83,8 +83,8 @@ void RpcServerCore::Alloc(const AllocRequest *request, AllocResponse *response)
 
     INFO("Serving AllocRequest with alignment {} and num_bytes {}", alignment, num_bytes);
 
-    // TODO: use more appropriate memroy allocation
-    uint64_t addr_handle = reinterpret_cast<uint64_t>(mem::alignedAlloc(num_bytes, alignment));
+    auto ptr = MemoryMgr::instance().allocate(num_bytes, alignment);
+    auto addr_handle = reinterpret_cast<uint64_t>(ptr);
     response->set_addr_handle(addr_handle);
 
     INFO("Allocated address handel: {:x}", addr_handle);
@@ -98,8 +98,7 @@ void RpcServerCore::Dealloc(const DeallocRequest *request, DeallocResponse *resp
 
     INFO("Serving DeallocRequest with address handel: {:x}", addr_handle);
 
-    // TODO: use more appropriate memroy deallocation
-    mem::alignedFree(reinterpret_cast<void*>(addr_handle));
+    MemoryMgr::instance().deallocate(reinterpret_cast<void*>(addr_handle));
 
     response->mutable_result()->set_code(0);
 }

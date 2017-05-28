@@ -48,7 +48,6 @@ class TFSession;
 class TFTask : public ITask
 {
 public:
-
     ~TFTask() override = default;
 
     TFTask(TFOpLibrary *library, std::unique_ptr<tensorflow::OpKernel> &&kernel,
@@ -72,7 +71,8 @@ public:
     ~TFOpLibrary() override = default;
 
     bool accepts(const executor::OpKernelDef &operation) override;
-    ITask *createTask(const executor::OpKernelDef &opdef, const executor::OpContextDef &ctxdef) override;
+    std::unique_ptr<ITask> createTask(const executor::OpKernelDef &opdef,
+                                      const executor::OpContextDef &ctxdef) override;
 
     std::unique_ptr<tensorflow::OpKernel> kernelFromDef(const executor::OpKernelDef &opdef);
     std::unique_ptr<tensorflow::OpKernelContext> contextFromDef(const executor::OpContextDef &ctxdef);

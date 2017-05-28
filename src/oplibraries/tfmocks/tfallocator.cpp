@@ -17,27 +17,39 @@
  * 
  */
 
-#ifndef TFDEVICE_H
-#define TFDEVICE_H
+#include "tfallocator.h"
 
-#include <tensorflow/core/common_runtime/device.h>
+#include "memorymgr/memorymgr.h"
+#include "platform/logging.h"
 
-/**
- * @todo write docs
- */
-class TFDevice : public tensorflow::Device
+
+TFAllocator::TFAllocator()
 {
-public:
-    TFDevice();
-    ~TFDevice() override;
 
-    void Compute(tensorflow::OpKernel* op_kernel, tensorflow::OpKernelContext* context) override;
-    tensorflow::Allocator* GetAllocator(tensorflow::AllocatorAttributes attr) override;
-    tensorflow::Status MakeTensorFromProto(const tensorflow::TensorProto& tensor_proto,
-                               const tensorflow::AllocatorAttributes alloc_attrs,
-                               tensorflow::Tensor* tensor) override;
+}
 
-    tensorflow::Status Sync() override { return tensorflow::Status::OK(); }
-};
+TFAllocator::~TFAllocator()
+{
 
-#endif // TFDEVICE_H
+}
+
+std::string TFAllocator::Name()
+{
+    return "mock_tf";
+}
+
+void *TFAllocator::AllocateRaw(size_t alignment, size_t num_bytes)
+{
+    auto ptr = MemoryMgr::instance().allocate(num_bytes, alignment);
+
+    INFO("TFAllocator allocated {} bytes of memory at {:x} with alignment {}",
+         num_bytes, reinterpret_cast<uint64_t>(ptr), alignment);
+
+    return ptr;
+}
+
+void TFAllocator::DeallocateRaw(void *ptr)
+{
+    INFO("TFAllocator deallocating memory at {:x}", reinterpret_cast<uint64_t>(ptr));
+    MemoryMgr::instance().deallocate(ptr);
+}

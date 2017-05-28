@@ -3,17 +3,26 @@ include_directories(${CMAKE_CURRENT_SOURCE_DIR})
 set(SRC_LIST
     "oplibraries/ioplibrary.cpp"
     "oplibraries/tfoplibrary.cpp"
-    "oplibraries/tfdevice.cpp"
+
+    "oplibraries/tfmocks/tfdevice.cpp"
+    "oplibraries/tfmocks/tfallocator.cpp"
+
+    "memorymgr/memorymgr.cpp"
+
+    "execution/executionengine.cpp"
+
     "rpcserver/irpcserver.cpp"
     "rpcserver/rpcservercore.cpp"
     "rpcserver/zmqserver.cpp"
+
     "platform/memory.cpp"
     "platform/logging.cpp"
     "platform/crashhandler/logcapture.cpp"
+
     "utils/protoutils.cpp"
     "utils/pointerutils.cpp"
     "utils/stringutils.cpp"
-    "executionengine.cpp"
+
     "executor.cpp"
 )
 

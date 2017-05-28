@@ -24,6 +24,8 @@
 
 #include "executor.pb.h"
 
+#include <tensorflow/core/framework/allocator.h>
+
 #include <zmq.hpp>
 
 logging::LoggerWrapper::LoggerWrapper()
@@ -61,4 +63,14 @@ std::ostream &operator<<(std::ostream &os, const zmq::error_t &c)
 {
     return os << "zmq::error_t(code=" << c.num()
               << ", msg='" << c.what() << "')";
+}
+
+std::ostream &operator<<(std::ostream &os, const tensorflow::AllocatorAttributes &c)
+{
+    return os << "tensorflow::AllocatorAttributes("
+    << "on_host=" << c.on_host()
+    << ", nic_compatible=" << c.nic_compatible()
+    << ", gpu_compatible=" << c.gpu_compatible()
+    << ", track_sizes=" << c.track_sizes()
+    << ")";
 }
