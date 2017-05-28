@@ -19,6 +19,8 @@
 
 #include "tfoplibrary.h"
 
+#include "tfdevice.h"
+
 #include "utils/protoutils.h"
 #include "utils/pointerutils.h"
 #include "platform/logging.h"
@@ -26,10 +28,18 @@
 #include "executor.pb.h"
 #include "tfoplibrary.pb.h"
 
-#include "tensorflow/core/framework/op_kernel.h"
+#include <tensorflow/core/framework/op.h>
+#include <tensorflow/core/framework/op_kernel.h>
+#include <tensorflow/core/framework/op_segment.h>
+#include <tensorflow/core/common_runtime/function.h>
+#include <tensorflow/core/framework/node_def.pb.h>
+#include <tensorflow/core/framework/function.pb.h>
+#include <tensorflow/core/protobuf/config.pb.h>
 
 namespace rpc = executor;
 using ::tensorflow::NodeDef;
+using ::tensorflow::ConfigProto;
+using ::tensorflow::FunctionDefLibrary;
 using ::google::protobuf::Message;
 using std::unique_ptr;
 
@@ -40,16 +50,45 @@ bool TFOpLibrary::accepts(const rpc::OpKernelDef& operation)
 
 unique_ptr<tensorflow::OpKernel> TFOpLibrary::kernelFromDef(const executor::OpKernelDef &opdef)
 {
-    auto msg = utils::createMessage("tensorflow.NodeDef", opdef.extra().data(), opdef.extra().size());
-    if (!msg) {
-        return {};
+    google::protobuf::io::ArrayInputStream raw_input(opdef.extra().data(), opdef.extra().size());
+    google::protobuf::io::CodedInputStream coded_input(&raw_input);
+
+    auto nodedef = utils::createLenLimitedMessage<NodeDef>("tensorflow.NodeDef", &coded_input);
+    if (!nodedef) { return {}; }
+    DEBUG("Got NodeDef {}", nodedef->DebugString());
+
+    auto configproto = utils::createLenLimitedMessage<ConfigProto>("tensorflow.ConfigProto", &coded_input);
+    if (!configproto) { return {}; }
+    DEBUG("Got ConfigProto {}", configproto->DebugString());
+
+    auto funcdeflib = utils::createLenLimitedMessage<FunctionDefLibrary>("tensorflow.FunctionDefLibrary", &coded_input);
+    if (!funcdeflib) { return {}; }
+    DEBUG("Got funcdeflib {}", funcdeflib->DebugString());
+
+    // TODO: compute session id
+    std::string session_id = "session_id";
+
+    auto sess = getOrCreateSession(session_id, opdef.graph_def_version(), *configproto, *funcdeflib);
+    if (!sess) { return {}; }
+
+    return sess->createKernel(*nodedef);
+}
+
+TFSession *TFOpLibrary::getOrCreateSession(const std::string& sess_id, int graph_def_version,
+                                           const tensorflow::ConfigProto& cfgProto,
+                                           const tensorflow::FunctionDefLibrary& fDefLib)
+{
+    std::lock_guard<std::mutex> guard(m_mu);
+
+    auto &sess = m_sessions[sess_id];
+    if (!sess) {
+        sess.reset(new TFSession(this, fDefLib, graph_def_version,
+                                 cfgProto.graph_options().optimizer_options()));
     }
 
-    auto nodedef = utils::static_unique_ptr_cast<NodeDef>(std::move(msg));
-    DEBUG("Got NodeDef {}", nodedef->DebugString());
-    // FIXME: create opkernel from def
-    return {};
+    return sess.get();
 }
+
 
 unique_ptr<tensorflow::OpKernelContext> TFOpLibrary::contextFromDef(const executor::OpContextDef &ctxdef)
 {
@@ -68,12 +107,56 @@ ITask * TFOpLibrary::createTask(const rpc::OpKernelDef& opdef, const rpc::OpCont
     return new TFTask(this, kernelFromDef(opdef), contextFromDef(ctxdef));
 }
 
+TFSession::TFSession(TFOpLibrary *opLibrary, const tensorflow::FunctionDefLibrary &fDefLib,
+                     int graphDefVersion, const tensorflow::OptimizerOptions &optimizerOpts)
+    : m_oplibrary(opLibrary)
+    , m_flibDef(tensorflow::OpRegistry::Global(), fDefLib)
+    , m_fruntime()
+    , m_device(new TFDevice)
+{
+    m_fruntime.reset(tensorflow::NewFunctionLibraryRuntime(
+        nullptr /* DeviceMgr */, nullptr /* Env */,
+        m_device.get(), graphDefVersion, &m_flibDef, optimizerOpts));
+}
+
+TFSession::~TFSession() = default;
+
+std::unique_ptr<tensorflow::OpKernel> TFSession::createKernel(const tensorflow::NodeDef &ndef)
+{
+    tensorflow::OpKernel *kernel = nullptr;
+    // Caches the kernel only if the node is stateful.
+    if (!m_fruntime->IsStateful(ndef.op())) {
+        auto ok = m_fruntime->CreateKernel(ndef, &kernel);
+        if (!ok.ok()) {
+            ERR("Failed to create kernel with status {}({}) for NodeDef: {}",
+                ok.code(), ok.error_message(), ndef.DebugString());
+        }
+        return std::unique_ptr<tensorflow::OpKernel>(kernel);
+    }
+
+    // Kernels created for subgraph nodes need to be cached.  On
+    // cache miss, create_fn() is invoked to create a kernel based
+    // on the function library here + global op registry.
+    auto lib = m_fruntime.get();
+    auto create_fn = [lib, &ndef](tensorflow::OpKernel** kernel) {
+        return lib->CreateKernel(ndef, kernel);
+    };
+    auto ok = m_opseg.FindOrCreate("executor_session", ndef.name(), &kernel, create_fn);
+
+    return std::unique_ptr<tensorflow::OpKernel>(kernel);
+}
+
 TFTask::TFTask(TFOpLibrary *library, unique_ptr<tensorflow::OpKernel> &&kernel,
                unique_ptr<tensorflow::OpKernelContext> &&context)
     : m_opkernel(std::move(kernel))
     , m_context(std::move(context))
     , m_library(library)
 { }
+
+rpc::OpContextDef TFTask::contextDef()
+{
+    return m_library->contextToDef(m_context.get());
+}
 
 rpc::Status TFTask::run()
 {
@@ -87,7 +170,3 @@ rpc::Status TFTask::run()
     return {};
 }
 
-rpc::OpContextDef TFTask::contextDef()
-{
-    return m_library->contextToDef(m_context.get());
-}

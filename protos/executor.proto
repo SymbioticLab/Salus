@@ -42,7 +42,8 @@ message OpKernelDef {
     }
     OpLibraryType oplibrary = 1;
     string id = 2;
-    bytes extra = 3;
+    int32 graph_def_version = 3;
+    bytes extra = 4;
 }
 
 message OpContextDef {

@@ -24,14 +24,26 @@
 
 #include "executor.pb.h"
 
+#include <tensorflow/core/framework/op_segment.h>
+
 #include <memory>
+#include <mutex>
+#include <string>
+#include <unordered_map>
 
 namespace tensorflow {
 class OpKernel;
 class OpKernelContext;
+class OpSegment;
+class OptimizerOptions;
+class NodeDef;
+class FunctionDefLibrary;
+class ConfigProto;
 }
 
 class TFOpLibrary;
+class TFDevice;
+class TFSession;
 
 class TFTask : public ITask
 {
@@ -57,13 +69,40 @@ private:
 class TFOpLibrary : public IOpLibrary
 {
 public:
+    ~TFOpLibrary() override = default;
+
     bool accepts(const executor::OpKernelDef &operation) override;
     ITask *createTask(const executor::OpKernelDef &opdef, const executor::OpContextDef &ctxdef) override;
 
     std::unique_ptr<tensorflow::OpKernel> kernelFromDef(const executor::OpKernelDef &opdef);
     std::unique_ptr<tensorflow::OpKernelContext> contextFromDef(const executor::OpContextDef &ctxdef);
     executor::OpContextDef contextToDef(const tensorflow::OpKernelContext *context);
+
 private:
+    TFSession *getOrCreateSession(const std::string &sess_id, int graph_def_version,
+                                  const tensorflow::ConfigProto &cfgProto,
+                                  const tensorflow::FunctionDefLibrary &fDefLib);
+
+    std::mutex m_mu; // protects m_sessions
+    std::unordered_map<std::string, std::unique_ptr<TFSession>> m_sessions;
 };
 
+class TFSession
+{
+public:
+    TFSession(TFOpLibrary *opLibrary, const tensorflow::FunctionDefLibrary &fDefLib,
+              int graphDefVersion, const tensorflow::OptimizerOptions &optimizerOpts);
+
+    ~TFSession();
+
+    std::unique_ptr<tensorflow::OpKernel> createKernel(const tensorflow::NodeDef &nodedef);
+
+private:
+    TFOpLibrary *m_oplibrary;
+
+    tensorflow::OpSegment m_opseg;
+    tensorflow::FunctionLibraryDefinition m_flibDef;
+    std::unique_ptr<tensorflow::FunctionLibraryRuntime> m_fruntime;
+    std::unique_ptr<TFDevice> m_device;
+};
 #endif // TFOPLIBRARY_H

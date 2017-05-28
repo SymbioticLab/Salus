@@ -1,46 +1,43 @@
 /*
  * <one line to give the library's name and an idea of what it does.>
  * Copyright (C) 2017  Aetf <aetf@unlimitedcodeworks.xyz>
- *
+ * 
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation, either version 3 of the License, or
  * (at your option) any later version.
- *
+ * 
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
- *
+ * 
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
- *
+ * 
  */
 
-#ifndef POINTERUTILS_H
-#define POINTERUTILS_H
+#ifndef TFDEVICE_H
+#define TFDEVICE_H
 
-#include <memory>
+#include <tensorflow/core/common_runtime/device.h>
 
-namespace utils {
-
-template<typename Derived, typename Base>
-std::unique_ptr<Derived> static_unique_ptr_cast(std::unique_ptr<Base> &&p)
+/**
+ * @todo write docs
+ */
+class TFDevice : public tensorflow::Device
 {
-    auto d = static_cast<Derived *>(p.release());
-    return std::unique_ptr<Derived>(d);
-}
+public:
+    TFDevice();
+    ~TFDevice() override;
 
-template<typename Derived, typename Base>
-std::unique_ptr<Derived> dynamic_unique_ptr_cast(std::unique_ptr<Base> &&p)
-{
-    if (Derived *result = dynamic_cast<Derived *>(p.get())) {
-        p.release();
-        return std::unique_ptr<Derived>(result);
-    }
-    return std::unique_ptr<Derived>(nullptr);
-}
+    void Compute(tensorflow::OpKernel* op_kernel, tensorflow::OpKernelContext* context) override;
+    tensorflow::Allocator* GetAllocator(tensorflow::AllocatorAttributes attr) override;
+    tensorflow::Status MakeTensorFromProto(const tensorflow::TensorProto& tensor_proto,
+                               const tensorflow::AllocatorAttributes alloc_attrs,
+                               tensorflow::Tensor* tensor) override;
 
-} // namespace utils
+    tensorflow::Status Sync() override { return tensorflow::Status::OK(); }
+};
 
-#endif // POINTERUTILS_H
+#endif // TFDEVICE_H

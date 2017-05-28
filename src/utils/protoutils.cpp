@@ -21,19 +21,30 @@
 
 #include "platform/logging.h"
 
-ProtoPtr utils::createMessage(const std::string type, const void* data, size_t len)
+#include <google/protobuf/io/coded_stream.h>
+
+namespace protobuf = ::google::protobuf;
+
+ProtoPtr utils::newMessage(const std::string &type)
 {
-    auto desc = ::google::protobuf::DescriptorPool::generated_pool()->FindMessageTypeByName(type);
+    auto desc = protobuf::DescriptorPool::generated_pool()->FindMessageTypeByName(type);
     if (!desc) {
         WARN("Protobuf descriptor not found for type name: {}", type);
         return {};
     }
 
-    auto message = ::google::protobuf::MessageFactory::generated_factory()->GetPrototype(desc)->New();
+    auto message = protobuf::MessageFactory::generated_factory()->GetPrototype(desc)->New();
     if (!message) {
         WARN("Failed to create message object from descriptor of type name: {}", type);
         return {};
     }
+
+    return ProtoPtr(message);
+}
+
+ProtoPtr utils::createMessage(const std::string &type, const void* data, size_t len)
+{
+    auto message = newMessage(type);
 
     auto ok = message->ParseFromArray(data, len);
     if (!ok) {
@@ -41,5 +52,21 @@ ProtoPtr utils::createMessage(const std::string type, const void* data, size_t l
         return {};
     }
 
-    return ProtoPtr(message);
+    return message;
+}
+
+ProtoPtr utils::createLenLimitedMessage(const std::string &type, protobuf::io::CodedInputStream *stream)
+{
+    auto limit = stream->ReadLengthAndPushLimit();
+    auto msg = utils::newMessage(type);
+    if (!msg) {
+        return {};
+    }
+    if (!(msg->ParseFromCodedStream(stream) && stream->ConsumedEntireMessage())) {
+        WARN("Malformatted message received in CodedInputStream for type: {}", type);
+        return {};
+    }
+    stream->PopLimit(limit);
+
+    return msg;
 }

@@ -3,6 +3,7 @@ include_directories(${CMAKE_CURRENT_SOURCE_DIR})
 set(SRC_LIST
     "oplibraries/ioplibrary.cpp"
     "oplibraries/tfoplibrary.cpp"
+    "oplibraries/tfdevice.cpp"
     "rpcserver/irpcserver.cpp"
     "rpcserver/rpcservercore.cpp"
     "rpcserver/zmqserver.cpp"
