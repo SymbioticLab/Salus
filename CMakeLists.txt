@@ -26,7 +26,6 @@ option(WITH_BUNDLED_SPDLOG "Use bundled spdlog library instead of system provide
 # Protobuf
 find_package(Protobuf REQUIRED)
 
-
 # TensorFlow
 # TensorFlow root must be passed in command line as -DTensorFlow_ROOT=/path/to/tensorflow
 find_package(TensorFlow REQUIRED)
@@ -41,17 +40,29 @@ endif()
 # spdlog
 if(NOT WITH_BUNDLED_SPDLOG)
     find_package(spdlog QUIET)
+    if(NOT spdlog_FOUND)
+        ## fallback to bundled spdlog
+        SET(WITH_BUNDLED_SPDLOG ON CACHE BOOL
+            "Use bundled spdlog library instead of system provided version" FORCE)
+        message(WARNING "spdlog requested but not found, fallback to use bundled version.")
+    endif(NOT spdlog_FOUND)
 endif(NOT WITH_BUNDLED_SPDLOG)
 
-## fallback to bundled spdlog
-if(NOT TARGET spdlog::spdlog)
-    SET(WITH_BUNDLED_SPDLOG ON CACHE BOOL "Use bundled spdlog library instead of system provided version" FORCE)
-    message(WARNING "spdlog requested but not found, fallback to use bundled version.")
-
+if(WITH_BUNDLED_SPDLOG)
+    if(NOT EXISTS thirdparty/spdlog/CMakeLists.txt)
+        message(STATUS "Initialize submodule")
+        execute_process(COMMAND "git" "submodule" "update" "--init" "thirdparty/spdlog"
+            WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
+            RESULT_VARIABLE retcode
+        )
+        if(NOT "${retcode}" STREQUAL "0")
+            message(FATAL_ERROR "Failed to checkout spdlog as submodule")
+        endif(NOT "${retcode}" STREQUAL "0")
+    endif(NOT EXISTS thirdparty/spdlog/CMakeLists.txt)
     SET(SPDLOG_BUILD_TESTING OFF CACHE BOOL "Build spdlog tests" FORCE)
     add_subdirectory(thirdparty/spdlog)
     add_library(spdlog::spdlog ALIAS spdlog)
-endif(NOT TARGET spdlog::spdlog)
+endif(WITH_BUNDLED_SPDLOG)
 
 #---------------------------------------------------------------------------------------
 # Print summary
