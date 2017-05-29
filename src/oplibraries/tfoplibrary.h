@@ -23,17 +23,22 @@
 #include "ioplibrary.h"
 
 #include "executor.pb.h"
+#include "tfoplibrary.pb.h"
 
 #include <tensorflow/core/framework/op_segment.h>
+#include <tensorflow/core/framework/op_kernel.h>
+#include <tensorflow/core/framework/resource_mgr.h>
+#include <tensorflow/core/framework/allocator.h>
+#include <tensorflow/core/util/tensor_slice_reader_cache.h>
 
 #include <memory>
 #include <mutex>
 #include <string>
 #include <unordered_map>
+#include <utility>
+#include <vector>
 
 namespace tensorflow {
-class OpKernel;
-class OpKernelContext;
 class OpSegment;
 class OptimizerOptions;
 class NodeDef;
@@ -45,20 +50,48 @@ class TFOpLibrary;
 class TFDevice;
 class TFSession;
 
+typedef tensorflow::gtl::InlinedVector<tensorflow::TensorValue, 4> TensorValueVec;
+typedef tensorflow::gtl::InlinedVector<tensorflow::DeviceContext*, 4> DeviceContextVec;
+typedef tensorflow::gtl::InlinedVector<tensorflow::AllocatorAttributes, 4> AllocatorAttributeVec;
+
+class TFContext
+{
+public:
+    TFContext();
+    ~TFContext();
+
+    tensorflow::OpKernelContext *ctx();
+
+    void FillOutputAttrs();
+
+    tensorflow::ScopedStepContainer step_container;
+    tensorflow::checkpoint::TensorSliceReaderCacheWrapper slice_reader_cache_wrapper;
+
+    TensorValueVec inputs;
+    DeviceContextVec input_device_contexts;
+    AllocatorAttributeVec input_alloc_attrs;
+
+    std::vector<tensorflow::AllocatorAttributes> output_attrs;
+
+    tensorflow::OpKernelContext::Params params;
+private:
+    std::unique_ptr<tensorflow::OpKernelContext> context;
+};
+
 class TFTask : public ITask
 {
 public:
     ~TFTask() override = default;
 
     TFTask(TFOpLibrary *library, std::unique_ptr<tensorflow::OpKernel> &&kernel,
-           std::unique_ptr<tensorflow::OpKernelContext> &&context);
+           std::unique_ptr<TFContext> &&context);
 
     executor::Status run() override;
     executor::OpContextDef contextDef() override;
 
 private:
     std::unique_ptr<tensorflow::OpKernel> m_opkernel;
-    std::unique_ptr<tensorflow::OpKernelContext> m_context;
+    std::unique_ptr<TFContext> m_context;
     TFOpLibrary *m_library;
 };
 
@@ -74,14 +107,13 @@ public:
     std::unique_ptr<ITask> createTask(const executor::OpKernelDef &opdef,
                                       const executor::OpContextDef &ctxdef) override;
 
-    std::unique_ptr<tensorflow::OpKernel> kernelFromDef(const executor::OpKernelDef &opdef);
-    std::unique_ptr<tensorflow::OpKernelContext> contextFromDef(const executor::OpContextDef &ctxdef);
-    executor::OpContextDef contextToDef(const tensorflow::OpKernelContext *context);
+    executor::OpContextDef contextToDef(tensorflow::OpKernelContext *context);
 
 private:
     TFSession *getOrCreateSession(const std::string &sess_id, int graph_def_version,
                                   const tensorflow::ConfigProto &cfgProto,
                                   const tensorflow::FunctionDefLibrary &fDefLib);
+    TFSession *getSession(const std::string &sess_id);
 
     std::mutex m_mu; // protects m_sessions
     std::unordered_map<std::string, std::unique_ptr<TFSession>> m_sessions;
@@ -96,6 +128,8 @@ public:
     ~TFSession();
 
     std::unique_ptr<tensorflow::OpKernel> createKernel(const tensorflow::NodeDef &nodedef);
+
+    std::unique_ptr<TFContext> createContext(const executor::TFOpContextDef &tfdef, tensorflow::OpKernel *opkernel);
 
 private:
     TFOpLibrary *m_oplibrary;

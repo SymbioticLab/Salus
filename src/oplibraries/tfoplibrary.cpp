@@ -29,12 +29,12 @@
 #include "tfoplibrary.pb.h"
 
 #include <tensorflow/core/framework/op.h>
-#include <tensorflow/core/framework/op_kernel.h>
 #include <tensorflow/core/framework/op_segment.h>
 #include <tensorflow/core/common_runtime/function.h>
 #include <tensorflow/core/framework/node_def.pb.h>
 #include <tensorflow/core/framework/function.pb.h>
 #include <tensorflow/core/protobuf/config.pb.h>
+#include <tensorflow/core/lib/gtl/stl_util.h>
 
 namespace rpc = executor;
 using ::tensorflow::NodeDef;
@@ -63,52 +63,49 @@ TFSession *TFOpLibrary::getOrCreateSession(const std::string& sess_id, int graph
     return sess.get();
 }
 
-unique_ptr<tensorflow::OpKernel> TFOpLibrary::kernelFromDef(const executor::OpKernelDef &opdef)
+TFSession *TFOpLibrary::getSession(const std::string& sess_id)
 {
-    auto def = utils::createMessage<executor::TFOpKernelDef>("executor.TFOpKernelDef",
-                                                             opdef.extra().data(),
-                                                             opdef.extra().size());
-
-    if (!def) { return {}; }
-
-    DEBUG("Got NodeDef {}", def->nodedef().DebugString());
-    DEBUG("Got ConfigProto {}", def->cfgproto().DebugString());
-    DEBUG("Got funcdeflib {}", def->funcdef().DebugString());
-
-    // TODO: compute session id
-    std::string session_id = "session_id";
-
-    auto sess = getOrCreateSession(session_id, def->graph_def_version(), def->cfgproto(), def->funcdef());
-    if (!sess) { return {}; }
-
-    return sess->createKernel(def->nodedef());
-}
-
-unique_ptr<tensorflow::OpKernelContext> TFOpLibrary::contextFromDef(const executor::OpContextDef &ctxdef)
-{
-    auto def = utils::createMessage<executor::TFOpContextDef>("executor.TFOpContextDef",
-                                                              ctxdef.extra().data(),
-                                                              ctxdef.extra().size());
-    // FIXME: create kernel context from def
-    return {};
-}
-
-executor::OpContextDef TFOpLibrary::contextToDef(const tensorflow::OpKernelContext *context)
-{
-    // FIXME: create def from kernel context
+    std::lock_guard<std::mutex> guard(m_mu);
+    if (m_sessions.count(sess_id) != 0) {
+        return m_sessions[sess_id].get();
+    }
     return {};
 }
 
 std::unique_ptr<ITask> TFOpLibrary::createTask(const rpc::OpKernelDef& opdef, const rpc::OpContextDef& ctxdef)
 {
-    return std::make_unique<TFTask>(this, kernelFromDef(opdef), contextFromDef(ctxdef));
+    auto tfdef = utils::createMessage<executor::TFOpKernelDef>("executor.TFOpKernelDef",
+                                                             opdef.extra().data(),
+                                                             opdef.extra().size());
+    auto tfctxdef = utils::createMessage<executor::TFOpContextDef>("executor.TFOpContextDef",
+                                                                   ctxdef.extra().data(),
+                                                                   ctxdef.extra().size());
+
+    if (!tfdef || !tfctxdef) { return {}; }
+
+    DEBUG("Got NodeDef {}", tfdef->nodedef().DebugString());
+    DEBUG("Got ConfigProto {}", tfdef->cfgproto().DebugString());
+    DEBUG("Got funcdeflib {}", tfdef->funcdef().DebugString());
+
+    // TODO: compute session id
+    std::string session_id = "session_id";
+
+    auto sess = getOrCreateSession(session_id, tfdef->graph_def_version(), tfdef->cfgproto(), tfdef->funcdef());
+    if (!sess) { return {}; }
+
+    auto opkernel = sess->createKernel(tfdef->nodedef());
+    TRACE("Created OpKernel");
+    auto tfctx = sess->createContext(*tfctxdef, opkernel.get());
+    TRACE("Created OpKernelContext");
+
+    return std::make_unique<TFTask>(this, std::move(opkernel), std::move(tfctx));
 }
 
 TFSession::TFSession(TFOpLibrary *opLibrary, const tensorflow::FunctionDefLibrary &fDefLib,
                      int graphDefVersion, const tensorflow::OptimizerOptions &optimizerOpts)
     : m_oplibrary(opLibrary)
     , m_flibDef(tensorflow::OpRegistry::Global(), fDefLib)
-    , m_fruntime()
+    , m_fruntime(nullptr)
     , m_device(new TFDevice)
 {
     m_fruntime.reset(tensorflow::NewFunctionLibraryRuntime(
@@ -143,8 +140,59 @@ std::unique_ptr<tensorflow::OpKernel> TFSession::createKernel(const tensorflow::
     return std::unique_ptr<tensorflow::OpKernel>(kernel);
 }
 
+TFContext::TFContext()
+    : step_container(0, [](const std::string&) {})
+{ }
+
+TFContext::~TFContext() { }
+
+tensorflow::OpKernelContext *TFContext::ctx()
+{
+    if (!context) {
+        context.reset(new tensorflow::OpKernelContext(&params));
+    }
+    return context.get();
+}
+
+inline void TFContext::FillOutputAttrs() {
+    output_attrs.clear();
+    for (int index = 0; index < params.op_kernel->num_outputs(); index++) {
+        tensorflow::AllocatorAttributes attr;
+        const bool on_host =
+        (params.op_kernel->output_memory_types()[index] == tensorflow::HOST_MEMORY);
+        attr.set_on_host(on_host);
+        output_attrs.push_back(attr);
+    }
+    params.output_attr_array = tensorflow::gtl::vector_as_array(&output_attrs);
+}
+
+std::unique_ptr<TFContext> TFSession::createContext(const executor::TFOpContextDef &tfdef,
+                                                    tensorflow::OpKernel *opkernel)
+{
+    auto tfctx = std::make_unique<TFContext>();
+
+    tfctx->params.device = m_device.get();
+    tfctx->params.op_kernel = opkernel;
+    tfctx->params.step_container = &tfctx->step_container;
+    tfctx->params.slice_reader_cache = &tfctx->slice_reader_cache_wrapper;
+    tfctx->params.resource_manager = m_device->resource_manager();
+    tfctx->params.function_library = m_fruntime.get();
+
+    tfctx->params.step_id = tfdef.step_id();
+    tfctx->params.frame_iter = tensorflow::FrameAndIter(tfdef.frame_id(), tfdef.iter_id());
+    tfctx->params.is_input_dead = tfdef.is_input_dead();
+    tfctx->FillOutputAttrs();
+
+    tfctx->params.inputs = &tfctx->inputs;
+    tfctx->params.input_device_contexts = &tfctx->input_device_contexts;
+    tfctx->params.input_alloc_attrs = &tfctx->input_alloc_attrs;
+    // FIXME: prepare inputs
+
+    return tfctx;
+}
+
 TFTask::TFTask(TFOpLibrary *library, unique_ptr<tensorflow::OpKernel> &&kernel,
-               unique_ptr<tensorflow::OpKernelContext> &&context)
+               unique_ptr<TFContext> &&context)
     : m_opkernel(std::move(kernel))
     , m_context(std::move(context))
     , m_library(library)
@@ -181,19 +229,37 @@ TFTask::TFTask(TFOpLibrary *library, unique_ptr<tensorflow::OpKernel> &&kernel,
 
 rpc::OpContextDef TFTask::contextDef()
 {
-    return m_library->contextToDef(m_context.get());
+    return m_library->contextToDef(m_context->ctx());
 }
 
 rpc::Status TFTask::run()
 {
     if (m_opkernel && m_context) {
-        m_opkernel->Compute(m_context.get());
+        m_opkernel->Compute(m_context->ctx());
     } else {
         ERR("Got nullptr for opkernel or context: m_opkernel = {:x}, m_context = {:x}",
             reinterpret_cast<uint64_t>(m_opkernel.get()), reinterpret_cast<uint64_t>(m_context.get()));
     }
 
+    INFO("OpKernel->Compute finished");
+
     // TODO: proper return code
     return {};
 }
 
+executor::OpContextDef TFOpLibrary::contextToDef(tensorflow::OpKernelContext *context)
+{
+    executor::TFOpContextDef tfctxdef;
+    if (!context->status().ok()) {
+        tfctxdef.set_status_code(context->status().code());
+        tfctxdef.set_status_msg(context->status().error_message());
+    }
+    tfctxdef.set_is_output_dead(*context->is_output_dead());
+
+    // FIXME: set outputs
+
+
+    executor::OpContextDef def;
+    tfctxdef.SerializeToString(def.mutable_extra());
+    return def;
+}
