@@ -20,6 +20,7 @@
 #include "tfoplibrary.h"
 
 #include "tfmocks/tfdevice.h"
+#include "tfmocks/tfallocator.h"
 
 #include "utils/protoutils.h"
 #include "utils/pointerutils.h"
@@ -186,7 +187,27 @@ std::unique_ptr<TFContext> TFSession::createContext(const executor::TFOpContextD
     tfctx->params.inputs = &tfctx->inputs;
     tfctx->params.input_device_contexts = &tfctx->input_device_contexts;
     tfctx->params.input_alloc_attrs = &tfctx->input_alloc_attrs;
-    // FIXME: prepare inputs
+
+    if (opkernel->num_inputs() != tfdef.inputs_size()) {
+        ERR("Missing inputs in received TFOpContextDef: required {}, found {}",
+            opkernel->num_inputs(), tfdef.inputs_size());
+        return {};
+    }
+
+    auto input_types = opkernel->input_types();
+    for (const auto &inpdef : tfdef.inputs()) {
+        bool is_ref = IsRefType(input_types[tfctx->inputs.size()]);
+        OneTimeAllocator alloc(inpdef.int64_val(0));
+        auto input = new tensorflow::Tensor(&alloc, inpdef.dtype(),
+                                            tensorflow::TensorShape(inpdef.tensor_shape()));
+        if (is_ref) {
+            CHECK_EQ(RemoveRefType(input_types[tfctx->inputs.size()]), inpdef.dtype());
+            tfctx->inputs.push_back({&tfctx->ref_mutex, input});
+        } else {
+            CHECK_EQ(input_types[tfctx->inputs.size()], inpdef.dtype());
+            tfctx->inputs.push_back({nullptr, input});
+        }
+    }
 
     return tfctx;
 }
@@ -249,17 +270,27 @@ rpc::Status TFTask::run()
 
 executor::OpContextDef TFOpLibrary::contextToDef(tensorflow::OpKernelContext *context)
 {
-    executor::TFOpContextDef tfctxdef;
+    executor::TFOpContextUpdate tfctxupd;
     if (!context->status().ok()) {
-        tfctxdef.set_status_code(context->status().code());
-        tfctxdef.set_status_msg(context->status().error_message());
+        tfctxupd.set_status_code(context->status().code());
+        tfctxupd.set_status_msg(context->status().error_message());
     }
-    tfctxdef.set_is_output_dead(*context->is_output_dead());
+    tfctxupd.set_is_output_dead(*context->is_output_dead());
 
-    // FIXME: set outputs
+    for (int i = 0; i != context->num_outputs(); i++) {
+        auto out = context->release_output(i);
+        auto outdef = tfctxupd.add_outputs();
 
+        outdef->set_dtype(out->dtype());
+        out->shape().AsProto(outdef->mutable_tensor_shape());
+
+        auto addr_handle = reinterpret_cast<uint64_t>(out->tensor_data().data());
+        // HACK: use a int64 val entry to store the addr handle for simplicity,
+        // idealy should store this in tensor_content with proper encoding.
+        outdef->add_int64_val(addr_handle);
+    }
 
     executor::OpContextDef def;
-    tfctxdef.SerializeToString(def.mutable_extra());
+    tfctxupd.SerializeToString(def.mutable_extra());
     return def;
 }

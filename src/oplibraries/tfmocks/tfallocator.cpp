@@ -53,3 +53,26 @@ void TFAllocator::DeallocateRaw(void *ptr)
     INFO("TFAllocator deallocating memory at {:x}", reinterpret_cast<uint64_t>(ptr));
     MemoryMgr::instance().deallocate(ptr);
 }
+
+OneTimeAllocator::OneTimeAllocator(uint64_t addr_handle)
+: m_addr_handle(addr_handle)
+{ }
+
+OneTimeAllocator::~OneTimeAllocator()
+{
+}
+
+std::string OneTimeAllocator::Name()
+{
+    return "onetime";
+}
+
+void *OneTimeAllocator::AllocateRaw(size_t /* alignment */, size_t /* num_bytes */)
+{
+    return reinterpret_cast<void*>(m_addr_handle);
+}
+
+void OneTimeAllocator::DeallocateRaw(void *ptr)
+{
+    CHECK(reinterpret_cast<uint64_t>(ptr) == m_addr_handle);
+}

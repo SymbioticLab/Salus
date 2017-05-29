@@ -4,6 +4,7 @@ package executor;
 
 import "tensorflow/core/framework/node_def.proto";
 import "tensorflow/core/framework/function.proto";
+import "tensorflow/core/framework/tensor.proto";
 import "tensorflow/core/protobuf/config.proto";
 import "tensorflow/core/lib/core/error_codes.proto";
 
@@ -17,42 +18,27 @@ message TFOpKernelDef {
 message TFOpContextDef {
 // Params
     int64 step_id = 1;
-    // OpKernel
-    // Device
+    uint64 frame_id = 2;
+    int64 iter_id = 3;
 
     // Rendevous
     // SessionState
     // TensorStore
     // CancellationManager
     // CallFrame
-    // FUnctionLibraryRuntime
-    // ResourceMgr
-    // StepContainer
-    // SliceReaderCache
-    
-    // Inputs
+// Inputs
+    bool is_input_dead = 4;
+    repeated tensorflow.TensorProto inputs = 5;
     // Input DeviceContext
     // Input AllocatorAttributes
-    
-    // Runner
-    
-    uint64 frame_id = 4;
-    int64 iter_id = 5;
-    
-    bool is_input_dead = 6;
-    
+}
+
+message TFOpContextUpdate {
+// Outputs
+    bool is_output_dead = 1;
+    repeated tensorflow.TensorProto outputs = 2;
     // Output AllocatorAttributes
-    
-    int64 host_temp_memory_size = 7;
-    int64 device_temp_memory_size = 8;
-    repeated int64 host_persistent_alloc_ids = 9;
-    repeated int64 device_persistent_alloc_ids = 10;
-    int64 host_persistent_memory_allocated = 11;
-    int64 device_persistent_memory_allocated = 12;
 
-
-    bool is_output_dead = 13;
-    tensorflow.error.Code status_code = 14;
-    string status_msg = 15;
-    // Outputs
+    tensorflow.error.Code status_code = 4;
+    string status_msg = 5;
 }

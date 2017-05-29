@@ -30,6 +30,7 @@
 #include <tensorflow/core/framework/resource_mgr.h>
 #include <tensorflow/core/framework/allocator.h>
 #include <tensorflow/core/util/tensor_slice_reader_cache.h>
+#include <tensorflow/core/platform/mutex.h>
 
 #include <memory>
 #include <mutex>
@@ -70,6 +71,7 @@ public:
     TensorValueVec inputs;
     DeviceContextVec input_device_contexts;
     AllocatorAttributeVec input_alloc_attrs;
+    tensorflow::mutex ref_mutex;
 
     std::vector<tensorflow::AllocatorAttributes> output_attrs;
 
