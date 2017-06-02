@@ -41,6 +41,8 @@ ProtoPtr RpcServerCore::dispatch(const std::string &type, const Message *request
         }}
 
     static std::unordered_map<std::string, std::function<ProtoPtr(const Message*)>> funcs {
+        ITEM(Push),
+        ITEM(Fetch),
         ITEM(Run),
         ITEM(Alloc),
         ITEM(Dealloc),
@@ -53,25 +55,76 @@ ProtoPtr RpcServerCore::dispatch(const std::string &type, const Message *request
     return funcs[type](request);
 }
 
+void RpcServerCore::Push(const executor::PushRequest *request, executor::PushResponse *response)
+{
+    INFO("Serving PushRequest for oplibrary {}", OpLibraryType_Name(request->oplibrary()));
+
+    auto oplib = OpLibraryRegistary::instance().findOpLibrary(request->oplibrary());
+    if (!oplib) {
+        ERR("Skipping fetch due to failed to find requested OpLibrary.");
+        return;
+    }
+
+    auto task = oplib->createPushTask(*request);
+    if (!task) {
+        ERR("Skipping task due to failed creation.");
+        return;
+    }
+
+    // run the task right away
+    auto res = response->mutable_result();
+    *res = task->run(response);
+
+    // TODO: Enqueue the task, and run async
+}
+
+void RpcServerCore::Fetch(const FetchRequest *request, FetchResponse *response)
+{
+    INFO("Serving FetchRequest for oplibrary {}", OpLibraryType_Name(request->oplibrary()));
+
+    auto oplib = OpLibraryRegistary::instance().findOpLibrary(request->oplibrary());
+    if (!oplib) {
+        ERR("Skipping fetch due to failed to find requested OpLibrary.");
+        return;
+    }
+
+    auto task = oplib->createFetchTask(*request);
+    if (!task) {
+        ERR("Skipping task due to failed creation.");
+        return;
+    }
+
+    // run the task right away
+    auto res = response->mutable_result();
+    *res = task->run(response);
+
+    // TODO: Enqueue the task, and run async
+}
+
 void RpcServerCore::Run(const RunRequest *request, RunResponse *response)
 {
     const auto &opdef = request->opkernel();
     const auto &ctxdef = request->context();
 
     INFO("Serving RunRequest with opkernel id {} and oplibrary {}",
-         opdef.id(), OpKernelDef::OpLibraryType_Name(opdef.oplibrary()));
+         opdef.id(), OpLibraryType_Name(opdef.oplibrary()));
 
     auto oplib = OpLibraryRegistary::instance().findSuitableOpLibrary(opdef);
+    if (!oplib) {
+        ERR("Skipping task due to failed to find suitable OpLibrary.");
+        return;
+    }
     assert(oplib->accepts(opdef));
 
-    auto task = oplib->createTask(opdef, ctxdef);
+    auto task = oplib->createRunTask(opdef, ctxdef);
+    if (!task) {
+        ERR("Skipping task due to failed creation.");
+        return;
+    }
 
     // run the task right away
     auto res = response->mutable_result();
-    auto newctxdef = response->mutable_context();
-
-    *res = task->run();
-    *newctxdef = task->contextDef();
+    *res = task->run(response->mutable_context());
 
     // TODO: Enqueue the task, and run async
 }

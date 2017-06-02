@@ -17,26 +17,9 @@
  * 
  */
 
-#ifndef MEMORYMGR_H
-#define MEMORYMGR_H
+#ifndef MACROS_H
+#define MACROS_H
 
-#include <cstddef>
-#include <memory>
+#define UNUSED(x) (void)(x)
 
-/**
- * @todo write docs
- */
-class MemoryMgr
-{
-public:
-    static MemoryMgr &instance();
-    ~MemoryMgr();
-
-    void *allocate(size_t num_bytes, int alignment);
-    void deallocate(void *ptr);
-
-private:
-    MemoryMgr();
-};
-
-#endif // MEMORYMGR_H
+#endif // MACROS_H

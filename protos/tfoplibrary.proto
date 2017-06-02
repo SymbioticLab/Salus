@@ -42,3 +42,7 @@ message TFOpContextUpdate {
     tensorflow.error.Code status_code = 4;
     string status_msg = 5;
 }
+
+message TFTensors {
+    repeated tensorflow.TensorProto tensors = 1;
+}

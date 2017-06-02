@@ -25,6 +25,7 @@
 #include "executor.pb.h"
 
 #include <tensorflow/core/framework/allocator.h>
+#include <tensorflow/core/lib/core/status.h>
 
 #include <zmq.hpp>
 
@@ -50,7 +51,7 @@ std::shared_ptr<spdlog::logger> &logging::LoggerWrapper::logger()
 std::ostream &operator<<(std::ostream &os, const executor::OpKernelDef &c)
 {
     return os << "OpKernelDef(" << c.id() << ", "
-              << executor::OpKernelDef::OpLibraryType_Name(c.oplibrary()) << ")";
+              << executor::OpLibraryType_Name(c.oplibrary()) << ")";
 }
 
 std::ostream &operator<<(std::ostream &os, const zmq::message_t &c)

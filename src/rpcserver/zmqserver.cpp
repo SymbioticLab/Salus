@@ -153,12 +153,13 @@ void ServerWorker::work() {
     m_sock.connect(baddr);
     INFO("ServerWorker started (thread {}), connected to address: {}", m_thread->get_id(), baddr);
 
-    try {
-        while (!m_shouldStop) {
+    while (!m_shouldStop) {
+        try {
             std::vector<zmq::message_t> identities;
             zmq::message_t evenlop;
             zmq::message_t body;
             try {
+                TRACE("==============================================================");
                 // First receive all identity frames added by ZMQ_ROUTER socket
                 TRACE("Receiving identity frame {}", identities.size());
                 identities.emplace_back();
@@ -217,8 +218,8 @@ void ServerWorker::work() {
                 ERR("Sending error when serving request {}: {}", type, err);
                 continue;
             }
+        } catch (std::exception &e) {
+            ERR("Caught exception in ServerWorker main loop: {}", e.what());
         }
-    } catch (std::exception &e) {
-        ERR("Catched exception: {}", e.what());
     }
 }

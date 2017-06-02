@@ -11,6 +11,8 @@
 #include "crashhandler.hpp"
 #include "logcapture.hpp"
 
+#include "utils/macros.h"
+
 #if (defined(WIN32) || defined(_WIN32) || defined(__WIN32__) && !defined(__GNUC__))
 #error "crashhandler_unix.cpp used but it's a windows system"
 #endif
@@ -71,6 +73,8 @@ namespace {
    // ALL thanks to this thread at StackOverflow. Pretty much borrowed from:
    // Ref: http://stackoverflow.com/questions/77005/how-to-generate-a-stacktrace-when-my-gcc-c-app-crashes
    void signalHandler(int signal_number, siginfo_t* info, void* unused_context) {
+      UNUSED(info);
+      UNUSED(unused_context);
 
       // Only one signal will be allowed past this point
       if (false == shouldDoExit()) {

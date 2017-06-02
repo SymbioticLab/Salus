@@ -22,6 +22,7 @@
 #include "tfallocator.h"
 
 #include "platform/logging.h"
+#include "utils/macros.h"
 
 TFDevice::TFDevice()
     : Device(nullptr,
@@ -29,19 +30,20 @@ TFDevice::TFDevice()
                                         tensorflow::Bytes(256 << 20), tensorflow::DeviceLocality()),
             nullptr)
     , m_allocator(new TFAllocator)
-{
-    
-}
+{ }
 
 TFDevice::~TFDevice() = default;
 
 void TFDevice::Compute(tensorflow::OpKernel* op_kernel, tensorflow::OpKernelContext* context)
 {
+    UNUSED(op_kernel);
+    UNUSED(context);
     WARN("Empty compute");
 }
 
 tensorflow::Allocator* TFDevice::GetAllocator(tensorflow::AllocatorAttributes attr)
 {
+    UNUSED(attr);
     return m_allocator.get();
 }
 

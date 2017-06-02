@@ -2,6 +2,7 @@
 #include "rpcserver/zmqserver.h"
 #include "rpcserver/rpcservercore.h"
 #include "platform/logging.h"
+#include "utils/macros.h"
 
 #include <iostream>
 #include <memory>
@@ -12,6 +13,9 @@ using namespace std;
 
 int main(int argc, char **argv)
 {
+    UNUSED(argc);
+    UNUSED(argv);
+
     ZmqServer server;
     server.setNumWorkers(1);
 

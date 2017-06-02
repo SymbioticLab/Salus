@@ -25,6 +25,10 @@
 #include <memory>
 
 namespace executor {
+class PushRequest;
+class PushResponse;
+class FetchRequest;
+class FetchResponse;
 class RunRequest;
 class RunResponse;
 class AllocRequest;
@@ -47,6 +51,10 @@ public:
     ProtoPtr dispatch(const std::string &type, const ::google::protobuf::Message *request);
 
     void Run(const executor::RunRequest *request, executor::RunResponse *response);
+    void Fetch(const executor::FetchRequest *request, executor::FetchResponse *response);
+
+    void Push(const executor::PushRequest *request, executor::PushResponse *response);
+
     void Alloc(const executor::AllocRequest *request, executor::AllocResponse *response);
     void Dealloc(const executor::DeallocRequest *request, executor::DeallocResponse *response);
 

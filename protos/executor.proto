@@ -8,6 +8,25 @@ service IExecEngine {
     rpc deallocate(DeallocRequest) returns (DeallocResponse) {}
 }
 
+message PushRequest {
+    OpLibraryType oplibrary = 1;
+    bytes extra = 2;
+}
+
+message PushResponse {
+    Status result = 1;
+}
+
+message FetchRequest {
+    OpLibraryType oplibrary = 1;
+    bytes extra = 2;
+}
+
+message FetchResponse {
+    Status result = 1;
+    bytes extra = 2;
+}
+
 message RunRequest {
     OpKernelDef opkernel = 1;
     OpContextDef context = 2;
@@ -37,9 +56,6 @@ message AllocResponse {
 }
 
 message OpKernelDef {
-    enum OpLibraryType {
-        TENSORFLOW = 0;
-    }
     OpLibraryType oplibrary = 1;
     string id = 2;
     bytes extra = 3;
@@ -51,4 +67,8 @@ message OpContextDef {
 
 message Status {
     int32 code = 1;
+}
+
+enum OpLibraryType {
+    TENSORFLOW = 0;
 }

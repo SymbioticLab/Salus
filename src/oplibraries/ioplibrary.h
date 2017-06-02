@@ -30,8 +30,7 @@ class ITask
 public:
     virtual ~ITask() = default;
 
-    virtual executor::Status run() = 0;
-    virtual executor::OpContextDef contextDef() = 0;
+    virtual executor::Status run(google::protobuf::Message *out) = 0;
 };
 
 /**
@@ -40,12 +39,15 @@ public:
 class IOpLibrary
 {
 public:
-    virtual ~IOpLibrary() = default;
+    virtual ~IOpLibrary();
 
     virtual bool accepts(const executor::OpKernelDef &operation) = 0;
 
-    virtual std::unique_ptr<ITask> createTask(const executor::OpKernelDef &opeartion,
-                                              const executor::OpContextDef &context) = 0;
+    virtual std::unique_ptr<ITask> createRunTask(const executor::OpKernelDef &opeartion,
+                                                 const executor::OpContextDef &context) = 0;
+
+    virtual std::unique_ptr<ITask> createFetchTask(const executor::FetchRequest &fetch) = 0;
+    virtual std::unique_ptr<ITask> createPushTask(const executor::PushRequest &push) = 0;
 };
 
 class OpLibraryRegistary final
@@ -55,13 +57,15 @@ public:
 
     ~OpLibraryRegistary() = default;
 
-    void registerOpLibrary(executor::OpKernelDef::OpLibraryType libraryType, std::unique_ptr<IOpLibrary> &&library);
+    void registerOpLibrary(executor::OpLibraryType libraryType, std::unique_ptr<IOpLibrary> &&library);
+
+    IOpLibrary *findOpLibrary(const executor::OpLibraryType libraryType) const;
     IOpLibrary *findSuitableOpLibrary(const executor::OpKernelDef &opdef) const;
 
     static OpLibraryRegistary &instance();
 
 private:
-    std::unordered_map<executor::OpKernelDef::OpLibraryType, std::unique_ptr<IOpLibrary>> m_opLibraries;
+    std::unordered_map<executor::OpLibraryType, std::unique_ptr<IOpLibrary>> m_opLibraries;
 };
 
 #endif // IOPLIBRARY_H

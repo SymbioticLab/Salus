@@ -6,6 +6,8 @@ set(SRC_LIST
 
     "oplibraries/tfmocks/tfdevice.cpp"
     "oplibraries/tfmocks/tfallocator.cpp"
+    "oplibraries/tfmocks/tfsession.cpp"
+    "oplibraries/tfmocks/tfrendezvous.cpp"
 
     "memorymgr/memorymgr.cpp"
 

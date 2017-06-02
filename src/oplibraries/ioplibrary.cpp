@@ -20,8 +20,11 @@
 #include "ioplibrary.h"
 
 #include "tfoplibrary.h"
+#include "tfmocks/tfsession.h"
 
 #include "platform/logging.h"
+
+IOpLibrary::~IOpLibrary() = default;
 
 OpLibraryRegistary &OpLibraryRegistary::instance()
 {
@@ -31,13 +34,23 @@ OpLibraryRegistary &OpLibraryRegistary::instance()
 
 OpLibraryRegistary::OpLibraryRegistary()
 {
-    registerOpLibrary(executor::OpKernelDef::TENSORFLOW, std::make_unique<TFOpLibrary>());
+    registerOpLibrary(executor::TENSORFLOW, std::make_unique<TFOpLibrary>());
 }
 
-void OpLibraryRegistary::registerOpLibrary(executor::OpKernelDef::OpLibraryType libraryType,
+void OpLibraryRegistary::registerOpLibrary(executor::OpLibraryType libraryType,
                                            std::unique_ptr<IOpLibrary> &&library)
 {
     m_opLibraries[libraryType] = std::move(library);
+}
+
+IOpLibrary *OpLibraryRegistary::findOpLibrary(const executor::OpLibraryType libraryType) const
+{
+    if (m_opLibraries.count(libraryType) <= 0) {
+        WARN("No OpLibrary registered under the library type {}",
+             executor::OpLibraryType_Name(libraryType));
+        return nullptr;
+    }
+    return m_opLibraries.at(libraryType).get();
 }
 
 IOpLibrary * OpLibraryRegistary::findSuitableOpLibrary(const executor::OpKernelDef& opdef) const

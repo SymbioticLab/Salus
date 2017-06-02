@@ -33,6 +33,9 @@ public:
     TFAllocator();
     ~TFAllocator() override;
 
+    // bring up all AllocateRaw signiture from base class to surpass -Woverloaded-virtual
+    using Allocator::AllocateRaw;
+
     std::string Name() override;
     void *AllocateRaw(size_t alignment, size_t num_bytes) override;
     void DeallocateRaw(void *ptr) override;
@@ -47,9 +50,13 @@ public:
     OneTimeAllocator(uint64_t addr_handle);
     ~OneTimeAllocator();
 
+    // bring up all AllocateRaw signiture from base class to surpass -Woverloaded-virtual
+    using Allocator::AllocateRaw;
+
     std::string Name() override;
     void *AllocateRaw(size_t alignment, size_t num_bytes) override;
     void DeallocateRaw(void *ptr) override;
+
 private:
     uint64_t m_addr_handle;
 

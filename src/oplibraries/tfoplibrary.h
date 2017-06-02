@@ -26,76 +26,15 @@
 #include "tfoplibrary.pb.h"
 
 #include <tensorflow/core/framework/op_segment.h>
-#include <tensorflow/core/framework/op_kernel.h>
-#include <tensorflow/core/framework/resource_mgr.h>
-#include <tensorflow/core/framework/allocator.h>
-#include <tensorflow/core/util/tensor_slice_reader_cache.h>
-#include <tensorflow/core/platform/mutex.h>
 
 #include <memory>
-#include <mutex>
-#include <string>
-#include <unordered_map>
-#include <utility>
-#include <vector>
 
 namespace tensorflow {
-class OpSegment;
-class OptimizerOptions;
-class NodeDef;
-class FunctionDefLibrary;
-class ConfigProto;
+class OpKernel;
 }
 
-class TFOpLibrary;
-class TFDevice;
 class TFSession;
-
-typedef tensorflow::gtl::InlinedVector<tensorflow::TensorValue, 4> TensorValueVec;
-typedef tensorflow::gtl::InlinedVector<tensorflow::DeviceContext*, 4> DeviceContextVec;
-typedef tensorflow::gtl::InlinedVector<tensorflow::AllocatorAttributes, 4> AllocatorAttributeVec;
-
-class TFContext
-{
-public:
-    TFContext();
-    ~TFContext();
-
-    tensorflow::OpKernelContext *ctx();
-
-    void FillOutputAttrs();
-
-    tensorflow::ScopedStepContainer step_container;
-    tensorflow::checkpoint::TensorSliceReaderCacheWrapper slice_reader_cache_wrapper;
-
-    TensorValueVec inputs;
-    DeviceContextVec input_device_contexts;
-    AllocatorAttributeVec input_alloc_attrs;
-    tensorflow::mutex ref_mutex;
-
-    std::vector<tensorflow::AllocatorAttributes> output_attrs;
-
-    tensorflow::OpKernelContext::Params params;
-private:
-    std::unique_ptr<tensorflow::OpKernelContext> context;
-};
-
-class TFTask : public ITask
-{
-public:
-    ~TFTask() override = default;
-
-    TFTask(TFOpLibrary *library, std::unique_ptr<tensorflow::OpKernel> &&kernel,
-           std::unique_ptr<TFContext> &&context);
-
-    executor::Status run() override;
-    executor::OpContextDef contextDef() override;
-
-private:
-    std::unique_ptr<tensorflow::OpKernel> m_opkernel;
-    std::unique_ptr<TFContext> m_context;
-    TFOpLibrary *m_library;
-};
+class TFContext;
 
 /**
  * @todo write docs
@@ -103,13 +42,14 @@ private:
 class TFOpLibrary : public IOpLibrary
 {
 public:
-    ~TFOpLibrary() override = default;
+    ~TFOpLibrary() override;
 
     bool accepts(const executor::OpKernelDef &operation) override;
-    std::unique_ptr<ITask> createTask(const executor::OpKernelDef &opdef,
-                                      const executor::OpContextDef &ctxdef) override;
+    std::unique_ptr<ITask> createRunTask(const executor::OpKernelDef &opdef,
+                                         const executor::OpContextDef &ctxdef) override;
 
-    executor::OpContextDef contextToDef(tensorflow::OpKernelContext *context);
+    std::unique_ptr<ITask> createFetchTask(const executor::FetchRequest &fetch) override;
+    std::unique_ptr<ITask> createPushTask(const executor::PushRequest &push) override;
 
 private:
     TFSession *getOrCreateSession(const std::string &sess_id, int graph_def_version,
@@ -121,24 +61,50 @@ private:
     std::unordered_map<std::string, std::unique_ptr<TFSession>> m_sessions;
 };
 
-class TFSession
+class TFRunTask : public ITask
 {
 public:
-    TFSession(TFOpLibrary *opLibrary, const tensorflow::FunctionDefLibrary &fDefLib,
-              int graphDefVersion, const tensorflow::OptimizerOptions &optimizerOpts);
+    ~TFRunTask() override;
 
-    ~TFSession();
+    TFRunTask(TFSession *session, std::unique_ptr<tensorflow::OpKernel> &&kernel,
+              std::unique_ptr<TFContext> &&context);
 
-    std::unique_ptr<tensorflow::OpKernel> createKernel(const tensorflow::NodeDef &nodedef);
-
-    std::unique_ptr<TFContext> createContext(const executor::TFOpContextDef &tfdef, tensorflow::OpKernel *opkernel);
+    executor::Status run(google::protobuf::Message *out) override;
 
 private:
-    TFOpLibrary *m_oplibrary;
+    std::unique_ptr<tensorflow::OpKernel> m_opkernel;
+    std::unique_ptr<TFContext> m_context;
 
-    tensorflow::OpSegment m_opseg;
-    tensorflow::FunctionLibraryDefinition m_flibDef;
-    std::unique_ptr<tensorflow::FunctionLibraryRuntime> m_fruntime;
-    std::unique_ptr<TFDevice> m_device;
+    TFSession *m_session;
+};
+
+class TFFetchTask : public ITask
+{
+public:
+    ~TFFetchTask() override;
+
+    TFFetchTask(TFSession *session, std::unique_ptr<executor::TFTensors> &&tensors);
+
+    executor::Status run(google::protobuf::Message *out) override;
+
+private:
+    std::unique_ptr<executor::TFTensors> m_tensors;
+
+    TFSession *m_session;
+};
+
+class TFPushTask : public ITask
+{
+public:
+    ~TFPushTask() override;
+
+    TFPushTask(TFSession *session, std::unique_ptr<executor::TFTensors> &&tensors);
+
+    executor::Status run(google::protobuf::Message *out) override;
+
+private:
+    std::unique_ptr<executor::TFTensors> m_tensors;
+
+    TFSession *m_session;
 };
 #endif // TFOPLIBRARY_H

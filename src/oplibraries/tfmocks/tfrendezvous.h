@@ -17,26 +17,33 @@
  * 
  */
 
-#ifndef MEMORYMGR_H
-#define MEMORYMGR_H
+#ifndef TFRENDEZVOUS_H
+#define TFRENDEZVOUS_H
 
-#include <cstddef>
-#include <memory>
+#include <tensorflow/core/framework/rendezvous.h>
+
+class TFSession;
 
 /**
  * @todo write docs
  */
-class MemoryMgr
+class TFRendezvous : public tensorflow::Rendezvous
 {
 public:
-    static MemoryMgr &instance();
-    ~MemoryMgr();
+    TFRendezvous(TFSession *sess);
+    ~TFRendezvous() override;
 
-    void *allocate(size_t num_bytes, int alignment);
-    void deallocate(void *ptr);
+    tensorflow::Status Send(const ParsedKey& parsed,
+                            const Args& send_args,
+                            const tensorflow::Tensor& val,
+                            const bool is_dead) override;
+
+    void RecvAsync(const ParsedKey& parsed, const Args& recv_args, DoneCallback done) override;
+
+    void StartAbort(const tensorflow::Status& status) override;
 
 private:
-    MemoryMgr();
+    TFSession *m_sess;
 };
 
-#endif // MEMORYMGR_H
+#endif // TFRENDEZVOUS_H
