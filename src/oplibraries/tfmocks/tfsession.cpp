@@ -64,11 +64,11 @@ void TFSession::registerTensorMemory(const tensorflow::Tensor &tensor)
     registerTensorMemoryLocked(new tensorflow::Tensor(tensor));
 }
 
-void TFSession::createAndRegister(const tensorflow::TensorProto &proto)
+tensorflow::Tensor *TFSession::createAndRegister(const tensorflow::TensorProto &proto)
 {
     if (!m_device) {
         ERR("m_device should not be nullptr for TFSession");
-        return;
+        return nullptr;
     }
 
     auto tensor = new tensorflow::Tensor;
@@ -76,10 +76,11 @@ void TFSession::createAndRegister(const tensorflow::TensorProto &proto)
     auto status = m_device->MakeTensorFromProto(proto, {}, tensor);
     if (!status.ok()) {
         ERR("Error when create tensor");
-        return;
+        return nullptr;
     }
 
     registerTensorMemoryLocked(tensor);
+    return tensor;
 }
 
 void TFSession::registerTensorMemoryLocked(tensorflow::Tensor *tensor)
@@ -107,18 +108,26 @@ tensorflow::Tensor *TFSession::findTensorFromProto(const tensorflow::TensorProto
         return {};
     }
 
-    tensorflow::TensorShape shape(proto.tensor_shape());
-    if (tensor->dtype() != proto.dtype()
-        || tensor->shape() != shape) {
-        ERR("Requested tensor metadata mismatch with record. Requested: {} of type {}, stored: {} of type {}",
-            tensor->shape().DebugString(), tensor->dtype(),
-            shape.DebugString(), proto.dtype());
+    if (!isCompatible(*tensor, proto)) {
         return {};
     }
     return tensor;
 }
 
-void TFSession::tensorToProto(tensorflow::TensorProto *proto, const tensorflow::Tensor &tensor)
+bool TFSession::isCompatible(const tensorflow::Tensor &tensor, const tensorflow::TensorProto &proto) const
+{
+    tensorflow::TensorShape shape(proto.tensor_shape());
+    if (tensor.dtype() != proto.dtype()
+        || tensor.shape() != shape) {
+        ERR("Requested tensor metadata mismatch with record. Requested: {} of type {}, stored: {} of type {}",
+            tensor.shape().DebugString(), tensor.dtype(),
+            shape.DebugString(), proto.dtype());
+        return false;
+    }
+    return true;
+}
+
+void TFSession::tensorMetaToProto(tensorflow::TensorProto *proto, const tensorflow::Tensor &tensor)
 {
     proto->set_dtype(tensor.dtype());
     tensor.shape().AsProto(proto->mutable_tensor_shape());

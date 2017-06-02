@@ -97,9 +97,11 @@ public:
 
     // convinence method that combines create a tensor from proto, allocate and fill in memory,
     // and finally register
-    void createAndRegister(const tensorflow::TensorProto &proto);
+    tensorflow::Tensor *createAndRegister(const tensorflow::TensorProto &proto);
 
-    void tensorToProto(tensorflow::TensorProto *proto, const tensorflow::Tensor &tensor);
+    void tensorMetaToProto(tensorflow::TensorProto *proto, const tensorflow::Tensor &tensor);
+
+    bool isCompatible(const tensorflow::Tensor &tensor, const tensorflow::TensorProto &proto) const;
 
 private:
     void registerTensorMemoryLocked(tensorflow::Tensor *tensor);

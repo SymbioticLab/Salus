@@ -24,6 +24,7 @@
 #include "utils/protoutils.h"
 #include "utils/pointerutils.h"
 #include "platform/logging.h"
+#include "utils/macros.h"
 
 #include "executor.pb.h"
 #include "tfoplibrary.pb.h"
@@ -177,7 +178,7 @@ rpc::Status TFRunTask::run(google::protobuf::Message *out)
         // Let the session manage the tensor memory
         m_session->registerTensorMemory(*out.tensor);
 
-        m_session->tensorToProto(outdef, *out.tensor);
+        m_session->tensorMetaToProto(outdef, *out.tensor);
         if (!out.is_ref()) {
             delete out.tensor;
         }
@@ -236,9 +237,9 @@ TFFetchTask::~TFFetchTask() = default;
 
 std::unique_ptr<ITask> TFOpLibrary::createPushTask(const executor::PushRequest &push)
 {
-    auto tftensors = utils::createMessage<executor::TFTensors>("executor.TFTensors",
-                                                               push.extra().data(),
-                                                               push.extra().size());
+    auto tfpush = utils::createMessage<executor::TFPushRequest>("executor.TFPushRequest",
+                                                                push.extra().data(),
+                                                                push.extra().size());
 
     // TODO: compute session id
     std::string session_id = "session_id";
@@ -247,19 +248,36 @@ std::unique_ptr<ITask> TFOpLibrary::createPushTask(const executor::PushRequest &
         ERR("Push request received before any run request");
         return {};
     }
-    return std::make_unique<TFPushTask>(sess, std::move(tftensors));
+    return std::make_unique<TFPushTask>(sess, std::move(tfpush));
 }
 
-TFPushTask::TFPushTask(TFSession* session, std::unique_ptr<executor::TFTensors> && tensors)
+TFPushTask::TFPushTask(TFSession* session, std::unique_ptr<executor::TFPushRequest> && tensors)
     : m_tensors(std::move(tensors))
     , m_session(session)
 {
 }
 
-executor::Status TFPushTask::run(google::protobuf::Message */*out*/)
+executor::Status TFPushTask::run(google::protobuf::Message *out)
 {
-    for (auto &proto : m_tensors->tensors()) {
-        m_session->createAndRegister(proto);
+    UNUSED(out);
+
+    if (m_tensors->data_size() != m_tensors->tensors_size()) {
+        ERR("Number of tensors mismatch in push request: data {}, tensors {}",
+            m_tensors->data_size(), m_tensors->tensors_size());
+    }
+
+    for (int i = 0; i != m_tensors->tensors_size(); ++i) {
+        auto t = m_session->findTensorFromProto(m_tensors->tensors(i));
+
+        auto &dataproto = m_tensors->data(i);
+        if (!m_session->isCompatible(*t, dataproto)) {
+            ERR("Tensor not compatible with pushed data tensor proto");
+            continue;
+        }
+        if (!t->FromProto(dataproto)) {
+            ERR("Malformated tensor proto");
+            continue;
+        }
     }
 
     // TODO: proper return status

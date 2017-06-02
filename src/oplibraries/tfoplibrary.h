@@ -98,12 +98,12 @@ class TFPushTask : public ITask
 public:
     ~TFPushTask() override;
 
-    TFPushTask(TFSession *session, std::unique_ptr<executor::TFTensors> &&tensors);
+    TFPushTask(TFSession *session, std::unique_ptr<executor::TFPushRequest> &&tensors);
 
     executor::Status run(google::protobuf::Message *out) override;
 
 private:
-    std::unique_ptr<executor::TFTensors> m_tensors;
+    std::unique_ptr<executor::TFPushRequest> m_tensors;
 
     TFSession *m_session;
 };

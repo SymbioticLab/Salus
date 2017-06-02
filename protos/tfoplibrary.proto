@@ -46,3 +46,8 @@ message TFOpContextUpdate {
 message TFTensors {
     repeated tensorflow.TensorProto tensors = 1;
 }
+
+message TFPushRequest {
+    repeated tensorflow.TensorProto data = 1;
+    repeated tensorflow.TensorProto tensors = 2;
+}

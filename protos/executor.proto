@@ -15,6 +15,7 @@ message PushRequest {
 
 message PushResponse {
     Status result = 1;
+    bytes extra = 2;
 }
 
 message FetchRequest {
