@@ -34,10 +34,10 @@ logging::LoggerWrapper::LoggerWrapper()
     spdlog::set_async_mode(8192);
     m_logger = spdlog::stdout_color_mt("console");
 
-    m_logger->flush_on(spdlog::level::err);
+    m_logger->flush_on(spdlog::level::trace);
     m_logger->set_level(spdlog::level::trace);
 
-    g3::installCrashHandler();
+    //g3::installCrashHandler();
 }
 
 logging::LoggerWrapper::~LoggerWrapper() = default;
