@@ -151,7 +151,7 @@ void ServerWorker::stop()
 void ServerWorker::work() {
     auto baddr = "inproc://backend";
     m_sock.connect(baddr);
-    INFO("ServerWorker started (thread {}), connected to address: {}", m_thread->get_id(), baddr);
+    INFO("ServerWorker started (thread {}), connected to address: {}", std::this_thread::get_id(), baddr);
 
     while (!m_shouldStop) {
         try {
