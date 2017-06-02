@@ -62,6 +62,8 @@ public:
     tensorflow::OpKernelContext *ctx();
 
     void FillOutputAttrs();
+    void FillInputAttrs();
+    void FillInputDeviceContext();
 
     tensorflow::ScopedStepContainer step_container;
     tensorflow::checkpoint::TensorSliceReaderCacheWrapper slice_reader_cache_wrapper;

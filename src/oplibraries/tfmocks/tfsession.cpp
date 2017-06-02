@@ -198,6 +198,30 @@ inline void TFContext::FillOutputAttrs() {
     params.output_attr_array = tensorflow::gtl::vector_as_array(&output_attrs);
 }
 
+inline void TFContext::FillInputAttrs()
+{
+    input_alloc_attrs.clear();
+    input_alloc_attrs.reserve(params.op_kernel->num_inputs());
+    for (int index = 0; index < params.op_kernel->num_inputs(); index++) {
+        tensorflow::AllocatorAttributes attr;
+        const bool on_host =
+        (params.op_kernel->input_memory_types()[index] == tensorflow::HOST_MEMORY);
+        attr.set_on_host(on_host);
+        input_alloc_attrs.push_back(attr);
+    }
+    params.input_alloc_attrs = &input_alloc_attrs;
+}
+
+inline void TFContext::FillInputDeviceContext()
+{
+    input_device_contexts.clear();
+    input_device_contexts.reserve(params.op_kernel->num_inputs());
+    for (int index = 0; index < params.op_kernel->num_inputs(); index++) {
+        input_device_contexts.push_back(nullptr);
+    }
+    params.input_device_contexts = &input_device_contexts;
+}
+
 std::unique_ptr<TFContext> TFSession::createContext(const executor::TFOpContextDef &tfdef,
                                                     tensorflow::OpKernel *opkernel)
 {
@@ -216,30 +240,23 @@ std::unique_ptr<TFContext> TFSession::createContext(const executor::TFOpContextD
     tfctx->params.is_input_dead = tfdef.is_input_dead();
     tfctx->FillOutputAttrs();
 
-    tfctx->params.inputs = &tfctx->inputs;
-    tfctx->params.input_device_contexts = &tfctx->input_device_contexts;
-    tfctx->params.input_alloc_attrs = &tfctx->input_alloc_attrs;
+    tfctx->FillInputAttrs();
+    tfctx->FillInputDeviceContext();
 
-    if (opkernel->num_inputs() != tfdef.inputs_size()) {
+    auto num_inputs = opkernel->num_inputs();
+    if (num_inputs != tfdef.inputs_size()) {
         ERR("Missing inputs in received TFOpContextDef: required {}, found {}",
-            opkernel->num_inputs(), tfdef.inputs_size());
+            num_inputs, tfdef.inputs_size());
         return {};
     }
-
+    tfctx->inputs.reserve(num_inputs);
     auto input_types = opkernel->input_types();
     for (const auto &inpdef : tfdef.inputs()) {
         auto input = findTensorFromProto(inpdef);
-
-        bool is_ref = IsRefType(input_types[tfctx->inputs.size()]);
-        if (is_ref) {
-            CHECK_EQ(RemoveRefType(input_types[tfctx->inputs.size()]), inpdef.dtype());
-            tfctx->inputs.push_back({&tfctx->ref_mutex, input});
-        } else {
-            CHECK_EQ(input_types[tfctx->inputs.size()], inpdef.dtype());
-            tfctx->inputs.push_back({nullptr, input});
-        }
+        auto pmu = IsRefType(input_types[tfctx->inputs.size()]) ? &tfctx->ref_mutex : nullptr;
+        tfctx->inputs.push_back({pmu, input});
     }
+    tfctx->params.inputs = &tfctx->inputs;
 
     return tfctx;
 }
-

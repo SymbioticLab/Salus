@@ -42,6 +42,43 @@ using ::tensorflow::FunctionDefLibrary;
 using ::google::protobuf::Message;
 using std::unique_ptr;
 
+namespace {
+
+void dumpOpKernel(tensorflow::OpKernel *opkernel)
+{
+    if (!opkernel) return;
+
+    TRACE("m_opkernel.name() {}", opkernel->name());
+    TRACE("m_opkernel.type_string() {}", opkernel->type_string());
+    TRACE("m_opkernel.is_internal() {}", opkernel->is_internal());
+    TRACE("m_opkernel.IsExpensive() {}", opkernel->IsExpensive());
+    TRACE("m_opkernel.num_inputs() {}", opkernel->num_inputs());
+    for (int i = 0; i != opkernel->num_inputs(); i++) {
+        TRACE("m_opkernel.input_type({}) {}", i, opkernel->input_type(i));
+    }
+    for (size_t i = 0; i != opkernel->input_memory_types().size(); i++) {
+        TRACE("m_opkernel.input_memory_types()[{}] {}", i, opkernel->input_memory_types()[i]);
+    }
+
+    TRACE("m_opkernel.num_outputs() {}", opkernel->num_outputs());
+    for (int i = 0; i != opkernel->num_outputs(); i++) {
+        TRACE("m_opkernel.output_type({}) {}", i, opkernel->output_type(i));
+    }
+    for (size_t i = 0; i != opkernel->output_memory_types().size(); i++) {
+        TRACE("m_opkernel.output_memory_types()[{}] {}", i, opkernel->output_memory_types()[i]);
+    }
+}
+
+void dumpOpContext(tensorflow::OpKernelContext *ctx)
+{
+    if (!ctx) return;
+
+    TRACE("context.is_output_dead() {}", *ctx->is_output_dead());
+    TRACE("context.num_outputs() {}", ctx->num_outputs());
+}
+
+}
+
 TFOpLibrary::~TFOpLibrary() = default;
 
 bool TFOpLibrary::accepts(const rpc::OpKernelDef& operation)
@@ -100,12 +137,15 @@ std::unique_ptr<ITask> TFOpLibrary::createRunTask(const rpc::OpKernelDef& opdef,
     if (!opkernel) {
         return {};
     }
-    TRACE("Created OpKernel");
+    INFO("Created OpKernel");
+    dumpOpKernel(opkernel.get());
+
     auto tfctx = sess->createContext(*tfctxdef, opkernel.get());
     if (!tfctx) {
         return {};
     }
     TRACE("Created OpKernelContext");
+    dumpOpContext(tfctx->ctx());
 
     return std::make_unique<TFRunTask>(sess, std::move(opkernel), std::move(tfctx));
 }
@@ -116,35 +156,6 @@ TFRunTask::TFRunTask(TFSession *sess, unique_ptr<tensorflow::OpKernel> &&kernel,
     , m_context(std::move(context))
     , m_session(sess)
 {
-    INFO("Created TFTask.");
-    if (m_opkernel) {
-        INFO("m_opkernel.def() {}", m_opkernel->def().DebugString());
-        INFO("m_opkernel.name() {}", m_opkernel->name());
-        INFO("m_opkernel.type_string() {}", m_opkernel->type_string());
-        INFO("m_opkernel.is_internal() {}", m_opkernel->is_internal());
-        INFO("m_opkernel.num_inputs() {}", m_opkernel->num_inputs());
-        for (int i = 0; i != m_opkernel->num_inputs(); i++) {
-            INFO("m_opkernel.input_type({}) {}", i, m_opkernel->input_type(i));
-        }
-        for (size_t i = 0; i != m_opkernel->input_memory_types().size(); i++) {
-            INFO("m_opkernel.input_memory_types()[{}] {}", i, m_opkernel->input_memory_types()[i]);
-        }
-
-        INFO("m_opkernel.num_outputs() {}", m_opkernel->num_outputs());
-        for (int i = 0; i != m_opkernel->num_outputs(); i++) {
-            INFO("m_opkernel.output_type({}) {}", i, m_opkernel->output_type(i));
-        }
-        for (size_t i = 0; i != m_opkernel->output_memory_types().size(); i++) {
-            INFO("m_opkernel.output_memory_types()[{}] {}", i, m_opkernel->output_memory_types()[i]);
-        }
-
-        INFO("m_opkernel.IsExpensive() {}", m_opkernel->IsExpensive());
-    }
-
-    if (m_context) {
-        INFO("context.is_output_dead() {}", *m_context->ctx()->is_output_dead());
-        INFO("context.num_outputs() {}", m_context->ctx()->num_outputs());
-    }
 }
 
 rpc::Status TFRunTask::run(google::protobuf::Message *out)
