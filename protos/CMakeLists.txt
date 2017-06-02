@@ -16,8 +16,9 @@ endif()
 
 # Compile to a static lib
 add_library(protos_gen STATIC ${proto_srcs} ${grpc_srcs})
+target_link_libraries(protos_gen protobuf::libprotobuf)
 target_include_directories(protos_gen
-    PUBLIC ${PROTO_SRC_DIR}
+    INTERFACE ${PROTO_SRC_DIR}
 )
 
 # HACK: we need the proto definition from TensorFlow
