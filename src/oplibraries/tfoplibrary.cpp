@@ -41,6 +41,7 @@ using ::tensorflow::ConfigProto;
 using ::tensorflow::FunctionDefLibrary;
 using ::google::protobuf::Message;
 using std::unique_ptr;
+using std::shared_ptr;
 
 namespace {
 
@@ -138,21 +139,21 @@ std::unique_ptr<ITask> TFOpLibrary::createRunTask(const rpc::OpKernelDef& opdef,
         return {};
     }
     INFO("Created OpKernel");
-    dumpOpKernel(opkernel.get());
+    dumpOpKernel(opkernel);
 
-    auto tfctx = sess->createContext(*tfctxdef, opkernel.get());
+    auto tfctx = sess->createContext(*tfctxdef, opkernel);
     if (!tfctx) {
         return {};
     }
     TRACE("Created OpKernelContext");
     dumpOpContext(tfctx->ctx());
 
-    return std::make_unique<TFRunTask>(sess, std::move(opkernel), std::move(tfctx));
+    return std::make_unique<TFRunTask>(sess, opkernel, std::move(tfctx));
 }
 
-TFRunTask::TFRunTask(TFSession *sess, unique_ptr<tensorflow::OpKernel> &&kernel,
+TFRunTask::TFRunTask(TFSession *sess, tensorflow::OpKernel *kernel,
                      unique_ptr<TFContext> &&context)
-    : m_opkernel(std::move(kernel))
+    : m_opkernel(kernel)
     , m_context(std::move(context))
     , m_session(sess)
 {
@@ -162,7 +163,7 @@ rpc::Status TFRunTask::run(google::protobuf::Message *out)
 {
     if (!m_opkernel || !m_context) {
         ERR("Got nullptr for opkernel or context: m_opkernel = {:x}, m_context = {:x}",
-            reinterpret_cast<uint64_t>(m_opkernel.get()), reinterpret_cast<uint64_t>(m_context.get()));
+            reinterpret_cast<uint64_t>(m_opkernel), reinterpret_cast<uint64_t>(m_context.get()));
         // TODO: proper return status
         return {};
     }

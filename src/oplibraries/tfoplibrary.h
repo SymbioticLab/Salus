@@ -66,13 +66,13 @@ class TFRunTask : public ITask
 public:
     ~TFRunTask() override;
 
-    TFRunTask(TFSession *session, std::unique_ptr<tensorflow::OpKernel> &&kernel,
+    TFRunTask(TFSession *session, tensorflow::OpKernel *kernel,
               std::unique_ptr<TFContext> &&context);
 
     executor::Status run(google::protobuf::Message *out) override;
 
 private:
-    std::unique_ptr<tensorflow::OpKernel> m_opkernel;
+    tensorflow::OpKernel *m_opkernel;
     std::unique_ptr<TFContext> m_context;
 
     TFSession *m_session;

@@ -139,7 +139,7 @@ void TFSession::tensorMetaToProto(tensorflow::TensorProto *proto, const tensorfl
 }
 
 
-std::unique_ptr<tensorflow::OpKernel> TFSession::createKernel(const tensorflow::NodeDef &ndef)
+tensorflow::OpKernel *TFSession::createKernel(const tensorflow::NodeDef &ndef)
 {
     tensorflow::OpKernel *kernel = nullptr;
     // Caches the kernel only if the node is stateful.
@@ -148,13 +148,19 @@ std::unique_ptr<tensorflow::OpKernel> TFSession::createKernel(const tensorflow::
         if (!ok.ok()) {
             ERR("Failed to create kernel with status {} for NodeDef: {}", ok,
                 ndef.DebugString());
+            delete kernel;
+            kernel = nullptr;
         }
-        return std::unique_ptr<tensorflow::OpKernel>(kernel);
+        if (kernel) {
+            m_kernels.emplace_back(kernel);
+        }
+        return kernel;
     }
 
     // Kernels created for subgraph nodes need to be cached.  On
     // cache miss, create_fn() is invoked to create a kernel based
     // on the function library here + global op registry.
+    // OpSegment takes ownership of the created kernel.
     auto lib = m_fruntime.get();
     auto create_fn = [lib, &ndef](tensorflow::OpKernel** kernel) {
         return lib->CreateKernel(ndef, kernel);
@@ -165,7 +171,7 @@ std::unique_ptr<tensorflow::OpKernel> TFSession::createKernel(const tensorflow::
             ndef.DebugString());
     }
 
-    return std::unique_ptr<tensorflow::OpKernel>(kernel);
+    return kernel;
 }
 
 TFContext::TFContext()

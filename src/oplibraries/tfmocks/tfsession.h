@@ -89,7 +89,7 @@ public:
 
     ~TFSession();
 
-    std::unique_ptr<tensorflow::OpKernel> createKernel(const tensorflow::NodeDef &nodedef);
+    tensorflow::OpKernel *createKernel(const tensorflow::NodeDef &nodedef);
 
     std::unique_ptr<TFContext> createContext(const executor::TFOpContextDef &tfdef, tensorflow::OpKernel *opkernel);
 
@@ -111,7 +111,9 @@ private:
     TFOpLibrary *m_oplibrary;
 
     std::string m_sessHandle;
+
     tensorflow::OpSegment m_opseg;
+    std::vector<std::unique_ptr<tensorflow::OpKernel>> m_kernels;
 
     tensorflow::FunctionLibraryDefinition m_flibDef;
     std::unique_ptr<tensorflow::FunctionLibraryRuntime> m_fruntime;
