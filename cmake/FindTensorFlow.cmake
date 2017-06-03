@@ -88,10 +88,11 @@ find_package_handle_standard_args(TensorFlow DEFAULT_MSG
 # set external variables for usage in CMakeLists.txt
 if(TensorFlow_FOUND)
     set(TensorFlow_LIBRARIES ${TensorFlow_LIBRARY})
+    get_filename_component(tf_repo_name ${TensorFlow_INCLUDE_DIR} NAME)
     set(TensorFlow_INCLUDE_DIRS
         ${TensorFlow_INCLUDE_DIR}
         ${TensorFlow_INCLUDE_DIR}/bazel-genfiles
-        ${TensorFlow_INCLUDE_DIR}/bazel-tensorflow/external/eigen_archive
+        ${TensorFlow_INCLUDE_DIR}/bazel-${tf_repo_name}/external/eigen_archive
     )
     # This is the same as the include dir
     set(TensorFlow_PROTO_DIRS ${TensorFlow_INCLUDE_DIR})
