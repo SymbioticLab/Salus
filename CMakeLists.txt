@@ -9,7 +9,7 @@ project(executor)
 include(cmake/Utilities.cmake)
 list(APPEND CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR}/cmake)
 # Setup defaults
-include(cmake/DefaultFlags.cmake)
+include(cmake/Defaults.cmake)
 # For feature_summary
 include(FeatureSummary)
 
@@ -75,6 +75,10 @@ feature_summary(INCLUDE_QUIET_PACKAGES FATAL_ON_MISSING_REQUIRED_PACKAGES WHAT A
 #---------------------------------------------------------------------------------------
 # Put code together
 #---------------------------------------------------------------------------------------
+
+# Only set compile options after any inclusion of third party code
+include(cmake/CompileOptions.cmake)
+
 add_subdirectory(protos)
 
 add_subdirectory(src)
