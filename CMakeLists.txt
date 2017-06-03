@@ -61,11 +61,12 @@ if(WITH_BUNDLED_SPDLOG)
     endif(NOT EXISTS thirdparty/spdlog/CMakeLists.txt)
     SET(SPDLOG_BUILD_TESTING OFF CACHE BOOL "Build spdlog tests" FORCE)
     add_subdirectory(thirdparty/spdlog)
-    # make it like a system imported target
+    # make a imported target from it to keep consistency with find_package
+    add_library(spdlog::spdlog INTERFACE IMPORTED)
     get_target_property(spdlog_inc spdlog INTERFACE_INCLUDE_DIRECTORIES)
-    target_include_directories(spdlog SYSTEM INTERFACE ${spdlog_inc})
-    set_target_properties(spdlog PROPERTIES INTERFACE_INCLUDE_DIRECTORIES "")
-    add_library(spdlog::spdlog ALIAS spdlog)
+    set_target_properties(spdlog::spdlog PROPERTIES
+        INTERFACE_INCLUDE_DIRECTORIES "${spdlog_inc}"
+    )
 endif(WITH_BUNDLED_SPDLOG)
 
 #---------------------------------------------------------------------------------------
