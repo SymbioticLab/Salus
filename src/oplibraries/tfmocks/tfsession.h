@@ -20,6 +20,8 @@
 #ifndef TFSESSION_H
 #define TFSESSION_H
 
+#include "tfrendezvous.h"
+
 #include "executor.pb.h"
 #include "tfoplibrary.pb.h"
 
@@ -51,12 +53,11 @@ class ConfigProto;
 class TFDevice;
 class TFSession;
 class TFOpLibrary;
-class TFRendezvous;
 
 class TFContext
 {
 public:
-    TFContext();
+    explicit TFContext(TFSession *sess);
     ~TFContext();
 
     tensorflow::OpKernelContext *ctx();
@@ -76,6 +77,8 @@ public:
 
     std::vector<tensorflow::AllocatorAttributes> output_attrs;
 
+    TFRendezvous rendez;
+
     tensorflow::OpKernelContext::Params params;
 private:
     std::unique_ptr<tensorflow::OpKernelContext> context;
@@ -89,16 +92,19 @@ public:
 
     ~TFSession();
 
-    tensorflow::OpKernel *createKernel(const tensorflow::NodeDef &nodedef);
+    tensorflow::OpKernel *findOrCreateKernel(const tensorflow::NodeDef &nodedef);
 
     std::unique_ptr<TFContext> createContext(const executor::TFOpContextDef &tfdef, tensorflow::OpKernel *opkernel);
 
+    // Tensor memory management
     void registerTensorMemory(const tensorflow::Tensor &tensor);
     tensorflow::Tensor *tensorFromAddrHandle(uint64_t addr_handle);
     tensorflow::Tensor *findTensorFromProto(const tensorflow::TensorProto &proto);
 
-    // convinence method that combines create a tensor from proto, allocate and fill in memory,
-    // and finally register
+    /**
+     * Convinence method that combines create a tensor from proto, allocate and fill in memory,
+     * and finally register
+     */
     tensorflow::Tensor *createAndRegister(const tensorflow::TensorProto &proto);
 
     void tensorMetaToProto(tensorflow::TensorProto *proto, const tensorflow::Tensor &tensor);
@@ -118,7 +124,6 @@ private:
     tensorflow::FunctionLibraryDefinition m_flibDef;
     std::unique_ptr<tensorflow::FunctionLibraryRuntime> m_fruntime;
     std::unique_ptr<TFDevice> m_device;
-    std::unique_ptr<TFRendezvous> m_rendez;
 
     tensorflow::mutex m_mu;
     std::unordered_map<uint64_t, tensorflow::Tensor*> m_tensors;

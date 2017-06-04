@@ -22,6 +22,8 @@
 
 #include <tensorflow/core/framework/rendezvous.h>
 
+#include <vector>
+
 class TFSession;
 
 /**
@@ -30,7 +32,18 @@ class TFSession;
 class TFRendezvous : public tensorflow::Rendezvous
 {
 public:
-    TFRendezvous(TFSession *sess);
+    struct Item {
+        std::string key;
+        Args args;
+        bool isDead;
+        tensorflow::Tensor val;
+
+        Item();
+        Item(const std::string &k, const Args &a, bool d, tensorflow::Tensor &&v);
+    };
+    typedef std::vector<Item> TensorTable;
+
+    explicit TFRendezvous(TFSession *sess);
     ~TFRendezvous() override;
 
     tensorflow::Status Send(const ParsedKey& parsed,
@@ -42,8 +55,12 @@ public:
 
     void StartAbort(const tensorflow::Status& status) override;
 
+    const TensorTable &receivedTensors() const;
+
 private:
     TFSession *m_sess;
+
+    TensorTable m_tensors;
 };
 
 #endif // TFRENDEZVOUS_H

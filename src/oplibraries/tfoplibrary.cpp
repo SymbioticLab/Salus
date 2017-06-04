@@ -134,7 +134,7 @@ std::unique_ptr<ITask> TFOpLibrary::createRunTask(const rpc::OpKernelDef& opdef,
     auto sess = getOrCreateSession(session_id, tfdef->graph_def_version(), tfdef->cfgproto(), tfdef->funcdef());
     if (!sess) { return {}; }
 
-    auto opkernel = sess->createKernel(tfdef->nodedef());
+    auto opkernel = sess->findOrCreateKernel(tfdef->nodedef());
     if (!opkernel) {
         return {};
     }
@@ -183,6 +183,17 @@ rpc::Status TFRunTask::run(google::protobuf::Message *out)
     tfctxupd.set_status_msg(context->status().error_message());
     tfctxupd.set_is_output_dead(*context->is_output_dead());
 
+    // process tensor received by rendezvous
+    // Note that rendezvous already registered these tensors to m_session
+    for (auto &elem : m_context->rendez.receivedTensors()) {
+        auto item = tfctxupd.add_rendeztensors();
+        item->set_key(elem.key);
+        item->set_allocattributes(elem.args.alloc_attrs.value);
+        item->set_isdead(elem.isDead);
+        m_session->tensorMetaToProto(item->mutable_val(), elem.val);
+    }
+
+    // process tensor set as outputs
     for (int i = 0; i != context->num_outputs(); i++) {
         auto out = context->release_output(i);
         auto outdef = tfctxupd.add_outputs();
@@ -190,6 +201,7 @@ rpc::Status TFRunTask::run(google::protobuf::Message *out)
         // Let the session manage the tensor memory
         m_session->registerTensorMemory(*out.tensor);
 
+        // TODO: handle ref TensorValue
         m_session->tensorMetaToProto(outdef, *out.tensor);
         if (!out.is_ref()) {
             delete out.tensor;

@@ -23,6 +23,17 @@
 #include "platform/logging.h"
 #include "utils/macros.h"
 
+TFRendezvous::Item::Item()
+    : Item("", Args(), false, tensorflow::Tensor())
+{ }
+
+TFRendezvous::Item::Item(const std::string &k, const Args &a, bool d, tensorflow::Tensor &&v)
+    : key(k)
+    , args(a)
+    , isDead(d)
+    , val(std::move(v))
+{ }
+
 TFRendezvous::TFRendezvous(TFSession *sess)
     : m_sess(sess)
 { }
@@ -38,6 +49,9 @@ tensorflow::Status TFRendezvous::Send(const ParsedKey& parsed, const Args& send_
 
     INFO("TFRendezvous::Send");
     m_sess->registerTensorMemory(val);
+
+    tensorflow::Tensor copy(val);
+    m_tensors.emplace_back(parsed.FullKey().ToString(), send_args, is_dead, std::move(copy));
 
     return tensorflow::Status::OK();
 }
@@ -55,4 +69,9 @@ void TFRendezvous::RecvAsync(const ParsedKey& parsed, const Args& recv_args, Don
 void TFRendezvous::StartAbort(const tensorflow::Status& status)
 {
     UNUSED(status);
+}
+
+const TFRendezvous::TensorTable &TFRendezvous::receivedTensors() const
+{
+    return m_tensors;
 }

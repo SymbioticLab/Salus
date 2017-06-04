@@ -21,7 +21,6 @@ message TFOpContextDef {
     uint64 frame_id = 2;
     int64 iter_id = 3;
 
-    // Rendevous
     // SessionState
     // TensorStore
     // CancellationManager
@@ -37,10 +36,18 @@ message TFOpContextUpdate {
 // Outputs
     bool is_output_dead = 1;
     repeated tensorflow.TensorProto outputs = 2;
+    repeated TFRendezItem rendezTensors = 3;
     // Output AllocatorAttributes
 
     tensorflow.error.Code status_code = 4;
     string status_msg = 5;
+}
+
+message TFRendezItem {
+    string key = 1;
+    uint32 allocAttributes = 2;
+    bool isDead = 3;
+    tensorflow.TensorProto val = 4;
 }
 
 message TFTensors {
