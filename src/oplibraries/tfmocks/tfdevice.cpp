@@ -24,11 +24,11 @@
 #include "platform/logging.h"
 #include "utils/macros.h"
 
-TFDevice::TFDevice()
-    : Device(nullptr,
-            Device::BuildDeviceAttributes("/device:CPU:0", tensorflow::DEVICE_CPU,
-                                        tensorflow::Bytes(256 << 20), tensorflow::DeviceLocality()),
-            nullptr)
+TFDevice::TFDevice(const tensorflow::SessionOptions &options)
+    : LocalDevice(options,
+                  Device::BuildDeviceAttributes("/device:CPU:0", tensorflow::DEVICE_CPU,
+                                                tensorflow::Bytes(256 << 20), tensorflow::DeviceLocality()),
+                  nullptr)
     , m_allocator(new TFAllocator)
 { }
 

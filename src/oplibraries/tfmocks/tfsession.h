@@ -31,6 +31,7 @@
 #include <tensorflow/core/framework/allocator.h>
 #include <tensorflow/core/util/tensor_slice_reader_cache.h>
 #include <tensorflow/core/platform/mutex.h>
+#include <tensorflow/core/public/session_options.h>
 
 #include <memory>
 #include <mutex>
@@ -88,7 +89,7 @@ class TFSession
 {
 public:
     TFSession(TFOpLibrary *opLibrary, const tensorflow::FunctionDefLibrary &fDefLib,
-              int graphDefVersion, const tensorflow::OptimizerOptions &optimizerOpts);
+              int graphDefVersion, const tensorflow::ConfigProto &configProto);
 
     ~TFSession();
 
@@ -113,6 +114,8 @@ public:
 
 private:
     void registerTensorMemoryLocked(tensorflow::Tensor *tensor);
+
+    tensorflow::SessionOptions m_options;
 
     TFOpLibrary *m_oplibrary;
 

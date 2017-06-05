@@ -95,8 +95,7 @@ TFSession *TFOpLibrary::getOrCreateSession(const std::string& sess_id, int graph
 
     auto &sess = m_sessions[sess_id];
     if (!sess) {
-        sess.reset(new TFSession(this, fDefLib, graph_def_version,
-                                 cfgProto.graph_options().optimizer_options()));
+        sess = std::make_unique<TFSession>(this, fDefLib, graph_def_version, cfgProto);
     } else {
         DEBUG("Reuse previously created session");
     }

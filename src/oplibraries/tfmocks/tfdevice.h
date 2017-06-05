@@ -20,7 +20,7 @@
 #ifndef TFDEVICE_H
 #define TFDEVICE_H
 
-#include <tensorflow/core/common_runtime/device.h>
+#include <tensorflow/core/common_runtime/local_device.h>
 
 #include <memory>
 
@@ -28,10 +28,10 @@ class TFAllocator;
 /**
  * @todo write docs
  */
-class TFDevice : public tensorflow::Device
+class TFDevice : public tensorflow::LocalDevice
 {
 public:
-    TFDevice();
+    explicit TFDevice(const tensorflow::SessionOptions &options);
     ~TFDevice() override;
 
     void Compute(tensorflow::OpKernel* op_kernel, tensorflow::OpKernelContext* context) override;

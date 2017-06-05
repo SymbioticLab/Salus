@@ -32,19 +32,22 @@
 #include <tensorflow/core/lib/gtl/stl_util.h>
 
 TFSession::TFSession(TFOpLibrary *opLibrary, const tensorflow::FunctionDefLibrary &fDefLib,
-                     int graphDefVersion, const tensorflow::OptimizerOptions &optimizerOpts)
+                     int graphDefVersion, const tensorflow::ConfigProto &configProto)
     : m_oplibrary(opLibrary)
     , m_sessHandle("executor_session")
     , m_opseg()
     , m_flibDef(tensorflow::OpRegistry::Global(), fDefLib)
     , m_fruntime(nullptr)
-    , m_device(new TFDevice)
 {
     DEBUG("Creating new TFSession at {:x}", reinterpret_cast<uint64_t>(this));
 
+    m_options.config = configProto;
+
+    m_device = std::make_unique<TFDevice>(m_options);
+
     m_fruntime.reset(tensorflow::NewFunctionLibraryRuntime(
-        nullptr /* DeviceMgr */, nullptr /* Env */,
-        m_device.get(), graphDefVersion, &m_flibDef, optimizerOpts));
+        nullptr /* DeviceMgr */, m_options.env,
+        m_device.get(), graphDefVersion, &m_flibDef, configProto.graph_options().optimizer_options()));
 
     m_opseg.AddHold(m_sessHandle);
 }
@@ -84,6 +87,11 @@ tensorflow::Tensor *TFSession::createAndRegister(const tensorflow::TensorProto &
 
 void TFSession::registerTensorMemoryLocked(tensorflow::Tensor *tensor)
 {
+    if (!tensor) {
+        ERR("Got nullptr in registerTensorMemoryLocked");
+        return;
+    }
+    INFO("Registering tensor: {}", tensor->DebugString());
     tensorflow::mutex_lock locker(m_mu);
     m_tensors[reinterpret_cast<uint64_t>(tensor->tensor_data().data())] = tensor;
 }
