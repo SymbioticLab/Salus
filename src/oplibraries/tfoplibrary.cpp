@@ -219,6 +219,9 @@ std::unique_ptr<ITask> TFOpLibrary::createFetchTask(const executor::FetchRequest
     auto tftensors = utils::createMessage<executor::TFTensors>("executor.TFTensors",
                                                                fetch.extra().data(),
                                                                fetch.extra().size());
+    if (!tftensors) {
+        return {};
+    }
 
     // TODO: compute session id
     std::string session_id = "session_id";
@@ -244,8 +247,10 @@ executor::Status TFFetchTask::run(google::protobuf::Message* out)
         auto tensor = m_session->findTensorFromProto(proto);
         if (!tensor) {
             // TODO: proper return status
+            ERR("Requested tensor not found in this session: {}", proto.DebugString());
             return {};
         }
+        INFO("Found a tensor: {}", tensor->DebugString());
         tensor->AsProtoTensorContent(ret.add_tensors());
     }
 
@@ -263,6 +268,10 @@ std::unique_ptr<ITask> TFOpLibrary::createPushTask(const executor::PushRequest &
     auto tfpush = utils::createMessage<executor::TFPushRequest>("executor.TFPushRequest",
                                                                 push.extra().data(),
                                                                 push.extra().size());
+
+    if (!tfpush) {
+        return {};
+    }
 
     // TODO: compute session id
     std::string session_id = "session_id";

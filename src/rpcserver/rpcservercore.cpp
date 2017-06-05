@@ -61,7 +61,7 @@ void RpcServerCore::Push(const executor::PushRequest *request, executor::PushRes
 
     auto oplib = OpLibraryRegistary::instance().findOpLibrary(request->oplibrary());
     if (!oplib) {
-        ERR("Skipping fetch due to failed to find requested OpLibrary.");
+        ERR("Skipping push due to failed to find requested OpLibrary.");
         return;
     }
 
