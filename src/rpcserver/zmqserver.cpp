@@ -70,8 +70,11 @@ void ZmqServer::setNumWorkers(size_t num)
 
 void ZmqServer::adjustNumWorkers(size_t num)
 {
-    // Only add new workers when started, otherwise m_plogic may be empty
-    while (m_started && m_workers.size() < num) {
+    while (m_workers.size() < num) {
+        if (!m_pLogic) {
+            ERR("ZmqServer::adjustNumWorkers called while m_pLogic is nullptr. No worker will be started");
+            break;
+        }
         std::unique_ptr<ServerWorker> worker(new ServerWorker(m_zmqCtx, *m_pLogic));
         worker->start();
         m_workers.push_back(std::move(worker));
@@ -100,6 +103,7 @@ void ZmqServer::start(std::unique_ptr<RpcServerCore> &&logic, const std::string&
     }
 
     m_proxyLoopThread = std::make_unique<std::thread>(std::bind(&ZmqServer::proxyLoop, this));
+
     adjustNumWorkers(m_numWorkers);
 
     m_started = true;
