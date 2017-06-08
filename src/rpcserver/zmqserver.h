@@ -26,6 +26,7 @@
 
 #include <vector>
 #include <memory>
+#include <thread>
 
 class ServerWorker;
 /**
@@ -47,9 +48,11 @@ public:
 
 private:
     void adjustNumWorkers(size_t num);
+    void proxyLoop();
 
 private:
     std::unique_ptr<RpcServerCore> m_pLogic;
+    std::unique_ptr<std::thread> m_proxyLoopThread;
 
     zmq::context_t m_zmqCtx;
     zmq::socket_t m_frontend_sock;

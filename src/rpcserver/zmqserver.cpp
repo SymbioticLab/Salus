@@ -99,15 +99,17 @@ void ZmqServer::start(std::unique_ptr<RpcServerCore> &&logic, const std::string&
         throw;
     }
 
-    m_started = true;
+    m_proxyLoopThread = std::make_unique<std::thread>(std::bind(&ZmqServer::proxyLoop, this));
     adjustNumWorkers(m_numWorkers);
+
+    m_started = true;
 
     if (block) {
         join();
     }
 }
 
-void ZmqServer::join()
+void ZmqServer::proxyLoop()
 {
     INFO("Started serving loop");
     try {
@@ -115,17 +117,30 @@ void ZmqServer::join()
     } catch (zmq::error_t &err) {
         ERR("Exiting serving loop due to error: {}", err);
     }
+}
+
+void ZmqServer::join()
+{
+    if (m_proxyLoopThread) {
+        m_proxyLoopThread->join();
+        m_proxyLoopThread.reset();
+    }
     stop();
 }
 
 void ZmqServer::stop()
 {
+    if (!m_started) {
+        return;
+    }
+
     INFO("Stopping ZMQ context");
     m_started = false;
     m_zmqCtx.close();
 
     INFO("Stopping all workers");
     adjustNumWorkers(0);
+
     m_pLogic.reset();
 }
 
@@ -139,7 +154,7 @@ ServerWorker::ServerWorker(zmq::context_t &ctx, RpcServerCore &logic)
 
 void ServerWorker::start()
 {
-    m_thread.reset(new std::thread(std::bind(&ServerWorker::work, this)));
+    m_thread = std::make_unique<std::thread>(std::bind(&ServerWorker::work, this));
 }
 
 void ServerWorker::stop()
