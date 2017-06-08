@@ -133,38 +133,48 @@ std::unique_ptr<ITask> TFOpLibrary::createRunTask(const rpc::OpKernelDef& opdef,
     auto sess = getOrCreateSession(session_id, tfdef->graph_def_version(), tfdef->cfgproto(), tfdef->funcdef());
     if (!sess) { return {}; }
 
-    auto opkernel = sess->findOrCreateKernel(tfdef->nodedef());
-    if (!opkernel) {
-        return {};
+    auto ndef = std::unique_ptr<NodeDef>(tfdef->release_nodedef());
+    return std::make_unique<TFRunTask>(sess, std::move(ndef), std::move(tfctxdef));
+}
+
+TFRunTask::TFRunTask(TFSession *sess, unique_ptr<NodeDef> &&nodedef,
+                     unique_ptr<executor::TFOpContextDef> &&tfctxdef)
+    : m_session(sess)
+    , m_ndef(std::move(nodedef))
+    , m_tfctxdef(std::move(tfctxdef))
+{
+}
+
+bool TFRunTask::prepare(DeviceType dev)
+{
+    UNUSED(dev);
+
+    m_opkernel = m_session->findOrCreateKernel(*m_ndef);
+    if (!m_opkernel) {
+        return false;
     }
     INFO("Created OpKernel");
-    dumpOpKernel(opkernel);
+    dumpOpKernel(m_opkernel);
 
-    auto tfctx = sess->createContext(*tfctxdef, opkernel);
-    if (!tfctx) {
-        return {};
+    m_context = m_session->createContext(*m_tfctxdef, m_opkernel);
+    if (!m_context) {
+        return false;
     }
     TRACE("Created OpKernelContext");
-    dumpOpContext(tfctx->ctx());
+    dumpOpContext(m_context->ctx());
 
-    return std::make_unique<TFRunTask>(sess, opkernel, std::move(tfctx));
+    return true;
 }
 
-TFRunTask::TFRunTask(TFSession *sess, tensorflow::OpKernel *kernel,
-                     unique_ptr<TFContext> &&context)
-    : m_opkernel(kernel)
-    , m_context(std::move(context))
-    , m_session(sess)
+ProtoPtr TFRunTask::run()
 {
-}
+    auto resp = std::make_unique<executor::RunResponse>();
 
-rpc::Status TFRunTask::run(google::protobuf::Message *out)
-{
     if (!m_opkernel || !m_context) {
         ERR("Got nullptr for opkernel or context: m_opkernel = {:x}, m_context = {:x}",
             reinterpret_cast<uint64_t>(m_opkernel), reinterpret_cast<uint64_t>(m_context.get()));
-        // TODO: proper return status
-        return {};
+        resp->mutable_result()->set_code(-1);
+        return resp;
     }
 
     try {
@@ -174,7 +184,7 @@ rpc::Status TFRunTask::run(google::protobuf::Message *out)
     }
     INFO("OpKernel->Compute finished with status {}", m_context->ctx()->status());
 
-    auto ctxdef = static_cast<executor::OpContextDef*>(out);
+    auto ctxdef = resp->mutable_context();
 
     auto context = m_context->ctx();
     rpc::TFOpContextUpdate tfctxupd;
@@ -207,9 +217,10 @@ rpc::Status TFRunTask::run(google::protobuf::Message *out)
         }
     }
 
+    // write update to ctxdef
     tfctxupd.SerializeToString(ctxdef->mutable_extra());
-    // TODO: proper return code
-    return {};
+
+    return resp;
 }
 
 TFRunTask::~TFRunTask() = default;
@@ -234,31 +245,29 @@ std::unique_ptr<ITask> TFOpLibrary::createFetchTask(const executor::FetchRequest
 }
 
 TFFetchTask::TFFetchTask(TFSession* session, std::unique_ptr<executor::TFTensors> && tensors)
-    : m_tensors(std::move(tensors))
+    : m_tensorMetas(std::move(tensors))
     , m_session(session)
 {
 }
 
-executor::Status TFFetchTask::run(google::protobuf::Message* out)
+ProtoPtr TFFetchTask::run()
 {
-    executor::TFTensors ret;
+    auto resp = std::make_unique<executor::FetchResponse>();
 
-    for (auto &proto : m_tensors->tensors()) {
-        auto tensor = m_session->findTensorFromProto(proto);
+    executor::TFTensors full_tensors;
+    for (auto &proto : m_tensorMetas->tensors()) {
+        auto tensor = m_session->findTensorFromProtoMeta(proto);
         if (!tensor) {
-            // TODO: proper return status
             ERR("Requested tensor not found in this session: {}", proto.DebugString());
-            return {};
+            resp->mutable_result()->set_code(-1);
+            return resp;
         }
         INFO("Found a tensor: {}", tensor->DebugString());
-        tensor->AsProtoTensorContent(ret.add_tensors());
+        tensor->AsProtoTensorContent(full_tensors.add_tensors());
     }
+    full_tensors.SerializeToString(resp->mutable_extra());
 
-    auto resp = static_cast<executor::FetchResponse*>(out);
-    ret.SerializeToString(resp->mutable_extra());
-
-    // TODO: proper return status
-    return {};
+    return resp;
 }
 
 TFFetchTask::~TFFetchTask() = default;
@@ -289,17 +298,18 @@ TFPushTask::TFPushTask(TFSession* session, std::unique_ptr<executor::TFPushReque
 {
 }
 
-executor::Status TFPushTask::run(google::protobuf::Message *out)
+ProtoPtr TFPushTask::run()
 {
-    UNUSED(out);
-
+    auto resp = std::make_unique<executor::PushResponse>();
     if (m_tensors->data_size() != m_tensors->tensors_size()) {
         ERR("Number of tensors mismatch in push request: data {}, tensors {}",
             m_tensors->data_size(), m_tensors->tensors_size());
+        resp->mutable_result()->set_code(-1);
+        return resp;
     }
 
     for (int i = 0; i != m_tensors->tensors_size(); ++i) {
-        auto t = m_session->findTensorFromProto(m_tensors->tensors(i));
+        auto t = m_session->findTensorFromProtoMeta(m_tensors->tensors(i));
 
         auto &dataproto = m_tensors->data(i);
         if (!m_session->isCompatible(*t, dataproto)) {
@@ -312,8 +322,7 @@ executor::Status TFPushTask::run(google::protobuf::Message *out)
         }
     }
 
-    // TODO: proper return status
-    return {};
+    return resp;
 }
 
 TFPushTask::~TFPushTask() = default;

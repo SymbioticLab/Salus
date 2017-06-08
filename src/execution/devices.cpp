@@ -17,20 +17,4 @@
  * 
  */
 
-#include "executionengine.h"
-
-ExecutionEngine &ExecutionEngine::instance()
-{
-    static ExecutionEngine eng;
-    return eng;
-}
-
-ExecutionEngine::ExecutionEngine()
-{
-
-}
-
-ExecutionEngine::~ExecutionEngine()
-{
-
-}
+#include "devices.h"

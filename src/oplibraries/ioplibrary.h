@@ -20,17 +20,30 @@
 #ifndef IOPLIBRARY_H
 #define IOPLIBRARY_H
 
+#include "execution/devices.h"
+#include "utils/pointerutils.h"
+
 #include "executor.pb.h"
 
 #include <memory>
 #include <unordered_map>
 
+typedef std::unique_ptr<google::protobuf::Message> ProtoPtr;
+
 class ITask
 {
 public:
-    virtual ~ITask() = default;
+    virtual ~ITask();
 
-    virtual executor::Status run(google::protobuf::Message *out) = 0;
+    virtual bool prepare(DeviceType dev);
+
+    virtual ProtoPtr run() = 0;
+
+    template<typename RESPONSE>
+    std::unique_ptr<RESPONSE> run()
+    {
+        return utils::static_unique_ptr_cast<RESPONSE, google::protobuf::Message>(run());
+    }
 };
 
 /**

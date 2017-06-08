@@ -12,6 +12,7 @@ set(SRC_LIST
     "memorymgr/memorymgr.cpp"
 
     "execution/executionengine.cpp"
+    "execution/devices.cpp"
 
     "rpcserver/irpcserver.cpp"
     "rpcserver/rpcservercore.cpp"

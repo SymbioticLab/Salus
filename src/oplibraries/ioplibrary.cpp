@@ -23,6 +23,16 @@
 #include "tfmocks/tfsession.h"
 
 #include "platform/logging.h"
+#include "utils/macros.h"
+
+ITask::~ITask() = default;
+
+bool ITask::prepare(DeviceType dev)
+{
+    UNUSED(dev);
+
+    return true;
+}
 
 IOpLibrary::~IOpLibrary() = default;
 

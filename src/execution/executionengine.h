@@ -20,22 +20,41 @@
 #ifndef EXECUTIONENGINE_H
 #define EXECUTIONENGINE_H
 
+#include "devices.h"
+
+#include "oplibraries/ioplibrary.h"
+
+#include <memory>
+#include <future>
+
 /**
  * @todo write docs
  */
 class ExecutionEngine
 {
 public:
-    /**
-     * Default constructor
-     */
-    ExecutionEngine();
+    static ExecutionEngine &instance();
 
-    /**
-     * Destructor
-     */
     ~ExecutionEngine();
 
+    template<typename ResponseType>
+    std::future<std::unique_ptr<ResponseType>> enqueue(std::unique_ptr<ITask> &&task)
+    {
+        typedef std::unique_ptr<ResponseType> PResponse;
+
+        std::promise<PResponse> p;
+
+        if (task->prepare(DeviceType::CPU)) {
+            p.set_value(task->run<ResponseType>());
+        } else {
+            p.set_value({});
+        }
+
+        return p.get_future();
+    }
+
+private:
+    ExecutionEngine();
 };
 
 #endif // EXECUTIONENGINE_H

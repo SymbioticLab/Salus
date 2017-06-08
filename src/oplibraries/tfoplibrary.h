@@ -66,16 +66,21 @@ class TFRunTask : public ITask
 public:
     ~TFRunTask() override;
 
-    TFRunTask(TFSession *session, tensorflow::OpKernel *kernel,
-              std::unique_ptr<TFContext> &&context);
+    TFRunTask(TFSession *sess, std::unique_ptr<tensorflow::NodeDef> &&nodedef,
+              std::unique_ptr<executor::TFOpContextDef> &&tfctxdef);
 
-    executor::Status run(google::protobuf::Message *out) override;
+    ProtoPtr run() override;
+
+    bool prepare(DeviceType dev) override;
 
 private:
+    TFSession *m_session;
+
+    std::unique_ptr<tensorflow::NodeDef> m_ndef;
+    std::unique_ptr<executor::TFOpContextDef> m_tfctxdef;
+
     tensorflow::OpKernel *m_opkernel;
     std::unique_ptr<TFContext> m_context;
-
-    TFSession *m_session;
 };
 
 class TFFetchTask : public ITask
@@ -85,10 +90,10 @@ public:
 
     TFFetchTask(TFSession *session, std::unique_ptr<executor::TFTensors> &&tensors);
 
-    executor::Status run(google::protobuf::Message *out) override;
+    ProtoPtr run() override;
 
 private:
-    std::unique_ptr<executor::TFTensors> m_tensors;
+    std::unique_ptr<executor::TFTensors> m_tensorMetas;
 
     TFSession *m_session;
 };
@@ -100,7 +105,7 @@ public:
 
     TFPushTask(TFSession *session, std::unique_ptr<executor::TFPushRequest> &&tensors);
 
-    executor::Status run(google::protobuf::Message *out) override;
+    ProtoPtr run() override;
 
 private:
     std::unique_ptr<executor::TFPushRequest> m_tensors;

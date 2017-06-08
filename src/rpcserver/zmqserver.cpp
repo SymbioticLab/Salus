@@ -200,6 +200,10 @@ void ServerWorker::work() {
                   reinterpret_cast<uint64_t>(pRequest.get()));
 
             auto pResponse = m_logic.dispatch(type, pRequest.get());
+            if (!pResponse) {
+                ERR("Skipped to send one reply due to error in logic dispatch");
+                continue;
+            }
 
             zmq::message_t reply(pResponse->ByteSizeLong());
             pResponse->SerializeToArray(reply.data(), reply.size());

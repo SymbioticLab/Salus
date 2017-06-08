@@ -106,7 +106,7 @@ tensorflow::Tensor *TFSession::tensorFromAddrHandle(uint64_t addr_handle)
     return m_tensors.at(addr_handle);
 }
 
-tensorflow::Tensor *TFSession::findTensorFromProto(const tensorflow::TensorProto &proto)
+tensorflow::Tensor *TFSession::findTensorFromProtoMeta(const tensorflow::TensorProto &proto)
 {
     auto addr = proto.int64_val(0);
     auto tensor = tensorFromAddrHandle(addr);
@@ -266,7 +266,7 @@ std::unique_ptr<TFContext> TFSession::createContext(const executor::TFOpContextD
     tfctx->inputs.reserve(num_inputs);
     auto input_types = opkernel->input_types();
     for (const auto &inpdef : tfdef.inputs()) {
-        auto input = findTensorFromProto(inpdef);
+        auto input = findTensorFromProtoMeta(inpdef);
         auto pmu = IsRefType(input_types[tfctx->inputs.size()]) ? &tfctx->ref_mutex : nullptr;
         tfctx->inputs.push_back({pmu, input});
     }

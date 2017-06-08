@@ -17,20 +17,12 @@
  * 
  */
 
-#include "executionengine.h"
+#ifndef DEVICES_H
+#define DEVICES_H
 
-ExecutionEngine &ExecutionEngine::instance()
-{
-    static ExecutionEngine eng;
-    return eng;
-}
+enum class DeviceType {
+    CPU,
+    GPU
+};
 
-ExecutionEngine::ExecutionEngine()
-{
-
-}
-
-ExecutionEngine::~ExecutionEngine()
-{
-
-}
+#endif // DEVICES_H

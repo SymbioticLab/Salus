@@ -22,6 +22,7 @@
 #include "oplibraries/ioplibrary.h"
 #include "platform/logging.h"
 #include "memorymgr/memorymgr.h"
+#include "execution/executionengine.h"
 
 #include "executor.pb.h"
 
@@ -30,22 +31,17 @@
 
 using namespace executor;
 using ::google::protobuf::Message;
+using std::unique_ptr;
 
 ProtoPtr RpcServerCore::dispatch(const std::string &type, const Message *request)
 {
 #define ITEM(name) \
         {"executor." #name "Request", [&](const Message *request){ \
-            auto response = std::make_unique<name ## Response>(); \
-            name (static_cast<const name ## Request*>(request), response.get()); \
-            return response; \
-        }}
+            return name (static_cast<const name ## Request*>(request)); \
+        }},
 
     static std::unordered_map<std::string, std::function<ProtoPtr(const Message*)>> funcs {
-        ITEM(Push),
-        ITEM(Fetch),
-        ITEM(Run),
-        ITEM(Alloc),
-        ITEM(Dealloc),
+        CALL_ALL_SERVICE_NAME(ITEM)
     };
 
 #undef ITEM
@@ -55,53 +51,49 @@ ProtoPtr RpcServerCore::dispatch(const std::string &type, const Message *request
     return funcs[type](request);
 }
 
-void RpcServerCore::Push(const executor::PushRequest *request, executor::PushResponse *response)
+unique_ptr<PushResponse> RpcServerCore::Push(const PushRequest *request)
 {
     INFO("Serving PushRequest for oplibrary {}", OpLibraryType_Name(request->oplibrary()));
 
     auto oplib = OpLibraryRegistary::instance().findOpLibrary(request->oplibrary());
     if (!oplib) {
         ERR("Skipping push due to failed to find requested OpLibrary.");
-        return;
+        return {};
     }
 
     auto task = oplib->createPushTask(*request);
     if (!task) {
         ERR("Skipping task due to failed creation.");
-        return;
+        return {};
     }
 
-    // run the task right away
-    auto res = response->mutable_result();
-    *res = task->run(response);
-
-    // TODO: Enqueue the task, and run async
+    // TODO: run async
+    auto f = ExecutionEngine::instance().enqueue<PushResponse>(std::move(task));
+    return f.get();
 }
 
-void RpcServerCore::Fetch(const FetchRequest *request, FetchResponse *response)
+unique_ptr<FetchResponse> RpcServerCore::Fetch(const FetchRequest *request)
 {
     INFO("Serving FetchRequest for oplibrary {}", OpLibraryType_Name(request->oplibrary()));
 
     auto oplib = OpLibraryRegistary::instance().findOpLibrary(request->oplibrary());
     if (!oplib) {
         ERR("Skipping fetch due to failed to find requested OpLibrary.");
-        return;
+        return {};
     }
 
     auto task = oplib->createFetchTask(*request);
     if (!task) {
         ERR("Skipping task due to failed creation.");
-        return;
+        return {};
     }
 
-    // run the task right away
-    auto res = response->mutable_result();
-    *res = task->run(response);
-
-    // TODO: Enqueue the task, and run async
+    // TODO: run async
+    auto f = ExecutionEngine::instance().enqueue<FetchResponse>(std::move(task));
+    return f.get();
 }
 
-void RpcServerCore::Run(const RunRequest *request, RunResponse *response)
+unique_ptr<RunResponse> RpcServerCore::Run(const RunRequest *request)
 {
     const auto &opdef = request->opkernel();
     const auto &ctxdef = request->context();
@@ -112,24 +104,22 @@ void RpcServerCore::Run(const RunRequest *request, RunResponse *response)
     auto oplib = OpLibraryRegistary::instance().findSuitableOpLibrary(opdef);
     if (!oplib) {
         ERR("Skipping task due to failed to find suitable OpLibrary.");
-        return;
+        return {};
     }
     assert(oplib->accepts(opdef));
 
     auto task = oplib->createRunTask(opdef, ctxdef);
     if (!task) {
         ERR("Skipping task due to failed creation.");
-        return;
+        return {};
     }
 
-    // run the task right away
-    auto res = response->mutable_result();
-    *res = task->run(response->mutable_context());
-
-    // TODO: Enqueue the task, and run async
+    // TODO: run async
+    auto f = ExecutionEngine::instance().enqueue<RunResponse>(std::move(task));
+    return f.get();
 }
 
-void RpcServerCore::Alloc(const AllocRequest *request, AllocResponse *response)
+unique_ptr<AllocResponse> RpcServerCore::Alloc(const AllocRequest *request)
 {
     auto alignment = request->alignment();
     auto num_bytes = request->num_bytes();
@@ -138,14 +128,17 @@ void RpcServerCore::Alloc(const AllocRequest *request, AllocResponse *response)
 
     auto ptr = MemoryMgr::instance().allocate(num_bytes, alignment);
     auto addr_handle = reinterpret_cast<uint64_t>(ptr);
+
+    auto response = std::make_unique<AllocResponse>();
     response->set_addr_handle(addr_handle);
 
     INFO("Allocated address handel: {:x}", addr_handle);
 
     response->mutable_result()->set_code(0);
+    return response;
 }
 
-void RpcServerCore::Dealloc(const DeallocRequest *request, DeallocResponse *response)
+unique_ptr<DeallocResponse> RpcServerCore::Dealloc(const DeallocRequest *request)
 {
     auto addr_handle = request->addr_handle();
 
@@ -153,5 +146,7 @@ void RpcServerCore::Dealloc(const DeallocRequest *request, DeallocResponse *resp
 
     MemoryMgr::instance().deallocate(reinterpret_cast<void*>(addr_handle));
 
+    auto response = std::make_unique<DeallocResponse>();
     response->mutable_result()->set_code(0);
+    return response;
 }

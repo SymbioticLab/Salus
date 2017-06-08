@@ -100,7 +100,7 @@ public:
     // Tensor memory management
     void registerTensorMemory(const tensorflow::Tensor &tensor);
     tensorflow::Tensor *tensorFromAddrHandle(uint64_t addr_handle);
-    tensorflow::Tensor *findTensorFromProto(const tensorflow::TensorProto &proto);
+    tensorflow::Tensor *findTensorFromProtoMeta(const tensorflow::TensorProto &proto);
 
     /**
      * Convinence method that combines create a tensor from proto, allocate and fill in memory,

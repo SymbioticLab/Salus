@@ -37,6 +37,13 @@ class DeallocRequest;
 class DeallocResponse;
 }
 
+#define CALL_ALL_SERVICE_NAME(m) \
+    m(Run) \
+    m(Fetch) \
+    m(Push) \
+    m(Alloc) \
+    m(Dealloc)
+
 /**
  * @todo write docs
  */
@@ -50,15 +57,14 @@ public:
      */
     ProtoPtr dispatch(const std::string &type, const ::google::protobuf::Message *request);
 
-    void Run(const executor::RunRequest *request, executor::RunResponse *response);
-    void Fetch(const executor::FetchRequest *request, executor::FetchResponse *response);
-
-    void Push(const executor::PushRequest *request, executor::PushResponse *response);
-
-    void Alloc(const executor::AllocRequest *request, executor::AllocResponse *response);
-    void Dealloc(const executor::DeallocRequest *request, executor::DeallocResponse *response);
-
 private:
+
+#define DECL_METHOD(name) \
+    std::unique_ptr<executor:: name##Response> name (const executor:: name##Request *request);
+
+    CALL_ALL_SERVICE_NAME(DECL_METHOD)
+
+#undef DECL_METHOD
 };
 
 #endif // RPCSERVER_H
