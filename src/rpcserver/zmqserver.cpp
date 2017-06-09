@@ -92,7 +92,7 @@ void ZmqServer::recvLoop()
     while (m_keepRunning) {
         try {
             // will be deleted after sending
-            auto identities = new MultiMessage;
+            auto identities = std::make_unique<MultiMessage>();
             zmq::message_t evenlop;
             zmq::message_t body;
             try {
@@ -138,19 +138,23 @@ void ZmqServer::recvLoop()
 
             m_pLogic->dispatch(type, pRequest.get())
 
-            .then(boost::launch::deferred, [identities, this](auto f){
-                auto pResponse = f.get();
+            .then(boost::launch::deferred, [parts = std::move(identities), this](auto f) mutable {
+                ProtoPtr pResponse;
+                try {
+                    pResponse = f.get();
+                } catch(std::exception &ex) {
+                    ERR("Caught exception in logic dispatch: {}", ex.what());
+                }
                 if (!pResponse) {
                     ERR("Skipped to send one reply due to error in logic dispatch");
-                    delete identities;
                     return;
                 }
 
-                identities->emplace_back(pResponse->ByteSizeLong());
-                auto &reply = identities->back();
+                parts->emplace_back(pResponse->ByteSizeLong());
+                auto &reply = parts->back();
                 pResponse->SerializeToArray(reply.data(), reply.size());
                 TRACE("Response proto object have size {}", reply.size());
-                sendMessage(identities);
+                sendMessage(std::move(parts));
             });
         } catch (std::exception &e) {
             ERR("Caught exception in recv loop: {}", e.what());
@@ -158,9 +162,9 @@ void ZmqServer::recvLoop()
     }
 }
 
-void ZmqServer::sendMessage(MultiMessage *parts)
+void ZmqServer::sendMessage(std::unique_ptr<MultiMessage> &&parts)
 {
-    m_sendQueue.push({parts});
+    m_sendQueue.push({parts.release()});
 }
 
 void ZmqServer::sendLoop()
@@ -175,17 +179,18 @@ void ZmqServer::sendLoop()
             std::this_thread::sleep_for(1ms);
             continue;
         }
+        // Wrap the address in smart pointer immediately so we won't risk memory leak.
+        std::unique_ptr<MultiMessage> parts(item.p_parts);
         try {
-            for (size_t i = 0; i != item.p_parts->size() - 1; ++i) {
-                auto &msg = item.p_parts->at(i);
+            for (size_t i = 0; i != parts->size() - 1; ++i) {
+                auto &msg = parts->at(i);
                 sock.send(msg, ZMQ_SNDMORE);
             }
-            sock.send(item.p_parts->back());
+            sock.send(parts->back());
             TRACE("Response sent");
         } catch (zmq::error_t &err) {
             ERR("Sending error: {}", err);
         }
-        delete item.p_parts;
     }
 }
 

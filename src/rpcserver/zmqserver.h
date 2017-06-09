@@ -55,9 +55,8 @@ public:
 
     /**
      * Low level api for sending messages back to client.
-     * Takes ownership of parts
      */
-    void sendMessage(MultiMessage *parts);
+    void sendMessage(std::unique_ptr<MultiMessage> &&parts);
 
 private:
     void proxyLoop();

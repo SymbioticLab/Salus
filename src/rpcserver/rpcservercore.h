@@ -56,7 +56,7 @@ public:
     /**
      * Dispatch the call.
      *
-     * @return the response protobuf message, gauranteed to be not null.
+     * @return the future of response protobuf message
      */
     boost::future<ProtoPtr> dispatch(const std::string &type, const ::google::protobuf::Message *request);
 

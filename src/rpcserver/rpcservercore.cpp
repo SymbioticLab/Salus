@@ -39,11 +39,7 @@ boost::future<ProtoPtr> RpcServerCore::dispatch(const std::string &type, const M
         {"executor." #name "Request", [&](const Message *request){ \
             return name (static_cast<const name ## Request*>(request)).then(boost::launch::deferred, \
                                                                             [](auto f){ \
-                if (f.has_value()) { \
-                    return static_cast<ProtoPtr>(f.get()); \
-                } else { \
-                    throw f.get_exception_ptr(); \
-                } \
+                return static_cast<ProtoPtr>(f.get()); \
             }); \
         }},
 
