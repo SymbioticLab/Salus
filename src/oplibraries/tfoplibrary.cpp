@@ -35,6 +35,8 @@
 #include <tensorflow/core/framework/function.pb.h>
 #include <tensorflow/core/protobuf/config.pb.h>
 
+#include <thread>
+
 namespace rpc = executor;
 using ::tensorflow::NodeDef;
 using ::tensorflow::ConfigProto;
@@ -168,6 +170,7 @@ bool TFRunTask::prepare(DeviceType dev)
 
 ProtoPtr TFRunTask::run()
 {
+    INFO("running in thread {}", std::this_thread::get_id());
     auto resp = std::make_unique<executor::RunResponse>();
 
     if (!m_opkernel || !m_context) {

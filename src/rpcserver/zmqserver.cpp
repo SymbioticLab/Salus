@@ -193,8 +193,10 @@ void ZmqServer::sendLoop()
         try {
             for (size_t i = 0; i != parts->size() - 1; ++i) {
                 auto &msg = parts->at(i);
+                TRACE("Sending identity frame {}: {}", i, msg);
                 sock.send(msg, ZMQ_SNDMORE);
             }
+            TRACE("Sending body frame: {}", parts->back());
             sock.send(parts->back());
             TRACE("Response sent");
         } catch (zmq::error_t &err) {
