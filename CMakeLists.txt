@@ -30,12 +30,13 @@ find_package(Protobuf REQUIRED)
 # TensorFlow root must be passed in command line as -DTensorFlow_ROOT=/path/to/tensorflow
 find_package(TensorFlow REQUIRED)
 
-# ZeroMQ or gRPC
+# ZeroMQ
 find_package(ZeroMQ REQUIRED)
-# gRPC
-if(NOT ZeroMQ_FOUND)
-    find_package(GRPC REQUIRED)
-endif()
+
+# Boost
+find_package(Boost 1.64 REQUIRED COMPONENTS
+    thread
+)
 
 # spdlog
 if(NOT WITH_BUNDLED_SPDLOG)

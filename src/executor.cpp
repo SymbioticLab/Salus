@@ -21,5 +21,7 @@ int main(int argc, char **argv)
     INFO("Starting server");
     server.start("tcp://*:5501");
 
+    server.join();
+
     return 0;
 }

@@ -48,4 +48,6 @@ target_link_libraries(executor
     #gRPC::grpc++
     ZeroMQ::zmq
     tensorflow::kernels
+    Boost::thread
+    Boost::boost
 )

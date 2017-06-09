@@ -32,17 +32,17 @@
 using namespace std::literals::chrono_literals;
 
 ZmqServer::ZmqServer(std::unique_ptr<RpcServerCore> &&logic)
-    : m_pLogic(std::move(logic))
-    , m_zmqCtx(1)
+    : m_zmqCtx(1)
+    , m_keepRunning(false)
     , m_frontend_sock(m_zmqCtx, ZMQ_ROUTER)
     , m_backend_sock(m_zmqCtx, ZMQ_DEALER)
-    , m_keepRunning(false)
+    , m_pLogic(std::move(logic))
 {
 }
 
 ZmqServer::~ZmqServer()
 {
-    stop();
+    requestStop();
 }
 
 void ZmqServer::start(const std::string& address)
@@ -91,23 +91,24 @@ void ZmqServer::recvLoop()
 
     while (m_keepRunning) {
         try {
-            std::vector<zmq::message_t> identities;
+            // will be deleted after sending
+            auto identities = new MultiMessage;
             zmq::message_t evenlop;
             zmq::message_t body;
             try {
                 TRACE("==============================================================");
                 // First receive all identity frames added by ZMQ_ROUTER socket
-                TRACE("Receiving identity frame {}", identities.size());
-                identities.emplace_back();
-                sock.recv(&identities.back());
-                TRACE("Identity frame {}: {}", identities.size() - 1, identities.back());
+                TRACE("Receiving identity frame {}", identities->size());
+                identities->emplace_back();
+                sock.recv(&identities->back());
+                TRACE("Identity frame {}: {}", identities->size() - 1, identities->back());
                 // Identity frames stop at an empty message
                 // ZMQ_RCVMORE is a int64_t according to doc, not a bool
-                while (identities.back().size() != 0 && sock.getsockopt<int64_t>(ZMQ_RCVMORE)) {
-                    TRACE("Receiving identity frame {}", identities.size());
-                    identities.emplace_back();
-                    sock.recv(&identities.back());
-                    TRACE("Identity frame {}: {}", identities.size() - 1, identities.back());
+                while (identities->back().size() != 0 && sock.getsockopt<int64_t>(ZMQ_RCVMORE)) {
+                    TRACE("Receiving identity frame {}", identities->size());
+                    identities->emplace_back();
+                    sock.recv(&identities->back());
+                    TRACE("Identity frame {}: {}", identities->size() - 1, identities->back());
                 }
                 if (!sock.getsockopt<int64_t>(ZMQ_RCVMORE)) {
                     ERR("Skipped one iteration due to no body message part found after identity frames");
@@ -135,33 +136,31 @@ void ZmqServer::recvLoop()
             TRACE("Created request proto object from message at {:x}",
                   reinterpret_cast<uint64_t>(pRequest.get()));
 
-            auto pResponse = m_pLogic->dispatch(type, pRequest.get());
-            if (!pResponse) {
-                ERR("Skipped to send one reply due to error in logic dispatch");
-                continue;
-            }
+            m_pLogic->dispatch(type, pRequest.get())
 
-            zmq::message_t reply(pResponse->ByteSizeLong());
-            pResponse->SerializeToArray(reply.data(), reply.size());
-            TRACE("Response proto object have size {}", reply.size());
-
-            try {
-                // First send out all saved identity frames, including the empty part
-                for (auto &id : identities) {
-                    sock.send(id, ZMQ_SNDMORE);
+            .then(boost::launch::deferred, [identities, this](auto f){
+                auto pResponse = f.get();
+                if (!pResponse) {
+                    ERR("Skipped to send one reply due to error in logic dispatch");
+                    delete identities;
+                    return;
                 }
 
-                // Then send our message
-                sock.send(reply);
-                TRACE("Response sent");
-            } catch (zmq::error_t &err) {
-                ERR("Sending error when serving request {}: {}", type, err);
-                continue;
-            }
+                identities->emplace_back(pResponse->ByteSizeLong());
+                auto &reply = identities->back();
+                pResponse->SerializeToArray(reply.data(), reply.size());
+                TRACE("Response proto object have size {}", reply.size());
+                sendMessage(identities);
+            });
         } catch (std::exception &e) {
             ERR("Caught exception in recv loop: {}", e.what());
         }
     }
+}
+
+void ZmqServer::sendMessage(MultiMessage *parts)
+{
+    m_sendQueue.push({parts});
 }
 
 void ZmqServer::sendLoop()
@@ -171,11 +170,26 @@ void ZmqServer::sendLoop()
     INFO("Sending loop started on thread {}", std::this_thread::get_id());
 
     while (m_keepRunning) {
-        
+        SendItem item;
+        if(!m_sendQueue.pop(item)) {
+            std::this_thread::sleep_for(1ms);
+            continue;
+        }
+        try {
+            for (size_t i = 0; i != item.p_parts->size() - 1; ++i) {
+                auto &msg = item.p_parts->at(i);
+                sock.send(msg, ZMQ_SNDMORE);
+            }
+            sock.send(item.p_parts->back());
+            TRACE("Response sent");
+        } catch (zmq::error_t &err) {
+            ERR("Sending error: {}", err);
+        }
+        delete item.p_parts;
     }
 }
 
-void ZmqServer::stop()
+void ZmqServer::requestStop()
 {
     if (!m_keepRunning) {
         return;
@@ -184,4 +198,14 @@ void ZmqServer::stop()
     INFO("Stopping ZMQ context");
     m_keepRunning = false;
     m_zmqCtx.close();
+}
+
+void ZmqServer::join()
+{
+    if (m_recvThread && m_recvThread->joinable()) {
+        m_recvThread->join();
+    }
+    if (m_sendThread && m_sendThread->joinable()) {
+        m_sendThread->join();
+    }
 }

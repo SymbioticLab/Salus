@@ -22,6 +22,8 @@
 
 #include "zmq.hpp"
 
+#include <boost/lockfree/queue.hpp>
+
 #include <vector>
 #include <memory>
 #include <thread>
@@ -35,6 +37,8 @@ class ServerWorker;
 class ZmqServer
 {
 public:
+    typedef std::vector<zmq::message_t> MultiMessage;
+
     explicit ZmqServer(std::unique_ptr<RpcServerCore> &&logic);
 
     ~ZmqServer();
@@ -45,7 +49,15 @@ public:
      */
     void start(const std::string &address);
 
-    void stop();
+    void requestStop();
+
+    void join();
+
+    /**
+     * Low level api for sending messages back to client.
+     * Takes ownership of parts
+     */
+    void sendMessage(MultiMessage *parts);
 
 private:
     void proxyLoop();
@@ -53,18 +65,27 @@ private:
     void sendLoop();
 
 private:
-    std::unique_ptr<RpcServerCore> m_pLogic;
-
     std::unique_ptr<std::thread> m_recvThread;
     std::unique_ptr<std::thread> m_sendThread;
 
+    // Shared by proxy, recv, send threads
+    constexpr static const char *m_baddr = "inproc://backend";
     zmq::context_t m_zmqCtx;
+    bool m_keepRunning;
+
+    // For the proxy loop
     zmq::socket_t m_frontend_sock;
     zmq::socket_t m_backend_sock;
 
-    bool m_keepRunning;
+    // For send loop
+    struct SendItem {
+        // we cannot use unique_ptr because boost::lockfree::queue does not support move semantics
+        MultiMessage *p_parts;
+    };
+    boost::lockfree::queue<SendItem> m_sendQueue;
 
-    constexpr static const char *m_baddr = "inproc://backend";
+    // For recv loop
+    std::unique_ptr<RpcServerCore> m_pLogic;
 };
 
 #endif // ZMQSERVER_H

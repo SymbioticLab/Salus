@@ -24,8 +24,10 @@
 
 #include "oplibraries/ioplibrary.h"
 
+#define BOOST_THREAD_VERSION 4
+#include <boost/thread/future.hpp>
+
 #include <memory>
-#include <future>
 
 /**
  * @todo write docs
@@ -38,19 +40,15 @@ public:
     ~ExecutionEngine();
 
     template<typename ResponseType>
-    std::future<std::unique_ptr<ResponseType>> enqueue(std::unique_ptr<ITask> &&task)
+    boost::future<std::unique_ptr<ResponseType>> enqueue(std::unique_ptr<ITask> &&task)
     {
         typedef std::unique_ptr<ResponseType> PResponse;
 
-        std::promise<PResponse> p;
-
         if (task->prepare(DeviceType::CPU)) {
-            p.set_value(task->run<ResponseType>());
+            return boost::make_future(task->run<ResponseType>());
         } else {
-            p.set_value({});
+            return boost::make_future<PResponse>({});
         }
-
-        return p.get_future();
     }
 
 private:

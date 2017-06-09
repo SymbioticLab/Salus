@@ -33,14 +33,21 @@ using namespace executor;
 using ::google::protobuf::Message;
 using std::unique_ptr;
 
-ProtoPtr RpcServerCore::dispatch(const std::string &type, const Message *request)
+boost::future<ProtoPtr> RpcServerCore::dispatch(const std::string &type, const Message *request)
 {
 #define ITEM(name) \
         {"executor." #name "Request", [&](const Message *request){ \
-            return name (static_cast<const name ## Request*>(request)); \
+            return name (static_cast<const name ## Request*>(request)).then(boost::launch::deferred, \
+                                                                            [](auto f){ \
+                if (f.has_value()) { \
+                    return static_cast<ProtoPtr>(f.get()); \
+                } else { \
+                    throw f.get_exception_ptr(); \
+                } \
+            }); \
         }},
 
-    static std::unordered_map<std::string, std::function<ProtoPtr(const Message*)>> funcs {
+    static std::unordered_map<std::string, std::function<boost::future<ProtoPtr>(const Message*)>> funcs {
         CALL_ALL_SERVICE_NAME(ITEM)
     };
 
@@ -51,7 +58,7 @@ ProtoPtr RpcServerCore::dispatch(const std::string &type, const Message *request
     return funcs[type](request);
 }
 
-unique_ptr<PushResponse> RpcServerCore::Push(const PushRequest *request)
+boost::future<unique_ptr<PushResponse>> RpcServerCore::Push(const PushRequest *request)
 {
     INFO("Serving PushRequest for oplibrary {}", OpLibraryType_Name(request->oplibrary()));
 
@@ -67,12 +74,10 @@ unique_ptr<PushResponse> RpcServerCore::Push(const PushRequest *request)
         return {};
     }
 
-    // TODO: run async
-    auto f = ExecutionEngine::instance().enqueue<PushResponse>(std::move(task));
-    return f.get();
+    return ExecutionEngine::instance().enqueue<PushResponse>(std::move(task));
 }
 
-unique_ptr<FetchResponse> RpcServerCore::Fetch(const FetchRequest *request)
+boost::future<unique_ptr<FetchResponse>> RpcServerCore::Fetch(const FetchRequest *request)
 {
     INFO("Serving FetchRequest for oplibrary {}", OpLibraryType_Name(request->oplibrary()));
 
@@ -88,12 +93,10 @@ unique_ptr<FetchResponse> RpcServerCore::Fetch(const FetchRequest *request)
         return {};
     }
 
-    // TODO: run async
-    auto f = ExecutionEngine::instance().enqueue<FetchResponse>(std::move(task));
-    return f.get();
+    return ExecutionEngine::instance().enqueue<FetchResponse>(std::move(task));
 }
 
-unique_ptr<RunResponse> RpcServerCore::Run(const RunRequest *request)
+boost::future<unique_ptr<RunResponse>> RpcServerCore::Run(const RunRequest *request)
 {
     const auto &opdef = request->opkernel();
     const auto &ctxdef = request->context();
@@ -114,12 +117,10 @@ unique_ptr<RunResponse> RpcServerCore::Run(const RunRequest *request)
         return {};
     }
 
-    // TODO: run async
-    auto f = ExecutionEngine::instance().enqueue<RunResponse>(std::move(task));
-    return f.get();
+    return ExecutionEngine::instance().enqueue<RunResponse>(std::move(task));
 }
 
-unique_ptr<AllocResponse> RpcServerCore::Alloc(const AllocRequest *request)
+boost::future<unique_ptr<AllocResponse>> RpcServerCore::Alloc(const AllocRequest *request)
 {
     auto alignment = request->alignment();
     auto num_bytes = request->num_bytes();
@@ -135,10 +136,10 @@ unique_ptr<AllocResponse> RpcServerCore::Alloc(const AllocRequest *request)
     INFO("Allocated address handel: {:x}", addr_handle);
 
     response->mutable_result()->set_code(0);
-    return response;
+    return boost::make_future(response);
 }
 
-unique_ptr<DeallocResponse> RpcServerCore::Dealloc(const DeallocRequest *request)
+boost::future<unique_ptr<DeallocResponse>> RpcServerCore::Dealloc(const DeallocRequest *request)
 {
     auto addr_handle = request->addr_handle();
 
@@ -148,5 +149,5 @@ unique_ptr<DeallocResponse> RpcServerCore::Dealloc(const DeallocRequest *request
 
     auto response = std::make_unique<DeallocResponse>();
     response->mutable_result()->set_code(0);
-    return response;
+    return boost::make_future(response);
 }
