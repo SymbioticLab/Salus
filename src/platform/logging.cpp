@@ -36,6 +36,7 @@ logging::LoggerWrapper::LoggerWrapper()
 
     m_logger->flush_on(spdlog::level::trace);
     m_logger->set_level(spdlog::level::trace);
+    m_logger->set_pattern("[%Y-%m-%d %T.%e] [%t] [%n] [%L] %v");
 
     //g3::installCrashHandler();
 }
