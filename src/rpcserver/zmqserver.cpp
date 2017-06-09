@@ -137,9 +137,10 @@ void ZmqServer::recvLoop()
             TRACE("Created request proto object from message at {:x}",
                   reinterpret_cast<uint64_t>(pRequest.get()));
 
-            m_pLogic->dispatch(type, pRequest.get())
+            auto f = m_pLogic->dispatch(type, pRequest.get())
 
-            .then(boost::launch::deferred, [parts = std::move(identities), this](auto f) mutable {
+            .then(boost::launch::inherit, [parts = std::move(identities), this](auto f) mutable {
+                INFO("callback called in thread {}", std::this_thread::get_id());
                 ProtoPtr pResponse;
                 try {
                     pResponse = f.get();
@@ -157,6 +158,13 @@ void ZmqServer::recvLoop()
                 TRACE("Response proto object have size {}", reply.size());
                 this->sendMessage(std::move(parts));
             });
+
+            // save the future so it won't deconstrcut, which will block.
+            m_futures.push_back(std::move(f));
+            // TODO: do the clean up in a seprate thread? And smarter clean up?
+            while (m_futures.front().is_ready()) {
+                m_futures.pop_front();
+            }
         } catch (std::exception &e) {
             ERR("Caught exception in recv loop: {}", e.what());
         }

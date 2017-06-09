@@ -45,9 +45,9 @@ public:
         typedef std::unique_ptr<ResponseType> PResponse;
 
         if (task->prepare(DeviceType::CPU)) {
-            return boost::make_future(task->run<ResponseType>());
+            return boost::make_future<PResponse>(task->run<ResponseType>());
         } else {
-            return boost::make_future<PResponse>({});
+            return boost::make_future<PResponse>(nullptr);
         }
     }
 

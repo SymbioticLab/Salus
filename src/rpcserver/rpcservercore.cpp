@@ -37,7 +37,7 @@ boost::future<ProtoPtr> RpcServerCore::dispatch(const std::string &type, const M
 {
 #define ITEM(name) \
         {"executor." #name "Request", [&](const Message *request){ \
-            return name (static_cast<const name ## Request*>(request)).then(boost::launch::deferred, \
+            return name (static_cast<const name ## Request*>(request)).then(boost::launch::inherit, \
                                                                             [](auto f){ \
                 return static_cast<ProtoPtr>(f.get()); \
             }); \

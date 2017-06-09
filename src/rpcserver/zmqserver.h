@@ -23,10 +23,13 @@
 #include "zmq.hpp"
 
 #include <boost/lockfree/queue.hpp>
+#define BOOST_THREAD_VERSION 4
+#include <boost/thread/future.hpp>
 
 #include <vector>
 #include <memory>
 #include <thread>
+#include <list>
 
 class RpcServerCore;
 class ServerWorker;
@@ -85,6 +88,7 @@ private:
 
     // For recv loop
     std::unique_ptr<RpcServerCore> m_pLogic;
+    std::list<boost::future<void>> m_futures;
 };
 
 #endif // ZMQSERVER_H
