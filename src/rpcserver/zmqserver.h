@@ -20,47 +20,51 @@
 #ifndef ZMQSERVER_H
 #define ZMQSERVER_H
 
-#include "irpcserver.h"
-
 #include "zmq.hpp"
 
 #include <vector>
 #include <memory>
 #include <thread>
 
+class RpcServerCore;
 class ServerWorker;
+
 /**
  * @todo write docs
  */
-class ZmqServer final : public IRpcServer
+class ZmqServer
 {
 public:
-    ZmqServer();
+    explicit ZmqServer(std::unique_ptr<RpcServerCore> &&logic);
 
-    ~ZmqServer() override;
+    ~ZmqServer();
 
-    void start(std::unique_ptr<RpcServerCore> &&logic, const std::string &address, bool block = true) override;
-    void join() override;
-    void stop() override;
+    /**
+     * Start the server, must be called in the same thread as the constructor. Will blocks until
+     * stop is called in another thread or ctrl-c signal received.
+     */
+    void start(const std::string &address);
 
-    size_t numWorkers() const;
-    void setNumWorkers(size_t num);
+    void stop();
 
 private:
-    void adjustNumWorkers(size_t num);
     void proxyLoop();
+    void recvLoop();
+    void sendLoop();
 
 private:
     std::unique_ptr<RpcServerCore> m_pLogic;
-    std::unique_ptr<std::thread> m_proxyLoopThread;
+
+    std::unique_ptr<std::thread> m_recvThread;
+    std::unique_ptr<std::thread> m_sendThread;
 
     zmq::context_t m_zmqCtx;
     zmq::socket_t m_frontend_sock;
     zmq::socket_t m_backend_sock;
 
-    std::vector<std::unique_ptr<ServerWorker>> m_workers;
-    size_t m_numWorkers;
-    bool m_started;
+    bool m_keepRunning;
+
+    constexpr static const char *m_baddr = "inproc://backend";
 };
 
 #endif // ZMQSERVER_H

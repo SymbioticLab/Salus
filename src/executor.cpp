@@ -16,13 +16,10 @@ int main(int argc, char **argv)
     UNUSED(argc);
     UNUSED(argv);
 
-    ZmqServer server;
-    server.setNumWorkers(1);
+    ZmqServer server(make_unique<RpcServerCore>());
 
     INFO("Starting server");
-    server.start(make_unique<RpcServerCore>(), "tcp://*:5501", false);
-    server.join();
-    server.stop();
+    server.start("tcp://*:5501");
 
     return 0;
 }

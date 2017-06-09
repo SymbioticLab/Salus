@@ -18,7 +18,6 @@
  */
 
 #include "zmqserver.h"
-#include "zmqserver_p.h"
 
 #include "rpcservercore.h"
 #include "platform/logging.h"
@@ -32,18 +31,13 @@
 
 using namespace std::literals::chrono_literals;
 
-ZmqServer::ZmqServer()
-    : m_pLogic(nullptr)
+ZmqServer::ZmqServer(std::unique_ptr<RpcServerCore> &&logic)
+    : m_pLogic(std::move(logic))
     , m_zmqCtx(1)
     , m_frontend_sock(m_zmqCtx, ZMQ_ROUTER)
     , m_backend_sock(m_zmqCtx, ZMQ_DEALER)
-    , m_numWorkers(std::thread::hardware_concurrency())
-    , m_started(false)
+    , m_keepRunning(false)
 {
-    // Make sure we have at least 1 worker
-    if (m_numWorkers <= 0) {
-        m_numWorkers = 1;
-    }
 }
 
 ZmqServer::~ZmqServer()
@@ -51,43 +45,12 @@ ZmqServer::~ZmqServer()
     stop();
 }
 
-size_t ZmqServer::numWorkers() const
+void ZmqServer::start(const std::string& address)
 {
-    return m_workers.size();
-}
-
-void ZmqServer::setNumWorkers(size_t num)
-{
-    if (num <= 0) {
-        num = 1;
+    if (m_keepRunning) {
+        ERR("ZmqServer already started.");
+        return;
     }
-    m_numWorkers = num;
-
-    if (m_started) {
-        adjustNumWorkers(m_numWorkers);
-    }
-}
-
-void ZmqServer::adjustNumWorkers(size_t num)
-{
-    while (m_workers.size() < num) {
-        if (!m_pLogic) {
-            ERR("ZmqServer::adjustNumWorkers called while m_pLogic is nullptr. No worker will be started");
-            break;
-        }
-        std::unique_ptr<ServerWorker> worker(new ServerWorker(m_zmqCtx, *m_pLogic));
-        worker->start();
-        m_workers.push_back(std::move(worker));
-    }
-    while (m_workers.size() > num) {
-        m_workers.back()->stop();
-        m_workers.pop_back();
-    }
-}
-
-void ZmqServer::start(std::unique_ptr<RpcServerCore> &&logic, const std::string& address, bool block)
-{
-    m_pLogic = std::move(logic);
 
     try {
         INFO("Binding frontend socket to address: {}", address);
@@ -102,15 +65,12 @@ void ZmqServer::start(std::unique_ptr<RpcServerCore> &&logic, const std::string&
         throw;
     }
 
-    m_proxyLoopThread = std::make_unique<std::thread>(std::bind(&ZmqServer::proxyLoop, this));
+    m_keepRunning = true;
+    m_recvThread = std::make_unique<std::thread>(std::bind(&ZmqServer::recvLoop, this));
+    m_sendThread = std::make_unique<std::thread>(std::bind(&ZmqServer::sendLoop, this));
 
-    adjustNumWorkers(m_numWorkers);
-
-    m_started = true;
-
-    if (block) {
-        join();
-    }
+    // proxy loop must be called in the same thread as constructor (because of fe and bd sockets)
+    proxyLoop();
 }
 
 void ZmqServer::proxyLoop()
@@ -123,56 +83,13 @@ void ZmqServer::proxyLoop()
     }
 }
 
-void ZmqServer::join()
+void ZmqServer::recvLoop()
 {
-    if (m_proxyLoopThread) {
-        m_proxyLoopThread->join();
-        m_proxyLoopThread.reset();
-    }
-    stop();
-}
+    zmq::socket_t sock(m_zmqCtx, ZMQ_DEALER);
+    sock.connect(m_baddr);
+    INFO("Recving loop started on thread {}", std::this_thread::get_id());
 
-void ZmqServer::stop()
-{
-    if (!m_started) {
-        return;
-    }
-
-    INFO("Stopping ZMQ context");
-    m_started = false;
-    m_zmqCtx.close();
-
-    INFO("Stopping all workers");
-    adjustNumWorkers(0);
-
-    m_pLogic.reset();
-}
-
-ServerWorker::ServerWorker(zmq::context_t &ctx, RpcServerCore &logic)
-    : m_thread(nullptr)
-    , m_zmqCtx(ctx)
-    , m_sock(m_zmqCtx, ZMQ_DEALER)
-    , m_shouldStop(false)
-    , m_logic(logic)
-{}
-
-void ServerWorker::start()
-{
-    m_thread = std::make_unique<std::thread>(std::bind(&ServerWorker::work, this));
-}
-
-void ServerWorker::stop()
-{
-    m_shouldStop = true;
-    m_thread->join();
-}
-
-void ServerWorker::work() {
-    auto baddr = "inproc://backend";
-    m_sock.connect(baddr);
-    INFO("ServerWorker started (thread {}), connected to address: {}", std::this_thread::get_id(), baddr);
-
-    while (!m_shouldStop) {
+    while (m_keepRunning) {
         try {
             std::vector<zmq::message_t> identities;
             zmq::message_t evenlop;
@@ -182,24 +99,24 @@ void ServerWorker::work() {
                 // First receive all identity frames added by ZMQ_ROUTER socket
                 TRACE("Receiving identity frame {}", identities.size());
                 identities.emplace_back();
-                m_sock.recv(&identities.back());
+                sock.recv(&identities.back());
                 TRACE("Identity frame {}: {}", identities.size() - 1, identities.back());
                 // Identity frames stop at an empty message
                 // ZMQ_RCVMORE is a int64_t according to doc, not a bool
-                while (identities.back().size() != 0 && m_sock.getsockopt<int64_t>(ZMQ_RCVMORE)) {
+                while (identities.back().size() != 0 && sock.getsockopt<int64_t>(ZMQ_RCVMORE)) {
                     TRACE("Receiving identity frame {}", identities.size());
                     identities.emplace_back();
-                    m_sock.recv(&identities.back());
+                    sock.recv(&identities.back());
                     TRACE("Identity frame {}: {}", identities.size() - 1, identities.back());
                 }
-                if (!m_sock.getsockopt<int64_t>(ZMQ_RCVMORE)) {
+                if (!sock.getsockopt<int64_t>(ZMQ_RCVMORE)) {
                     ERR("Skipped one iteration due to no body message part found after identity frames");
                     continue;
                 }
                 TRACE("Receiving body frames...");
                 // Now receive our message
-                m_sock.recv(&evenlop);
-                m_sock.recv(&body);
+                sock.recv(&evenlop);
+                sock.recv(&body);
             } catch (zmq::error_t &err) {
                 ERR("Skipped one iteration due to error while receiving: {}", err);
                 continue;
@@ -218,7 +135,7 @@ void ServerWorker::work() {
             TRACE("Created request proto object from message at {:x}",
                   reinterpret_cast<uint64_t>(pRequest.get()));
 
-            auto pResponse = m_logic.dispatch(type, pRequest.get());
+            auto pResponse = m_pLogic->dispatch(type, pRequest.get());
             if (!pResponse) {
                 ERR("Skipped to send one reply due to error in logic dispatch");
                 continue;
@@ -231,18 +148,40 @@ void ServerWorker::work() {
             try {
                 // First send out all saved identity frames, including the empty part
                 for (auto &id : identities) {
-                    m_sock.send(id, ZMQ_SNDMORE);
+                    sock.send(id, ZMQ_SNDMORE);
                 }
 
                 // Then send our message
-                m_sock.send(reply);
+                sock.send(reply);
                 TRACE("Response sent");
             } catch (zmq::error_t &err) {
                 ERR("Sending error when serving request {}: {}", type, err);
                 continue;
             }
         } catch (std::exception &e) {
-            ERR("Caught exception in ServerWorker main loop: {}", e.what());
+            ERR("Caught exception in recv loop: {}", e.what());
         }
     }
+}
+
+void ZmqServer::sendLoop()
+{
+    zmq::socket_t sock(m_zmqCtx, ZMQ_DEALER);
+    sock.connect(m_baddr);
+    INFO("Sending loop started on thread {}", std::this_thread::get_id());
+
+    while (m_keepRunning) {
+        
+    }
+}
+
+void ZmqServer::stop()
+{
+    if (!m_keepRunning) {
+        return;
+    }
+
+    INFO("Stopping ZMQ context");
+    m_keepRunning = false;
+    m_zmqCtx.close();
 }

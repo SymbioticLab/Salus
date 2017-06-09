@@ -14,7 +14,6 @@ set(SRC_LIST
     "execution/executionengine.cpp"
     "execution/devices.cpp"
 
-    "rpcserver/irpcserver.cpp"
     "rpcserver/rpcservercore.cpp"
     "rpcserver/zmqserver.cpp"
 
