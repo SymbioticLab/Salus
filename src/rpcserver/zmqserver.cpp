@@ -154,7 +154,7 @@ void ZmqServer::recvLoop()
                 auto &reply = parts->back();
                 pResponse->SerializeToArray(reply.data(), reply.size());
                 TRACE("Response proto object have size {}", reply.size());
-                sendMessage(std::move(parts));
+                this->sendMessage(std::move(parts));
             });
         } catch (std::exception &e) {
             ERR("Caught exception in recv loop: {}", e.what());
