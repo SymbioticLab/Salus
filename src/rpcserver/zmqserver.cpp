@@ -36,6 +36,7 @@ ZmqServer::ZmqServer(std::unique_ptr<RpcServerCore> &&logic)
     , m_keepRunning(false)
     , m_frontend_sock(m_zmqCtx, ZMQ_ROUTER)
     , m_backend_sock(m_zmqCtx, ZMQ_DEALER)
+    , m_sendQueue(128)
     , m_pLogic(std::move(logic))
 {
 }
