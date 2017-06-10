@@ -34,8 +34,8 @@ using namespace std::literals::chrono_literals;
 ZmqServer::ZmqServer(std::unique_ptr<RpcServerCore> &&logic)
     : m_zmqCtx(1)
     , m_keepRunning(false)
-    , m_frontend_sock(m_zmqCtx, ZMQ_ROUTER)
-    , m_backend_sock(m_zmqCtx, ZMQ_PAIR)
+    , m_frontend_sock(m_zmqCtx, zmq::socket_type::router)
+    , m_backend_sock(m_zmqCtx, zmq::socket_type::pair)
     , m_sendQueue(128)
     , m_pLogic(std::move(logic))
 {
@@ -114,12 +114,12 @@ void ZmqServer::halfProxyLoop()
     // messages received on m_backend_sock are forwarded to m_frontend_sock.
 
     zmq::pollitem_t pollin_events[] = {
-        {&m_frontend_sock, 0, ZMQ_POLLIN, 0},
-        {&m_backend_sock, 0, ZMQ_POLLIN, 0},
+        {m_frontend_sock, 0, ZMQ_POLLIN, 0},
+        {m_backend_sock, 0, ZMQ_POLLIN, 0},
     };
     zmq::pollitem_t all_events[] = {
-        {&m_frontend_sock, 0, ZMQ_POLLIN | ZMQ_POLLOUT, 0},
-        {&m_backend_sock, 0, ZMQ_POLLIN, 0},
+        {m_frontend_sock, 0, ZMQ_POLLIN | ZMQ_POLLOUT, 0},
+        {m_backend_sock, 0, ZMQ_POLLIN, 0},
     };
     zmq::pollitem_t *wait_events = pollin_events;
 
@@ -143,10 +143,10 @@ void ZmqServer::halfProxyLoop()
         // process events
         for (int i = 0; i != rc; i++) {
             auto revents = all_events[i].revents;
-            if (all_events[i].socket == &m_frontend_sock) {
+            if (all_events[i].socket == m_frontend_sock) {
                 shouldDispatch = (revents & ZMQ_POLLIN) != 0;
                 canSendOut = (revents & ZMQ_POLLOUT) != 0;
-            } else if (all_events[i].socket == &m_backend_sock) {
+            } else if (all_events[i].socket == m_backend_sock) {
                 needSendOut = (revents & ZMQ_POLLIN) != 0;
             }
         }
@@ -358,7 +358,7 @@ void ZmqServer::sendMessage(std::unique_ptr<MultiMessage> &&parts)
 
 void ZmqServer::sendLoop()
 {
-    zmq::socket_t sock(m_zmqCtx, ZMQ_PAIR);
+    zmq::socket_t sock(m_zmqCtx, zmq::socket_type::pair);
     sock.connect(m_baddr);
     INFO("Sending loop started on thread {}", std::this_thread::get_id());
 
