@@ -39,6 +39,7 @@ ZmqServer::ZmqServer(std::unique_ptr<RpcServerCore> &&logic)
     , m_pLogic(std::move(logic))
     , m_sendQueue(128)
 {
+    m_frontend_sock.setsockopt(ZMQ_ROUTER_MANDATORY, 1);
 }
 
 ZmqServer::~ZmqServer()
