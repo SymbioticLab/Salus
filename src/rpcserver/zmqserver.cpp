@@ -159,7 +159,7 @@ void ZmqServer::proxyRecvLoop()
                     m_backend_sock.recv(&msg);
                     TRACE("Forwarding message part: {}", msg);
                     bool more = m_backend_sock.getsockopt<int64_t>(ZMQ_RCVMORE);
-                    m_frontend_sock.send(&msg, more ? ZMQ_SNDMORE : 0);
+                    m_frontend_sock.send(msg, more ? ZMQ_SNDMORE : 0);
                     if (!more)
                         break;
                 }
