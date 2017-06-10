@@ -38,6 +38,7 @@ class AllocRequest;
 class AllocResponse;
 class DeallocRequest;
 class DeallocResponse;
+class EvenlopDef;
 }
 
 #define CALL_ALL_SERVICE_NAME(m) \
@@ -58,12 +59,13 @@ public:
      *
      * @return the future of response protobuf message
      */
-    boost::future<ProtoPtr> dispatch(const std::string &type, const ::google::protobuf::Message *request);
+    boost::future<ProtoPtr> dispatch(const executor::EvenlopDef &evenlop,
+                                     const ::google::protobuf::Message &request);
 
 private:
 
 #define DECL_METHOD(name) \
-    boost::future<std::unique_ptr<executor:: name##Response>> name (const executor:: name##Request *request);
+    boost::future<std::unique_ptr<executor:: name##Response>> name (const executor:: name##Request &request);
 
     CALL_ALL_SERVICE_NAME(DECL_METHOD)
 

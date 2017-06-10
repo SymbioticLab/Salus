@@ -45,7 +45,7 @@ target_link_libraries(executor
 
     spdlog::spdlog
 
-    #gRPC::grpc++
+    protobuf::libprotobuf
     ZeroMQ::zmq
     tensorflow::kernels
     Boost::thread

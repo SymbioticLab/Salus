@@ -203,26 +203,33 @@ void ZmqServer::dispatch(zmq::socket_t &sock)
         // Now receive our message
         sock.recv(&evenlop);
         TRACE("Received evenlop frame: {}", evenlop);
+        if (!sock.getsockopt<int64_t>(ZMQ_RCVMORE)) {
+            ERR("Skipped one iteration due to no body message part found after identity frames");
+            return;
+        }
         sock.recv(&body);
         TRACE("Received body frame: {}", body);
     } catch (zmq::error_t &err) {
         ERR("Skipped one iteration due to error while receiving: {}", err);
         return;
     }
-    std::string type(static_cast<char *>(evenlop.data()), evenlop.size());
-    DEBUG("Received request of proto type {}", type);
-    DEBUG("Received request byte array size {}", body.size());
-
-    auto pRequest = utils::createMessage(type, body.data(), body.size());
-    if (!pRequest) {
-        ERR("Skipped one iteration due to malformatted request received. Evenlop data '{}'."
-            " Body size {}", type, body.size());
+    auto pEvenlop = utils::createMessage<executor::EvenlopDef>("executor.EvenlopDef",
+                                                               evenlop.data(), evenlop.size());
+    if (!pEvenlop) {
+        ERR("Skipped one iteration due to malformatted request evenlop received.");
         return;
     }
-    TRACE("Created request proto object from message at {:x}",
-            reinterpret_cast<uint64_t>(pRequest.get()));
 
-    auto f = m_pLogic->dispatch(type, pRequest.get())
+    DEBUG("Received request evenlop: type {} seq {}", pEvenlop->type(), pEvenlop->seq());
+    DEBUG("Received request body byte array size {}", body.size());
+
+    auto pRequest = utils::createMessage(pEvenlop->type(), body.data(), body.size());
+    if (!pRequest) {
+        ERR("Skipped one iteration due to malformatted request received.");
+        return;
+    }
+
+    auto f = m_pLogic->dispatch(*pEvenlop, *pRequest)
 
     .then(boost::launch::inherit, [parts = std::move(identities), this](auto f) mutable {
         INFO("callback called in thread {}", std::this_thread::get_id());
@@ -248,8 +255,6 @@ void ZmqServer::dispatch(zmq::socket_t &sock)
     m_futures.push_back(std::move(f));
     // TODO: do the clean up in a seprate thread? And smarter clean up?
     cleanupFutures();
-
-    return;
 }
 
 void ZmqServer::cleanupFutures()

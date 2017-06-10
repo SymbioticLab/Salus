@@ -33,38 +33,41 @@ using namespace executor;
 using ::google::protobuf::Message;
 using std::unique_ptr;
 
-boost::future<ProtoPtr> RpcServerCore::dispatch(const std::string &type, const Message *request)
+boost::future<ProtoPtr> RpcServerCore::dispatch(const EvenlopDef &evenlop, const Message &request)
 {
 #define ITEM(name) \
-        {"executor." #name "Request", [&](const Message *request){ \
-            return name (static_cast<const name ## Request*>(request)).then(boost::launch::inherit, \
-                                                                            [](auto f){ \
-                return static_cast<ProtoPtr>(f.get()); \
+        {"executor." #name "Request", [&](const Message &request){ \
+            return name (static_cast<const name ## Request&>(request)).then(boost::launch::inherit, \
+                                                                            [seq](auto f){ \
+                auto resp = f.get(); \
+                resp->mutable_result()->set_seq(seq); \
+                return static_cast<ProtoPtr>(std::move(resp)); \
             }); \
         }},
 
-    static std::unordered_map<std::string, std::function<boost::future<ProtoPtr>(const Message*)>> funcs {
+    auto seq = evenlop.seq();
+    static std::unordered_map<std::string, std::function<boost::future<ProtoPtr>(const Message&)>> funcs {
         CALL_ALL_SERVICE_NAME(ITEM)
     };
 
 #undef ITEM
 
-    assert(funcs.count(type) == 1);
+    assert(funcs.count(evenlop.type()) == 1);
 
-    return funcs[type](request);
+    return funcs[evenlop.type()](request);
 }
 
-boost::future<unique_ptr<PushResponse>> RpcServerCore::Push(const PushRequest *request)
+boost::future<unique_ptr<PushResponse>> RpcServerCore::Push(const PushRequest &request)
 {
-    INFO("Serving PushRequest for oplibrary {}", OpLibraryType_Name(request->oplibrary()));
+    INFO("Serving PushRequest for oplibrary {}", OpLibraryType_Name(request.oplibrary()));
 
-    auto oplib = OpLibraryRegistary::instance().findOpLibrary(request->oplibrary());
+    auto oplib = OpLibraryRegistary::instance().findOpLibrary(request.oplibrary());
     if (!oplib) {
         ERR("Skipping push due to failed to find requested OpLibrary.");
         return {};
     }
 
-    auto task = oplib->createPushTask(*request);
+    auto task = oplib->createPushTask(request);
     if (!task) {
         ERR("Skipping task due to failed creation.");
         return {};
@@ -73,17 +76,17 @@ boost::future<unique_ptr<PushResponse>> RpcServerCore::Push(const PushRequest *r
     return ExecutionEngine::instance().enqueue<PushResponse>(std::move(task));
 }
 
-boost::future<unique_ptr<FetchResponse>> RpcServerCore::Fetch(const FetchRequest *request)
+boost::future<unique_ptr<FetchResponse>> RpcServerCore::Fetch(const FetchRequest &request)
 {
-    INFO("Serving FetchRequest for oplibrary {}", OpLibraryType_Name(request->oplibrary()));
+    INFO("Serving FetchRequest for oplibrary {}", OpLibraryType_Name(request.oplibrary()));
 
-    auto oplib = OpLibraryRegistary::instance().findOpLibrary(request->oplibrary());
+    auto oplib = OpLibraryRegistary::instance().findOpLibrary(request.oplibrary());
     if (!oplib) {
         ERR("Skipping fetch due to failed to find requested OpLibrary.");
         return {};
     }
 
-    auto task = oplib->createFetchTask(*request);
+    auto task = oplib->createFetchTask(request);
     if (!task) {
         ERR("Skipping task due to failed creation.");
         return {};
@@ -92,10 +95,10 @@ boost::future<unique_ptr<FetchResponse>> RpcServerCore::Fetch(const FetchRequest
     return ExecutionEngine::instance().enqueue<FetchResponse>(std::move(task));
 }
 
-boost::future<unique_ptr<RunResponse>> RpcServerCore::Run(const RunRequest *request)
+boost::future<unique_ptr<RunResponse>> RpcServerCore::Run(const RunRequest &request)
 {
-    const auto &opdef = request->opkernel();
-    const auto &ctxdef = request->context();
+    const auto &opdef = request.opkernel();
+    const auto &ctxdef = request.context();
 
     INFO("Serving RunRequest with opkernel id {} and oplibrary {}",
          opdef.id(), OpLibraryType_Name(opdef.oplibrary()));
@@ -116,10 +119,10 @@ boost::future<unique_ptr<RunResponse>> RpcServerCore::Run(const RunRequest *requ
     return ExecutionEngine::instance().enqueue<RunResponse>(std::move(task));
 }
 
-boost::future<unique_ptr<AllocResponse>> RpcServerCore::Alloc(const AllocRequest *request)
+boost::future<unique_ptr<AllocResponse>> RpcServerCore::Alloc(const AllocRequest &request)
 {
-    auto alignment = request->alignment();
-    auto num_bytes = request->num_bytes();
+    auto alignment = request.alignment();
+    auto num_bytes = request.num_bytes();
 
     INFO("Serving AllocRequest with alignment {} and num_bytes {}", alignment, num_bytes);
 
@@ -135,9 +138,9 @@ boost::future<unique_ptr<AllocResponse>> RpcServerCore::Alloc(const AllocRequest
     return boost::make_future(response);
 }
 
-boost::future<unique_ptr<DeallocResponse>> RpcServerCore::Dealloc(const DeallocRequest *request)
+boost::future<unique_ptr<DeallocResponse>> RpcServerCore::Dealloc(const DeallocRequest &request)
 {
-    auto addr_handle = request->addr_handle();
+    auto addr_handle = request.addr_handle();
 
     INFO("Serving DeallocRequest with address handel: {:x}", addr_handle);
 
