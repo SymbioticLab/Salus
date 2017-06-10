@@ -62,15 +62,13 @@ public:
     void sendMessage(std::unique_ptr<MultiMessage> &&parts);
 
 private:
-    void proxyLoop();
-    void recvLoop();
     void sendLoop();
-    void halfProxyLoop();
+    void proxyRecvLoop();
 
     /**
      * Poll on items with check
      */
-    int pollWithCheck(zmq::pollitem_t *items, size_t nitem, long timeout);
+    bool pollWithCheck(const std::vector<zmq::pollitem_t> &items, long timeout);
 
     /**
      * Read a whole message from m_frontend_sock, and dispatch using m_pLogic
@@ -85,28 +83,25 @@ private:
     void cleanupFutures();
 
 private:
-    std::unique_ptr<std::thread> m_recvThread;
-    std::unique_ptr<std::thread> m_sendThread;
-
-    // Shared by proxy, recv, send threads
+    // Shared by proxy&recv and send threads
     constexpr static const char *m_baddr = "inproc://backend";
     zmq::context_t m_zmqCtx;
     bool m_keepRunning;
 
-    // For the proxy loop
+    // For the proxy&recv loop
     zmq::socket_t m_frontend_sock;
     zmq::socket_t m_backend_sock;
 
+    std::unique_ptr<RpcServerCore> m_pLogic;
+    std::list<boost::future<void>> m_futures;
+
     // For send loop
+    std::unique_ptr<std::thread> m_sendThread;
     struct SendItem {
         // we cannot use unique_ptr because boost::lockfree::queue does not support move semantics
         MultiMessage *p_parts;
     };
     boost::lockfree::queue<SendItem> m_sendQueue;
-
-    // For recv loop
-    std::unique_ptr<RpcServerCore> m_pLogic;
-    std::list<boost::future<void>> m_futures;
 };
 
 #endif // ZMQSERVER_H

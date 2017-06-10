@@ -45,6 +45,9 @@ ProtoPtr utils::newMessage(const std::string &type)
 ProtoPtr utils::createMessage(const std::string &type, const void* data, size_t len)
 {
     auto message = newMessage(type);
+    if (!message) {
+        return {};
+    }
 
     auto ok = message->ParseFromArray(data, len);
     if (!ok) {
