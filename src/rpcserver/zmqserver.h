@@ -65,6 +65,24 @@ private:
     void proxyLoop();
     void recvLoop();
     void sendLoop();
+    void halfProxyLoop();
+
+    /**
+     * Poll on items with check
+     */
+    int pollWithCheck(zmq::pollitem_t *items, size_t nitem, long timeout);
+
+    /**
+     * Read a whole message from m_frontend_sock, and dispatch using m_pLogic
+     */
+    void dispatch(zmq::socket_t &sock);
+
+    /**
+     * Remove already finished futures from the front of m_futures.
+     * WARNING: there is no lock protecting m_futures. This method
+     * must be called from recvLoop thread
+     */
+    void cleanupFutures();
 
 private:
     std::unique_ptr<std::thread> m_recvThread;
