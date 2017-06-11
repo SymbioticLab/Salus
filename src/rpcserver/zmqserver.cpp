@@ -154,18 +154,21 @@ void ZmqServer::proxyRecvLoop()
         // forward any send message
         if (needSendOut && canSendOut) {
             TRACE("Forwarding message out");
-            try {
-                zmq::message_t msg;
-                while (true) {
+            zmq::message_t msg;
+            bool more;
+            while (true) {
+                try {
                     m_backend_sock.recv(&msg);
                     TRACE("Forwarding message part: {}", msg);
-                    bool more = m_backend_sock.getsockopt<int64_t>(ZMQ_RCVMORE);
+                    more = m_backend_sock.getsockopt<int64_t>(ZMQ_RCVMORE);
                     m_frontend_sock.send(msg, more ? ZMQ_SNDMORE : 0);
                     if (!more)
                         break;
+                } catch (zmq::error_t &err) {
+                    ERR("Dropping message part while sending out due to error: {}", err);
+                    if (!more)
+                        break;
                 }
-            } catch (zmq::error_t &err) {
-                ERR("Dropping message while sending out due to error: {}", err);
             }
             needSendOut = canSendOut = false;
             wait_events = &pollin_events;
