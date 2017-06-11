@@ -38,6 +38,9 @@ find_package(Boost 1.64 REQUIRED COMPONENTS
     thread
 )
 
+# Q
+find_package(Q REQUIRED)
+
 # spdlog
 if(NOT WITH_BUNDLED_SPDLOG)
     find_package(spdlog QUIET)

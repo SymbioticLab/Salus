@@ -22,8 +22,7 @@
 
 #include "utils/protoutils.h"
 
-#define BOOST_THREAD_VERSION 4
-#include <boost/thread/future.hpp>
+#include <q/promise.hpp>
 
 #include <memory>
 
@@ -59,13 +58,13 @@ public:
      *
      * @return the future of response protobuf message
      */
-    boost::future<ProtoPtr> dispatch(const executor::EvenlopDef &evenlop,
-                                     const ::google::protobuf::Message &request);
+    q::promise<ProtoPtr> dispatch(const executor::EvenlopDef &evenlop,
+                                  const ::google::protobuf::Message &request);
 
 private:
 
 #define DECL_METHOD(name) \
-    boost::future<std::unique_ptr<executor:: name##Response>> name (const executor:: name##Request &request);
+    q::promise<std::unique_ptr<executor:: name##Response>> name (const executor:: name##Request &request);
 
     CALL_ALL_SERVICE_NAME(DECL_METHOD)
 

@@ -26,6 +26,13 @@ ExecutionEngine &ExecutionEngine::instance()
 }
 
 ExecutionEngine::ExecutionEngine()
+    : m_qscope(q::scoped_initialize())
+    , m_qec(q::make_execution_context<q::threadpool,
+                                      q::direct_scheduler>("executionengine",
+                                                           // The queue passed in here is only used for threadpool
+                                                           // termination. We don't care about it. Thus this queue
+                                                           // is not connected to any event dispatcher
+                                                           q::make_shared<q::queue>(0)))
 {
 
 }

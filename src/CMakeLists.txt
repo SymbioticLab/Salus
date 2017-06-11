@@ -50,4 +50,5 @@ target_link_libraries(executor
     tensorflow::kernels
     Boost::thread
     Boost::boost
+    q
 )

@@ -24,8 +24,10 @@
 
 #include "oplibraries/ioplibrary.h"
 
-#define BOOST_THREAD_VERSION 4
-#include <boost/thread/future.hpp>
+#include <q/lib.hpp>
+#include <q/promise.hpp>
+#include <q/execution_context.hpp>
+#include <q/threadpool.hpp>
 
 #include <memory>
 
@@ -40,19 +42,52 @@ public:
     ~ExecutionEngine();
 
     template<typename ResponseType>
-    boost::future<std::unique_ptr<ResponseType>> enqueue(std::unique_ptr<ITask> &&task)
+    q::promise<std::unique_ptr<ResponseType>> enqueue(std::unique_ptr<ITask> &&task)
     {
-        typedef std::unique_ptr<ResponseType> PResponse;
+        using PResponse = std::unique_ptr<ResponseType>;
 
         if (task->prepare(DeviceType::CPU)) {
-            return boost::make_future<PResponse>(task->run<ResponseType>());
+            return q::make_promise_of<PResponse>(m_qec->queue(),
+                                                 [task = std::move(task)](auto resolve, auto reject){
+                try {
+                    resolve(task->run<ResponseType>());
+                } catch (std::exception &err) {
+                    reject(err);
+                }
+            });
         } else {
-            return boost::make_future<PResponse>(nullptr);
+            return q::with(m_qec->queue(), PResponse(nullptr));
         }
     }
 
+    template<typename ResponseType>
+    q::promise<std::unique_ptr<ResponseType>> emptyPromise()
+    {
+        using PResponse = std::unique_ptr<ResponseType>;
+        return q::with(m_qec->queue(), PResponse(nullptr));
+    }
+
+    template<typename ResponseType>
+    q::promise<ResponseType> makePromise(ResponseType &&t)
+    {
+        return q::with(m_qec->queue(), std::move(t));
+    }
+
+    template<typename ResponseType>
+    q::promise<ResponseType> makePromise(const ResponseType &t)
+    {
+        return q::with(m_qec->queue(), t);
+    }
+
+
+
 private:
     ExecutionEngine();
+
+    using qExecutionContext = q::specific_execution_context_ptr<q::threadpool>;
+
+    q::scope m_qscope;
+    qExecutionContext m_qec;
 };
 
 #endif // EXECUTIONENGINE_H

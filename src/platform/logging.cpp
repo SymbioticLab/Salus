@@ -49,6 +49,18 @@ std::shared_ptr<spdlog::logger> &logging::LoggerWrapper::logger()
     return wrapper.m_logger;
 }
 
+std::ostream &operator<<(std::ostream &os, const std::exception_ptr &ep)
+{
+    try {
+        std::rethrow_exception(ep);
+    } catch (const std::exception& e) {
+        os << e.what();
+    } catch (...) {
+        os << "unknown exception";
+    }
+    return os;
+}
+
 std::ostream &operator<<(std::ostream &os, const executor::OpKernelDef &c)
 {
     return os << "OpKernelDef(" << c.id() << ", "

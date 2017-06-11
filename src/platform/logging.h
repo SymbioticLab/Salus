@@ -42,6 +42,8 @@ private:
 } // namespace logging
 
 // Additional operator<< implementations
+std::ostream &operator<<(std::ostream &os, const std::exception_ptr &ep);
+
 namespace executor {
 class OpKernelDef;
 class EvenlopDef;

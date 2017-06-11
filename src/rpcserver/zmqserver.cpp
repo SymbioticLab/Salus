@@ -246,14 +246,8 @@ void ZmqServer::dispatch(zmq::socket_t &sock)
     auto f = m_pLogic->dispatch(*pEvenlop, *pRequest)
 
     // step 5. send response back
-    .then(boost::launch::inherit, [parts = std::move(identities), this](auto f) mutable {
+    .then([parts = std::move(identities), this](ProtoPtr &&pResponse) mutable {
         INFO("callback called in thread {}", std::this_thread::get_id());
-        ProtoPtr pResponse;
-        try {
-            pResponse = f.get();
-        } catch(std::exception &ex) {
-            ERR("Caught exception in logic dispatch: {}", ex.what());
-        }
         if (!pResponse) {
             ERR("Skipped to send one reply due to error in logic dispatch");
             return;
@@ -264,13 +258,15 @@ void ZmqServer::dispatch(zmq::socket_t &sock)
         pResponse->SerializeToArray(reply.data(), reply.size());
         TRACE("Response proto object have size {}", reply.size());
         this->sendMessage(std::move(parts));
+    }).fail([](std::exception_ptr e){
+        ERR("Caught exception in logic dispatch: {}", e);
     });
 
     // step 6. bookkeeping works
     // save the future so it won't deconstrcut, which will block.
-    m_futures.push_back(std::move(f));
+//     m_futures.push_back(std::move(f));
     // TODO: do the clean up in a seprate thread? And smarter clean up?
-    cleanupFutures();
+//     cleanupFutures();
 }
 
 void ZmqServer::cleanupFutures()
