@@ -44,8 +44,10 @@ private:
 // Additional operator<< implementations
 namespace executor {
 class OpKernelDef;
+class EvenlopDef;
 }
 std::ostream &operator<<(std::ostream &os, const executor::OpKernelDef &c);
+std::ostream &operator<<(std::ostream &os, const executor::EvenlopDef &c);
 
 namespace zmq {
 class message_t;

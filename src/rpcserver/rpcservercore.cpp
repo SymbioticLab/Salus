@@ -39,9 +39,7 @@ boost::future<ProtoPtr> RpcServerCore::dispatch(const EvenlopDef &evenlop, const
         {"executor." #name "Request", [&](const Message &request){ \
             return name (static_cast<const name ## Request&>(request)).then(boost::launch::inherit, \
                                                                             [seq](auto f){ \
-                auto resp = f.get(); \
-                resp->mutable_result()->set_seq(seq); \
-                return static_cast<ProtoPtr>(std::move(resp)); \
+                return static_cast<ProtoPtr>(std::move(f.get())); \
             }); \
         }},
 

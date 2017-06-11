@@ -40,6 +40,7 @@ ZmqServer::ZmqServer(std::unique_ptr<RpcServerCore> &&logic)
     , m_sendQueue(128)
 {
     m_frontend_sock.setsockopt(ZMQ_ROUTER_MANDATORY, 1);
+    m_frontend_sock.setsockopt(ZMQ_ROUTER_HANDOVER, 1);
 }
 
 ZmqServer::~ZmqServer()
@@ -219,18 +220,29 @@ void ZmqServer::dispatch(zmq::socket_t &sock)
         ERR("Skipped one iteration due to malformatted request evenlop received.");
         return;
     }
+    DEBUG("Received request evenlop: {}", *pEvenlop);
 
-    DEBUG("Received request evenlop: type {} seq {}", pEvenlop->type(), pEvenlop->seq());
-    DEBUG("Received request body byte array size {}", body.size());
+    // step 1. replace the first frame in identity with the requested identity
+    identities->front().rebuild(pEvenlop->recvidentity().data(), pEvenlop->recvidentity().size());
 
+    // step 2. remove recvidentity part as we do not need it anymore, and then append evenlop again to
+    // the messages we'll send back
+    pEvenlop->clear_recvidentity();
+    identities->emplace_back(pEvenlop->ByteSizeLong());
+    pEvenlop->SerializeToArray(identities->back().data(), identities->back().size());
+
+    // step 3. create request object
     auto pRequest = utils::createMessage(pEvenlop->type(), body.data(), body.size());
     if (!pRequest) {
         ERR("Skipped one iteration due to malformatted request received.");
         return;
     }
+    DEBUG("Received request body byte array size {}", body.size());
 
+    // step 4. dispatch
     auto f = m_pLogic->dispatch(*pEvenlop, *pRequest)
 
+    // step 5. send response back
     .then(boost::launch::inherit, [parts = std::move(identities), this](auto f) mutable {
         INFO("callback called in thread {}", std::this_thread::get_id());
         ProtoPtr pResponse;
@@ -251,6 +263,7 @@ void ZmqServer::dispatch(zmq::socket_t &sock)
         this->sendMessage(std::move(parts));
     });
 
+    // step 6. bookkeeping works
     // save the future so it won't deconstrcut, which will block.
     m_futures.push_back(std::move(f));
     // TODO: do the clean up in a seprate thread? And smarter clean up?

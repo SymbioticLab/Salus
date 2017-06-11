@@ -68,12 +68,12 @@ message OpContextDef {
 
 message Status {
     int32 code = 1;
-    uint64 seq = 2;
 }
 
 message EvenlopDef {
     string type = 1;
     uint64 seq = 2;
+    bytes recvIdentity = 3;
 }
 
 enum OpLibraryType {
