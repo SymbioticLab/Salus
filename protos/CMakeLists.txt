@@ -1,8 +1,11 @@
 # Proto file
 set(proto_files
     "executor.proto"
-    "tfoplibrary.proto"
 )
+
+if(USE_TENSORFLOW)
+    list(APPEND proto_files "tfoplibrary.proto")
+endif(USE_TENSORFLOW)
 
 # Generated sources
 set(PROTO_SRC_DIR ${CMAKE_CURRENT_BINARY_DIR}/proto-gen)
@@ -21,5 +24,7 @@ target_include_directories(protos_gen
     INTERFACE ${PROTO_SRC_DIR}
 )
 
-# HACK: we need the proto definition from TensorFlow
-target_link_libraries(protos_gen tensorflow::headers)
+if(USE_TENSORFLOW)
+    # HACK: we need the proto definition from TensorFlow
+    target_link_libraries(protos_gen tensorflow::headers)
+endif(USE_TENSORFLOW)

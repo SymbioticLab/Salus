@@ -19,9 +19,6 @@
 
 #include "ioplibrary.h"
 
-#include "tfoplibrary.h"
-#include "tfmocks/tfsession.h"
-
 #include "platform/logging.h"
 #include "utils/macros.h"
 
@@ -42,9 +39,12 @@ OpLibraryRegistary &OpLibraryRegistary::instance()
     return registary;
 }
 
-OpLibraryRegistary::OpLibraryRegistary()
+OpLibraryRegistary::OpLibraryRegistary() = default;
+
+OpLibraryRegistary::Register::Register(executor::OpLibraryType libraryType,
+                                       std::unique_ptr<IOpLibrary> &&library)
 {
-    registerOpLibrary(executor::TENSORFLOW, std::make_unique<TFOpLibrary>());
+    OpLibraryRegistary::instance().registerOpLibrary(libraryType, std::move(library));
 }
 
 void OpLibraryRegistary::registerOpLibrary(executor::OpLibraryType libraryType,

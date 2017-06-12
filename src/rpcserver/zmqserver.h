@@ -23,8 +23,6 @@
 #include "zmq.hpp"
 
 #include <boost/lockfree/queue.hpp>
-#define BOOST_THREAD_VERSION 4
-#include <boost/thread/future.hpp>
 
 #include <vector>
 #include <memory>
@@ -75,13 +73,6 @@ private:
      */
     void dispatch(zmq::socket_t &sock);
 
-    /**
-     * Remove already finished futures from the front of m_futures.
-     * WARNING: there is no lock protecting m_futures. This method
-     * must be called from recvLoop thread
-     */
-    void cleanupFutures();
-
 private:
     // Shared by proxy&recv and send threads
     constexpr static const char *m_baddr = "inproc://backend";
@@ -93,7 +84,6 @@ private:
     zmq::socket_t m_backend_sock;
 
     std::unique_ptr<RpcServerCore> m_pLogic;
-    std::list<boost::future<void>> m_futures;
 
     // For send loop
     std::unique_ptr<std::thread> m_sendThread;

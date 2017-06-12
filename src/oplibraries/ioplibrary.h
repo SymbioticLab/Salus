@@ -70,6 +70,10 @@ public:
 
     ~OpLibraryRegistary() = default;
 
+    struct Register
+    {
+        Register(executor::OpLibraryType libraryType, std::unique_ptr<IOpLibrary> &&library);
+    };
     void registerOpLibrary(executor::OpLibraryType libraryType, std::unique_ptr<IOpLibrary> &&library);
 
     IOpLibrary *findOpLibrary(const executor::OpLibraryType libraryType) const;
@@ -80,5 +84,8 @@ public:
 private:
     std::unordered_map<executor::OpLibraryType, std::unique_ptr<IOpLibrary>> m_opLibraries;
 };
+
+#define REGISTER_OPLIBRARY(type, name) \
+    OpLibraryRegistary::Register name ## register ((type), std::make_unique<name>())
 
 #endif // IOPLIBRARY_H

@@ -329,3 +329,5 @@ ProtoPtr TFPushTask::run()
 }
 
 TFPushTask::~TFPushTask() = default;
+
+REGISTER_OPLIBRARY(executor::TENSORFLOW, TFOpLibrary);

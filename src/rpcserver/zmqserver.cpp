@@ -261,21 +261,6 @@ void ZmqServer::dispatch(zmq::socket_t &sock)
     }).fail([](std::exception_ptr e){
         ERR("Caught exception in logic dispatch: {}", e);
     });
-
-    // step 6. bookkeeping works
-    // save the future so it won't deconstrcut, which will block.
-//     m_futures.push_back(std::move(f));
-    // TODO: do the clean up in a seprate thread? And smarter clean up?
-//     cleanupFutures();
-}
-
-void ZmqServer::cleanupFutures()
-{
-    INFO("Cleaning up futures");
-    while (m_futures.front().is_ready()) {
-        m_futures.pop_front();
-    }
-    INFO("Cleaning up done");
 }
 
 void ZmqServer::sendMessage(std::unique_ptr<MultiMessage> &&parts)
