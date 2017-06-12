@@ -15,3 +15,6 @@ build-kdev/*
 
 # Vagrant
 .vagrant
+
+# Data files in test
+MNIST_data
