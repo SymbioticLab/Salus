@@ -197,12 +197,13 @@ ProtoPtr TFRunTask::run()
 
     // process tensor received by rendezvous
     // Note that rendezvous already registered these tensors to m_session
+    // And this will clear tensors table in rendezvous
     for (auto &elem : m_context->rendez.receivedTensors()) {
         auto item = tfctxupd.add_rendeztensors();
-        item->set_key(elem.key);
-        item->set_allocattributes(elem.args.alloc_attrs.value);
-        item->set_isdead(elem.isDead);
-        m_session->tensorMetaToProto(item->mutable_val(), elem.val);
+        item->set_key(elem.first);
+        item->set_allocattributes(elem.second.args.alloc_attrs.value);
+        item->set_isdead(elem.second.isDead);
+        m_session->tensorMetaToProto(item->mutable_val(), elem.second.val);
     }
 
     // process tensor set as outputs

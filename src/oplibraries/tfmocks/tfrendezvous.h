@@ -21,6 +21,7 @@
 #define TFRENDEZVOUS_H
 
 #include <tensorflow/core/framework/rendezvous.h>
+#include <tensorflow/core/platform/mutex.h>
 
 #include <vector>
 
@@ -33,15 +34,14 @@ class TFRendezvous : public tensorflow::Rendezvous
 {
 public:
     struct Item {
-        std::string key;
         Args args;
         bool isDead;
         tensorflow::Tensor val;
 
         Item();
-        Item(const std::string &k, const Args &a, bool d, tensorflow::Tensor &&v);
+        Item(const Args &a, bool d, tensorflow::Tensor &&v);
     };
-    typedef std::vector<Item> TensorTable;
+    typedef std::unordered_map<std::string, Item> TensorTable;
 
     explicit TFRendezvous(TFSession *sess);
     ~TFRendezvous() override;
@@ -55,12 +55,14 @@ public:
 
     void StartAbort(const tensorflow::Status& status) override;
 
-    const TensorTable &receivedTensors() const;
+    TensorTable receivedTensors();
 
 private:
     TFSession *m_sess;
+    tensorflow::Rendezvous *m_local;
 
-    TensorTable m_tensors;
+    mutable tensorflow::mutex m_mu;
+    TensorTable m_tensors GUARDED_BY(m_mu);
 };
 
 #endif // TFRENDEZVOUS_H
