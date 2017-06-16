@@ -24,7 +24,7 @@
 
 namespace utils {
 
-std::string bytesToHexString(const uint8_t *info, size_t infoLength);
+std::string bytesToHexString(const uint8_t *info, size_t infoLength, size_t maxLen = 20);
 
 } // namespace utils
 

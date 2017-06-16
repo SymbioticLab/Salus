@@ -18,17 +18,18 @@ class TestBasicOps(unittest.TestCase):
             npt.assert_array_equal(sess.run(a), sess.run(b))
 
     def test_randomop(self):
+        tf.set_random_seed(233)
+        with tf.device('/device:RPC:0'):
+            a = tf.random_normal([20, 20])
         with tf.Session() as sess:
-            tf.set_random_seed(233)
-            with tf.device('/device:RPC:0'):
-                a = tf.random_normal([20, 20])
-                actual = sess.run(a)
+            actual = sess.run(a)
 
+        tf.reset_default_graph()
+        tf.set_random_seed(233)
+        with tf.device('/device:CPU:0'):
+            b = tf.random_normal([20, 20])
         with tf.Session() as sess:
-            tf.set_random_seed(233)
-            with tf.device('/device:CPU:0'):
-                b = tf.random_normal([20, 20])
-                expected = sess.run(b)
+            expected = sess.run(b)
 
         npt.assert_array_equal(actual, expected)
 

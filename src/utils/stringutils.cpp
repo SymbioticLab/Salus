@@ -19,9 +19,11 @@
 
 #include "stringutils.h"
 
-std::string utils::bytesToHexString(const uint8_t *info, size_t infoLength)
+std::string utils::bytesToHexString(const uint8_t *info, size_t infoLength, size_t maxLen)
 {
-    static const char *pszNibbleToHex = {"0123456789ABCDEF"};
+    static const char pszNibbleToHex[] = "0123456789ABCDEF";
+    static const char ellipses[] = "...";
+    static const size_t ellipsesLen = sizeof(ellipses) / sizeof(char);
 
     if (infoLength <= 0 || !info) {
         return {};
@@ -29,11 +31,22 @@ std::string utils::bytesToHexString(const uint8_t *info, size_t infoLength)
 
     std::string result(infoLength * 2, ' ');
 
+    // TODO: we should be able to skip some iterations based on maxLen
     for (size_t i = 0; i < infoLength; i++) {
         int nNibble = info[i] >> 4;
         result[2 * i] = pszNibbleToHex[nNibble];
         nNibble = info[i] & 0x0F;
         result[2 * i + 1] = pszNibbleToHex[nNibble];
+    }
+
+    if (result.size() > maxLen) {
+        if (maxLen <= ellipsesLen + 2) {
+            result.erase(maxLen);
+        } else {
+            auto leading = (maxLen - ellipsesLen) / 2;
+            auto ommitted = result.size() - leading - (maxLen - ellipsesLen);
+            result.replace(leading, ommitted, ellipses);
+        }
     }
 
     return result;

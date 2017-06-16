@@ -81,20 +81,20 @@ class TestMnistConv(unittest.TestCase):
         cls.mnist = input_data.read_data_sets('MNIST_data', one_hot=True)
 
     def test_softmax(self):
-        with tf.Session() as sess:
-            tf.set_random_seed(233)
-            np.random.seed(233)
-            with tf.device('/device:RPC:0'):
+        tf.set_random_seed(233)
+        np.random.seed(233)
+        with tf.device('/device:RPC:0'):
+            with tf.Session() as sess:
                 actual = run_mnist_softmax(sess, TestMnistConv.mnist)
 
         TestMnistConv.mnist = input_data.read_data_sets('MNIST_data', one_hot=True)
         tf.reset_default_graph()
-        with tf.Session() as sess:
-            tf.set_random_seed(233)
-            np.random.seed(233)
+        tf.set_random_seed(233)
+        np.random.seed(233)
 
-            with tf.device('/device:CPU:0'):
-                expected = run_mnist_softmax(self.sess, TestMnistConv.mnist)
+        with tf.device('/device:CPU:0'):
+            with tf.Session() as sess:
+                expected = run_mnist_softmax(sess, TestMnistConv.mnist)
 
         self.assertEquals(actual, expected)
 
@@ -102,15 +102,17 @@ class TestMnistConv(unittest.TestCase):
         tf.set_random_seed(233)
         np.random.seed(233)
         with tf.device('/device:RPC:0'):
-            actual = run_mnist_conv(self.sess, TestMnistConv.mnist)
+            with tf.Session() as sess:
+                actual = run_mnist_conv(sess, TestMnistConv.mnist)
 
+        TestMnistConv.mnist = input_data.read_data_sets('MNIST_data', one_hot=True)
         tf.reset_default_graph()
         tf.set_random_seed(233)
         np.random.seed(233)
-        TestMnistConv.mnist = input_data.read_data_sets('MNIST_data', one_hot=True)
 
         with tf.device('/device:CPU:0'):
-            expected = run_mnist_conv(self.sess, TestMnistConv.mnist)
+            with tf.Session() as sess:
+                expected = run_mnist_conv(sess, TestMnistConv.mnist)
 
         self.assertEquals(actual, expected)
 
