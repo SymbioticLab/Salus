@@ -78,8 +78,6 @@ public:
 
     std::vector<tensorflow::AllocatorAttributes> output_attrs;
 
-    TFRendezvous rendez;
-
     tensorflow::OpKernelContext::Params params;
 private:
     std::unique_ptr<tensorflow::OpKernelContext> context;
@@ -101,6 +99,9 @@ public:
     void registerTensorMemory(const tensorflow::Tensor &tensor);
     tensorflow::Tensor *tensorFromAddrHandle(uint64_t addr_handle);
     tensorflow::Tensor *findTensorFromProtoMeta(const tensorflow::TensorProto &proto);
+
+    // Get and clear pending rendezvous sent Tensor
+    TFRendezvous::TensorTable releasePendingRendezSentTensors();
 
     /**
      * Convinence method that combines create a tensor from proto, allocate and fill in memory,
@@ -127,6 +128,8 @@ private:
     tensorflow::FunctionLibraryDefinition m_flibDef;
     std::unique_ptr<tensorflow::FunctionLibraryRuntime> m_fruntime;
     std::unique_ptr<TFDevice> m_device;
+
+    TFRendezvous m_rendez;
 
     tensorflow::mutex m_mu;
     std::unordered_map<uint64_t, tensorflow::Tensor*> m_tensors;

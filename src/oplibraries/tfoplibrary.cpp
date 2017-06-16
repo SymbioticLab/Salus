@@ -198,7 +198,7 @@ ProtoPtr TFRunTask::run()
     // process tensor received by rendezvous
     // Note that rendezvous already registered these tensors to m_session
     // And this will clear tensors table in rendezvous
-    for (auto &elem : m_context->rendez.receivedTensors()) {
+    for (auto &elem : m_session->releasePendingRendezSentTensors()) {
         auto item = tfctxupd.add_rendeztensors();
         item->set_key(elem.first);
         item->set_allocattributes(elem.second.args.alloc_attrs.value);

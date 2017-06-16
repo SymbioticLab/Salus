@@ -23,7 +23,7 @@
 #include <tensorflow/core/framework/rendezvous.h>
 #include <tensorflow/core/platform/mutex.h>
 
-#include <vector>
+#include <unordered_map>
 
 class TFSession;
 

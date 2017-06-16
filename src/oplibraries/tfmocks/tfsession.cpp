@@ -24,6 +24,7 @@
 
 #include "platform/logging.h"
 #include "memorymgr/memorymgr.h"
+#include "utils/macros.h"
 
 #include "tfoplibrary.pb.h"
 
@@ -38,6 +39,7 @@ TFSession::TFSession(TFOpLibrary *opLibrary, const tensorflow::FunctionDefLibrar
     , m_opseg()
     , m_flibDef(tensorflow::OpRegistry::Global(), fDefLib)
     , m_fruntime(nullptr)
+    , m_rendez(this)
 {
     DEBUG("Creating new TFSession at {:x}", reinterpret_cast<uint64_t>(this));
 
@@ -145,6 +147,10 @@ void TFSession::tensorMetaToProto(tensorflow::TensorProto *proto, const tensorfl
     proto->add_int64_val(addr_handle);
 }
 
+TFRendezvous::TensorTable TFSession::releasePendingRendezSentTensors()
+{
+    return m_rendez.receivedTensors();
+}
 
 tensorflow::OpKernel *TFSession::findOrCreateKernel(const tensorflow::NodeDef &ndef)
 {
@@ -183,8 +189,9 @@ tensorflow::OpKernel *TFSession::findOrCreateKernel(const tensorflow::NodeDef &n
 
 TFContext::TFContext(TFSession *sess)
     : step_container(0, [](const std::string&) {})
-    , rendez(sess)
-{ }
+{
+    UNUSED(sess);
+}
 
 TFContext::~TFContext() {
     for (auto t : inputs) {
@@ -247,7 +254,7 @@ std::unique_ptr<TFContext> TFSession::createContext(const executor::TFOpContextD
     tfctx->params.slice_reader_cache = &tfctx->slice_reader_cache_wrapper;
     tfctx->params.resource_manager = m_device->resource_manager();
     tfctx->params.function_library = m_fruntime.get();
-    tfctx->params.rendezvous = &tfctx->rendez;
+    tfctx->params.rendezvous = &m_rendez;
 
     tfctx->params.step_id = tfdef.step_id();
     tfctx->params.frame_iter = tensorflow::FrameAndIter(tfdef.frame_id(), tfdef.iter_id());
