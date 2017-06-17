@@ -2,28 +2,12 @@ syntax = "proto3";
 
 package executor;
 
-service IExecEngine {
-    rpc run(RunRequest) returns (RunResponse) {}
-    rpc allocate(AllocRequest) returns (AllocResponse) {}
-    rpc deallocate(DeallocRequest) returns (DeallocResponse) {}
-}
-
-message PushRequest {
-    OpLibraryType oplibrary = 1;
+message CustomRequest {
+    string type = 1;
     bytes extra = 2;
 }
 
-message PushResponse {
-    Status result = 1;
-    bytes extra = 2;
-}
-
-message FetchRequest {
-    OpLibraryType oplibrary = 1;
-    bytes extra = 2;
-}
-
-message FetchResponse {
+message CustomResponse {
     Status result = 1;
     bytes extra = 2;
 }
@@ -74,6 +58,7 @@ message EvenlopDef {
     string type = 1;
     uint64 seq = 2;
     bytes recvIdentity = 3;
+    OpLibraryType oplibrary = 4;
 }
 
 enum OpLibraryType {

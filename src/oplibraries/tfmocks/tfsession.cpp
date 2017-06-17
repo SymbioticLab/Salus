@@ -151,14 +151,9 @@ void TFSession::tensorMetaToProto(tensorflow::TensorProto *proto, const tensorfl
     proto->add_int64_val(addr_handle);
 }
 
-TFRendezvous::SentTensorTable TFSession::releasePendingRendezSentTensors()
+TFRendezvous &TFSession::rendezvous()
 {
-    return m_rendez.releasePendingSentTensors();
-}
-
-TFRendezvous::RecvTable TFSession::releasePendingRendezRecv()
-{
-    return m_rendez.releasePendingRecv();
+    return m_rendez;
 }
 
 tensorflow::OpKernel *TFSession::findOrCreateKernel(const tensorflow::NodeDef &ndef)

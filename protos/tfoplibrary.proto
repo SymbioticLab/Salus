@@ -56,6 +56,10 @@ message TFRendezRecvRequests {
     repeated uint32 allocAttributes = 2;
 }
 
+message TFRendezRecvResponse {
+    repeated TFRendezItem items = 1;
+}
+
 message TFTensors {
     repeated tensorflow.TensorProto tensors = 1;
 }

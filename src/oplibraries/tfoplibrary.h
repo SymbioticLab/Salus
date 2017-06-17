@@ -45,14 +45,27 @@ public:
     ~TFOpLibrary() override;
 
     bool accepts(const executor::OpKernelDef &operation) override;
-    std::unique_ptr<ITask> createRunTask(ZmqServer::Sender sender,
-                                         const executor::OpKernelDef &opdef,
-                                         const executor::OpContextDef &ctxdef) override;
+    PTask createRunTask(ZmqServer::Sender sender, const executor::OpKernelDef &opdef,
+                        const executor::OpContextDef &ctxdef) override;
 
-    std::unique_ptr<ITask> createFetchTask(ZmqServer::Sender sender,
-                                           const executor::FetchRequest &fetch) override;
-    std::unique_ptr<ITask> createPushTask(ZmqServer::Sender sender,
-                                          const executor::PushRequest &push) override;
+    PTask createCustomTask(ZmqServer::Sender sender, const executor::CustomRequest &push) override;
+
+private:
+    // subtasks for custom tasks
+    /**
+     * Called when need to copy executor tensor to cpu
+     */
+    PTask createFetchTask(ZmqServer::Sender sender, const executor::CustomRequest &fetch);
+
+    /**
+     * Called when need to copy cpu tensor to executor
+     */
+    PTask createPushTask(ZmqServer::Sender sender, const executor::CustomRequest &push);
+
+    /**
+     * Called when remote rendezvous recv available
+     */
+    PTask createRendezRecvTask(ZmqServer::Sender sender, const executor::CustomRequest &push);
 
 private:
     TFSession *getOrCreateSession(const std::string &sess_id, int graph_def_version,

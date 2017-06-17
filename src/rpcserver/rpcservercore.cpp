@@ -38,14 +38,14 @@ q::promise<ProtoPtr> RpcServerCore::dispatch(ZmqServer::Sender sender, const Eve
                                              const Message &request)
 {
 #define ITEM(name) \
-        {"executor." #name "Request", [this](ZmqServer::Sender &&sender, const Message &request){ \
-            return name (std::move(sender), static_cast<const name ## Request&>(request)) \
+        {"executor." #name "Request", [this](auto &&sender, auto *oplib, const auto &request){ \
+            return name (std::move(sender), oplib, static_cast<const name ## Request&>(request)) \
                 .then([](unique_ptr<name ## Response> &&f){ \
                     return static_cast<ProtoPtr>(std::move(f)); \
             }); \
         }},
 
-    using ServiceMethod = std::function<q::promise<ProtoPtr>(ZmqServer::Sender &&sender, const Message&)>;
+    using ServiceMethod = std::function<q::promise<ProtoPtr>(ZmqServer::Sender &&sender, IOpLibrary*, const Message&)>;
     static std::unordered_map<std::string, ServiceMethod> funcs {
         CALL_ALL_SERVICE_NAME(ITEM)
     };
@@ -54,60 +54,24 @@ q::promise<ProtoPtr> RpcServerCore::dispatch(ZmqServer::Sender sender, const Eve
 
     assert(funcs.count(evenlop.type()) == 1);
 
-    return funcs[evenlop.type()](std::move(sender), request);
-}
+    INFO("Serving {} for oplibrary {}", evenlop.type(), OpLibraryType_Name(evenlop.oplibrary()));
 
-q::promise<unique_ptr<PushResponse>> RpcServerCore::Push(ZmqServer::Sender &&sender, const PushRequest &request)
-{
-    INFO("Serving PushRequest for oplibrary {}", OpLibraryType_Name(request.oplibrary()));
-
-    auto oplib = OpLibraryRegistary::instance().findOpLibrary(request.oplibrary());
+    auto oplib = OpLibraryRegistary::instance().findOpLibrary(evenlop.oplibrary());
     if (!oplib) {
         ERR("Skipping push due to failed to find requested OpLibrary.");
-        return ExecutionEngine::instance().emptyPromise<PushResponse>();
+        return ExecutionEngine::instance().emptyPromise<Message>();
     }
 
-    auto task = oplib->createPushTask(std::move(sender), request);
-    if (!task) {
-        ERR("Skipping task due to failed creation.");
-        return ExecutionEngine::instance().emptyPromise<PushResponse>();
-    }
-
-    return ExecutionEngine::instance().enqueue<PushResponse>(std::move(task));
+    return funcs[evenlop.type()](std::move(sender), oplib, request);
 }
 
-q::promise<unique_ptr<FetchResponse>> RpcServerCore::Fetch(ZmqServer::Sender &&sender, const FetchRequest &request)
-{
-    INFO("Serving FetchRequest for oplibrary {}", OpLibraryType_Name(request.oplibrary()));
-
-    auto oplib = OpLibraryRegistary::instance().findOpLibrary(request.oplibrary());
-    if (!oplib) {
-        ERR("Skipping fetch due to failed to find requested OpLibrary.");
-        return ExecutionEngine::instance().emptyPromise<FetchResponse>();
-    }
-
-    auto task = oplib->createFetchTask(std::move(sender), request);
-    if (!task) {
-        ERR("Skipping task due to failed creation.");
-        return ExecutionEngine::instance().emptyPromise<FetchResponse>();
-    }
-
-    return ExecutionEngine::instance().enqueue<FetchResponse>(std::move(task));
-}
-
-q::promise<unique_ptr<RunResponse>> RpcServerCore::Run(ZmqServer::Sender &&sender, const RunRequest &request)
+q::promise<unique_ptr<RunResponse>> RpcServerCore::Run(ZmqServer::Sender &&sender, IOpLibrary *oplib,
+                                                       const RunRequest &request)
 {
     const auto &opdef = request.opkernel();
     const auto &ctxdef = request.context();
 
-    INFO("Serving RunRequest with opkernel id {} and oplibrary {}",
-         opdef.id(), OpLibraryType_Name(opdef.oplibrary()));
-
-    auto oplib = OpLibraryRegistary::instance().findSuitableOpLibrary(opdef);
-    if (!oplib) {
-        ERR("Skipping task due to failed to find suitable OpLibrary.");
-        return ExecutionEngine::instance().emptyPromise<RunResponse>();
-    }
+    INFO("Serving RunRequest with opkernel id {}", opdef.id());
     assert(oplib->accepts(opdef));
 
     auto task = oplib->createRunTask(std::move(sender), opdef, ctxdef);
@@ -119,9 +83,11 @@ q::promise<unique_ptr<RunResponse>> RpcServerCore::Run(ZmqServer::Sender &&sende
     return ExecutionEngine::instance().enqueue<RunResponse>(std::move(task));
 }
 
-q::promise<unique_ptr<AllocResponse>> RpcServerCore::Alloc(ZmqServer::Sender &&sender, const AllocRequest &request)
+q::promise<unique_ptr<AllocResponse>> RpcServerCore::Alloc(ZmqServer::Sender &&sender, IOpLibrary *oplib,
+                                                           const AllocRequest &request)
 {
     UNUSED(sender);
+    UNUSED(oplib);
 
     auto alignment = request.alignment();
     auto num_bytes = request.num_bytes();
@@ -140,9 +106,11 @@ q::promise<unique_ptr<AllocResponse>> RpcServerCore::Alloc(ZmqServer::Sender &&s
     return ExecutionEngine::instance().makePromise(std::move(response));
 }
 
-q::promise<unique_ptr<DeallocResponse>> RpcServerCore::Dealloc(ZmqServer::Sender &&sender, const DeallocRequest &request)
+q::promise<unique_ptr<DeallocResponse>> RpcServerCore::Dealloc(ZmqServer::Sender &&sender, IOpLibrary *oplib,
+                                                               const DeallocRequest &request)
 {
     UNUSED(sender);
+    UNUSED(oplib);
 
     auto addr_handle = request.addr_handle();
 
@@ -153,4 +121,16 @@ q::promise<unique_ptr<DeallocResponse>> RpcServerCore::Dealloc(ZmqServer::Sender
     auto response = std::make_unique<DeallocResponse>();
     response->mutable_result()->set_code(0);
     return ExecutionEngine::instance().makePromise(std::move(response));
+}
+
+q::promise<unique_ptr<CustomResponse>> RpcServerCore::Custom(ZmqServer::Sender &&sender, IOpLibrary *oplib,
+                                                             const CustomRequest &request)
+{
+    auto task = oplib->createCustomTask(std::move(sender), request);
+    if (!task) {
+        ERR("Skipping task due to failed creation.");
+        return ExecutionEngine::instance().emptyPromise<CustomResponse>();
+    }
+
+    return ExecutionEngine::instance().enqueue<CustomResponse>(std::move(task));
 }

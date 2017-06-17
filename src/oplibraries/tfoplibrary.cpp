@@ -36,6 +36,7 @@
 #include <tensorflow/core/protobuf/config.pb.h>
 
 #include <thread>
+#include <functional>
 
 namespace rpc = executor;
 using ::tensorflow::NodeDef;
@@ -80,7 +81,9 @@ void dumpOpContext(tensorflow::OpKernelContext *ctx)
     TRACE("context.num_outputs() {}", ctx->num_outputs());
 }
 
-}
+} // namespace
+
+REGISTER_OPLIBRARY(executor::TENSORFLOW, TFOpLibrary);
 
 TFOpLibrary::~TFOpLibrary() = default;
 
@@ -114,7 +117,7 @@ TFSession *TFOpLibrary::getSession(const std::string& sess_id)
     return {};
 }
 
-std::unique_ptr<ITask> TFOpLibrary::createRunTask(ZmqServer::Sender sender, const rpc::OpKernelDef& opdef, const rpc::OpContextDef& ctxdef)
+PTask TFOpLibrary::createRunTask(ZmqServer::Sender sender, const rpc::OpKernelDef& opdef, const rpc::OpContextDef& ctxdef)
 {
     auto tfdef = utils::createMessage<executor::TFOpKernelDef>("executor.TFOpKernelDef",
                                                              opdef.extra().data(),
@@ -215,7 +218,7 @@ ProtoPtr TFRunTask::run()
     // process tensor received by rendezvous
     // Note that rendezvous already registered these tensors to m_session
     // And this will clear tensors table in rendezvous
-    for (auto &elem : m_session->releasePendingRendezSentTensors()) {
+    for (auto &elem : m_session->rendezvous().releasePendingSentTensors()) {
         auto item = tfctxupd.add_rendeztensors();
         item->set_key(elem.first);
         item->set_allocattributes(elem.second.args.alloc_attrs.value);
@@ -278,7 +281,7 @@ void TFRunTask::runAsync(DoneCallback cb)
         // process tensor received by rendezvous
         // Note that rendezvous already registered these tensors to m_session
         // And this will clear tensors table in rendezvous
-        for (auto &elem : pSession->releasePendingRendezSentTensors()) {
+        for (auto &elem : pSession->rendezvous().releasePendingSentTensors()) {
             auto item = tfctxupd.add_rendeztensors();
             item->set_key(elem.first);
             item->set_allocattributes(elem.second.args.alloc_attrs.value);
@@ -295,6 +298,9 @@ void TFRunTask::runAsync(DoneCallback cb)
             pSession->registerTensorMemory(*out.tensor);
 
             // TODO: handle ref TensorValue
+            if (out.is_ref()) {
+                WARN("Ref tensor handling missing!!!!!");
+            }
             pSession->tensorMetaToProto(outdef, *out.tensor);
             if (!out.is_ref()) {
                 delete out.tensor;
@@ -315,7 +321,7 @@ void TFRunTask::runAsync(DoneCallback cb)
 
     // Send out a message for any pending rendezvous recv request immediately
     auto reqs = std::make_unique<executor::TFRendezRecvRequests>();
-    for (auto &elem : m_session->releasePendingRendezRecv()) {
+    for (auto &elem : m_session->rendezvous().releasePendingRecv()) {
         reqs->add_key(elem.first);
         reqs->add_allocattributes(elem.second.args.alloc_attrs.value);
     }
@@ -324,7 +330,7 @@ void TFRunTask::runAsync(DoneCallback cb)
 
 TFRunTask::~TFRunTask() = default;
 
-std::unique_ptr<ITask> TFOpLibrary::createFetchTask(ZmqServer::Sender sender, const executor::FetchRequest &fetch)
+PTask TFOpLibrary::createFetchTask(ZmqServer::Sender sender, const executor::CustomRequest &fetch)
 {
     UNUSED(sender);
 
@@ -353,7 +359,7 @@ TFFetchTask::TFFetchTask(TFSession* session, std::unique_ptr<executor::TFTensors
 
 ProtoPtr TFFetchTask::run()
 {
-    auto resp = std::make_unique<executor::FetchResponse>();
+    auto resp = std::make_unique<executor::CustomResponse>();
 
     executor::TFTensors full_tensors;
     for (auto &proto : m_tensorMetas->tensors()) {
@@ -373,7 +379,7 @@ ProtoPtr TFFetchTask::run()
 
 TFFetchTask::~TFFetchTask() = default;
 
-std::unique_ptr<ITask> TFOpLibrary::createPushTask(ZmqServer::Sender sender, const executor::PushRequest &push)
+PTask TFOpLibrary::createPushTask(ZmqServer::Sender sender, const executor::CustomRequest &push)
 {
     UNUSED(sender);
 
@@ -403,7 +409,7 @@ TFPushTask::TFPushTask(TFSession* session, std::unique_ptr<executor::TFPushReque
 
 ProtoPtr TFPushTask::run()
 {
-    auto resp = std::make_unique<executor::PushResponse>();
+    auto resp = std::make_unique<executor::CustomResponse>();
     if (m_tensors->data_size() != m_tensors->tensors_size()) {
         ERR("Number of tensors mismatch in push request: data {}, tensors {}",
             m_tensors->data_size(), m_tensors->tensors_size());
@@ -430,4 +436,75 @@ ProtoPtr TFPushTask::run()
 
 TFPushTask::~TFPushTask() = default;
 
-REGISTER_OPLIBRARY(executor::TENSORFLOW, TFOpLibrary);
+PTask TFOpLibrary::createCustomTask(ZmqServer::Sender sender, const executor::CustomRequest &req)
+{
+    using Method = std::function<PTask(ZmqServer::Sender, const executor::CustomRequest &)>;
+    static std::unordered_map<std::string, Method> funcs{
+        {"executor.TFPushTask", [this](auto sender, const auto &req) {
+            return createPushTask(std::move(sender), req);
+        }},
+        {"executor.TFFetchTask", [this](auto sender, const auto &req) {
+            return createFetchTask(std::move(sender), req);
+        }},
+        {"executor.TFRendezRecvResponse", [this](auto sender, const auto &req) {
+            return createRendezRecvTask(std::move(sender), req);
+        }},
+    };
+
+    assert(funcs.count(req.type()) == 1);
+
+    return funcs[req.type()](std::move(sender), req);
+}
+
+class TFRendezRecvTask : public ITask
+{
+public:
+    ~TFRendezRecvTask() override = default;
+
+    TFRendezRecvTask(TFSession *session, std::unique_ptr<executor::TFRendezRecvResponse> &&recv)
+        : m_recv(std::move(recv))
+        , m_session(session)
+    { }
+
+    ProtoPtr run() override
+    {
+        for (int i = 0; i != m_recv->items_size(); ++i) {
+            auto item = m_recv->items(i);
+
+            tensorflow::Rendezvous::ParsedKey parsed;
+            auto ok = tensorflow::Rendezvous::ParseKey(item.key(), &parsed);
+            ok.Update(m_session->rendezvous().Send(parsed,
+                                                   tensorflow::Rendezvous::Args(),
+                                                   *m_session->createAndRegister(item.val()),
+                                                   item.isdead()));
+        }
+        return {};
+    }
+
+private:
+    std::unique_ptr<executor::TFRendezRecvResponse> m_recv;
+
+    TFSession *m_session;
+};
+
+PTask TFOpLibrary::createRendezRecvTask(ZmqServer::Sender sender, const executor::CustomRequest &req)
+{
+    UNUSED(sender);
+
+    auto recvResp = utils::createMessage<executor::TFRendezRecvResponse>("executor.TFRendezRecvResponse",
+                                                                         req.extra().data(),
+                                                                         req.extra().size());
+
+    if (!recvResp) {
+        return {};
+    }
+
+    // TODO: compute session id
+    std::string session_id = "session_id";
+    auto sess = getSession(session_id);
+    if (!sess) {
+        ERR("RendezRecv request received before any run request");
+        return {};
+    }
+    return std::make_unique<TFRendezRecvTask>(sess, std::move(recvResp));
+}

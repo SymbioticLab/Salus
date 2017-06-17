@@ -42,7 +42,7 @@ public:
     ~ExecutionEngine();
 
     template<typename ResponseType>
-    q::promise<std::unique_ptr<ResponseType>> enqueue(std::unique_ptr<ITask> &&task)
+    q::promise<std::unique_ptr<ResponseType>> enqueue(PTask &&task)
     {
         using PResponse = std::unique_ptr<ResponseType>;
 

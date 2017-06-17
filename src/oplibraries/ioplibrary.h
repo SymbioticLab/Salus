@@ -61,6 +61,7 @@ public:
     }
 };
 
+using PTask = std::unique_ptr<ITask>;
 /**
  * @todo write docs
  */
@@ -71,14 +72,11 @@ public:
 
     virtual bool accepts(const executor::OpKernelDef &operation) = 0;
 
-    virtual std::unique_ptr<ITask> createRunTask(ZmqServer::Sender sender,
-                                                 const executor::OpKernelDef &opeartion,
-                                                 const executor::OpContextDef &context) = 0;
+    virtual PTask createRunTask(ZmqServer::Sender sender,
+                                const executor::OpKernelDef &opeartion,
+                                const executor::OpContextDef &context) = 0;
 
-    virtual std::unique_ptr<ITask> createFetchTask(ZmqServer::Sender sender,
-                                                   const executor::FetchRequest &fetch) = 0;
-    virtual std::unique_ptr<ITask> createPushTask(ZmqServer::Sender sender,
-                                                  const executor::PushRequest &push) = 0;
+    virtual PTask createCustomTask(ZmqServer::Sender sender, const executor::CustomRequest &msg) = 0;
 };
 
 class OpLibraryRegistary final

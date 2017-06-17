@@ -101,14 +101,9 @@ public:
     tensorflow::Tensor *findTensorFromProtoMeta(const tensorflow::TensorProto &proto);
 
     /**
-     * Get and clear pending rendezvous sent Tensor
+     * Get Rendezvous
      */
-    TFRendezvous::SentTensorTable releasePendingRendezSentTensors();
-
-    /**
-     * Get and clear pending rendezvous recv request
-     */
-    TFRendezvous::RecvTable releasePendingRendezRecv();
+    TFRendezvous &rendezvous();
 
     /**
      * Convinence method that combines create a tensor from proto, allocate and fill in memory,

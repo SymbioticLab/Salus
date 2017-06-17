@@ -279,7 +279,7 @@ void ZmqServer::dispatch(zmq::socket_t &sock)
     if (!pEvenlop->recvidentity().empty()) {
         identities->front().rebuild(pEvenlop->recvidentity().data(), pEvenlop->recvidentity().size());
     }
-    auto sender = std::make_shared<SenderImpl>(*this, std::move(identities));
+    auto sender = std::make_shared<SenderImpl>(*this, pEvenlop->seq(), std::move(identities));
 
     // step 2. create request object
     auto pRequest = utils::createMessage(pEvenlop->type(), body.data(), body.size());
@@ -289,26 +289,26 @@ void ZmqServer::dispatch(zmq::socket_t &sock)
     }
     DEBUG("Received request body byte array size {}", body.size());
 
-    auto seq = pEvenlop->seq();
     // step 3. dispatch
     auto f = m_pLogic->dispatch(sender, *pEvenlop, *pRequest)
 
     // step 4. send response back
-    .then([sender = std::move(sender), seq](ProtoPtr &&pResponse) mutable {
+    .then([sender = std::move(sender)](ProtoPtr &&pResponse) mutable {
         INFO("callback called in thread {}", std::this_thread::get_id());
         if (!pResponse) {
             ERR("Skipped to send one reply due to error in logic dispatch");
             return;
         }
-        sender->sendMessage(seq, std::move(pResponse));
+        sender->sendMessage(std::move(pResponse));
     }).fail([](std::exception_ptr e){
         ERR("Caught exception in logic dispatch: {}", e);
     });
 }
 
-ZmqServer::SenderImpl::SenderImpl(ZmqServer &server, MultiPartMessage &&identities)
+ZmqServer::SenderImpl::SenderImpl(ZmqServer &server, uint64_t seq, MultiPartMessage &&identities)
     : m_server(server)
     , m_identities(std::move(identities))
+    , m_seq(seq)
 {
 }
 
@@ -316,27 +316,10 @@ void ZmqServer::SenderImpl::sendMessage(ProtoPtr &&msg)
 {
     auto parts = m_identities.clone();
 
-    // step 4.1. clear unused parts of evenlop to save a few bytes on the wire,
+    // step 4.1. unused parts of evenlop is unset to save a few bytes on the wire,
     executor::EvenlopDef evenlop;
+    evenlop.set_seq(m_seq);
     evenlop.set_type(msg->GetTypeName());
-    parts->emplace_back(evenlop.ByteSizeLong());
-    evenlop.SerializeToArray(parts->back().data(), parts->back().size());
-
-    // step 4.2. append actual message
-    parts->emplace_back(msg->ByteSizeLong());
-    auto &reply = parts->back();
-    msg->SerializeToArray(reply.data(), reply.size());
-    TRACE("Response proto object have size {}", reply.size());
-    m_server.sendMessage(std::move(parts));
-}
-
-void ZmqServer::SenderImpl::sendMessage(uint64_t seq, ProtoPtr &&msg)
-{
-    auto parts = m_identities.clone();
-
-    // step 4.1. clear unused parts of evenlop to save a few bytes on the wire,
-    executor::EvenlopDef evenlop;
-    evenlop.set_seq(seq);
     parts->emplace_back(evenlop.ByteSizeLong());
     evenlop.SerializeToArray(parts->back().data(), parts->back().size());
 

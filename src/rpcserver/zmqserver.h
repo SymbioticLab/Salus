@@ -79,15 +79,14 @@ public:
     class SenderImpl
     {
     public:
-        SenderImpl(ZmqServer &server, MultiPartMessage &&m_identities);
+        SenderImpl(ZmqServer &server, uint64_t seq, MultiPartMessage &&m_identities);
 
         void sendMessage(ProtoPtr &&msg);
-
-        void sendMessage(uint64_t seq, ProtoPtr &&msg);
 
     private:
         ZmqServer &m_server;
         MultiPartMessage m_identities;
+        uint64_t m_seq;
     };
     using Sender = std::shared_ptr<SenderImpl>;
 
