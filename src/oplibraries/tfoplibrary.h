@@ -45,11 +45,14 @@ public:
     ~TFOpLibrary() override;
 
     bool accepts(const executor::OpKernelDef &operation) override;
-    std::unique_ptr<ITask> createRunTask(const executor::OpKernelDef &opdef,
+    std::unique_ptr<ITask> createRunTask(ZmqServer::Sender sender,
+                                         const executor::OpKernelDef &opdef,
                                          const executor::OpContextDef &ctxdef) override;
 
-    std::unique_ptr<ITask> createFetchTask(const executor::FetchRequest &fetch) override;
-    std::unique_ptr<ITask> createPushTask(const executor::PushRequest &push) override;
+    std::unique_ptr<ITask> createFetchTask(ZmqServer::Sender sender,
+                                           const executor::FetchRequest &fetch) override;
+    std::unique_ptr<ITask> createPushTask(ZmqServer::Sender sender,
+                                          const executor::PushRequest &push) override;
 
 private:
     TFSession *getOrCreateSession(const std::string &sess_id, int graph_def_version,
@@ -66,21 +69,29 @@ class TFRunTask : public ITask
 public:
     ~TFRunTask() override;
 
-    TFRunTask(TFSession *sess, std::unique_ptr<tensorflow::NodeDef> &&nodedef,
+    TFRunTask(TFSession *sess, ZmqServer::Sender &&sender,
+              std::unique_ptr<tensorflow::NodeDef> &&nodedef, bool async,
               std::unique_ptr<executor::TFOpContextDef> &&tfctxdef);
 
     ProtoPtr run() override;
+
+    bool isAsync() override;
+
+    void runAsync(DoneCallback cb) override;
 
     bool prepare(DeviceType dev) override;
 
 private:
     TFSession *m_session;
 
+    ZmqServer::Sender m_sender;
+
     std::unique_ptr<tensorflow::NodeDef> m_ndef;
     std::unique_ptr<executor::TFOpContextDef> m_tfctxdef;
 
     tensorflow::OpKernel *m_opkernel;
-    std::unique_ptr<TFContext> m_context;
+    std::shared_ptr<TFContext> m_context;
+    bool m_async;
 };
 
 class TFFetchTask : public ITask

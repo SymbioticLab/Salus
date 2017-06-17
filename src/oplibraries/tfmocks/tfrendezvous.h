@@ -33,15 +33,23 @@ class TFSession;
 class TFRendezvous : public tensorflow::Rendezvous
 {
 public:
-    struct Item {
+    struct SendItem {
         Args args;
         bool isDead;
         tensorflow::Tensor val;
 
-        Item();
-        Item(const Args &a, bool d, tensorflow::Tensor &&v);
+        SendItem();
+        SendItem(const Args &a, bool d, tensorflow::Tensor &&v);
     };
-    typedef std::unordered_map<std::string, Item> TensorTable;
+    using SentTensorTable = std::unordered_map<std::string, SendItem>;
+
+    struct RecvItem {
+        Args args;
+
+        RecvItem();
+        explicit RecvItem(const Args &a);
+    };
+    using RecvTable = std::unordered_map<std::string, RecvItem>;
 
     explicit TFRendezvous(TFSession *sess);
     ~TFRendezvous() override;
@@ -55,14 +63,25 @@ public:
 
     void StartAbort(const tensorflow::Status& status) override;
 
-    TensorTable receivedTensors();
+    /**
+     * Release pending sent tensors
+     */
+    SentTensorTable releasePendingSentTensors();
+
+    /**
+     * Release pending recv requests
+     */
+    RecvTable releasePendingRecv();
 
 private:
     TFSession *m_sess;
     tensorflow::Rendezvous *m_local;
 
     mutable tensorflow::mutex m_mu;
-    TensorTable m_tensors GUARDED_BY(m_mu);
+    SentTensorTable m_tensors GUARDED_BY(m_mu);
+
+    mutable tensorflow::mutex m_recvmu;
+    RecvTable m_recv GUARDED_BY(m_recvmu);
 };
 
 #endif // TFRENDEZVOUS_H

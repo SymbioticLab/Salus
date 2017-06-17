@@ -29,7 +29,7 @@
 #include "executor.pb.h"
 #include "tfoplibrary.pb.h"
 
-#include <tensorflow/core/framework/op.h>
+#include <tensorflow/core/framework/op_kernel.h>
 #include <tensorflow/core/framework/op_segment.h>
 #include <tensorflow/core/framework/node_def.pb.h>
 #include <tensorflow/core/framework/function.pb.h>
@@ -114,7 +114,7 @@ TFSession *TFOpLibrary::getSession(const std::string& sess_id)
     return {};
 }
 
-std::unique_ptr<ITask> TFOpLibrary::createRunTask(const rpc::OpKernelDef& opdef, const rpc::OpContextDef& ctxdef)
+std::unique_ptr<ITask> TFOpLibrary::createRunTask(ZmqServer::Sender sender, const rpc::OpKernelDef& opdef, const rpc::OpContextDef& ctxdef)
 {
     auto tfdef = utils::createMessage<executor::TFOpKernelDef>("executor.TFOpKernelDef",
                                                              opdef.extra().data(),
@@ -125,6 +125,7 @@ std::unique_ptr<ITask> TFOpLibrary::createRunTask(const rpc::OpKernelDef& opdef,
 
     if (!tfdef || !tfctxdef) { return {}; }
 
+    DEBUG("Got isAsync {}", tfdef->isasync());
     DEBUG("Got NodeDef {}", tfdef->nodedef().DebugString());
     DEBUG("Got ConfigProto {}", tfdef->cfgproto().DebugString());
     DEBUG("Got funcdeflib {}", tfdef->funcdef().DebugString());
@@ -136,23 +137,38 @@ std::unique_ptr<ITask> TFOpLibrary::createRunTask(const rpc::OpKernelDef& opdef,
     if (!sess) { return {}; }
 
     auto ndef = std::unique_ptr<NodeDef>(tfdef->release_nodedef());
-    return std::make_unique<TFRunTask>(sess, std::move(ndef), std::move(tfctxdef));
+    return std::make_unique<TFRunTask>(sess, std::move(sender), std::move(ndef),
+                                       tfdef->isasync(), std::move(tfctxdef));
 }
 
-TFRunTask::TFRunTask(TFSession *sess, unique_ptr<NodeDef> &&nodedef,
+TFRunTask::TFRunTask(TFSession *sess, ZmqServer::Sender &&sender, unique_ptr<NodeDef> &&nodedef, bool async,
                      unique_ptr<executor::TFOpContextDef> &&tfctxdef)
     : m_session(sess)
+    , m_sender(std::move(sender))
     , m_ndef(std::move(nodedef))
     , m_tfctxdef(std::move(tfctxdef))
+    , m_async(async)
 {
+}
+
+bool TFRunTask::isAsync()
+{
+    return m_async;
 }
 
 bool TFRunTask::prepare(DeviceType dev)
 {
     UNUSED(dev);
 
-    m_opkernel = m_session->findOrCreateKernel(*m_ndef);
+    auto kernel = m_session->findOrCreateKernel(*m_ndef);
+    if (m_async) {
+        m_opkernel = kernel->AsAsync();
+    } else {
+        m_opkernel = kernel;
+    }
     if (!m_opkernel) {
+        ERR("Kernel creation failed, got {:x}, after conversion {:x}",
+            reinterpret_cast<uint64_t>(kernel), reinterpret_cast<uint64_t>(m_opkernel));
         return false;
     }
     INFO("Created OpKernel");
@@ -185,6 +201,7 @@ ProtoPtr TFRunTask::run()
     } catch (std::exception &err) {
         ERR("Caught exception when run kernel compute: ", err.what());
     }
+
     INFO("OpKernel->Compute finished with status {}", m_context->ctx()->status());
 
     auto ctxdef = resp->mutable_context();
@@ -227,10 +244,90 @@ ProtoPtr TFRunTask::run()
     return resp;
 }
 
+void TFRunTask::runAsync(DoneCallback cb)
+{
+    // FIXME: implement this
+    INFO("running async in thread {}", std::this_thread::get_id());
+
+    if (!m_opkernel || !m_context) {
+        ERR("Got nullptr for opkernel or context: m_opkernel = {:x}, m_context = {:x}",
+            reinterpret_cast<uint64_t>(m_opkernel), reinterpret_cast<uint64_t>(m_context.get()));
+        auto resp = std::make_unique<executor::RunResponse>();
+        resp->mutable_result()->set_code(-1);
+        cb(std::move(resp));
+        return;
+    }
+
+    auto ctx = m_context->ctx(); // we need this later
+    auto pSession = m_session;
+    // NOTE: this might be deleted by the time done_cb got called. So move out the pieces we need.
+    // NOTE: both done and pContext are CopyConstructable, thus the done_cb is CopyConstructable,
+    // because move-only lambda can't be assigned to std::function
+    auto done_cb = [done = std::move(cb), pContext = std::move(m_context), pSession]() mutable {
+        INFO("OpKernel->ComputeAsync finished with status {}", pContext->ctx()->status());
+
+        auto resp = std::make_unique<executor::RunResponse>();
+        auto ctxdef = resp->mutable_context();
+
+        auto context = pContext->ctx();
+        rpc::TFOpContextUpdate tfctxupd;
+        tfctxupd.set_status_code(context->status().code());
+        tfctxupd.set_status_msg(context->status().error_message());
+        tfctxupd.set_is_output_dead(*context->is_output_dead());
+
+        // process tensor received by rendezvous
+        // Note that rendezvous already registered these tensors to m_session
+        // And this will clear tensors table in rendezvous
+        for (auto &elem : pSession->releasePendingRendezSentTensors()) {
+            auto item = tfctxupd.add_rendeztensors();
+            item->set_key(elem.first);
+            item->set_allocattributes(elem.second.args.alloc_attrs.value);
+            item->set_isdead(elem.second.isDead);
+            pSession->tensorMetaToProto(item->mutable_val(), elem.second.val);
+        }
+
+        // process tensor set as outputs
+        for (int i = 0; i != context->num_outputs(); i++) {
+            auto out = context->release_output(i);
+            auto outdef = tfctxupd.add_outputs();
+
+            // Let the session manage the tensor memory
+            pSession->registerTensorMemory(*out.tensor);
+
+            // TODO: handle ref TensorValue
+            pSession->tensorMetaToProto(outdef, *out.tensor);
+            if (!out.is_ref()) {
+                delete out.tensor;
+            }
+        }
+
+        // write update to ctxdef
+        tfctxupd.SerializeToString(ctxdef->mutable_extra());
+
+        done(std::move(resp));
+    };
+
+    try {
+        m_opkernel->AsAsync()->ComputeAsync(ctx, std::move(done_cb));
+    } catch (std::exception &err) {
+        ERR("Caught exception when run kernel compute async: ", err.what());
+    }
+
+    // Send out a message for any pending rendezvous recv request immediately
+    auto reqs = std::make_unique<executor::TFRendezRecvRequests>();
+    for (auto &elem : m_session->releasePendingRendezRecv()) {
+        reqs->add_key(elem.first);
+        reqs->add_allocattributes(elem.second.args.alloc_attrs.value);
+    }
+    m_sender->sendMessage(std::move(reqs));
+}
+
 TFRunTask::~TFRunTask() = default;
 
-std::unique_ptr<ITask> TFOpLibrary::createFetchTask(const executor::FetchRequest &fetch)
+std::unique_ptr<ITask> TFOpLibrary::createFetchTask(ZmqServer::Sender sender, const executor::FetchRequest &fetch)
 {
+    UNUSED(sender);
+
     auto tftensors = utils::createMessage<executor::TFTensors>("executor.TFTensors",
                                                                fetch.extra().data(),
                                                                fetch.extra().size());
@@ -276,8 +373,10 @@ ProtoPtr TFFetchTask::run()
 
 TFFetchTask::~TFFetchTask() = default;
 
-std::unique_ptr<ITask> TFOpLibrary::createPushTask(const executor::PushRequest &push)
+std::unique_ptr<ITask> TFOpLibrary::createPushTask(ZmqServer::Sender sender, const executor::PushRequest &push)
 {
+    UNUSED(sender);
+
     auto tfpush = utils::createMessage<executor::TFPushRequest>("executor.TFPushRequest",
                                                                 push.extra().data(),
                                                                 push.extra().size());

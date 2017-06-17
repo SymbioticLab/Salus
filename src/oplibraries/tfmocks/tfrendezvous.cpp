@@ -23,20 +23,23 @@
 #include "platform/logging.h"
 #include "utils/macros.h"
 
+#include <tensorflow/core/util/device_name_utils.h>
+
 using tensorflow::Status;
 using tensorflow::Tensor;
 
-TFRendezvous::Item::Item()
-    : Item(Args(), false, tensorflow::Tensor())
-{
-}
+TFRendezvous::SendItem::SendItem() : SendItem(Args(), false, tensorflow::Tensor()) {}
 
-TFRendezvous::Item::Item(const Args &a, bool d, tensorflow::Tensor &&v)
+TFRendezvous::SendItem::SendItem(const Args &a, bool d, tensorflow::Tensor &&v)
     : args(a)
     , isDead(d)
     , val(std::move(v))
 {
 }
+
+TFRendezvous::RecvItem::RecvItem() : RecvItem(Args()) {}
+
+TFRendezvous::RecvItem::RecvItem(const Args &a) : args(a) {}
 
 TFRendezvous::TFRendezvous(TFSession *sess)
     : m_sess(sess)
@@ -54,42 +57,49 @@ tensorflow::Status TFRendezvous::Send(const ParsedKey &parsed, const Args &send_
 {
     INFO("TFRendezvous::Send {}", parsed.FullKey().ToString());
 
-    auto key = parsed.FullKey().ToString();
+    m_sess->registerTensorMemory(val);
 
-    auto it = m_tensors.end();
-    {
-        tensorflow::mutex_lock locker(m_mu);
-        it = m_tensors.find(key);
-    }
-    if (it == m_tensors.end()) {
-        m_sess->registerTensorMemory(val);
-        tensorflow::Tensor copy(val);
+    bool sameDevice = tensorflow::DeviceNameUtils::IsSameAddressSpace(parsed.src, parsed.dst);
+    if (!sameDevice) {
+        auto key = parsed.FullKey().ToString();
+        auto it = m_tensors.end();
         {
             tensorflow::mutex_lock locker(m_mu);
+            it = m_tensors.find(key);
+            if (it != m_tensors.end()) {
+                ERR("Duplicated send: {}", key);
+                return tensorflow::errors::Aborted("Duplicated send: ", parsed.FullKey());
+            }
+            tensorflow::Tensor copy(val);
             m_tensors.emplace(std::make_pair(parsed.FullKey().ToString(),
-                                             Item {send_args, is_dead, std::move(copy)}));
+                                             SendItem {send_args, is_dead, std::move(copy)}));
         }
-        return m_local->Send(parsed, send_args, val, is_dead);
-    } else {
-        ERR("Duplicated send: {}", key);
-        return tensorflow::errors::Aborted("Duplicated send: ", parsed.FullKey());
     }
+
+    return m_local->Send(parsed, send_args, val, is_dead);
 }
 
 void TFRendezvous::RecvAsync(const ParsedKey &parsed, const Args &recv_args, DoneCallback done)
 {
     INFO("TFRendezvous::RecvAsync {}", parsed.FullKey().ToString());
-    // TODO: also handle receiving from tensorflow cpu
 
-    return m_local->RecvAsync(parsed, recv_args,
-                              [done, parsed, this](auto status, auto send_args, auto recv_args, auto val, auto is_dead){
-        INFO("{} is received", parsed.FullKey().ToString());
+    bool sameDevice = tensorflow::DeviceNameUtils::IsSameAddressSpace(parsed.src, parsed.dst);
+    if (!sameDevice) {
+        // Pending recv must be fullfilled later by RPC
+        auto key = parsed.FullKey().ToString();
         {
-            tensorflow::mutex_lock locker(m_mu);
-            m_tensors.erase(parsed.FullKey().ToString());
+            tensorflow::mutex_lock locker(m_recvmu);
+            auto it = m_recv.find(key);
+            if (it != m_recv.end()) {
+                ERR("Duplicated recv: {}", key);
+                done(tensorflow::errors::Internal("Duplicated recv"), Args(),
+                     recv_args, tensorflow::Tensor(), false);
+                return;
+            }
+            m_recv.emplace(std::make_pair(parsed.FullKey().ToString(), RecvItem {recv_args}));
         }
-        done(status, send_args, recv_args, val, is_dead);
-    });
+    }
+    return m_local->RecvAsync(parsed, recv_args, std::move(done));
 }
 
 void TFRendezvous::StartAbort(const tensorflow::Status &status)
@@ -97,12 +107,18 @@ void TFRendezvous::StartAbort(const tensorflow::Status &status)
     return m_local->StartAbort(status);
 }
 
-TFRendezvous::TensorTable TFRendezvous::receivedTensors()
+TFRendezvous::SentTensorTable TFRendezvous::releasePendingSentTensors()
 {
-    TensorTable table;
-    {
-        tensorflow::mutex_lock locker(m_mu);
-        std::swap(table, m_tensors);
-    }
+    SentTensorTable table;
+    tensorflow::mutex_lock locker(m_mu);
+    std::swap(table, m_tensors);
+    return table;
+}
+
+TFRendezvous::RecvTable TFRendezvous::releasePendingRecv()
+{
+    RecvTable table;
+    tensorflow::mutex_lock locker(m_recvmu);
+    std::swap(table, m_recv);
     return table;
 }

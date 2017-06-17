@@ -50,7 +50,13 @@ public:
             return q::make_promise_of<PResponse>(m_qec->queue(),
                                                  [task = std::move(task)](auto resolve, auto reject){
                 try {
-                    resolve(task->run<ResponseType>());
+                    if (task->isAsync()) {
+                        task->runAsync<ResponseType>([resolve](PResponse &&ptr){
+                            resolve(std::move(ptr));
+                        });
+                    } else {
+                        resolve(task->run<ResponseType>());
+                    }
                 } catch (std::exception &err) {
                     reject(err);
                 }

@@ -31,6 +31,17 @@ bool ITask::prepare(DeviceType dev)
     return true;
 }
 
+bool ITask::isAsync()
+{
+    return false;
+}
+
+void ITask::runAsync(DoneCallback cb)
+{
+    UNUSED(cb);
+    ERR("Not Implemented");
+}
+
 IOpLibrary::~IOpLibrary() = default;
 
 OpLibraryRegistary &OpLibraryRegistary::instance()

@@ -22,11 +22,13 @@
 
 #include "execution/devices.h"
 #include "utils/pointerutils.h"
+#include "rpcserver/zmqserver.h"
 
 #include "executor.pb.h"
 
 #include <memory>
 #include <unordered_map>
+#include <functional>
 
 typedef std::unique_ptr<google::protobuf::Message> ProtoPtr;
 
@@ -37,12 +39,25 @@ public:
 
     virtual bool prepare(DeviceType dev);
 
+    virtual bool isAsync();
+
     virtual ProtoPtr run() = 0;
 
     template<typename RESPONSE>
     std::unique_ptr<RESPONSE> run()
     {
         return utils::static_unique_ptr_cast<RESPONSE, google::protobuf::Message>(run());
+    }
+
+    using DoneCallback = std::function<void(ProtoPtr&&)>;
+    virtual void runAsync(DoneCallback cb);
+
+    template<typename RESPONSE>
+    void runAsync(std::function<void(std::unique_ptr<RESPONSE>&&)> cb)
+    {
+        runAsync([cb = std::move(cb)](ProtoPtr &&ptr) mutable {
+            cb(utils::static_unique_ptr_cast<RESPONSE, google::protobuf::Message>(std::move(ptr)));
+        });
     }
 };
 
@@ -56,11 +71,14 @@ public:
 
     virtual bool accepts(const executor::OpKernelDef &operation) = 0;
 
-    virtual std::unique_ptr<ITask> createRunTask(const executor::OpKernelDef &opeartion,
+    virtual std::unique_ptr<ITask> createRunTask(ZmqServer::Sender sender,
+                                                 const executor::OpKernelDef &opeartion,
                                                  const executor::OpContextDef &context) = 0;
 
-    virtual std::unique_ptr<ITask> createFetchTask(const executor::FetchRequest &fetch) = 0;
-    virtual std::unique_ptr<ITask> createPushTask(const executor::PushRequest &push) = 0;
+    virtual std::unique_ptr<ITask> createFetchTask(ZmqServer::Sender sender,
+                                                   const executor::FetchRequest &fetch) = 0;
+    virtual std::unique_ptr<ITask> createPushTask(ZmqServer::Sender sender,
+                                                  const executor::PushRequest &push) = 0;
 };
 
 class OpLibraryRegistary final

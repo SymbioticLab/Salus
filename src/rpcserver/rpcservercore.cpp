@@ -23,6 +23,7 @@
 #include "platform/logging.h"
 #include "memorymgr/memorymgr.h"
 #include "execution/executionengine.h"
+#include "utils/macros.h"
 
 #include "executor.pb.h"
 
@@ -33,17 +34,19 @@ using namespace executor;
 using ::google::protobuf::Message;
 using std::unique_ptr;
 
-q::promise<ProtoPtr> RpcServerCore::dispatch(const EvenlopDef &evenlop, const Message &request)
+q::promise<ProtoPtr> RpcServerCore::dispatch(ZmqServer::Sender sender, const EvenlopDef &evenlop,
+                                             const Message &request)
 {
 #define ITEM(name) \
-        {"executor." #name "Request", [&](const Message &request){ \
-            return name (static_cast<const name ## Request&>(request)) \
+        {"executor." #name "Request", [this](ZmqServer::Sender &&sender, const Message &request){ \
+            return name (std::move(sender), static_cast<const name ## Request&>(request)) \
                 .then([](unique_ptr<name ## Response> &&f){ \
                     return static_cast<ProtoPtr>(std::move(f)); \
             }); \
         }},
 
-    static std::unordered_map<std::string, std::function<q::promise<ProtoPtr>(const Message&)>> funcs {
+    using ServiceMethod = std::function<q::promise<ProtoPtr>(ZmqServer::Sender &&sender, const Message&)>;
+    static std::unordered_map<std::string, ServiceMethod> funcs {
         CALL_ALL_SERVICE_NAME(ITEM)
     };
 
@@ -51,10 +54,10 @@ q::promise<ProtoPtr> RpcServerCore::dispatch(const EvenlopDef &evenlop, const Me
 
     assert(funcs.count(evenlop.type()) == 1);
 
-    return funcs[evenlop.type()](request);
+    return funcs[evenlop.type()](std::move(sender), request);
 }
 
-q::promise<unique_ptr<PushResponse>> RpcServerCore::Push(const PushRequest &request)
+q::promise<unique_ptr<PushResponse>> RpcServerCore::Push(ZmqServer::Sender &&sender, const PushRequest &request)
 {
     INFO("Serving PushRequest for oplibrary {}", OpLibraryType_Name(request.oplibrary()));
 
@@ -64,7 +67,7 @@ q::promise<unique_ptr<PushResponse>> RpcServerCore::Push(const PushRequest &requ
         return ExecutionEngine::instance().emptyPromise<PushResponse>();
     }
 
-    auto task = oplib->createPushTask(request);
+    auto task = oplib->createPushTask(std::move(sender), request);
     if (!task) {
         ERR("Skipping task due to failed creation.");
         return ExecutionEngine::instance().emptyPromise<PushResponse>();
@@ -73,7 +76,7 @@ q::promise<unique_ptr<PushResponse>> RpcServerCore::Push(const PushRequest &requ
     return ExecutionEngine::instance().enqueue<PushResponse>(std::move(task));
 }
 
-q::promise<unique_ptr<FetchResponse>> RpcServerCore::Fetch(const FetchRequest &request)
+q::promise<unique_ptr<FetchResponse>> RpcServerCore::Fetch(ZmqServer::Sender &&sender, const FetchRequest &request)
 {
     INFO("Serving FetchRequest for oplibrary {}", OpLibraryType_Name(request.oplibrary()));
 
@@ -83,7 +86,7 @@ q::promise<unique_ptr<FetchResponse>> RpcServerCore::Fetch(const FetchRequest &r
         return ExecutionEngine::instance().emptyPromise<FetchResponse>();
     }
 
-    auto task = oplib->createFetchTask(request);
+    auto task = oplib->createFetchTask(std::move(sender), request);
     if (!task) {
         ERR("Skipping task due to failed creation.");
         return ExecutionEngine::instance().emptyPromise<FetchResponse>();
@@ -92,7 +95,7 @@ q::promise<unique_ptr<FetchResponse>> RpcServerCore::Fetch(const FetchRequest &r
     return ExecutionEngine::instance().enqueue<FetchResponse>(std::move(task));
 }
 
-q::promise<unique_ptr<RunResponse>> RpcServerCore::Run(const RunRequest &request)
+q::promise<unique_ptr<RunResponse>> RpcServerCore::Run(ZmqServer::Sender &&sender, const RunRequest &request)
 {
     const auto &opdef = request.opkernel();
     const auto &ctxdef = request.context();
@@ -107,7 +110,7 @@ q::promise<unique_ptr<RunResponse>> RpcServerCore::Run(const RunRequest &request
     }
     assert(oplib->accepts(opdef));
 
-    auto task = oplib->createRunTask(opdef, ctxdef);
+    auto task = oplib->createRunTask(std::move(sender), opdef, ctxdef);
     if (!task) {
         ERR("Skipping task due to failed creation.");
         return ExecutionEngine::instance().emptyPromise<RunResponse>();
@@ -116,8 +119,10 @@ q::promise<unique_ptr<RunResponse>> RpcServerCore::Run(const RunRequest &request
     return ExecutionEngine::instance().enqueue<RunResponse>(std::move(task));
 }
 
-q::promise<unique_ptr<AllocResponse>> RpcServerCore::Alloc(const AllocRequest &request)
+q::promise<unique_ptr<AllocResponse>> RpcServerCore::Alloc(ZmqServer::Sender &&sender, const AllocRequest &request)
 {
+    UNUSED(sender);
+
     auto alignment = request.alignment();
     auto num_bytes = request.num_bytes();
 
@@ -135,8 +140,10 @@ q::promise<unique_ptr<AllocResponse>> RpcServerCore::Alloc(const AllocRequest &r
     return ExecutionEngine::instance().makePromise(std::move(response));
 }
 
-q::promise<unique_ptr<DeallocResponse>> RpcServerCore::Dealloc(const DeallocRequest &request)
+q::promise<unique_ptr<DeallocResponse>> RpcServerCore::Dealloc(ZmqServer::Sender &&sender, const DeallocRequest &request)
 {
+    UNUSED(sender);
+
     auto addr_handle = request.addr_handle();
 
     INFO("Serving DeallocRequest with address handel: {:x}", addr_handle);

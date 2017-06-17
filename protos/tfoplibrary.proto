@@ -13,6 +13,7 @@ message TFOpKernelDef {
     tensorflow.NodeDef nodedef = 2;
     tensorflow.ConfigProto cfgProto = 3;
     tensorflow.FunctionDefLibrary funcDef = 4;
+    bool isAsync = 5;
 }
 
 message TFOpContextDef {
@@ -48,6 +49,11 @@ message TFRendezItem {
     uint32 allocAttributes = 2;
     bool isDead = 3;
     tensorflow.TensorProto val = 4;
+}
+
+message TFRendezRecvRequests {
+    repeated string key = 1;
+    repeated uint32 allocAttributes = 2;
 }
 
 message TFTensors {

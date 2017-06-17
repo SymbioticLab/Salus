@@ -100,8 +100,15 @@ public:
     tensorflow::Tensor *tensorFromAddrHandle(uint64_t addr_handle);
     tensorflow::Tensor *findTensorFromProtoMeta(const tensorflow::TensorProto &proto);
 
-    // Get and clear pending rendezvous sent Tensor
-    TFRendezvous::TensorTable releasePendingRendezSentTensors();
+    /**
+     * Get and clear pending rendezvous sent Tensor
+     */
+    TFRendezvous::SentTensorTable releasePendingRendezSentTensors();
+
+    /**
+     * Get and clear pending rendezvous recv request
+     */
+    TFRendezvous::RecvTable releasePendingRendezRecv();
 
     /**
      * Convinence method that combines create a tensor from proto, allocate and fill in memory,

@@ -20,6 +20,8 @@
 #ifndef RPCSERVER_H
 #define RPCSERVER_H
 
+#include "zmqserver.h"
+
 #include "utils/protoutils.h"
 
 #include <q/promise.hpp>
@@ -58,13 +60,13 @@ public:
      *
      * @return the future of response protobuf message
      */
-    q::promise<ProtoPtr> dispatch(const executor::EvenlopDef &evenlop,
+    q::promise<ProtoPtr> dispatch(ZmqServer::Sender sender, const executor::EvenlopDef &evenlop,
                                   const ::google::protobuf::Message &request);
 
 private:
 
 #define DECL_METHOD(name) \
-    q::promise<std::unique_ptr<executor:: name##Response>> name (const executor:: name##Request &request);
+    q::promise<std::unique_ptr<executor:: name##Response>> name (ZmqServer::Sender &&sender, const executor:: name##Request &request);
 
     CALL_ALL_SERVICE_NAME(DECL_METHOD)
 

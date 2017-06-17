@@ -65,6 +65,10 @@ TFSession::~TFSession()
 
 void TFSession::registerTensorMemory(const tensorflow::Tensor &tensor)
 {
+    if (!tensor.IsInitialized()) {
+        INFO("Skipped registering uninitialized tensor: {}", tensor.DebugString());
+        return;
+    }
     registerTensorMemoryLocked(new tensorflow::Tensor(tensor));
 }
 
@@ -147,9 +151,14 @@ void TFSession::tensorMetaToProto(tensorflow::TensorProto *proto, const tensorfl
     proto->add_int64_val(addr_handle);
 }
 
-TFRendezvous::TensorTable TFSession::releasePendingRendezSentTensors()
+TFRendezvous::SentTensorTable TFSession::releasePendingRendezSentTensors()
 {
-    return m_rendez.receivedTensors();
+    return m_rendez.releasePendingSentTensors();
+}
+
+TFRendezvous::RecvTable TFSession::releasePendingRendezRecv()
+{
+    return m_rendez.releasePendingRecv();
 }
 
 tensorflow::OpKernel *TFSession::findOrCreateKernel(const tensorflow::NodeDef &ndef)

@@ -31,6 +31,56 @@
 
 using namespace std::literals::chrono_literals;
 
+MultiPartMessage::MultiPartMessage() { }
+
+MultiPartMessage::MultiPartMessage(MultiPartMessage &&other)
+    : m_parts(std::move(other.m_parts))
+{
+}
+MultiPartMessage::MultiPartMessage(std::vector<zmq::message_t> *ptr)
+    : m_parts(std::move(*ptr))
+{
+}
+
+MultiPartMessage &MultiPartMessage::operator=(MultiPartMessage &&other)
+{
+    m_parts = std::move(other.m_parts);
+    return *this;
+}
+
+MultiPartMessage &MultiPartMessage::merge(MultiPartMessage &&other)
+{
+    if (m_parts.empty()) {
+        m_parts = std::move(other.m_parts);
+    } else {
+        m_parts.reserve(m_parts.size() + other.m_parts.size());
+        std::move(std::begin(other.m_parts), std::end(other.m_parts), std::back_inserter(m_parts));
+        other.m_parts.clear();
+    }
+    return *this;
+}
+
+MultiPartMessage MultiPartMessage::clone()
+{
+    MultiPartMessage mpm;
+    for (auto &m : m_parts) {
+        mpm->emplace_back();
+        mpm->back().copy(&m);
+    }
+    return mpm;
+}
+
+std::vector<zmq::message_t> *MultiPartMessage::release()
+{
+    auto ptr = new std::vector<zmq::message_t>(std::move(m_parts));
+    return ptr;
+}
+
+std::vector<zmq::message_t> *MultiPartMessage::operator->()
+{
+    return &m_parts;
+}
+
 ZmqServer::ZmqServer(std::unique_ptr<RpcServerCore> &&logic)
     : m_zmqCtx(1)
     , m_keepRunning(false)
@@ -184,7 +234,7 @@ void ZmqServer::proxyRecvLoop()
 
 void ZmqServer::dispatch(zmq::socket_t &sock)
 {
-    auto identities = std::make_unique<MultiMessage>();
+    MultiPartMessage identities;
     zmq::message_t evenlop;
     zmq::message_t body;
     try {
@@ -225,16 +275,13 @@ void ZmqServer::dispatch(zmq::socket_t &sock)
     }
     DEBUG("Received request evenlop: {}", *pEvenlop);
 
-    // step 1. replace the first frame in identity with the requested identity
-    identities->front().rebuild(pEvenlop->recvidentity().data(), pEvenlop->recvidentity().size());
+    // step 1. replace the first frame in identity with the requested identity and make a sender
+    if (!pEvenlop->recvidentity().empty()) {
+        identities->front().rebuild(pEvenlop->recvidentity().data(), pEvenlop->recvidentity().size());
+    }
+    auto sender = std::make_shared<SenderImpl>(*this, std::move(identities));
 
-    // step 2. remove recvidentity part as we do not need it anymore, and then append evenlop again to
-    // the messages we'll send back
-    pEvenlop->clear_recvidentity();
-    identities->emplace_back(pEvenlop->ByteSizeLong());
-    pEvenlop->SerializeToArray(identities->back().data(), identities->back().size());
-
-    // step 3. create request object
+    // step 2. create request object
     auto pRequest = utils::createMessage(pEvenlop->type(), body.data(), body.size());
     if (!pRequest) {
         ERR("Skipped one iteration due to malformatted request received.");
@@ -242,28 +289,66 @@ void ZmqServer::dispatch(zmq::socket_t &sock)
     }
     DEBUG("Received request body byte array size {}", body.size());
 
-    // step 4. dispatch
-    auto f = m_pLogic->dispatch(*pEvenlop, *pRequest)
+    auto seq = pEvenlop->seq();
+    // step 3. dispatch
+    auto f = m_pLogic->dispatch(sender, *pEvenlop, *pRequest)
 
-    // step 5. send response back
-    .then([parts = std::move(identities), this](ProtoPtr &&pResponse) mutable {
+    // step 4. send response back
+    .then([sender = std::move(sender), seq](ProtoPtr &&pResponse) mutable {
         INFO("callback called in thread {}", std::this_thread::get_id());
         if (!pResponse) {
             ERR("Skipped to send one reply due to error in logic dispatch");
             return;
         }
-
-        parts->emplace_back(pResponse->ByteSizeLong());
-        auto &reply = parts->back();
-        pResponse->SerializeToArray(reply.data(), reply.size());
-        TRACE("Response proto object have size {}", reply.size());
-        this->sendMessage(std::move(parts));
+        sender->sendMessage(seq, std::move(pResponse));
     }).fail([](std::exception_ptr e){
         ERR("Caught exception in logic dispatch: {}", e);
     });
 }
 
-void ZmqServer::sendMessage(std::unique_ptr<MultiMessage> &&parts)
+ZmqServer::SenderImpl::SenderImpl(ZmqServer &server, MultiPartMessage &&identities)
+    : m_server(server)
+    , m_identities(std::move(identities))
+{
+}
+
+void ZmqServer::SenderImpl::sendMessage(ProtoPtr &&msg)
+{
+    auto parts = m_identities.clone();
+
+    // step 4.1. clear unused parts of evenlop to save a few bytes on the wire,
+    executor::EvenlopDef evenlop;
+    evenlop.set_type(msg->GetTypeName());
+    parts->emplace_back(evenlop.ByteSizeLong());
+    evenlop.SerializeToArray(parts->back().data(), parts->back().size());
+
+    // step 4.2. append actual message
+    parts->emplace_back(msg->ByteSizeLong());
+    auto &reply = parts->back();
+    msg->SerializeToArray(reply.data(), reply.size());
+    TRACE("Response proto object have size {}", reply.size());
+    m_server.sendMessage(std::move(parts));
+}
+
+void ZmqServer::SenderImpl::sendMessage(uint64_t seq, ProtoPtr &&msg)
+{
+    auto parts = m_identities.clone();
+
+    // step 4.1. clear unused parts of evenlop to save a few bytes on the wire,
+    executor::EvenlopDef evenlop;
+    evenlop.set_seq(seq);
+    parts->emplace_back(evenlop.ByteSizeLong());
+    evenlop.SerializeToArray(parts->back().data(), parts->back().size());
+
+    // step 4.2. append actual message
+    parts->emplace_back(msg->ByteSizeLong());
+    auto &reply = parts->back();
+    msg->SerializeToArray(reply.data(), reply.size());
+    TRACE("Response proto object have size {}", reply.size());
+    m_server.sendMessage(std::move(parts));
+}
+
+void ZmqServer::sendMessage(MultiPartMessage &&parts)
 {
     m_sendQueue.push({parts.release()});
 }
@@ -281,7 +366,7 @@ void ZmqServer::sendLoop()
             continue;
         }
         // Wrap the address in smart pointer immediately so we won't risk memory leak.
-        std::unique_ptr<MultiMessage> parts(item.p_parts);
+        MultiPartMessage parts(item.p_parts);
         try {
             for (size_t i = 0; i != parts->size() - 1; ++i) {
                 auto &msg = parts->at(i);

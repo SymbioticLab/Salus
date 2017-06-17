@@ -20,6 +20,8 @@
 #ifndef ZMQSERVER_H
 #define ZMQSERVER_H
 
+#include "utils/protoutils.h"
+
 #include "zmq.hpp"
 
 #include <boost/lockfree/queue.hpp>
@@ -32,14 +34,34 @@
 class RpcServerCore;
 class ServerWorker;
 
+class MultiPartMessage
+{
+public:
+    MultiPartMessage();
+    MultiPartMessage(MultiPartMessage &&other);
+    MultiPartMessage(std::vector<zmq::message_t> *ptr);
+    MultiPartMessage(const MultiPartMessage&) = delete;
+
+    MultiPartMessage &operator=(MultiPartMessage &&other);
+    MultiPartMessage &operator=(const MultiPartMessage&) = delete;
+
+    MultiPartMessage &merge(MultiPartMessage &&other);
+    MultiPartMessage clone();
+
+    std::vector<zmq::message_t> *release();
+
+    std::vector<zmq::message_t> *operator->();
+
+private:
+    std::vector<zmq::message_t> m_parts;
+};
+
 /**
  * @todo write docs
  */
 class ZmqServer
 {
 public:
-    typedef std::vector<zmq::message_t> MultiMessage;
-
     explicit ZmqServer(std::unique_ptr<RpcServerCore> &&logic);
 
     ~ZmqServer();
@@ -54,12 +76,27 @@ public:
 
     void join();
 
+    class SenderImpl
+    {
+    public:
+        SenderImpl(ZmqServer &server, MultiPartMessage &&m_identities);
+
+        void sendMessage(ProtoPtr &&msg);
+
+        void sendMessage(uint64_t seq, ProtoPtr &&msg);
+
+    private:
+        ZmqServer &m_server;
+        MultiPartMessage m_identities;
+    };
+    using Sender = std::shared_ptr<SenderImpl>;
+
+private:
     /**
      * Low level api for sending messages back to client.
      */
-    void sendMessage(std::unique_ptr<MultiMessage> &&parts);
+    void sendMessage(MultiPartMessage &&parts);
 
-private:
     void sendLoop();
     void proxyRecvLoop();
 
@@ -89,7 +126,7 @@ private:
     std::unique_ptr<std::thread> m_sendThread;
     struct SendItem {
         // we cannot use unique_ptr because boost::lockfree::queue does not support move semantics
-        MultiMessage *p_parts;
+        std::vector<zmq::message_t> *p_parts;
     };
     boost::lockfree::queue<SendItem> m_sendQueue;
 };
