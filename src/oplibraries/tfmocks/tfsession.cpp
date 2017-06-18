@@ -163,9 +163,16 @@ TensorValue TFSession::fillTensor(const tensorflow::TensorProto &meta, const ten
 {
     if (meta.int64_val_size() == 0) {
         INFO("Found uninitialized proto meta");
-        auto t = createAndRegister(data);
-        if (!isCompatible(*t, meta)) {
-            ERR("Supplied data is not compatible with meta: {}", meta.DebugString());
+        tensorflow::Tensor *t = nullptr;
+        if (data.ByteSizeLong() > 0) {
+            INFO("data is not empty, create and register");
+            t = createAndRegister(data);
+            if (!isCompatible(*t, meta)) {
+                ERR("Supplied data is not compatible with meta: {}", meta.DebugString());
+            }
+        } else {
+            INFO("data is empty, unallocated tensor found, create new tensorvalue using meta data");
+            t = createAndRegister(meta);
         }
         return t;
     }

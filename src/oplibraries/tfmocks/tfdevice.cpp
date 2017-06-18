@@ -54,18 +54,16 @@ tensorflow::Status TFDevice::MakeTensorFromProto(const tensorflow::TensorProto& 
     INFO("TFDevice::MakeTensorFromProto got tensor_proto {}", tensor_proto.DebugString());
     INFO("TFDevice::MakeTensorFromProto got alloc_attrs {}", alloc_attrs);
 
-    if (tensor_proto.dtype() > 0 && tensor_proto.dtype() <= tensorflow::DataType_MAX) {
-        tensorflow::Tensor parsed(tensor_proto.dtype());
-        if (parsed.FromProto(m_allocator.get(), tensor_proto)) {
-            if (parsed.shape().num_elements() == 0) {
-                // Unallocated tensor, we have to allocate a value anyway.
-                tensorflow::Tensor t(m_allocator.get(), tensor_proto.dtype(), parsed.shape());
-                *tensor = t;
-            } else {
-                *tensor = parsed;
-            }
-            return tensorflow::Status::OK();
+    tensorflow::Tensor parsed(tensor_proto.dtype());
+    if (parsed.FromProto(m_allocator.get(), tensor_proto)) {
+        if (parsed.shape().num_elements() == 0) {
+            // Unallocated tensor, we have to allocate a value anyway.
+            tensorflow::Tensor t(m_allocator.get(), tensor_proto.dtype(), parsed.shape());
+            *tensor = t;
+        } else {
+            *tensor = parsed;
         }
+        return tensorflow::Status::OK();
     }
     ERR("Cannot parse tensor from proto: {}", tensor_proto.DebugString());
     return tensorflow::errors::InvalidArgument("Cannot parse tensor from proto: ",
