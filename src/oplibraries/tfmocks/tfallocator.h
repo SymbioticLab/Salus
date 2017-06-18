@@ -39,6 +39,7 @@ public:
     std::string Name() override;
     void *AllocateRaw(size_t alignment, size_t num_bytes) override;
     void DeallocateRaw(void *ptr) override;
+    bool ShouldAllocateEmptyTensors() override;
 
 private:
     TF_DISALLOW_COPY_AND_ASSIGN(TFAllocator);

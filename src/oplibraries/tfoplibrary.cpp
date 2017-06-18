@@ -361,14 +361,9 @@ ProtoPtr TFFetchTask::run()
             resp->mutable_result()->set_code(-1);
             return resp;
         }
-        if (tensorval.is_ref()) {
-            tensorflow::mutex_lock locker(*tensorval.mutex_if_ref);
-            INFO("Found a tensor: {}", tensorval->DebugString());
-            tensorval->AsProtoTensorContent(full_tensors.add_tensors());
-        } else {
-            INFO("Found a tensor: {}", tensorval->DebugString());
-            tensorval->AsProtoTensorContent(full_tensors.add_tensors());
-        }
+        MaybeLock locker(tensorval);
+        INFO("Found a tensor: {}", tensorval->DebugString());
+        tensorval->AsProtoTensorContent(full_tensors.add_tensors());
     }
     full_tensors.SerializeToString(resp->mutable_extra());
 
@@ -415,8 +410,17 @@ ProtoPtr TFPushTask::run()
         return resp;
     }
 
+    executor::TFTensors metas;
     for (int i = 0; i != m_tensors->tensors_size(); ++i) {
-        m_session->fillTensor(m_tensors->tensors(i), m_tensors->data(i));
+        auto tensorval = m_session->fillTensor(m_tensors->tensors(i), m_tensors->data(i));
+        if (!tensorval.tensor) {
+            ERR("Requested tensor not found in this session: {}", m_tensors->tensors(i).DebugString());
+            resp->mutable_result()->set_code(-1);
+            return resp;
+        }
+        MaybeLock locker(tensorval);
+        INFO("Filled a tensor: {}", tensorval->DebugString());
+        m_session->tensorMetaToProto(metas.add_tensors(), tensorval);
     }
 
     return resp;

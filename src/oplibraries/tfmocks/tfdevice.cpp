@@ -57,7 +57,13 @@ tensorflow::Status TFDevice::MakeTensorFromProto(const tensorflow::TensorProto& 
     if (tensor_proto.dtype() > 0 && tensor_proto.dtype() <= tensorflow::DataType_MAX) {
         tensorflow::Tensor parsed(tensor_proto.dtype());
         if (parsed.FromProto(m_allocator.get(), tensor_proto)) {
-            *tensor = parsed;
+            if (parsed.shape().num_elements() == 0) {
+                // Unallocated tensor, we have to allocate a value anyway.
+                tensorflow::Tensor t(m_allocator.get(), tensor_proto.dtype(), parsed.shape());
+                *tensor = t;
+            } else {
+                *tensor = parsed;
+            }
             return tensorflow::Status::OK();
         }
     }

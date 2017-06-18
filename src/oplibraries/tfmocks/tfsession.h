@@ -86,6 +86,25 @@ private:
     TFSession *m_sess;
 };
 
+class MaybeLock
+{
+public:
+    explicit MaybeLock(TensorValue &val) : m_val(val)
+    {
+        if (m_val.is_ref()) {
+            m_val.mutex_if_ref->lock();
+        }
+    }
+    ~MaybeLock()
+    {
+        if (m_val.is_ref()) {
+            m_val.mutex_if_ref->unlock();
+        }
+    }
+private:
+    TensorValue &m_val;
+};
+
 class TFSession
 {
 public:
@@ -109,7 +128,7 @@ public:
      * The found tensor will be filled with data, and returned.
      * Return nullptr if meta is initialized but the addr is not found or not compatible with data.
      */
-    void fillTensor(const tensorflow::TensorProto &meta, const tensorflow::TensorProto &data);
+    TensorValue fillTensor(const tensorflow::TensorProto &meta, const tensorflow::TensorProto &data);
 
     /**
      * Convinence method that combines create a tensor from proto, allocate and fill in memory,

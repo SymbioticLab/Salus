@@ -38,8 +38,18 @@ std::string TFAllocator::Name()
     return "mock_tf";
 }
 
+bool TFAllocator::ShouldAllocateEmptyTensors()
+{
+    return true;
+}
+
 void *TFAllocator::AllocateRaw(size_t alignment, size_t num_bytes)
 {
+    if (num_bytes == 0) {
+        INFO("Allocation for tracking purpose");
+        num_bytes = 1;
+    }
+
     auto ptr = MemoryMgr::instance().allocate(num_bytes, alignment);
 
     INFO("TFAllocator allocated {} bytes of memory at {:x} with alignment {}",
