@@ -327,7 +327,7 @@ void ZmqServer::SenderImpl::sendMessage(ProtoPtr &&msg)
     parts->emplace_back(msg->ByteSizeLong());
     auto &reply = parts->back();
     msg->SerializeToArray(reply.data(), reply.size());
-    TRACE("Response proto object have size {}", reply.size());
+    TRACE("Response proto object have size {} with evenlop {}", reply.size(), evenlop);
     m_server.sendMessage(std::move(parts));
 }
 

@@ -322,6 +322,7 @@ void TFRunTask::runAsync(DoneCallback cb)
     // Send out a message for any pending rendezvous recv request immediately
     auto reqs = std::make_unique<executor::TFRendezRecvRequests>();
     for (auto &elem : m_session->rendezvous().releasePendingRecv()) {
+        INFO("Found pending recv request: ", elem.first);
         reqs->add_key(elem.first);
         reqs->add_allocattributes(elem.second.args.alloc_attrs.value);
     }
