@@ -70,8 +70,7 @@ tensorflow::Status TFRendezvous::Send(const ParsedKey &parsed, const Args &send_
 
     m_sess->registerTensorMemory(val);
 
-    bool sameDevice = tensorflow::DeviceNameUtils::IsSameAddressSpace(parsed.src, parsed.dst);
-    if (!sameDevice) {
+    if (!isSameDevice(parsed.src, parsed.dst)) {
         auto key = parsed.FullKey().ToString();
         auto it = m_tensors.end();
         {

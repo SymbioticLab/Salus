@@ -40,6 +40,7 @@
 #include <utility>
 #include <vector>
 
+using tensorflow::TensorValue;
 typedef tensorflow::gtl::InlinedVector<tensorflow::TensorValue, 4> TensorValueVec;
 typedef tensorflow::gtl::InlinedVector<tensorflow::DeviceContext*, 4> DeviceContextVec;
 typedef tensorflow::gtl::InlinedVector<tensorflow::AllocatorAttributes, 4> AllocatorAttributeVec;
@@ -75,7 +76,6 @@ public:
 
     DeviceContextVec input_device_contexts;
     AllocatorAttributeVec input_alloc_attrs;
-    tensorflow::mutex ref_mutex;
 
     std::vector<tensorflow::AllocatorAttributes> output_attrs;
 
@@ -102,14 +102,14 @@ public:
 
     // Tensor memory management
     void registerTensorMemory(const tensorflow::Tensor &tensor);
-    tensorflow::Tensor *tensorFromAddrHandle(uint64_t addr_handle);
-    tensorflow::Tensor *findTensorFromProtoMeta(const tensorflow::TensorProto &proto);
+    void registerTensorMemory(TensorValue tensorval);
+    TensorValue findTensorFromProtoMeta(const tensorflow::TensorProto &proto);
     /**
      * Find registered tensor from meta, if meta is uninitialized, new tensor will be created & registered.
      * The found tensor will be filled with data, and returned.
      * Return nullptr if meta is initialized but the addr is not found or not compatible with data.
      */
-    tensorflow::Tensor *fillTensor(const tensorflow::TensorProto &meta, const tensorflow::TensorProto &data);
+    void fillTensor(const tensorflow::TensorProto &meta, const tensorflow::TensorProto &data);
 
     /**
      * Convinence method that combines create a tensor from proto, allocate and fill in memory,
@@ -117,13 +117,14 @@ public:
      */
     tensorflow::Tensor *createAndRegister(const tensorflow::TensorProto &proto);
 
-    void tensorMetaToProto(tensorflow::TensorProto *proto, const tensorflow::Tensor &tensor);
+    void tensorMetaToProto(tensorflow::TensorProto *proto, TensorValue tensorval);
 
     bool isCompatible(const tensorflow::Tensor &tensor, const tensorflow::TensorProto &proto) const;
 
 
 private:
-    void registerTensorMemoryLocked(tensorflow::Tensor *tensor);
+    TensorValue *tensorFromAddrHandle(uint64_t addr_handle);
+    void registerTensorMemoryLocked(tensorflow::Tensor *tensor, tensorflow::mutex *mu = nullptr);
 
     friend class TFContext;
     void contextDestroied(uint64_t taskId);
@@ -145,7 +146,7 @@ private:
     tensorflow::Rendezvous *m_rendez;
 
     tensorflow::mutex m_mu;
-    std::unordered_map<uint64_t, tensorflow::Tensor*> m_tensors;
+    std::unordered_map<uint64_t, TensorValue> m_tensors;
 
     tensorflow::mutex m_muctx;
     std::unordered_map<uint64_t, TFContext*> m_contexts;

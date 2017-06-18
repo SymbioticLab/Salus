@@ -34,6 +34,7 @@
 #include <tensorflow/core/framework/node_def.pb.h>
 #include <tensorflow/core/framework/function.pb.h>
 #include <tensorflow/core/protobuf/config.pb.h>
+#include <tensorflow/core/platform/mutex.h>
 
 #include <thread>
 #include <functional>
@@ -224,7 +225,7 @@ ProtoPtr TFRunTask::run()
         item->set_key(elem.first);
         item->set_allocattributes(elem.second.args.alloc_attrs.value);
         item->set_isdead(elem.second.isDead);
-        m_session->tensorMetaToProto(item->mutable_val(), elem.second.val);
+        m_session->tensorMetaToProto(item->mutable_val(), &elem.second.val);
     }
 
     // process tensor set as outputs
@@ -232,14 +233,10 @@ ProtoPtr TFRunTask::run()
         auto out = context->release_output(i);
         auto outdef = tfctxupd.add_outputs();
 
+        m_session->tensorMetaToProto(outdef, out);
         // Let the session manage the tensor memory
-        m_session->registerTensorMemory(*out.tensor);
-
-        // TODO: handle ref TensorValue
-        m_session->tensorMetaToProto(outdef, *out.tensor);
-        if (!out.is_ref()) {
-            delete out.tensor;
-        }
+        // The session takes the ownership of tensor in non-ref case
+        m_session->registerTensorMemory(out);
     }
 
     // write update to ctxdef
@@ -250,7 +247,6 @@ ProtoPtr TFRunTask::run()
 
 void TFRunTask::runAsync(DoneCallback cb)
 {
-    // FIXME: implement this
     INFO("running async in thread {}", std::this_thread::get_id());
 
     if (!m_opkernel || !m_context) {
@@ -287,7 +283,7 @@ void TFRunTask::runAsync(DoneCallback cb)
             item->set_key(elem.first);
             item->set_allocattributes(elem.second.args.alloc_attrs.value);
             item->set_isdead(elem.second.isDead);
-            pSession->tensorMetaToProto(item->mutable_val(), elem.second.val);
+            pSession->tensorMetaToProto(item->mutable_val(), &elem.second.val);
         }
 
         // process tensor set as outputs
@@ -295,17 +291,10 @@ void TFRunTask::runAsync(DoneCallback cb)
             auto out = context->release_output(i);
             auto outdef = tfctxupd.add_outputs();
 
+            pSession->tensorMetaToProto(outdef, out);
             // Let the session manage the tensor memory
-            pSession->registerTensorMemory(*out.tensor);
-
-            // TODO: handle ref TensorValue
-            if (out.is_ref()) {
-                WARN("Ref tensor handling missing!!!!!");
-            }
-            pSession->tensorMetaToProto(outdef, *out.tensor);
-            if (!out.is_ref()) {
-                delete out.tensor;
-            }
+            // The session takes the ownership of tensor in non-ref case
+            pSession->registerTensorMemory(out);
         }
 
         // write update to ctxdef
@@ -366,14 +355,20 @@ ProtoPtr TFFetchTask::run()
 
     executor::TFTensors full_tensors;
     for (auto &proto : m_tensorMetas->tensors()) {
-        auto tensor = m_session->findTensorFromProtoMeta(proto);
-        if (!tensor) {
+        auto tensorval = m_session->findTensorFromProtoMeta(proto);
+        if (!tensorval.tensor) {
             ERR("Requested tensor not found in this session: {}", proto.DebugString());
             resp->mutable_result()->set_code(-1);
             return resp;
         }
-        INFO("Found a tensor: {}", tensor->DebugString());
-        tensor->AsProtoTensorContent(full_tensors.add_tensors());
+        if (tensorval.is_ref()) {
+            tensorflow::mutex_lock locker(*tensorval.mutex_if_ref);
+            INFO("Found a tensor: {}", tensorval->DebugString());
+            tensorval->AsProtoTensorContent(full_tensors.add_tensors());
+        } else {
+            INFO("Found a tensor: {}", tensorval->DebugString());
+            tensorval->AsProtoTensorContent(full_tensors.add_tensors());
+        }
     }
     full_tensors.SerializeToString(resp->mutable_extra());
 
@@ -421,11 +416,7 @@ ProtoPtr TFPushTask::run()
     }
 
     for (int i = 0; i != m_tensors->tensors_size(); ++i) {
-        auto t = m_session->fillTensor(m_tensors->tensors(i), m_tensors->data(i));
-        if (!t) {
-            ERR("Skipped one proto meta due to not found tensor");
-            continue;
-        }
+        m_session->fillTensor(m_tensors->tensors(i), m_tensors->data(i));
     }
 
     return resp;

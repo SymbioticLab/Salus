@@ -58,19 +58,21 @@ TFSession::~TFSession()
 {
     m_opseg.RemoveHold(m_sessHandle);
     for (auto p : m_tensors) {
-        delete p.second;
-        MemoryMgr::instance().deallocate(reinterpret_cast<void*>(p.first));
+        if (!p.second.is_ref()) {
+            delete p.second.tensor;
+        }
     }
     m_rendez->Unref();
 }
 
 void TFSession::registerTensorMemory(const tensorflow::Tensor &tensor)
 {
-    if (!tensor.IsInitialized()) {
-        INFO("Skipped registering uninitialized tensor: {}", tensor.DebugString());
-        return;
-    }
     registerTensorMemoryLocked(new tensorflow::Tensor(tensor));
+}
+
+void TFSession::registerTensorMemory(TensorValue tensorval)
+{
+    registerTensorMemoryLocked(tensorval.tensor, tensorval.mutex_if_ref);
 }
 
 tensorflow::Tensor *TFSession::createAndRegister(const tensorflow::TensorProto &proto)
@@ -92,28 +94,32 @@ tensorflow::Tensor *TFSession::createAndRegister(const tensorflow::TensorProto &
     return tensor;
 }
 
-void TFSession::registerTensorMemoryLocked(tensorflow::Tensor *tensor)
+void TFSession::registerTensorMemoryLocked(tensorflow::Tensor *tensor, tensorflow::mutex *mu)
 {
     if (!tensor) {
         ERR("Got nullptr in registerTensorMemoryLocked");
         return;
     }
-    INFO("Registering tensor: {}", tensor->DebugString());
-    tensorflow::mutex_lock locker(m_mu);
-    m_tensors[reinterpret_cast<uint64_t>(tensor->tensor_data().data())] = tensor;
+    if (tensor->IsInitialized() && tensor->shape().num_elements() > 0) {
+        INFO("Registering tensor: {}, is ref: {}", tensor->DebugString(), mu != nullptr);
+        tensorflow::mutex_lock locker(m_mu);
+        m_tensors[reinterpret_cast<uint64_t>(tensor->tensor_data().data())] = {mu, tensor};
+    } else {
+        INFO("Skipped registering tensor that is not allocated.");
+    }
 }
 
-tensorflow::Tensor *TFSession::tensorFromAddrHandle(uint64_t addr_handle)
+TensorValue *TFSession::tensorFromAddrHandle(uint64_t addr_handle)
 {
     tensorflow::mutex_lock locker(m_mu);
     if (m_tensors.count(addr_handle) <= 0) {
         ERR("Tensor at addr {:x} not found", addr_handle);
         return {};
     }
-    return m_tensors.at(addr_handle);
+    return &m_tensors.at(addr_handle);
 }
 
-tensorflow::Tensor *TFSession::findTensorFromProtoMeta(const tensorflow::TensorProto &proto)
+TensorValue TFSession::findTensorFromProtoMeta(const tensorflow::TensorProto &proto)
 {
     if (proto.int64_val_size() == 0) {
         ERR("Proto meta must be initialized for findTensorFromProtoMeta");
@@ -121,44 +127,63 @@ tensorflow::Tensor *TFSession::findTensorFromProtoMeta(const tensorflow::TensorP
     }
 
     auto addr = proto.int64_val(0);
-    auto tensor = tensorFromAddrHandle(addr);
-    if (!tensor) {
+    auto tensorval = tensorFromAddrHandle(addr);
+    if (!tensorval) {
         ERR("Requested tensor not found at addr {:x}", addr);
         return {};
     }
 
-    if (!isCompatible(*tensor, proto)) {
+    if (tensorflow::IsRefType(proto.dtype())) {
+        if (!tensorval->is_ref()) {
+            ERR("Tensor is ref type but no mutex provided when registration");
+            return {};
+        }
+    }
+
+    if (!isCompatible(*tensorval->tensor, proto)) {
         return {};
     }
-    return tensor;
+    return *tensorval;
 }
 
-tensorflow::Tensor *TFSession::fillTensor(const tensorflow::TensorProto &meta, const tensorflow::TensorProto &data)
+void TFSession::fillTensor(const tensorflow::TensorProto &meta, const tensorflow::TensorProto &data)
 {
     if (meta.int64_val_size() == 0) {
-        INFO("Found uninitialized proto meta, create and register it");
-        return createAndRegister(data);
+        INFO("Found uninitialized proto meta");
+        if (data.ByteSizeLong() > 0) {
+            INFO("Found non-empty data, create and register the proto meta");
+            auto t = createAndRegister(data);
+            if (!isCompatible(*t, meta)) {
+                ERR("Supplied data is not compatible with meta: {}", meta.DebugString());
+            }
+        } else {
+            INFO("Data is also empty, ignore. It will be created later");
+        }
+        return;
     }
     auto t = findTensorFromProtoMeta(meta);
-    if (!t) {
-        return nullptr;
+    if (!t.tensor) {
+        return;
     }
 
-    if (!isCompatible(*t, data)) {
+    if (!isCompatible(*t.tensor, data)) {
         ERR("Tensor not compatible with pushed data tensor proto");
-        return nullptr;
+        return;
     }
     if (!t->FromProto(m_device->GetAllocator({}), data)) {
         ERR("Malformated tensor proto");
-        return nullptr;
+        return;
     }
-    return t;
 }
 
 bool TFSession::isCompatible(const tensorflow::Tensor &tensor, const tensorflow::TensorProto &proto) const
 {
+    auto dtype = proto.dtype();
+    if (tensorflow::IsRefType(dtype)) {
+        dtype = tensorflow::RemoveRefType(proto.dtype());
+    }
     tensorflow::TensorShape shape(proto.tensor_shape());
-    if (tensor.dtype() != proto.dtype()
+    if (tensor.dtype() != dtype
         || tensor.shape() != shape) {
         ERR("Requested tensor metadata mismatch with record. Requested: {} of type {}, stored: {} of type {}",
             tensor.shape().DebugString(), tensor.dtype(),
@@ -168,15 +193,28 @@ bool TFSession::isCompatible(const tensorflow::Tensor &tensor, const tensorflow:
     return true;
 }
 
-void TFSession::tensorMetaToProto(tensorflow::TensorProto *proto, const tensorflow::Tensor &tensor)
+void TFSession::tensorMetaToProto(tensorflow::TensorProto *proto, TensorValue tensorval)
 {
-    proto->set_dtype(tensor.dtype());
-    tensor.shape().AsProto(proto->mutable_tensor_shape());
+    if (tensorval.is_ref()) {
+        proto->set_dtype(tensorflow::MakeRefType(tensorval->dtype()));
 
-    auto addr_handle = reinterpret_cast<uint64_t>(tensor.tensor_data().data());
-    // HACK: use a int64 val entry to store the addr handle for simplicity,
-    // idealy should store this in tensor_content with proper encoding.
-    proto->add_int64_val(addr_handle);
+        tensorflow::mutex_lock locker(*tensorval.mutex_if_ref);
+
+        tensorval->shape().AsProto(proto->mutable_tensor_shape());
+
+        auto addr_handle = reinterpret_cast<uint64_t>(tensorval->tensor_data().data());
+        // HACK: use a int64 val entry to store the addr handle for simplicity,
+        // idealy should store this in tensor_content with proper encoding.
+        proto->add_int64_val(addr_handle);
+    } else {
+        proto->set_dtype(tensorval->dtype());
+        tensorval->shape().AsProto(proto->mutable_tensor_shape());
+
+        auto addr_handle = reinterpret_cast<uint64_t>(tensorval->tensor_data().data());
+        // HACK: use a int64 val entry to store the addr handle for simplicity,
+        // idealy should store this in tensor_content with proper encoding.
+        proto->add_int64_val(addr_handle);
+    }
 }
 
 tensorflow::OpKernel *TFSession::findOrCreateKernel(const tensorflow::NodeDef &ndef)
@@ -321,11 +359,9 @@ std::unique_ptr<TFContext> TFSession::createContext(const executor::TFOpContextD
         return {};
     }
     tfctx->inputs.reserve(num_inputs);
-    auto input_types = opkernel->input_types();
     for (const auto &inpdef : tfdef.inputs()) {
         auto input = findTensorFromProtoMeta(inpdef);
-        auto pmu = IsRefType(input_types[tfctx->inputs.size()]) ? &tfctx->ref_mutex : nullptr;
-        tfctx->inputs.push_back({pmu, input});
+        tfctx->inputs.push_back(input);
     }
     tfctx->params.inputs = &tfctx->inputs;
 
