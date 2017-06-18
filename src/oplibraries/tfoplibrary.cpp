@@ -438,16 +438,18 @@ TFPushTask::~TFPushTask() = default;
 
 PTask TFOpLibrary::createCustomTask(ZmqServer::Sender sender, const executor::CustomRequest &req)
 {
+    // NOTE: this-> is need to workaround a bug in GCC 6.x where member function lookup is broken
+    // for generic lambda. See https://gcc.gnu.org/bugzilla/show_bug.cgi?id=61636
     using Method = std::function<PTask(ZmqServer::Sender, const executor::CustomRequest &)>;
     static std::unordered_map<std::string, Method> funcs{
         {"executor.TFPushTask", [this](auto sender, const auto &req) {
-            return createPushTask(std::move(sender), req);
+            return this->createPushTask(std::move(sender), req);
         }},
         {"executor.TFFetchTask", [this](auto sender, const auto &req) {
-            return createFetchTask(std::move(sender), req);
+            return this->createFetchTask(std::move(sender), req);
         }},
         {"executor.TFRendezRecvResponse", [this](auto sender, const auto &req) {
-            return createRendezRecvTask(std::move(sender), req);
+            return this->createRendezRecvTask(std::move(sender), req);
         }},
     };
 

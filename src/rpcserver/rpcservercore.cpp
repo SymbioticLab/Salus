@@ -37,9 +37,11 @@ using std::unique_ptr;
 q::promise<ProtoPtr> RpcServerCore::dispatch(ZmqServer::Sender sender, const EvenlopDef &evenlop,
                                              const Message &request)
 {
+    // NOTE: this-> is need to workaround a bug in GCC 6.x where member function lookup is broken
+    // for generic lambda. See https://gcc.gnu.org/bugzilla/show_bug.cgi?id=61636
 #define ITEM(name) \
         {"executor." #name "Request", [this](auto &&sender, auto *oplib, const auto &request){ \
-            return name (std::move(sender), oplib, static_cast<const name ## Request&>(request)) \
+            return this->name (std::move(sender), oplib, static_cast<const name ## Request&>(request)) \
                 .then([](unique_ptr<name ## Response> &&f){ \
                     return static_cast<ProtoPtr>(std::move(f)); \
             }); \
