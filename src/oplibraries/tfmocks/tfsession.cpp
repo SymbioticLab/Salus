@@ -67,12 +67,16 @@ TFSession::~TFSession()
 
 void TFSession::registerTensorMemory(const tensorflow::Tensor &tensor)
 {
-    registerTensorMemoryLocked(new tensorflow::Tensor(tensor));
+    registerTensorMemory(new tensorflow::Tensor(tensor));
 }
 
 void TFSession::registerTensorMemory(TensorValue tensorval)
 {
-    registerTensorMemoryLocked(tensorval.tensor, tensorval.mutex_if_ref);
+    if (tensorval->IsInitialized() && tensorval->shape().num_elements() > 0) {
+        registerTensorMemoryLocked(tensorval.tensor, tensorval.mutex_if_ref);
+    } else {
+        INFO("Skipped registering tensor that is not allocated.");
+    }
 }
 
 tensorflow::Tensor *TFSession::createAndRegister(const tensorflow::TensorProto &proto)
@@ -100,22 +104,19 @@ void TFSession::registerTensorMemoryLocked(tensorflow::Tensor *tensor, tensorflo
         ERR("Got nullptr in registerTensorMemoryLocked");
         return;
     }
-    if (tensor->IsInitialized() && tensor->shape().num_elements() > 0) {
-        INFO("Registering tensor: {}, is ref: {}", tensor->DebugString(), mu != nullptr);
-        auto addr_handle = reinterpret_cast<uint64_t>(tensor->tensor_data().data());
-        tensorflow::mutex_lock locker(m_mu);
-        auto it = m_tensors.find(addr_handle);
-        if (it == m_tensors.end()) {
-            m_tensors.emplace(addr_handle, TensorValue{mu, tensor});
-        } else {
-            if (it->second.mutex_if_ref != mu) {
-                WARN("The tensor going to be registered already exists, and is under a different mutex");
-            }
-            it->second.tensor = tensor;
-            it->second.mutex_if_ref = mu;
-        }
+    auto addr_handle = reinterpret_cast<uint64_t>(tensor->tensor_data().data());
+    INFO("Registering tensor: {}, is ref: {} at address: {:x}",
+         tensor->DebugString(), mu != nullptr, addr_handle);
+    tensorflow::mutex_lock locker(m_mu);
+    auto it = m_tensors.find(addr_handle);
+    if (it == m_tensors.end()) {
+        m_tensors.emplace(addr_handle, TensorValue{mu, tensor});
     } else {
-        INFO("Skipped registering tensor that is not allocated.");
+        if (it->second.mutex_if_ref != mu) {
+            WARN("The tensor going to be registered already exists, and is under a different mutex");
+        }
+        it->second.tensor = tensor;
+        it->second.mutex_if_ref = mu;
     }
 }
 
