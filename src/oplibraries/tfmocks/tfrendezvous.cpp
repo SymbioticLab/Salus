@@ -43,8 +43,9 @@ TFRendezvous::RecvItem::RecvItem(const Args &a) : args(a) {}
 
 TFRendezvous::TFRendezvous(TFSession *sess)
     : m_sess(sess)
-    , m_local(tensorflow::NewLocalRendezvous())
+    , m_local(m_sess->m_rendez)
 {
+    m_local->Ref();
 }
 
 TFRendezvous::~TFRendezvous()
@@ -86,7 +87,9 @@ void TFRendezvous::RecvAsync(const ParsedKey &parsed, const Args &recv_args, Don
     bool sameDevice = tensorflow::DeviceNameUtils::IsSameAddressSpace(parsed.src, parsed.dst);
     if (!sameDevice) {
         // Pending recv must be fullfilled later by RPC
+        INFO("Saving recv request for later RPC");
         auto key = parsed.FullKey().ToString();
+        DEBUG("Pending recv request saved: {}", key);
         {
             tensorflow::mutex_lock locker(m_recvmu);
             auto it = m_recv.find(key);

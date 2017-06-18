@@ -261,7 +261,7 @@ void TFRunTask::runAsync(DoneCallback cb)
         return;
     }
 
-    auto ctx = m_context->ctx(); // we need this later
+    auto pContext = m_context.get(); // we need this later
     auto pSession = m_session;
     // NOTE: this might be deleted by the time done_cb got called. So move out the pieces we need.
     // NOTE: both done and pContext are CopyConstructable, thus the done_cb is CopyConstructable,
@@ -281,7 +281,7 @@ void TFRunTask::runAsync(DoneCallback cb)
         // process tensor received by rendezvous
         // Note that rendezvous already registered these tensors to m_session
         // And this will clear tensors table in rendezvous
-        for (auto &elem : pSession->rendezvous().releasePendingSentTensors()) {
+        for (auto &elem : pContext->rendez.releasePendingSentTensors()) {
             auto item = tfctxupd.add_rendeztensors();
             item->set_key(elem.first);
             item->set_allocattributes(elem.second.args.alloc_attrs.value);
@@ -314,14 +314,15 @@ void TFRunTask::runAsync(DoneCallback cb)
     };
 
     try {
-        m_opkernel->AsAsync()->ComputeAsync(ctx, std::move(done_cb));
+        m_opkernel->AsAsync()->ComputeAsync(pContext->ctx(), std::move(done_cb));
     } catch (std::exception &err) {
         ERR("Caught exception when run kernel compute async: ", err.what());
     }
 
+    DEBUG("ComputeAsync returned for opkernel ", m_opkernel->name());
     // Send out a message for any pending rendezvous recv request immediately
     auto reqs = std::make_unique<executor::TFRendezRecvRequests>();
-    for (auto &elem : m_session->rendezvous().releasePendingRecv()) {
+    for (auto &elem : pContext->rendez.releasePendingRecv()) {
         INFO("Found pending recv request: ", elem.first);
         reqs->add_key(elem.first);
         reqs->add_allocattributes(elem.second.args.alloc_attrs.value);

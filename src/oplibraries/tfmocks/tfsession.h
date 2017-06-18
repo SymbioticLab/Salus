@@ -69,6 +69,7 @@ public:
 
     tensorflow::ScopedStepContainer step_container;
     tensorflow::checkpoint::TensorSliceReaderCacheWrapper slice_reader_cache_wrapper;
+    TFRendezvous rendez;
 
     TensorValueVec inputs;
 
@@ -101,11 +102,6 @@ public:
     tensorflow::Tensor *findTensorFromProtoMeta(const tensorflow::TensorProto &proto);
 
     /**
-     * Get Rendezvous
-     */
-    TFRendezvous &rendezvous();
-
-    /**
      * Convinence method that combines create a tensor from proto, allocate and fill in memory,
      * and finally register
      */
@@ -131,7 +127,8 @@ private:
     std::unique_ptr<tensorflow::FunctionLibraryRuntime> m_fruntime;
     std::unique_ptr<TFDevice> m_device;
 
-    TFRendezvous m_rendez;
+    friend class TFRendezvous;
+    tensorflow::Rendezvous *m_rendez;
 
     tensorflow::mutex m_mu;
     std::unordered_map<uint64_t, tensorflow::Tensor*> m_tensors;

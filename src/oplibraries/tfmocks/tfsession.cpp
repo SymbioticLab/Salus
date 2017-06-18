@@ -39,7 +39,7 @@ TFSession::TFSession(TFOpLibrary *opLibrary, const tensorflow::FunctionDefLibrar
     , m_opseg()
     , m_flibDef(tensorflow::OpRegistry::Global(), fDefLib)
     , m_fruntime(nullptr)
-    , m_rendez(this)
+    , m_rendez(tensorflow::NewLocalRendezvous())
 {
     DEBUG("Creating new TFSession at {:x}", reinterpret_cast<uint64_t>(this));
 
@@ -61,6 +61,7 @@ TFSession::~TFSession()
         delete p.second;
         MemoryMgr::instance().deallocate(reinterpret_cast<void*>(p.first));
     }
+    m_rendez->Unref();
 }
 
 void TFSession::registerTensorMemory(const tensorflow::Tensor &tensor)
@@ -193,8 +194,8 @@ tensorflow::OpKernel *TFSession::findOrCreateKernel(const tensorflow::NodeDef &n
 
 TFContext::TFContext(TFSession *sess)
     : step_container(0, [](const std::string&) {})
+    , rendez(sess)
 {
-    UNUSED(sess);
 }
 
 TFContext::~TFContext() {

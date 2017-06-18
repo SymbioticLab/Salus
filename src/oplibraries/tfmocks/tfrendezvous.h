@@ -28,7 +28,7 @@
 class TFSession;
 
 /**
- * @todo write docs
+ * TODO: TFRendezvous need not to be thread safe as it is only used per TFContext
  */
 class TFRendezvous : public tensorflow::Rendezvous
 {
