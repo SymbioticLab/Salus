@@ -421,19 +421,9 @@ ProtoPtr TFPushTask::run()
     }
 
     for (int i = 0; i != m_tensors->tensors_size(); ++i) {
-        auto t = m_session->findTensorFromProtoMeta(m_tensors->tensors(i));
+        auto t = m_session->fillTensor(m_tensors->tensors(i), m_tensors->data(i));
         if (!t) {
             ERR("Skipped one proto meta due to not found tensor");
-            continue;
-        }
-
-        auto &dataproto = m_tensors->data(i);
-        if (!m_session->isCompatible(*t, dataproto)) {
-            ERR("Tensor not compatible with pushed data tensor proto");
-            continue;
-        }
-        if (!t->FromProto(dataproto)) {
-            ERR("Malformated tensor proto");
             continue;
         }
     }

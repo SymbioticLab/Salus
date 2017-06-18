@@ -115,6 +115,11 @@ tensorflow::Tensor *TFSession::tensorFromAddrHandle(uint64_t addr_handle)
 
 tensorflow::Tensor *TFSession::findTensorFromProtoMeta(const tensorflow::TensorProto &proto)
 {
+    if (proto.int64_val_size() == 0) {
+        ERR("Proto meta must be initialized for findTensorFromProtoMeta");
+        return {};
+    }
+
     auto addr = proto.int64_val(0);
     auto tensor = tensorFromAddrHandle(addr);
     if (!tensor) {
@@ -126,6 +131,28 @@ tensorflow::Tensor *TFSession::findTensorFromProtoMeta(const tensorflow::TensorP
         return {};
     }
     return tensor;
+}
+
+tensorflow::Tensor *TFSession::fillTensor(const tensorflow::TensorProto &meta, const tensorflow::TensorProto &data)
+{
+    if (meta.int64_val_size() == 0) {
+        INFO("Found uninitialized proto meta, create and register it");
+        return createAndRegister(data);
+    }
+    auto t = findTensorFromProtoMeta(meta);
+    if (!t) {
+        return nullptr;
+    }
+
+    if (!isCompatible(*t, data)) {
+        ERR("Tensor not compatible with pushed data tensor proto");
+        return nullptr;
+    }
+    if (!t->FromProto(m_device->GetAllocator({}), data)) {
+        ERR("Malformated tensor proto");
+        return nullptr;
+    }
+    return t;
 }
 
 bool TFSession::isCompatible(const tensorflow::Tensor &tensor, const tensorflow::TensorProto &proto) const
