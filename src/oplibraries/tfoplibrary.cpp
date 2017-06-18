@@ -476,6 +476,11 @@ public:
 
             tensorflow::Rendezvous::ParsedKey parsed;
             auto ok = tensorflow::Rendezvous::ParseKey(item.key(), &parsed);
+            auto t = m_session->createAndRegister(item.val());
+            if (!t) {
+                ERR("Failed to create tensor for rendezrecv");
+                return {};
+            }
             ok.Update(tfctx->rendez.Send(parsed,
                                          tensorflow::Rendezvous::Args(),
                                          *m_session->createAndRegister(item.val()),

@@ -167,6 +167,9 @@ TensorValue TFSession::fillTensor(const tensorflow::TensorProto &meta, const ten
         if (data.ByteSizeLong() > 0) {
             INFO("data is not empty, create and register");
             t = createAndRegister(data);
+            if (!t) {
+                return t;
+            }
             if (!isCompatible(*t, meta)) {
                 ERR("Supplied data is not compatible with meta: {}", meta.DebugString());
             }
