@@ -331,6 +331,11 @@ void ZmqServer::SenderImpl::sendMessage(ProtoPtr &&msg)
     m_server.sendMessage(std::move(parts));
 }
 
+uint64_t ZmqServer::SenderImpl::sequenceNumber() const
+{
+    return m_seq;
+}
+
 void ZmqServer::sendMessage(MultiPartMessage &&parts)
 {
     m_sendQueue.push({parts.release()});

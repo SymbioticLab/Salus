@@ -28,6 +28,16 @@
 using tensorflow::Status;
 using tensorflow::Tensor;
 
+namespace {
+bool isSameDevice(const tensorflow::DeviceNameUtils::ParsedName &a,
+                  const tensorflow::DeviceNameUtils::ParsedName &b)
+{
+    return tensorflow::DeviceNameUtils::IsSameAddressSpace(a, b) &&
+        (a.has_type && b.has_type && (a.type == b.type)) &&
+        (a.has_id && b.has_id && (a.id == b.id));
+}
+} // namespace
+
 TFRendezvous::SendItem::SendItem() : SendItem(Args(), false, tensorflow::Tensor()) {}
 
 TFRendezvous::SendItem::SendItem(const Args &a, bool d, tensorflow::Tensor &&v)
@@ -84,8 +94,7 @@ void TFRendezvous::RecvAsync(const ParsedKey &parsed, const Args &recv_args, Don
 {
     INFO("TFRendezvous::RecvAsync {}", parsed.FullKey().ToString());
 
-    bool sameDevice = tensorflow::DeviceNameUtils::IsSameAddressSpace(parsed.src, parsed.dst);
-    if (!sameDevice) {
+    if (!isSameDevice(parsed.src, parsed.dst)) {
         // Pending recv must be fullfilled later by RPC
         INFO("Saving recv request for later RPC");
         auto key = parsed.FullKey().ToString();

@@ -83,6 +83,8 @@ public:
 
         void sendMessage(ProtoPtr &&msg);
 
+        uint64_t sequenceNumber() const;
+
     private:
         ZmqServer &m_server;
         MultiPartMessage m_identities;

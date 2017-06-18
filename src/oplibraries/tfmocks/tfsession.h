@@ -58,7 +58,7 @@ class TFOpLibrary;
 class TFContext
 {
 public:
-    explicit TFContext(TFSession *sess);
+    TFContext(TFSession *sess, uint64_t taskId);
     ~TFContext();
 
     tensorflow::OpKernelContext *ctx();
@@ -82,6 +82,8 @@ public:
     tensorflow::OpKernelContext::Params params;
 private:
     std::unique_ptr<tensorflow::OpKernelContext> context;
+    uint64_t m_taskId;
+    TFSession *m_sess;
 };
 
 class TFSession
@@ -94,7 +96,9 @@ public:
 
     tensorflow::OpKernel *findOrCreateKernel(const tensorflow::NodeDef &nodedef);
 
-    std::unique_ptr<TFContext> createContext(const executor::TFOpContextDef &tfdef, tensorflow::OpKernel *opkernel);
+    std::unique_ptr<TFContext> createContext(const executor::TFOpContextDef &tfdef,
+                                             tensorflow::OpKernel *opkernel, uint64_t taskId);
+    TFContext *findContext(uint64_t taskId);
 
     // Tensor memory management
     void registerTensorMemory(const tensorflow::Tensor &tensor);
@@ -111,8 +115,12 @@ public:
 
     bool isCompatible(const tensorflow::Tensor &tensor, const tensorflow::TensorProto &proto) const;
 
+
 private:
     void registerTensorMemoryLocked(tensorflow::Tensor *tensor);
+
+    friend class TFContext;
+    void contextDestroied(uint64_t taskId);
 
     tensorflow::SessionOptions m_options;
 
@@ -132,6 +140,9 @@ private:
 
     tensorflow::mutex m_mu;
     std::unordered_map<uint64_t, tensorflow::Tensor*> m_tensors;
+
+    tensorflow::mutex m_muctx;
+    std::unordered_map<uint64_t, TFContext*> m_contexts;
 };
 
 #endif // TFSESSION_H

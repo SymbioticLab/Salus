@@ -57,7 +57,8 @@ message TFRendezRecvRequests {
 }
 
 message TFRendezRecvResponse {
-    repeated TFRendezItem items = 1;
+    uint64 forSeq = 1;
+    repeated TFRendezItem items = 2;
 }
 
 message TFTensors {

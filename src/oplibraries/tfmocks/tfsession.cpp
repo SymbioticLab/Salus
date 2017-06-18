@@ -152,11 +152,6 @@ void TFSession::tensorMetaToProto(tensorflow::TensorProto *proto, const tensorfl
     proto->add_int64_val(addr_handle);
 }
 
-TFRendezvous &TFSession::rendezvous()
-{
-    return m_rendez;
-}
-
 tensorflow::OpKernel *TFSession::findOrCreateKernel(const tensorflow::NodeDef &ndef)
 {
     tensorflow::OpKernel *kernel = nullptr;
@@ -192,9 +187,11 @@ tensorflow::OpKernel *TFSession::findOrCreateKernel(const tensorflow::NodeDef &n
     return kernel;
 }
 
-TFContext::TFContext(TFSession *sess)
+TFContext::TFContext(TFSession *sess, uint64_t taskId)
     : step_container(0, [](const std::string&) {})
     , rendez(sess)
+    , m_taskId(taskId)
+    , m_sess(sess)
 {
 }
 
@@ -202,6 +199,7 @@ TFContext::~TFContext() {
     for (auto t : inputs) {
         delete t.tensor;
     }
+    m_sess->contextDestroied(m_taskId);
 }
 
 tensorflow::OpKernelContext *TFContext::ctx()
@@ -248,10 +246,30 @@ inline void TFContext::FillInputDeviceContext()
     params.input_device_contexts = &input_device_contexts;
 }
 
-std::unique_ptr<TFContext> TFSession::createContext(const executor::TFOpContextDef &tfdef,
-                                                    tensorflow::OpKernel *opkernel)
+TFContext *TFSession::findContext(uint64_t taskId)
 {
-    auto tfctx = std::make_unique<TFContext>(this);
+    tensorflow::mutex_lock locker(m_muctx);
+    auto it = m_contexts.find(taskId);
+    if (it != m_contexts.end()) {
+        return it->second;
+    }
+    return nullptr;
+}
+
+void TFSession::contextDestroied(uint64_t taskId)
+{
+    tensorflow::mutex_lock locker(m_muctx);
+    m_contexts.erase(taskId);
+}
+
+std::unique_ptr<TFContext> TFSession::createContext(const executor::TFOpContextDef &tfdef,
+                                                    tensorflow::OpKernel *opkernel, uint64_t taskId)
+{
+    auto tfctx = std::make_unique<TFContext>(this, taskId);
+    {
+        tensorflow::mutex_lock locker(m_muctx);
+        m_contexts[taskId] = tfctx.get();
+    }
 
     tfctx->params.device = m_device.get();
     tfctx->params.op_kernel = opkernel;
@@ -259,7 +277,7 @@ std::unique_ptr<TFContext> TFSession::createContext(const executor::TFOpContextD
     tfctx->params.slice_reader_cache = &tfctx->slice_reader_cache_wrapper;
     tfctx->params.resource_manager = m_device->resource_manager();
     tfctx->params.function_library = m_fruntime.get();
-    tfctx->params.rendezvous = &m_rendez;
+    tfctx->params.rendezvous = &tfctx->rendez;
 
     tfctx->params.step_id = tfdef.step_id();
     tfctx->params.frame_iter = tensorflow::FrameAndIter(tfdef.frame_id(), tfdef.iter_id());

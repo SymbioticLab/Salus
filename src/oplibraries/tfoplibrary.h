@@ -105,6 +105,8 @@ private:
     tensorflow::OpKernel *m_opkernel;
     std::shared_ptr<TFContext> m_context;
     bool m_async;
+
+    uint64_t m_id;
 };
 
 class TFFetchTask : public ITask

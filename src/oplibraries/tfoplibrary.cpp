@@ -151,6 +151,7 @@ TFRunTask::TFRunTask(TFSession *sess, ZmqServer::Sender &&sender, unique_ptr<Nod
     , m_ndef(std::move(nodedef))
     , m_tfctxdef(std::move(tfctxdef))
     , m_async(async)
+    , m_id(m_sender->sequenceNumber())
 {
 }
 
@@ -177,7 +178,7 @@ bool TFRunTask::prepare(DeviceType dev)
     INFO("Created OpKernel");
     dumpOpKernel(m_opkernel);
 
-    m_context = m_session->createContext(*m_tfctxdef, m_opkernel);
+    m_context = m_session->createContext(*m_tfctxdef, m_opkernel, m_id);
     if (!m_context) {
         return false;
     }
@@ -218,7 +219,7 @@ ProtoPtr TFRunTask::run()
     // process tensor received by rendezvous
     // Note that rendezvous already registered these tensors to m_session
     // And this will clear tensors table in rendezvous
-    for (auto &elem : m_session->rendezvous().releasePendingSentTensors()) {
+    for (auto &elem : m_context->rendez.releasePendingSentTensors()) {
         auto item = tfctxupd.add_rendeztensors();
         item->set_key(elem.first);
         item->set_allocattributes(elem.second.args.alloc_attrs.value);
@@ -421,6 +422,10 @@ ProtoPtr TFPushTask::run()
 
     for (int i = 0; i != m_tensors->tensors_size(); ++i) {
         auto t = m_session->findTensorFromProtoMeta(m_tensors->tensors(i));
+        if (!t) {
+            ERR("Skipped one proto meta due to not found tensor");
+            continue;
+        }
 
         auto &dataproto = m_tensors->data(i);
         if (!m_session->isCompatible(*t, dataproto)) {
@@ -444,10 +449,10 @@ PTask TFOpLibrary::createCustomTask(ZmqServer::Sender sender, const executor::Cu
     // for generic lambda. See https://gcc.gnu.org/bugzilla/show_bug.cgi?id=61636
     using Method = std::function<PTask(ZmqServer::Sender, const executor::CustomRequest &)>;
     static std::unordered_map<std::string, Method> funcs{
-        {"executor.TFPushTask", [this](auto sender, const auto &req) {
+        {"executor.TFPushRequest", [this](auto sender, const auto &req) {
             return this->createPushTask(std::move(sender), req);
         }},
-        {"executor.TFFetchTask", [this](auto sender, const auto &req) {
+        {"executor.TFFetchRequest", [this](auto sender, const auto &req) {
             return this->createFetchTask(std::move(sender), req);
         }},
         {"executor.TFRendezRecvResponse", [this](auto sender, const auto &req) {
@@ -455,9 +460,13 @@ PTask TFOpLibrary::createCustomTask(ZmqServer::Sender sender, const executor::Cu
         }},
     };
 
-    assert(funcs.count(req.type()) == 1);
+    auto it = funcs.find(req.type());
+    if (it == funcs.end()) {
+        ERR("{} not found in registered custom tasks", req.type());
+        return nullptr;
+    }
 
-    return funcs[req.type()](std::move(sender), req);
+    return it->second(std::move(sender), req);
 }
 
 class TFRendezRecvTask : public ITask
@@ -472,15 +481,20 @@ public:
 
     ProtoPtr run() override
     {
+        auto tfctx = m_session->findContext(m_recv->forseq());
+        if (!tfctx) {
+            ERR("Context for given seq {} not found", m_recv->forseq());
+            return {};
+        }
         for (int i = 0; i != m_recv->items_size(); ++i) {
             auto item = m_recv->items(i);
 
             tensorflow::Rendezvous::ParsedKey parsed;
             auto ok = tensorflow::Rendezvous::ParseKey(item.key(), &parsed);
-            ok.Update(m_session->rendezvous().Send(parsed,
-                                                   tensorflow::Rendezvous::Args(),
-                                                   *m_session->createAndRegister(item.val()),
-                                                   item.isdead()));
+            ok.Update(tfctx->rendez.Send(parsed,
+                                         tensorflow::Rendezvous::Args(),
+                                         *m_session->createAndRegister(item.val()),
+                                         item.isdead()));
         }
         return {};
     }
