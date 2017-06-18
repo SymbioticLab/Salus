@@ -29,6 +29,41 @@
 
 #include <zmq.hpp>
 
+namespace {
+// Parse log level (int64) from environment variable (char*)
+uint64_t logLevelStrToIntOr(const char* env_var_val, uint64_t val) {
+    if (env_var_val == nullptr) {
+        return val;
+    }
+
+    // Ideally we would use env_var / safe_strto64, but it is
+    // hard to use here without pulling in a lot of dependencies,
+    // so we use std:istringstream instead
+    std::string levelstr(env_var_val);
+    std::istringstream ss(levelstr);
+    uint64_t level;
+    if (!(ss >> level)) {
+        // Invalid vlog level setting, set level to default (0)
+        level = val;
+    }
+
+    return level;
+}
+
+uint64_t maxBytesDumpLenFromEnv()
+{
+    const char* env_var_val = std::getenv("EXEC_MAX_BYTES_DUMP_LEN");
+    return logLevelStrToIntOr(env_var_val, 20);
+}
+
+uint64_t maxBytesDumpLen()
+{
+    static uint64_t len = maxBytesDumpLenFromEnv();
+    return len;
+}
+
+} // namespace
+
 logging::LoggerWrapper::LoggerWrapper()
 {
     spdlog::set_async_mode(8192);
@@ -80,7 +115,8 @@ std::ostream &operator<<(std::ostream &os, const executor::EvenlopDef &c)
 std::ostream &operator<<(std::ostream &os, const zmq::message_t &c)
 {
     return os << "zmq::message_t(len=" << c.size()
-              << ", data='" << utils::bytesToHexString(c.data<uint8_t>(), c.size()) << "')";
+              << ", data='"
+              << utils::bytesToHexString(c.data<uint8_t>(), c.size(), maxBytesDumpLen()) << "')";
 }
 
 std::ostream &operator<<(std::ostream &os, const zmq::error_t &c)

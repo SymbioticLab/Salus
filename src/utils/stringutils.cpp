@@ -39,12 +39,12 @@ std::string utils::bytesToHexString(const uint8_t *info, size_t infoLength, size
         result[2 * i + 1] = pszNibbleToHex[nNibble];
     }
 
-    if (result.size() > maxLen) {
+    if (maxLen > 0 && result.size() > maxLen) {
         if (maxLen <= ellipsesLen + 2) {
             result.erase(maxLen);
         } else {
             auto leading = (maxLen - ellipsesLen) / 2;
-            auto ommitted = result.size() - leading - (maxLen - ellipsesLen);
+            auto ommitted = result.size() - (maxLen - ellipsesLen);
             result.replace(leading, ommitted, ellipses);
         }
     }
