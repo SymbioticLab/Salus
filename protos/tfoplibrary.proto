@@ -28,15 +28,13 @@ message TFOpContextDef {
     // CallFrame
 // Inputs
     bool is_input_dead = 4;
-    repeated tensorflow.TensorProto inputs = 5;
-    // Input DeviceContext
-    // Input AllocatorAttributes
+    repeated TFTensorItem inputs = 5;
 }
 
 message TFOpContextUpdate {
 // Outputs
     bool is_output_dead = 1;
-    repeated tensorflow.TensorProto outputs = 2;
+    repeated TFTensorItem outputs = 2;
     repeated TFRendezItem rendezTensors = 3;
     // Output AllocatorAttributes
 
@@ -61,11 +59,8 @@ message TFRendezRecvResponse {
     repeated TFRendezItem items = 2;
 }
 
-message TFTensors {
-    repeated tensorflow.TensorProto tensors = 1;
-}
-
-message TFPushRequest {
-    repeated tensorflow.TensorProto data = 1;
-    repeated tensorflow.TensorProto tensors = 2;
+message TFTensorItem {
+    bool is_ref = 1;
+    string name = 2;
+    tensorflow.TensorProto meta = 3;
 }

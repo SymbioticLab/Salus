@@ -40,7 +40,7 @@ std::string TFAllocator::Name()
 
 bool TFAllocator::ShouldAllocateEmptyTensors()
 {
-    return true;
+    return false;
 }
 
 void *TFAllocator::AllocateRaw(size_t alignment, size_t num_bytes)

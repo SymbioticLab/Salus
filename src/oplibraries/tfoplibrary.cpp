@@ -35,6 +35,7 @@
 #include <tensorflow/core/framework/function.pb.h>
 #include <tensorflow/core/protobuf/config.pb.h>
 #include <tensorflow/core/platform/mutex.h>
+#include <tensorflow/core/lib/strings/strcat.h>
 
 #include <thread>
 #include <functional>
@@ -203,20 +204,26 @@ void TFRunTask::populateUpdate(rpc::TFOpContextUpdate &tfctxupd, TFContext *pCon
         item->set_key(elem.first);
         item->set_allocattributes(elem.second.args.alloc_attrs.value);
         item->set_isdead(elem.second.isDead);
-        elem.second.val.AsProtoTensorContent(item->mutable_val());
-//         pSession->tensorMetaToProto(item->mutable_val(), &elem.second.val);
+        pSession->tensorToProtoData(item->mutable_val(), &elem.second.val);
     }
 
     // process tensor set as outputs
     for (int i = 0; i != context->num_outputs(); i++) {
-        auto out = context->release_output(i);
-        auto outdef = tfctxupd.add_outputs();
+        auto output_name = pContext->ctx()->op_kernel().name();
+        if (i != 0) {
+            tensorflow::strings::StrAppend(&output_name, ":", i);
+        }
+        INFO("Processing output: {}", output_name);
 
-        // FIXME: handle unallocated ref tensor
-        pSession->tensorMetaToProto(outdef, out);
+        auto out = context->release_output(i);
         // Let the session manage the tensor memory
         // The session takes the ownership of tensor in non-ref case
-        pSession->registerTensorMemory(out);
+        pSession->registerTensorForName(output_name, out);
+
+        auto outitem = tfctxupd.add_outputs();
+        outitem->set_name(output_name);
+        outitem->set_is_ref(out.is_ref());
+        pSession->tensorToProtoMeta(outitem->mutable_meta(), out);
     }
 }
 
@@ -338,7 +345,7 @@ public:
 
             tensorflow::Rendezvous::ParsedKey parsed;
             auto ok = tensorflow::Rendezvous::ParseKey(item.key(), &parsed);
-            auto t = m_session->createFromProto(item.val());
+            auto t = m_session->tensorFromProtoData(item.val());
             if (!t) {
                 ERR("Failed to create tensor for rendezrecv");
                 return {};

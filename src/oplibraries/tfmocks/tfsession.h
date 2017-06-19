@@ -120,23 +120,19 @@ public:
     TFContext *findContext(uint64_t taskId);
 
     // Tensor memory management
-    void registerTensorMemory(const tensorflow::Tensor &tensor);
-    void registerTensorMemory(TensorValue tensorval);
-    TensorValue findTensorFromProtoMeta(const tensorflow::TensorProto &proto);
+    bool findTensorFromName(const std::string &name, TensorValue &val);
+    void registerTensorForName(const std::string &name, TensorValue val);
     /**
      * Create a tensor from proto, allocate and fill in memory,
      */
-    std::unique_ptr<tensorflow::Tensor> createFromProto(const tensorflow::TensorProto &proto);
+    std::unique_ptr<tensorflow::Tensor> tensorFromProtoData(const tensorflow::TensorProto &proto);
 
-    void tensorMetaToProto(tensorflow::TensorProto *proto, TensorValue tensorval);
+    void tensorToProtoMeta(tensorflow::TensorProto *meta, TensorValue val);
+    void tensorToProtoData(tensorflow::TensorProto *data, TensorValue val);
 
     bool isCompatible(const tensorflow::Tensor &tensor, const tensorflow::TensorProto &proto) const;
 
-
 private:
-    TensorValue *tensorFromAddrHandle(uint64_t addr_handle);
-    void registerTensorMemoryLocked(tensorflow::Tensor *tensor, tensorflow::mutex *mu = nullptr);
-
     friend class TFContext;
     void contextDestroied(uint64_t taskId);
 
@@ -157,7 +153,7 @@ private:
     tensorflow::Rendezvous *m_rendez;
 
     tensorflow::mutex m_mu;
-    std::unordered_map<uint64_t, TensorValue> m_tensors;
+    std::unordered_map<std::string, TensorValue> m_tensors;
 
     tensorflow::mutex m_muctx;
     std::unordered_map<uint64_t, TFContext*> m_contexts;

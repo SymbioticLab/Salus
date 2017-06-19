@@ -65,21 +65,7 @@ TFSession::~TFSession()
     m_rendez->Unref();
 }
 
-void TFSession::registerTensorMemory(const tensorflow::Tensor &tensor)
-{
-    registerTensorMemory(new tensorflow::Tensor(tensor));
-}
-
-void TFSession::registerTensorMemory(TensorValue tensorval)
-{
-    if (tensorval->IsInitialized() && tensorval->shape().num_elements() > 0) {
-        registerTensorMemoryLocked(tensorval.tensor, tensorval.mutex_if_ref);
-    } else {
-        INFO("Skipped registering tensor that is not allocated.");
-    }
-}
-
-std::unique_ptr<tensorflow::Tensor> TFSession::createFromProto(const tensorflow::TensorProto &proto)
+std::unique_ptr<tensorflow::Tensor> TFSession::tensorFromProtoData(const tensorflow::TensorProto &proto)
 {
     if (!m_device) {
         ERR("m_device should not be nullptr for TFSession");
@@ -96,66 +82,32 @@ std::unique_ptr<tensorflow::Tensor> TFSession::createFromProto(const tensorflow:
     return tensor;
 }
 
-void TFSession::registerTensorMemoryLocked(tensorflow::Tensor *tensor, tensorflow::mutex *mu)
+bool TFSession::findTensorFromName(const std::string &name, TensorValue &val)
 {
-    if (!tensor) {
-        ERR("Got nullptr in registerTensorMemoryLocked");
-        return;
-    }
-    auto addr_handle = reinterpret_cast<uint64_t>(tensor->tensor_data().data());
-    INFO("Registering tensor: {}, is ref: {} at address: {:x}",
-         tensor->DebugString(), mu != nullptr, addr_handle);
     tensorflow::mutex_lock locker(m_mu);
-    auto it = m_tensors.find(addr_handle);
+    auto it = m_tensors.find(name);
     if (it == m_tensors.end()) {
-        m_tensors.emplace(addr_handle, TensorValue{mu, tensor});
+        ERR("Tensor not found under name: {}", name);
+        return false;
+    }
+    val = it->second;
+    return true;
+}
+
+void TFSession::registerTensorForName(const std::string &name, TensorValue val)
+{
+    INFO("Registering tensor: {}, is ref: {} under name: {}",
+         val->DebugString(), val.is_ref(), name);
+    tensorflow::mutex_lock locker(m_mu);
+    auto it = m_tensors.find(name);
+    if (it == m_tensors.end()) {
+        m_tensors.emplace(name, val);
     } else {
-        if (it->second.mutex_if_ref != mu) {
+        if (it->second.mutex_if_ref != val.mutex_if_ref) {
             WARN("The tensor going to be registered already exists, and is under a different mutex");
         }
-        it->second.tensor = tensor;
-        it->second.mutex_if_ref = mu;
+        it->second = val;
     }
-}
-
-TensorValue *TFSession::tensorFromAddrHandle(uint64_t addr_handle)
-{
-    tensorflow::mutex_lock locker(m_mu);
-    if (m_tensors.count(addr_handle) <= 0) {
-        ERR("Tensor at addr {:x} not found", addr_handle);
-        return {};
-    }
-    return &m_tensors.at(addr_handle);
-}
-
-TensorValue TFSession::findTensorFromProtoMeta(const tensorflow::TensorProto &proto)
-{
-    auto isRef = tensorflow::IsRefType(proto.dtype());
-    if (proto.int64_val_size() == 0) {
-        ERR("Proto meta must be initialized for findTensorFromProtoMeta");
-        return {};
-    }
-
-    auto addr = proto.int64_val(0);
-    auto tensorval = tensorFromAddrHandle(addr);
-    if (!tensorval) {
-        ERR("Requested tensor not found at addr {:x}", addr);
-        return {};
-    }
-
-    // NOTE: for tensorval that is the root of ref, is_ref() still returns true, but
-    // it may be requested using a non-ref meta proto
-    if (isRef) {
-        if (!tensorval->is_ref()) {
-            ERR("Tensor is ref type but no mutex provided when registration");
-            return {};
-        }
-    }
-
-    if (!isCompatible(*tensorval->tensor, proto)) {
-        return {};
-    }
-    return *tensorval;
 }
 
 bool TFSession::isCompatible(const tensorflow::Tensor &tensor, const tensorflow::TensorProto &proto) const
@@ -175,21 +127,25 @@ bool TFSession::isCompatible(const tensorflow::Tensor &tensor, const tensorflow:
     return true;
 }
 
-void TFSession::tensorMetaToProto(tensorflow::TensorProto *proto, TensorValue tensorval)
+void TFSession::tensorToProtoMeta(tensorflow::TensorProto *meta, TensorValue val)
 {
-    if (tensorval.is_ref()) {
-        proto->set_dtype(tensorflow::MakeRefType(tensorval->dtype()));
-    } else {
-        proto->set_dtype(tensorval->dtype());
+    meta->set_dtype(val->dtype());
+
+    MaybeLock locker(val);
+    val->shape().AsProto(meta->mutable_tensor_shape());
+
+    if (val->IsInitialized() && val->shape().num_elements() > 0) {
+        auto addr_handle = reinterpret_cast<uint64_t>(val->tensor_data().data());
+        // HACK: use a int64 val entry to store the addr handle for simplicity,
+        // idealy should store this in tensor_content with proper encoding.
+        meta->add_int64_val(addr_handle);
     }
+}
 
-    MaybeLock locker(tensorval);
-    tensorval->shape().AsProto(proto->mutable_tensor_shape());
-
-    auto addr_handle = reinterpret_cast<uint64_t>(tensorval->tensor_data().data());
-    // HACK: use a int64 val entry to store the addr handle for simplicity,
-    // idealy should store this in tensor_content with proper encoding.
-    proto->add_int64_val(addr_handle);
+void TFSession::tensorToProtoData(tensorflow::TensorProto *data, TensorValue val)
+{
+    MaybeLock locker(val);
+    val->AsProtoTensorContent(data);
 }
 
 tensorflow::OpKernel *TFSession::findOrCreateKernel(const tensorflow::NodeDef &ndef)
@@ -334,10 +290,19 @@ std::unique_ptr<TFContext> TFSession::createContext(const executor::TFOpContextD
         return {};
     }
     tfctx->inputs.reserve(num_inputs);
-    for (const auto &inpdef : tfdef.inputs()) {
-        auto input = findTensorFromProtoMeta(inpdef);
-        if (!input.tensor) {
+    for (int i = 0; i != tfdef.inputs_size(); ++i) {
+        const auto &initem = tfdef.inputs(i);
+        if (initem.name() != opkernel->def().input(i)) {
+            ERR("Mismatch input: {}, expected: {}", initem.name(), opkernel->def().input(i));
+            return {};
+        }
+        TensorValue input;
+        if (!findTensorFromName(initem.name(), input)) {
             ERR("Input not found");
+            return {};
+        }
+        if (initem.is_ref() && !input.is_ref()) {
+            ERR("{}-th input expects a ref type", i);
             return {};
         }
         tfctx->inputs.push_back(input);
