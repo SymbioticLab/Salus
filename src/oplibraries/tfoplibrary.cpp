@@ -189,6 +189,36 @@ bool TFRunTask::prepare(DeviceType dev)
     return true;
 }
 
+void TFRunTask::populateUpdate(rpc::TFOpContextUpdate &tfctxupd, TFContext *pContext, TFSession *pSession)
+{
+    auto context = pContext->ctx();
+    tfctxupd.set_status_code(context->status().code());
+    tfctxupd.set_status_msg(context->status().error_message());
+    tfctxupd.set_is_output_dead(*context->is_output_dead());
+
+    // process tensor received by rendezvous
+    // Note that rendezvous already registered these tensors to m_session
+    // And this will clear tensors table in rendezvous
+    for (auto &elem : pContext->rendez.releasePendingSentTensors()) {
+        auto item = tfctxupd.add_rendeztensors();
+        item->set_key(elem.first);
+        item->set_allocattributes(elem.second.args.alloc_attrs.value);
+        item->set_isdead(elem.second.isDead);
+        pSession->tensorMetaToProto(item->mutable_val(), &elem.second.val);
+    }
+
+    // process tensor set as outputs
+    for (int i = 0; i != context->num_outputs(); i++) {
+        auto out = context->release_output(i);
+        auto outdef = tfctxupd.add_outputs();
+
+        pSession->tensorMetaToProto(outdef, out);
+        // Let the session manage the tensor memory
+        // The session takes the ownership of tensor in non-ref case
+        pSession->registerTensorMemory(out);
+    }
+}
+
 ProtoPtr TFRunTask::run()
 {
     INFO("running in thread {}", std::this_thread::get_id());
@@ -209,38 +239,10 @@ ProtoPtr TFRunTask::run()
 
     INFO("OpKernel->Compute finished with status {}", m_context->ctx()->status());
 
-    auto ctxdef = resp->mutable_context();
-
-    auto context = m_context->ctx();
     rpc::TFOpContextUpdate tfctxupd;
-    tfctxupd.set_status_code(context->status().code());
-    tfctxupd.set_status_msg(context->status().error_message());
-    tfctxupd.set_is_output_dead(*context->is_output_dead());
-
-    // process tensor received by rendezvous
-    // Note that rendezvous already registered these tensors to m_session
-    // And this will clear tensors table in rendezvous
-    for (auto &elem : m_context->rendez.releasePendingSentTensors()) {
-        auto item = tfctxupd.add_rendeztensors();
-        item->set_key(elem.first);
-        item->set_allocattributes(elem.second.args.alloc_attrs.value);
-        item->set_isdead(elem.second.isDead);
-        m_session->tensorMetaToProto(item->mutable_val(), &elem.second.val);
-    }
-
-    // process tensor set as outputs
-    for (int i = 0; i != context->num_outputs(); i++) {
-        auto out = context->release_output(i);
-        auto outdef = tfctxupd.add_outputs();
-
-        m_session->tensorMetaToProto(outdef, out);
-        // Let the session manage the tensor memory
-        // The session takes the ownership of tensor in non-ref case
-        m_session->registerTensorMemory(out);
-    }
-
+    populateUpdate(tfctxupd, m_context.get(), m_session);
     // write update to ctxdef
-    tfctxupd.SerializeToString(ctxdef->mutable_extra());
+    tfctxupd.SerializeToString(resp->mutable_context()->mutable_extra());
 
     return resp;
 }
@@ -267,39 +269,10 @@ void TFRunTask::runAsync(DoneCallback cb)
         INFO("OpKernel->ComputeAsync finished with status {}", pContext->ctx()->status());
 
         auto resp = std::make_unique<executor::RunResponse>();
-        auto ctxdef = resp->mutable_context();
-
-        auto context = pContext->ctx();
         rpc::TFOpContextUpdate tfctxupd;
-        tfctxupd.set_status_code(context->status().code());
-        tfctxupd.set_status_msg(context->status().error_message());
-        tfctxupd.set_is_output_dead(*context->is_output_dead());
-
-        // process tensor received by rendezvous
-        // Note that rendezvous already registered these tensors to m_session
-        // And this will clear tensors table in rendezvous
-        for (auto &elem : pContext->rendez.releasePendingSentTensors()) {
-            auto item = tfctxupd.add_rendeztensors();
-            item->set_key(elem.first);
-            item->set_allocattributes(elem.second.args.alloc_attrs.value);
-            item->set_isdead(elem.second.isDead);
-            pSession->tensorMetaToProto(item->mutable_val(), &elem.second.val);
-        }
-
-        // process tensor set as outputs
-        for (int i = 0; i != context->num_outputs(); i++) {
-            auto out = context->release_output(i);
-            auto outdef = tfctxupd.add_outputs();
-
-            pSession->tensorMetaToProto(outdef, out);
-            // Let the session manage the tensor memory
-            // The session takes the ownership of tensor in non-ref case
-            pSession->registerTensorMemory(out);
-        }
-
+        populateUpdate(tfctxupd, pContext.get(), pSession);
         // write update to ctxdef
-        tfctxupd.SerializeToString(ctxdef->mutable_extra());
-
+        tfctxupd.SerializeToString(resp->mutable_context()->mutable_extra());
         done(std::move(resp));
     };
 
@@ -420,7 +393,9 @@ ProtoPtr TFPushTask::run()
         }
         MaybeLock locker(tensorval);
         INFO("Filled a tensor: {}", tensorval->DebugString());
-        m_session->tensorMetaToProto(metas.add_tensors(), tensorval);
+        auto tmeta = metas.add_tensors();
+        m_session->tensorMetaToProto(tmeta, tensorval);
+        INFO("Tensor serialized to meta: {}", tmeta->DebugString());
     }
 
     return resp;

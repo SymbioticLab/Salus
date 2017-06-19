@@ -95,6 +95,8 @@ public:
     bool prepare(DeviceType dev) override;
 
 private:
+    static void populateUpdate(executor::TFOpContextUpdate &tfctxupd, TFContext *pContext, TFSession *pSession);
+
     TFSession *m_session;
 
     ZmqServer::Sender m_sender;
