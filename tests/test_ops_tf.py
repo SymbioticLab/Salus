@@ -13,7 +13,9 @@ class TestBasicOps(unittest.TestCase):
         with tf.device('/device:CPU:0'):
             b = tf.Variable(tf.zeros([200]))
 
-        with tf.Session() as sess:
+        config = tf.ConfigProto()
+        config.graph_options.optimizer_options.do_constant_folding = False
+        with tf.Session(config=config) as sess:
             sess.run(tf.global_variables_initializer())
             npt.assert_array_equal(sess.run(a), sess.run(b))
 
@@ -21,14 +23,19 @@ class TestBasicOps(unittest.TestCase):
         tf.set_random_seed(233)
         with tf.device('/device:RPC:0'):
             a = tf.random_normal([20, 20])
-        with tf.Session() as sess:
+
+        config = tf.ConfigProto()
+        config.graph_options.optimizer_options.do_constant_folding = False
+        with tf.Session(config=config) as sess:
             actual = sess.run(a)
 
         tf.reset_default_graph()
         tf.set_random_seed(233)
         with tf.device('/device:CPU:0'):
             b = tf.random_normal([20, 20])
-        with tf.Session() as sess:
+        config = tf.ConfigProto()
+        config.graph_options.optimizer_options.do_constant_folding = False
+        with tf.Session(config=config) as sess:
             expected = sess.run(b)
 
         npt.assert_array_equal(actual, expected)
@@ -37,7 +44,9 @@ class TestBasicOps(unittest.TestCase):
         with tf.device('/device:RPC:0'):
             a = tf.no_op(name='mynoop')
 
-        with tf.Session() as sess:
+        config = tf.ConfigProto()
+        config.graph_options.optimizer_options.do_constant_folding = False
+        with tf.Session(config=config) as sess:
             try:
                 sess.run(a)
             except:
@@ -58,7 +67,9 @@ class TestBasicOps(unittest.TestCase):
             d = tf.multiply(a, b, name='mul_first')
             expected = tf.multiply(c, d, name='mul_second')
 
-        with tf.Session() as sess:
+        config = tf.ConfigProto()
+        config.graph_options.optimizer_options.do_constant_folding = False
+        with tf.Session(config=config) as sess:
             npt.assert_array_equal(sess.run(actual), sess.run(expected))
 
     def test_matmul(self):
@@ -69,7 +80,9 @@ class TestBasicOps(unittest.TestCase):
         with tf.device('/device:CPU:0'):
             expected = tf.matmul(m1, m2)
 
-        with tf.Session() as sess:
+        config = tf.ConfigProto()
+        config.graph_options.optimizer_options.do_constant_folding = False
+        with tf.Session(config=config) as sess:
             npt.assert_array_equal(sess.run(actual), sess.run(expected))
 
     def test_conv2d(self):
@@ -82,7 +95,9 @@ class TestBasicOps(unittest.TestCase):
             filter = tf.constant([1, 4, 7, 2, 5, 8, 3, 6, 9], shape=(3, 3, 1, 1), dtype=tf.float32)
             expected = tf.nn.conv2d(image, filter, [1, 1, 1, 1], 'SAME')
 
-        with tf.Session() as sess:
+        config = tf.ConfigProto()
+        config.graph_options.optimizer_options.do_constant_folding = False
+        with tf.Session(config=config) as sess:
             npt.assert_array_equal(sess.run(actual), sess.run(expected))
 
 
