@@ -192,9 +192,6 @@ TFContext::TFContext(TFSession *sess, uint64_t taskId)
 }
 
 TFContext::~TFContext() {
-    for (auto t : inputs) {
-        delete t.tensor;
-    }
     m_sess->contextDestroied(m_taskId);
 }
 
