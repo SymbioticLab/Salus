@@ -68,8 +68,6 @@ tensorflow::Status TFRendezvous::Send(const ParsedKey &parsed, const Args &send_
 {
     INFO("TFRendezvous::Send {}", parsed.FullKey().ToString());
 
-    m_sess->registerTensorMemory(val);
-
     if (!isSameDevice(parsed.src, parsed.dst)) {
         auto key = parsed.FullKey().ToString();
         auto it = m_tensors.end();

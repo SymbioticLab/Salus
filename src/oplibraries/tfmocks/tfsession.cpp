@@ -79,22 +79,20 @@ void TFSession::registerTensorMemory(TensorValue tensorval)
     }
 }
 
-tensorflow::Tensor *TFSession::createAndRegister(const tensorflow::TensorProto &proto)
+std::unique_ptr<tensorflow::Tensor> TFSession::createFromProto(const tensorflow::TensorProto &proto)
 {
     if (!m_device) {
         ERR("m_device should not be nullptr for TFSession");
         return nullptr;
     }
 
-    auto tensor = new tensorflow::Tensor;
+    auto tensor = std::make_unique<tensorflow::Tensor>();
 
-    auto status = m_device->MakeTensorFromProto(proto, {}, tensor);
+    auto status = m_device->MakeTensorFromProto(proto, {}, tensor.get());
     if (!status.ok()) {
         ERR("Error when create tensor");
-        return nullptr;
+        tensor.reset();
     }
-
-    registerTensorMemoryLocked(tensor);
     return tensor;
 }
 
@@ -158,43 +156,6 @@ TensorValue TFSession::findTensorFromProtoMeta(const tensorflow::TensorProto &pr
         return {};
     }
     return *tensorval;
-}
-
-TensorValue TFSession::fillTensor(const tensorflow::TensorProto &meta, const tensorflow::TensorProto &data)
-{
-    if (meta.int64_val_size() == 0) {
-        INFO("Found uninitialized proto meta");
-        tensorflow::Tensor *t = nullptr;
-        if (data.ByteSizeLong() > 0) {
-            INFO("data is not empty, create and register");
-            t = createAndRegister(data);
-            if (!t) {
-                return t;
-            }
-            if (!isCompatible(*t, meta)) {
-                ERR("Supplied data is not compatible with meta: {}", meta.DebugString());
-            }
-        } else {
-            INFO("data is empty, unallocated tensor found, create new tensorvalue using meta data");
-            t = createAndRegister(meta);
-        }
-        return t;
-    }
-    auto t = findTensorFromProtoMeta(meta);
-    if (!t.tensor) {
-        return {};
-    }
-
-    MaybeLock locker(t);
-    if (!isCompatible(*t.tensor, data)) {
-        ERR("Tensor not compatible with pushed data tensor proto");
-        return {};
-    }
-    if (!m_device->MakeTensorFromProto(data, {}, t.tensor).ok()) {
-        ERR("Malformated tensor proto");
-        return {};
-    }
-    return t;
 }
 
 bool TFSession::isCompatible(const tensorflow::Tensor &tensor, const tensorflow::TensorProto &proto) const

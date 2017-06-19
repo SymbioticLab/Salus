@@ -124,17 +124,9 @@ public:
     void registerTensorMemory(TensorValue tensorval);
     TensorValue findTensorFromProtoMeta(const tensorflow::TensorProto &proto);
     /**
-     * Find registered tensor from meta, if meta is uninitialized, new tensor will be created & registered.
-     * The found tensor will be filled with data, and returned.
-     * Return nullptr if meta is initialized but the addr is not found or not compatible with data.
+     * Create a tensor from proto, allocate and fill in memory,
      */
-    TensorValue fillTensor(const tensorflow::TensorProto &meta, const tensorflow::TensorProto &data);
-
-    /**
-     * Convinence method that combines create a tensor from proto, allocate and fill in memory,
-     * and finally register
-     */
-    tensorflow::Tensor *createAndRegister(const tensorflow::TensorProto &proto);
+    std::unique_ptr<tensorflow::Tensor> createFromProto(const tensorflow::TensorProto &proto);
 
     void tensorMetaToProto(tensorflow::TensorProto *proto, TensorValue tensorval);
 

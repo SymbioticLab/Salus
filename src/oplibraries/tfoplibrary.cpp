@@ -197,14 +197,14 @@ void TFRunTask::populateUpdate(rpc::TFOpContextUpdate &tfctxupd, TFContext *pCon
     tfctxupd.set_is_output_dead(*context->is_output_dead());
 
     // process tensor received by rendezvous
-    // Note that rendezvous already registered these tensors to m_session
     // And this will clear tensors table in rendezvous
     for (auto &elem : pContext->rendez.releasePendingSentTensors()) {
         auto item = tfctxupd.add_rendeztensors();
         item->set_key(elem.first);
         item->set_allocattributes(elem.second.args.alloc_attrs.value);
         item->set_isdead(elem.second.isDead);
-        pSession->tensorMetaToProto(item->mutable_val(), &elem.second.val);
+        elem.second.val.AsProtoTensorContent(item->mutable_val());
+//         pSession->tensorMetaToProto(item->mutable_val(), &elem.second.val);
     }
 
     // process tensor set as outputs
@@ -212,6 +212,7 @@ void TFRunTask::populateUpdate(rpc::TFOpContextUpdate &tfctxupd, TFContext *pCon
         auto out = context->release_output(i);
         auto outdef = tfctxupd.add_outputs();
 
+        // FIXME: handle unallocated ref tensor
         pSession->tensorMetaToProto(outdef, out);
         // Let the session manage the tensor memory
         // The session takes the ownership of tensor in non-ref case
@@ -295,126 +296,12 @@ void TFRunTask::runAsync(DoneCallback cb)
 
 TFRunTask::~TFRunTask() = default;
 
-PTask TFOpLibrary::createFetchTask(ZmqServer::Sender sender, const executor::CustomRequest &fetch)
-{
-    UNUSED(sender);
-
-    auto tftensors = utils::createMessage<executor::TFTensors>("executor.TFTensors",
-                                                               fetch.extra().data(),
-                                                               fetch.extra().size());
-    if (!tftensors) {
-        return {};
-    }
-
-    // TODO: compute session id
-    std::string session_id = "session_id";
-    auto sess = getSession(session_id);
-    if (!sess) {
-        ERR("Fetch request received before any run request");
-        return {};
-    }
-    return std::make_unique<TFFetchTask>(sess, std::move(tftensors));
-}
-
-TFFetchTask::TFFetchTask(TFSession* session, std::unique_ptr<executor::TFTensors> && tensors)
-    : m_tensorMetas(std::move(tensors))
-    , m_session(session)
-{
-}
-
-ProtoPtr TFFetchTask::run()
-{
-    auto resp = std::make_unique<executor::CustomResponse>();
-
-    executor::TFTensors full_tensors;
-    for (auto &proto : m_tensorMetas->tensors()) {
-        auto tensorval = m_session->findTensorFromProtoMeta(proto);
-        if (!tensorval.tensor) {
-            ERR("Requested tensor not found in this session: {}", proto.DebugString());
-            resp->mutable_result()->set_code(-1);
-            return resp;
-        }
-        MaybeLock locker(tensorval);
-        INFO("Found a tensor: {}", tensorval->DebugString());
-        tensorval->AsProtoTensorContent(full_tensors.add_tensors());
-    }
-    full_tensors.SerializeToString(resp->mutable_extra());
-
-    return resp;
-}
-
-TFFetchTask::~TFFetchTask() = default;
-
-PTask TFOpLibrary::createPushTask(ZmqServer::Sender sender, const executor::CustomRequest &push)
-{
-    UNUSED(sender);
-
-    auto tfpush = utils::createMessage<executor::TFPushRequest>("executor.TFPushRequest",
-                                                                push.extra().data(),
-                                                                push.extra().size());
-
-    if (!tfpush) {
-        return {};
-    }
-
-    // TODO: compute session id
-    std::string session_id = "session_id";
-    auto sess = getSession(session_id);
-    if (!sess) {
-        ERR("Push request received before any run request");
-        return {};
-    }
-    return std::make_unique<TFPushTask>(sess, std::move(tfpush));
-}
-
-TFPushTask::TFPushTask(TFSession* session, std::unique_ptr<executor::TFPushRequest> && tensors)
-    : m_tensors(std::move(tensors))
-    , m_session(session)
-{
-}
-
-ProtoPtr TFPushTask::run()
-{
-    auto resp = std::make_unique<executor::CustomResponse>();
-    if (m_tensors->data_size() != m_tensors->tensors_size()) {
-        ERR("Number of tensors mismatch in push request: data {}, tensors {}",
-            m_tensors->data_size(), m_tensors->tensors_size());
-        resp->mutable_result()->set_code(-1);
-        return resp;
-    }
-
-    executor::TFTensors metas;
-    for (int i = 0; i != m_tensors->tensors_size(); ++i) {
-        auto tensorval = m_session->fillTensor(m_tensors->tensors(i), m_tensors->data(i));
-        if (!tensorval.tensor) {
-            ERR("Requested tensor not found in this session: {}", m_tensors->tensors(i).DebugString());
-            resp->mutable_result()->set_code(-1);
-            return resp;
-        }
-        MaybeLock locker(tensorval);
-        INFO("Filled a tensor: {}", tensorval->DebugString());
-        auto tmeta = metas.add_tensors();
-        m_session->tensorMetaToProto(tmeta, tensorval);
-        INFO("Tensor serialized to meta: {}", tmeta->DebugString());
-    }
-
-    return resp;
-}
-
-TFPushTask::~TFPushTask() = default;
-
 PTask TFOpLibrary::createCustomTask(ZmqServer::Sender sender, const executor::CustomRequest &req)
 {
     // NOTE: this-> is need to workaround a bug in GCC 6.x where member function lookup is broken
     // for generic lambda. See https://gcc.gnu.org/bugzilla/show_bug.cgi?id=61636
     using Method = std::function<PTask(ZmqServer::Sender, const executor::CustomRequest &)>;
     static std::unordered_map<std::string, Method> funcs{
-        {"executor.TFPushRequest", [this](auto sender, const auto &req) {
-            return this->createPushTask(std::move(sender), req);
-        }},
-        {"executor.TFFetchRequest", [this](auto sender, const auto &req) {
-            return this->createFetchTask(std::move(sender), req);
-        }},
         {"executor.TFRendezRecvResponse", [this](auto sender, const auto &req) {
             return this->createRendezRecvTask(std::move(sender), req);
         }},
@@ -451,15 +338,13 @@ public:
 
             tensorflow::Rendezvous::ParsedKey parsed;
             auto ok = tensorflow::Rendezvous::ParseKey(item.key(), &parsed);
-            auto t = m_session->createAndRegister(item.val());
+            auto t = m_session->createFromProto(item.val());
             if (!t) {
                 ERR("Failed to create tensor for rendezrecv");
                 return {};
             }
-            ok.Update(tfctx->rendez.Send(parsed,
-                                         tensorflow::Rendezvous::Args(),
-                                         *m_session->createAndRegister(item.val()),
-                                         item.isdead()));
+            ok.Update(tfctx->rendez.Send(parsed, tensorflow::Rendezvous::Args(),
+                                         *t, item.isdead()));
         }
         return {};
     }

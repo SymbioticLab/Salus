@@ -53,16 +53,6 @@ public:
 private:
     // subtasks for custom tasks
     /**
-     * Called when need to copy executor tensor to cpu
-     */
-    PTask createFetchTask(ZmqServer::Sender sender, const executor::CustomRequest &fetch);
-
-    /**
-     * Called when need to copy cpu tensor to executor
-     */
-    PTask createPushTask(ZmqServer::Sender sender, const executor::CustomRequest &push);
-
-    /**
      * Called when remote rendezvous recv available
      */
     PTask createRendezRecvTask(ZmqServer::Sender sender, const executor::CustomRequest &push);
@@ -111,33 +101,4 @@ private:
     uint64_t m_id;
 };
 
-class TFFetchTask : public ITask
-{
-public:
-    ~TFFetchTask() override;
-
-    TFFetchTask(TFSession *session, std::unique_ptr<executor::TFTensors> &&tensors);
-
-    ProtoPtr run() override;
-
-private:
-    std::unique_ptr<executor::TFTensors> m_tensorMetas;
-
-    TFSession *m_session;
-};
-
-class TFPushTask : public ITask
-{
-public:
-    ~TFPushTask() override;
-
-    TFPushTask(TFSession *session, std::unique_ptr<executor::TFPushRequest> &&tensors);
-
-    ProtoPtr run() override;
-
-private:
-    std::unique_ptr<executor::TFPushRequest> m_tensors;
-
-    TFSession *m_session;
-};
 #endif // TFOPLIBRARY_H
