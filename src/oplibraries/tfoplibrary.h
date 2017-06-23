@@ -28,6 +28,7 @@
 #include <tensorflow/core/framework/op_segment.h>
 
 #include <memory>
+#include <atomic>
 
 namespace tensorflow {
 class OpKernel;
@@ -45,26 +46,38 @@ public:
     ~TFOpLibrary() override;
 
     bool accepts(const executor::OpKernelDef &operation) override;
-    PTask createRunTask(ZmqServer::Sender sender, const executor::OpKernelDef &opdef,
+    PTask createRunTask(ZmqServer::Sender sender,
+                        const executor::EvenlopDef &evenlop,
+                        const executor::OpKernelDef &opdef,
                         const executor::OpContextDef &ctxdef) override;
 
-    PTask createCustomTask(ZmqServer::Sender sender, const executor::CustomRequest &push) override;
+    PTask createInitSessionTask(ZmqServer::Sender sender,
+                                const executor::EvenlopDef &evenlop,
+                                const executor::InitSessionRequest &req) override;
+
+    PTask createCustomTask(ZmqServer::Sender sender,
+                           const executor::EvenlopDef &evenlop,
+                           const executor::CustomRequest &push) override;
+
 
 private:
     // subtasks for custom tasks
     /**
      * Called when remote rendezvous recv available
      */
-    PTask createRendezRecvTask(ZmqServer::Sender sender, const executor::CustomRequest &push);
+    PTask createRendezRecvTask(ZmqServer::Sender sender, const executor::EvenlopDef &evenlop,
+                               const executor::CustomRequest &req);
 
 private:
     TFSession *getOrCreateSession(const std::string &sess_id, int graph_def_version,
                                   const tensorflow::ConfigProto &cfgProto,
                                   const tensorflow::FunctionDefLibrary &fDefLib);
-    TFSession *getSession(const std::string &sess_id);
+    TFSession *findSession(const std::string &sess_id);
 
     std::mutex m_mu; // protects m_sessions
     std::unordered_map<std::string, std::unique_ptr<TFSession>> m_sessions;
+
+    std::atomic_uint_fast64_t m_sessionSeq;
 };
 
 class TFRunTask : public ITask
@@ -97,8 +110,6 @@ private:
     tensorflow::OpKernel *m_opkernel;
     std::shared_ptr<TFContext> m_context;
     bool m_async;
-
-    uint64_t m_id;
 };
 
 #endif // TFOPLIBRARY_H

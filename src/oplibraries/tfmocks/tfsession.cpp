@@ -183,16 +183,16 @@ tensorflow::OpKernel *TFSession::findOrCreateKernel(const tensorflow::NodeDef &n
     return kernel;
 }
 
-TFContext::TFContext(TFSession *sess, uint64_t taskId)
+TFContext::TFContext(TFSession *sess, uint64_t seq)
     : step_container(0, [](const std::string&) {})
     , rendez(sess)
-    , m_taskId(taskId)
+    , m_seq(seq)
     , m_sess(sess)
 {
 }
 
 TFContext::~TFContext() {
-    m_sess->contextDestroied(m_taskId);
+    m_sess->contextDestroied(m_seq);
 }
 
 tensorflow::OpKernelContext *TFContext::ctx()
@@ -249,19 +249,19 @@ TFContext *TFSession::findContext(uint64_t taskId)
     return nullptr;
 }
 
-void TFSession::contextDestroied(uint64_t taskId)
+void TFSession::contextDestroied(uint64_t seq)
 {
     tensorflow::mutex_lock locker(m_muctx);
-    m_contexts.erase(taskId);
+    m_contexts.erase(seq);
 }
 
 std::unique_ptr<TFContext> TFSession::createContext(const executor::TFOpContextDef &tfdef,
-                                                    tensorflow::OpKernel *opkernel, uint64_t taskId)
+                                                    tensorflow::OpKernel *opkernel, uint64_t seq)
 {
-    auto tfctx = std::make_unique<TFContext>(this, taskId);
+    auto tfctx = std::make_unique<TFContext>(this, seq);
     {
         tensorflow::mutex_lock locker(m_muctx);
-        m_contexts[taskId] = tfctx.get();
+        m_contexts[seq] = tfctx.get();
     }
 
     tfctx->params.device = m_device.get();

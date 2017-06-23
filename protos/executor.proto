@@ -12,6 +12,15 @@ message CustomResponse {
     bytes extra = 2;
 }
 
+message InitSessionRequest {
+    bytes extra = 1;
+}
+
+message InitSessionResponse {
+    Status result = 1;
+    bytes extra = 2;
+}
+
 message RunRequest {
     OpKernelDef opkernel = 1;
     OpContextDef context = 2;
@@ -58,7 +67,8 @@ message EvenlopDef {
     string type = 1;
     uint64 seq = 2;
     bytes recvIdentity = 3;
-    OpLibraryType oplibrary = 4;
+    bytes sessionId = 4;
+    OpLibraryType oplibrary = 5;
 }
 
 enum OpLibraryType {

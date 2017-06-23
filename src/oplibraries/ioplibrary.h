@@ -62,6 +62,28 @@ public:
 };
 
 using PTask = std::unique_ptr<ITask>;
+
+template<typename Fn>
+class LambdaTask : public ITask
+{
+public:
+    explicit LambdaTask(Fn &&fn) : m_fn(std::move(fn)) {}
+
+    ProtoPtr run() override
+    {
+        return m_fn();
+    }
+
+private:
+    Fn m_fn;
+};
+
+template<typename Fn>
+PTask make_lambda_task(Fn fn)
+{
+    return std::make_unique<LambdaTask<Fn>>(std::move(fn));
+}
+
 /**
  * @todo write docs
  */
@@ -73,10 +95,17 @@ public:
     virtual bool accepts(const executor::OpKernelDef &operation) = 0;
 
     virtual PTask createRunTask(ZmqServer::Sender sender,
+                                const executor::EvenlopDef &evenlop,
                                 const executor::OpKernelDef &opeartion,
                                 const executor::OpContextDef &context) = 0;
 
-    virtual PTask createCustomTask(ZmqServer::Sender sender, const executor::CustomRequest &msg) = 0;
+    virtual PTask createCustomTask(ZmqServer::Sender sender,
+                                   const executor::EvenlopDef &evenlop,
+                                   const executor::CustomRequest &msg) = 0;
+
+    virtual PTask createInitSessionTask(ZmqServer::Sender sender,
+                                        const executor::EvenlopDef &evenlop,
+                                        const executor::InitSessionRequest &req) = 0;
 };
 
 class OpLibraryRegistary final

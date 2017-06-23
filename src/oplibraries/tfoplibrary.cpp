@@ -73,6 +73,7 @@ void dumpOpKernel(tensorflow::OpKernel *opkernel)
     for (size_t i = 0; i != opkernel->output_memory_types().size(); i++) {
         TRACE("m_opkernel.output_memory_types()[{}] {}", i, opkernel->output_memory_types()[i]);
     }
+    TRACE("m_opkernel.def() {}", opkernel->def().DebugString());
 }
 
 void dumpOpContext(tensorflow::OpKernelContext *ctx)
@@ -110,7 +111,7 @@ TFSession *TFOpLibrary::getOrCreateSession(const std::string& sess_id, int graph
     return sess.get();
 }
 
-TFSession *TFOpLibrary::getSession(const std::string& sess_id)
+TFSession *TFOpLibrary::findSession(const std::string& sess_id)
 {
     std::lock_guard<std::mutex> guard(m_mu);
     if (m_sessions.count(sess_id) != 0) {
@@ -119,7 +120,8 @@ TFSession *TFOpLibrary::getSession(const std::string& sess_id)
     return {};
 }
 
-PTask TFOpLibrary::createRunTask(ZmqServer::Sender sender, const rpc::OpKernelDef& opdef, const rpc::OpContextDef& ctxdef)
+PTask TFOpLibrary::createRunTask(ZmqServer::Sender sender, const rpc::EvenlopDef &evenlop,
+                                 const rpc::OpKernelDef& opdef, const rpc::OpContextDef& ctxdef)
 {
     auto tfdef = utils::createMessage<executor::TFOpKernelDef>("executor.TFOpKernelDef",
                                                              opdef.extra().data(),
@@ -131,14 +133,8 @@ PTask TFOpLibrary::createRunTask(ZmqServer::Sender sender, const rpc::OpKernelDe
     if (!tfdef || !tfctxdef) { return {}; }
 
     DEBUG("Got isAsync {}", tfdef->isasync());
-    DEBUG("Got NodeDef {}", tfdef->nodedef().DebugString());
-    DEBUG("Got ConfigProto {}", tfdef->cfgproto().DebugString());
-    DEBUG("Got funcdeflib {}", tfdef->funcdef().DebugString());
 
-    // TODO: compute session id
-    std::string session_id = "session_id";
-
-    auto sess = getOrCreateSession(session_id, tfdef->graph_def_version(), tfdef->cfgproto(), tfdef->funcdef());
+    auto sess = findSession(evenlop.sessionid());
     if (!sess) { return {}; }
 
     auto ndef = std::unique_ptr<NodeDef>(tfdef->release_nodedef());
@@ -153,7 +149,6 @@ TFRunTask::TFRunTask(TFSession *sess, ZmqServer::Sender &&sender, unique_ptr<Nod
     , m_ndef(std::move(nodedef))
     , m_tfctxdef(std::move(tfctxdef))
     , m_async(async)
-    , m_id(m_sender->sequenceNumber())
 {
 }
 
@@ -180,7 +175,7 @@ bool TFRunTask::prepare(DeviceType dev)
     INFO("Created OpKernel");
     dumpOpKernel(m_opkernel);
 
-    m_context = m_session->createContext(*m_tfctxdef, m_opkernel, m_id);
+    m_context = m_session->createContext(*m_tfctxdef, m_opkernel, m_sender->sequenceNumber());
     if (!m_context) {
         return false;
     }
@@ -303,14 +298,49 @@ void TFRunTask::runAsync(DoneCallback cb)
 
 TFRunTask::~TFRunTask() = default;
 
-PTask TFOpLibrary::createCustomTask(ZmqServer::Sender sender, const executor::CustomRequest &req)
+PTask TFOpLibrary::createInitSessionTask(ZmqServer::Sender sender, const rpc::EvenlopDef &evenlop,
+                                         const rpc::InitSessionRequest &req)
+{
+    UNUSED(sender);
+    UNUSED(evenlop);
+
+    auto tfreq = utils::createMessage<rpc::TFSessionArgs>("executor.TFSessionArgs",
+                                                          req.extra().data(),
+                                                          req.extra().size());
+    if (!tfreq) {
+        return {};
+    }
+
+    auto sessSeq = m_sessionSeq.fetch_add(1);
+    return make_lambda_task([tfreq = std::move(tfreq), sessSeq, this]() -> ProtoPtr {
+        std::string session_id = "session";
+        session_id += std::to_string(sessSeq);
+
+        auto sess = getOrCreateSession(session_id, tfreq->graph_def_version(),
+                                       tfreq->cfgproto(), tfreq->funcdef());
+        if (!sess) {
+            ERR("Session creation failed");
+            return {};
+        }
+
+        auto resp = std::make_unique<executor::InitSessionResponse>();
+        executor::TFSessionCreated tfsesscreated;
+        tfsesscreated.set_sessionid(session_id);
+        tfsesscreated.SerializeToString(resp->mutable_extra());
+        return resp;
+    });
+}
+
+PTask TFOpLibrary::createCustomTask(ZmqServer::Sender sender, const rpc::EvenlopDef &evenlop,
+                                    const rpc::CustomRequest &req)
 {
     // NOTE: this-> is need to workaround a bug in GCC 6.x where member function lookup is broken
     // for generic lambda. See https://gcc.gnu.org/bugzilla/show_bug.cgi?id=61636
-    using Method = std::function<PTask(ZmqServer::Sender, const executor::CustomRequest &)>;
+    using Method = std::function<PTask(ZmqServer::Sender, const rpc::EvenlopDef &evenlop,
+                                       const rpc::CustomRequest &)>;
     static std::unordered_map<std::string, Method> funcs{
-        {"executor.TFRendezRecvResponse", [this](auto sender, const auto &req) {
-            return this->createRendezRecvTask(std::move(sender), req);
+        {"executor.TFRendezRecvUpdate", [this](auto sender, const auto &evenlop, const auto &req) {
+            return this->createRendezRecvTask(std::move(sender), evenlop, req);
         }},
     };
 
@@ -320,32 +350,39 @@ PTask TFOpLibrary::createCustomTask(ZmqServer::Sender sender, const executor::Cu
         return nullptr;
     }
 
-    return it->second(std::move(sender), req);
+    return it->second(std::move(sender), evenlop, req);
 }
 
-class TFRendezRecvTask : public ITask
+PTask TFOpLibrary::createRendezRecvTask(ZmqServer::Sender sender, const rpc::EvenlopDef &evenlop,
+                                        const rpc::CustomRequest &req)
 {
-public:
-    ~TFRendezRecvTask() override = default;
+    UNUSED(sender);
 
-    TFRendezRecvTask(TFSession *session, std::unique_ptr<executor::TFRendezRecvResponse> &&recv)
-        : m_recv(std::move(recv))
-        , m_session(session)
-    { }
+    auto recvupd = utils::createMessage<rpc::TFRendezRecvUpdate>("executor.TFRendezRecvUpdate",
+                                                                 req.extra().data(),
+                                                                 req.extra().size());
+    if (!recvupd) {
+        return {};
+    }
 
-    ProtoPtr run() override
-    {
-        auto tfctx = m_session->findContext(m_recv->forseq());
+    auto sess = findSession(evenlop.sessionid());
+    if (!sess) {
+        ERR("RendezRecv request received before any run request");
+        return {};
+    }
+
+    return make_lambda_task([sess, recvupd = std::move(recvupd)]() -> ProtoPtr {
+        auto tfctx = sess->findContext(recvupd->forseq());
         if (!tfctx) {
-            ERR("Context for given seq {} not found", m_recv->forseq());
+            ERR("Context for given seq {} not found", recvupd->forseq());
             return {};
         }
-        for (int i = 0; i != m_recv->items_size(); ++i) {
-            auto item = m_recv->items(i);
+        for (int i = 0; i != recvupd->items_size(); ++i) {
+            auto item = recvupd->items(i);
 
             tensorflow::Rendezvous::ParsedKey parsed;
             auto ok = tensorflow::Rendezvous::ParseKey(item.key(), &parsed);
-            auto t = m_session->tensorFromProtoData(item.val());
+            auto t = sess->tensorFromProtoData(item.val());
             if (!t) {
                 ERR("Failed to create tensor for rendezrecv");
                 return {};
@@ -354,32 +391,5 @@ public:
                                          *t, item.isdead()));
         }
         return {};
-    }
-
-private:
-    std::unique_ptr<executor::TFRendezRecvResponse> m_recv;
-
-    TFSession *m_session;
-};
-
-PTask TFOpLibrary::createRendezRecvTask(ZmqServer::Sender sender, const executor::CustomRequest &req)
-{
-    UNUSED(sender);
-
-    auto recvResp = utils::createMessage<executor::TFRendezRecvResponse>("executor.TFRendezRecvResponse",
-                                                                         req.extra().data(),
-                                                                         req.extra().size());
-
-    if (!recvResp) {
-        return {};
-    }
-
-    // TODO: compute session id
-    std::string session_id = "session_id";
-    auto sess = getSession(session_id);
-    if (!sess) {
-        ERR("RendezRecv request received before any run request");
-        return {};
-    }
-    return std::make_unique<TFRendezRecvTask>(sess, std::move(recvResp));
+    });
 }

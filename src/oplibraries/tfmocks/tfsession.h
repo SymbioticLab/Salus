@@ -82,7 +82,7 @@ public:
     tensorflow::OpKernelContext::Params params;
 private:
     std::unique_ptr<tensorflow::OpKernelContext> context;
-    uint64_t m_taskId;
+    uint64_t m_seq;
     TFSession *m_sess;
 };
 
@@ -134,7 +134,7 @@ public:
 
 private:
     friend class TFContext;
-    void contextDestroied(uint64_t taskId);
+    void contextDestroied(uint64_t seq);
 
     tensorflow::SessionOptions m_options;
 
