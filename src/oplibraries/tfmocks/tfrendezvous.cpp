@@ -51,9 +51,9 @@ TFRendezvous::RecvItem::RecvItem() : RecvItem(Args()) {}
 
 TFRendezvous::RecvItem::RecvItem(const Args &a) : args(a) {}
 
-TFRendezvous::TFRendezvous(TFSession *sess)
-    : m_sess(sess)
-    , m_local(m_sess->m_rendez)
+TFRendezvous::TFRendezvous(TFExecutionState *exec)
+    : m_exec(exec)
+    , m_local(m_exec->rendez())
 {
     m_local->Ref();
 }

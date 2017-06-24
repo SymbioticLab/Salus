@@ -12,18 +12,21 @@ message CustomResponse {
     bytes extra = 2;
 }
 
-message InitSessionRequest {
-    bytes extra = 1;
+message RunGraphRequest {
+    ComputeDef computation = 1;
+    bytes extra = 2;
 }
 
-message InitSessionResponse {
+message RunGraphResponse {
     Status result = 1;
-    bytes extra = 2;
+    string execId = 2;
+    bytes extra = 3;
 }
 
 message RunRequest {
     OpKernelDef opkernel = 1;
     OpContextDef context = 2;
+    string execId = 3;
 }
 
 message RunResponse {
@@ -57,6 +60,11 @@ message OpKernelDef {
 
 message OpContextDef {
     bytes extra = 1;
+}
+
+message ComputeDef {
+    OpLibraryType oplibrary = 1;
+    bytes extra = 2;
 }
 
 message Status {

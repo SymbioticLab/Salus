@@ -96,16 +96,15 @@ public:
 
     virtual PTask createRunTask(ZmqServer::Sender sender,
                                 const executor::EvenlopDef &evenlop,
-                                const executor::OpKernelDef &opeartion,
-                                const executor::OpContextDef &context) = 0;
+                                const executor::RunRequest &request) = 0;
+
+    virtual PTask createRunGraphTask(ZmqServer::Sender sender,
+                                     const executor::EvenlopDef &evenlop,
+                                     const executor::RunGraphRequest &request) = 0;
 
     virtual PTask createCustomTask(ZmqServer::Sender sender,
                                    const executor::EvenlopDef &evenlop,
                                    const executor::CustomRequest &msg) = 0;
-
-    virtual PTask createInitSessionTask(ZmqServer::Sender sender,
-                                        const executor::EvenlopDef &evenlop,
-                                        const executor::InitSessionRequest &req) = 0;
 };
 
 class OpLibraryRegistary final

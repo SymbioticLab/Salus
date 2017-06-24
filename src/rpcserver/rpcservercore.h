@@ -31,23 +31,23 @@
 namespace executor {
 class RunRequest;
 class RunResponse;
+class RunGraphRequest;
+class RunGraphResponse;
 class AllocRequest;
 class AllocResponse;
 class DeallocRequest;
 class DeallocResponse;
 class CustomRequest;
 class CustomResponse;
-class InitSessionRequest;
-class InitSessionResponse;
 class EvenlopDef;
 }
 
 #define CALL_ALL_SERVICE_NAME(m) \
     m(Run) \
+    m(RunGraph) \
     m(Alloc) \
     m(Dealloc) \
-    m(Custom) \
-    m(InitSession)
+    m(Custom)
 
 class IOpLibrary;
 /**

@@ -74,18 +74,33 @@ q::promise<unique_ptr<RunResponse>> RpcServerCore::Run(ZmqServer::Sender &&sende
                                                        const RunRequest &request)
 {
     const auto &opdef = request.opkernel();
-    const auto &ctxdef = request.context();
 
     INFO("Serving RunRequest with opkernel id {}", opdef.id());
     assert(oplib->accepts(opdef));
 
-    auto task = oplib->createRunTask(std::move(sender), evenlop, opdef, ctxdef);
+    auto task = oplib->createRunTask(std::move(sender), evenlop, request);
     if (!task) {
         ERR("Skipping task due to failed creation.");
         return ExecutionEngine::instance().emptyPromise<RunResponse>();
     }
 
     return ExecutionEngine::instance().enqueue<RunResponse>(std::move(task));
+}
+
+q::promise<unique_ptr<RunGraphResponse>> RpcServerCore::RunGraph(ZmqServer::Sender &&sender,
+                                                                 IOpLibrary *oplib,
+                                                                 const EvenlopDef &evenlop,
+                                                                 const RunGraphRequest &request)
+{
+    INFO("Serving RunGraphRequest");
+
+    auto task = oplib->createRunGraphTask(std::move(sender), evenlop, request);
+    if (!task) {
+        ERR("Skipping task due to failed creation.");
+        return ExecutionEngine::instance().emptyPromise<RunGraphResponse>();
+    }
+
+    return ExecutionEngine::instance().enqueue<RunGraphResponse>(std::move(task));
 }
 
 q::promise<unique_ptr<AllocResponse>> RpcServerCore::Alloc(ZmqServer::Sender &&sender, IOpLibrary *oplib,
@@ -143,18 +158,4 @@ q::promise<unique_ptr<CustomResponse>> RpcServerCore::Custom(ZmqServer::Sender &
     }
 
     return ExecutionEngine::instance().enqueue<CustomResponse>(std::move(task));
-}
-
-q::promise<unique_ptr<InitSessionResponse>> RpcServerCore::InitSession(ZmqServer::Sender &&sender,
-                                                                       IOpLibrary *oplib,
-                                                                       const EvenlopDef &evenlop,
-                                                                       const InitSessionRequest &request)
-{
-    auto task = oplib->createInitSessionTask(std::move(sender), evenlop, request);
-    if (!task) {
-        ERR("Skipping task due to failed creation.");
-        return ExecutionEngine::instance().emptyPromise<InitSessionResponse>();
-    }
-
-    return ExecutionEngine::instance().enqueue<InitSessionResponse>(std::move(task));
 }

@@ -54,37 +54,8 @@ class ConfigProto;
 
 class TFDevice;
 class TFSession;
+class TFExecutionState;
 class TFOpLibrary;
-
-class TFContext
-{
-public:
-    TFContext(TFSession *sess, uint64_t taskId);
-    ~TFContext();
-
-    tensorflow::OpKernelContext *ctx();
-
-    void FillOutputAttrs();
-    void FillInputAttrs();
-    void FillInputDeviceContext();
-
-    tensorflow::ScopedStepContainer step_container;
-    tensorflow::checkpoint::TensorSliceReaderCacheWrapper slice_reader_cache_wrapper;
-    TFRendezvous rendez;
-
-    TensorValueVec inputs;
-
-    DeviceContextVec input_device_contexts;
-    AllocatorAttributeVec input_alloc_attrs;
-
-    std::vector<tensorflow::AllocatorAttributes> output_attrs;
-
-    tensorflow::OpKernelContext::Params params;
-private:
-    std::unique_ptr<tensorflow::OpKernelContext> context;
-    uint64_t m_seq;
-    TFSession *m_sess;
-};
 
 class MaybeLock
 {
@@ -105,18 +76,81 @@ private:
     TensorValue &m_val;
 };
 
+class TFContext
+{
+public:
+    TFContext(TFExecutionState *exec, uint64_t taskId);
+    ~TFContext();
+
+    tensorflow::OpKernelContext *ctx();
+
+    void FillOutputAttrs();
+    void FillInputAttrs();
+    void FillInputDeviceContext();
+
+    uint64_t seq;
+
+    tensorflow::ScopedStepContainer step_container;
+    tensorflow::checkpoint::TensorSliceReaderCacheWrapper slice_reader_cache_wrapper;
+    TFRendezvous rendez;
+
+    tensorflow::TensorStore tensorStore;
+
+    TensorValueVec inputs;
+    DeviceContextVec input_device_contexts;
+    AllocatorAttributeVec input_alloc_attrs;
+
+    std::vector<tensorflow::AllocatorAttributes> output_attrs;
+
+    tensorflow::OpKernelContext::Params params;
+private:
+    std::unique_ptr<tensorflow::OpKernelContext> context;
+    TFExecutionState *m_exec;
+};
+
+class TFExecutionState
+{
+public:
+    explicit TFExecutionState(TFSession *sess, const std::string &execId, tensorflow::GraphDef &&graphdef,
+                              const tensorflow::OptimizerOptions &optOptions);
+    ~TFExecutionState();
+
+    const std::string &execId() const;
+
+    tensorflow::FunctionLibraryRuntime *functionRuntime();
+
+    TFSession *session();
+
+    tensorflow::Rendezvous *rendez();
+
+private:
+    TFSession *m_session;
+    std::string m_execId;
+
+    tensorflow::GraphDef m_graphdef;
+
+    tensorflow::Rendezvous *m_rendez;
+
+    std::unique_ptr<tensorflow::FunctionLibraryDefinition> m_fdefinition;
+    std::unique_ptr<tensorflow::FunctionLibraryRuntime> m_fruntime;
+};
+
 class TFSession
 {
 public:
-    TFSession(TFOpLibrary *opLibrary, const tensorflow::FunctionDefLibrary &fDefLib,
-              int graphDefVersion, const tensorflow::ConfigProto &configProto);
+    TFSession(TFOpLibrary *opLibrary, const tensorflow::ConfigProto &configProto);
 
     ~TFSession();
 
-    tensorflow::OpKernel *findOrCreateKernel(const tensorflow::NodeDef &nodedef);
+    TFExecutionState *prepareExecution(tensorflow::GraphDef &&graphdef);
+    TFExecutionState *findExecution(const std::string &execId);
+
+    tensorflow::OpKernel *findOrCreateKernel(const tensorflow::NodeDef &nodedef, TFExecutionState *execState);
 
     std::unique_ptr<TFContext> createContext(const executor::TFOpContextDef &tfdef,
-                                             tensorflow::OpKernel *opkernel, uint64_t taskId);
+                                             tensorflow::OpKernel *opkernel, uint64_t taskId,
+                                             TFExecutionState *execState);
+    void registerContext(uint64_t taskId, TFContext *ctx);
     TFContext *findContext(uint64_t taskId);
 
     // Tensor memory management
@@ -132,31 +166,36 @@ public:
 
     bool isCompatible(const tensorflow::Tensor &tensor, const tensorflow::TensorProto &proto) const;
 
-private:
-    friend class TFContext;
-    void contextDestroied(uint64_t seq);
+    // Helper methods for run
+    executor::TFOpContextUpdate finalizeContext(TFContext *pContext);
 
-    tensorflow::SessionOptions m_options;
+private:
+    friend class TFExecutionState;
 
     TFOpLibrary *m_oplibrary;
 
     std::string m_sessHandle;
 
+    tensorflow::SessionOptions m_options;
+
     tensorflow::OpSegment m_opseg;
     std::vector<std::unique_ptr<tensorflow::OpKernel>> m_kernels;
 
-    tensorflow::FunctionLibraryDefinition m_flibDef;
-    std::unique_ptr<tensorflow::FunctionLibraryRuntime> m_fruntime;
-    std::unique_ptr<TFDevice> m_device;
+    tensorflow::SessionState m_sessState;
 
-    friend class TFRendezvous;
-    tensorflow::Rendezvous *m_rendez;
+    std::unique_ptr<TFDevice> m_device;
 
     tensorflow::mutex m_mu;
     std::unordered_map<std::string, TensorValue> m_tensors;
 
     tensorflow::mutex m_muctx;
+    /**
+     * Map RunRequest seq number to TFContext. Protected by m_muctx.
+     */
     std::unordered_map<uint64_t, TFContext*> m_contexts;
+
+    tensorflow::mutex m_muexec;
+    std::unordered_map<std::string, std::unique_ptr<TFExecutionState>> m_execStates;
 };
 
 #endif // TFSESSION_H

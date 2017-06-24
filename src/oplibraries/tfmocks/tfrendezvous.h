@@ -25,7 +25,7 @@
 
 #include <unordered_map>
 
-class TFSession;
+class TFExecutionState;
 
 /**
  * TODO: TFRendezvous need not to be thread safe as it is only used per TFContext
@@ -51,7 +51,7 @@ public:
     };
     using RecvTable = std::unordered_map<std::string, RecvItem>;
 
-    explicit TFRendezvous(TFSession *sess);
+    explicit TFRendezvous(TFExecutionState *exec);
     ~TFRendezvous() override;
 
     tensorflow::Status Send(const ParsedKey& parsed,
@@ -74,7 +74,7 @@ public:
     RecvTable releasePendingRecv();
 
 private:
-    TFSession *m_sess;
+    TFExecutionState *m_exec;
     tensorflow::Rendezvous *m_local;
 
     mutable tensorflow::mutex m_mu;

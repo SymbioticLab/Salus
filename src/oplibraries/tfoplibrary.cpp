@@ -95,15 +95,14 @@ bool TFOpLibrary::accepts(const rpc::OpKernelDef& operation)
     return operation.oplibrary() == rpc::TENSORFLOW;
 }
 
-TFSession *TFOpLibrary::getOrCreateSession(const std::string& sess_id, int graph_def_version,
-                                           const tensorflow::ConfigProto& cfgProto,
-                                           const tensorflow::FunctionDefLibrary& fDefLib)
+TFSession *TFOpLibrary::getOrCreateSession(const std::string& sess_id,
+                                           const tensorflow::ConfigProto& cfgProto)
 {
     std::lock_guard<std::mutex> guard(m_mu);
 
     auto &sess = m_sessions[sess_id];
     if (!sess) {
-        sess = std::make_unique<TFSession>(this, fDefLib, graph_def_version, cfgProto);
+        sess = std::make_unique<TFSession>(this, cfgProto);
     } else {
         DEBUG("Reuse previously created session");
     }
@@ -114,37 +113,56 @@ TFSession *TFOpLibrary::getOrCreateSession(const std::string& sess_id, int graph
 TFSession *TFOpLibrary::findSession(const std::string& sess_id)
 {
     std::lock_guard<std::mutex> guard(m_mu);
-    if (m_sessions.count(sess_id) != 0) {
-        return m_sessions[sess_id].get();
+    auto it = m_sessions.find(sess_id);
+    if (it != m_sessions.end()) {
+        return it->second.get();
     }
     return {};
 }
 
+void TFOpLibrary::destorySession(const std::string &sess_id)
+{
+    std::lock_guard<std::mutex> guard(m_mu);
+    auto it = m_sessions.find(sess_id);
+    if (it != m_sessions.end()) {
+        m_sessions.erase(it);
+    } else {
+        WARN("Trying to destory nonexist session: {}", sess_id);
+    }
+}
+
 PTask TFOpLibrary::createRunTask(ZmqServer::Sender sender, const rpc::EvenlopDef &evenlop,
-                                 const rpc::OpKernelDef& opdef, const rpc::OpContextDef& ctxdef)
+                                 const rpc::RunRequest &request)
 {
     auto tfdef = utils::createMessage<executor::TFOpKernelDef>("executor.TFOpKernelDef",
-                                                             opdef.extra().data(),
-                                                             opdef.extra().size());
+                                                             request.opkernel().extra().data(),
+                                                             request.opkernel().extra().size());
     auto tfctxdef = utils::createMessage<executor::TFOpContextDef>("executor.TFOpContextDef",
-                                                                   ctxdef.extra().data(),
-                                                                   ctxdef.extra().size());
+                                                                   request.context().extra().data(),
+                                                                   request.context().extra().size());
 
     if (!tfdef || !tfctxdef) { return {}; }
 
-    DEBUG("Got isAsync {}", tfdef->isasync());
-
     auto sess = findSession(evenlop.sessionid());
-    if (!sess) { return {}; }
+    if (!sess) {
+        ERR("Session {} not found", evenlop.sessionid());
+        return {};
+    }
+
+    auto exec = sess->findExecution(request.execid());
+    if (!exec) {
+        ERR("Execution {} not found in session {}", request.execid(), evenlop.sessionid());
+        return {};
+    }
 
     auto ndef = std::unique_ptr<NodeDef>(tfdef->release_nodedef());
-    return std::make_unique<TFRunTask>(sess, std::move(sender), std::move(ndef),
+    return std::make_unique<TFRunTask>(exec, std::move(sender), std::move(ndef),
                                        tfdef->isasync(), std::move(tfctxdef));
 }
 
-TFRunTask::TFRunTask(TFSession *sess, ZmqServer::Sender &&sender, unique_ptr<NodeDef> &&nodedef, bool async,
-                     unique_ptr<executor::TFOpContextDef> &&tfctxdef)
-    : m_session(sess)
+TFRunTask::TFRunTask(TFExecutionState *execState, ZmqServer::Sender &&sender, unique_ptr<NodeDef> &&nodedef,
+                     bool async, unique_ptr<executor::TFOpContextDef> &&tfctxdef)
+    : m_exec(execState)
     , m_sender(std::move(sender))
     , m_ndef(std::move(nodedef))
     , m_tfctxdef(std::move(tfctxdef))
@@ -161,7 +179,7 @@ bool TFRunTask::prepare(DeviceType dev)
 {
     UNUSED(dev);
 
-    auto kernel = m_session->findOrCreateKernel(*m_ndef);
+    auto kernel = m_exec->session()->findOrCreateKernel(*m_ndef, m_exec);
     if (m_async) {
         m_opkernel = kernel->AsAsync();
     } else {
@@ -175,7 +193,7 @@ bool TFRunTask::prepare(DeviceType dev)
     INFO("Created OpKernel");
     dumpOpKernel(m_opkernel);
 
-    m_context = m_session->createContext(*m_tfctxdef, m_opkernel, m_sender->sequenceNumber());
+    m_context = m_exec->session()->createContext(*m_tfctxdef, m_opkernel, m_sender->sequenceNumber(), m_exec);
     if (!m_context) {
         return false;
     }
@@ -183,43 +201,6 @@ bool TFRunTask::prepare(DeviceType dev)
     dumpOpContext(m_context->ctx());
 
     return true;
-}
-
-void TFRunTask::populateUpdate(rpc::TFOpContextUpdate &tfctxupd, TFContext *pContext, TFSession *pSession)
-{
-    auto context = pContext->ctx();
-    tfctxupd.set_status_code(context->status().code());
-    tfctxupd.set_status_msg(context->status().error_message());
-    tfctxupd.set_is_output_dead(*context->is_output_dead());
-
-    // process tensor received by rendezvous
-    // And this will clear tensors table in rendezvous
-    for (auto &elem : pContext->rendez.releasePendingSentTensors()) {
-        auto item = tfctxupd.add_rendeztensors();
-        item->set_key(elem.first);
-        item->set_allocattributes(elem.second.args.alloc_attrs.value);
-        item->set_isdead(elem.second.isDead);
-        pSession->tensorToProtoData(item->mutable_val(), &elem.second.val);
-    }
-
-    // process tensor set as outputs
-    for (int i = 0; i != context->num_outputs(); i++) {
-        auto output_name = pContext->ctx()->op_kernel().name();
-        if (i != 0) {
-            tensorflow::strings::StrAppend(&output_name, ":", i);
-        }
-        INFO("Processing output: {}", output_name);
-
-        auto out = context->release_output(i);
-        // Let the session manage the tensor memory
-        // The session takes the ownership of tensor in non-ref case
-        pSession->registerTensorForName(output_name, out);
-
-        auto outitem = tfctxupd.add_outputs();
-        outitem->set_name(output_name);
-        outitem->set_is_ref(out.is_ref());
-        pSession->tensorToProtoMeta(outitem->mutable_meta(), out);
-    }
 }
 
 ProtoPtr TFRunTask::run()
@@ -242,10 +223,8 @@ ProtoPtr TFRunTask::run()
 
     INFO("OpKernel->Compute finished with status {}", m_context->ctx()->status());
 
-    rpc::TFOpContextUpdate tfctxupd;
-    populateUpdate(tfctxupd, m_context.get(), m_session);
-    // write update to ctxdef
-    tfctxupd.SerializeToString(resp->mutable_context()->mutable_extra());
+    auto tfupd = m_exec->session()->finalizeContext(m_context.get());
+    tfupd.SerializeToString(resp->mutable_context()->mutable_extra());
 
     return resp;
 }
@@ -264,7 +243,7 @@ void TFRunTask::runAsync(DoneCallback cb)
     }
 
     auto pContext = m_context.get(); // we need this later
-    auto pSession = m_session;
+    auto pSession = m_exec->session();
     // NOTE: this might be deleted by the time done_cb got called. So move out the pieces we need.
     // NOTE: both done and pContext are CopyConstructable, thus the done_cb is CopyConstructable,
     // because move-only lambda can't be assigned to std::function
@@ -272,10 +251,8 @@ void TFRunTask::runAsync(DoneCallback cb)
         INFO("OpKernel->ComputeAsync finished with status {}", pContext->ctx()->status());
 
         auto resp = std::make_unique<executor::RunResponse>();
-        rpc::TFOpContextUpdate tfctxupd;
-        populateUpdate(tfctxupd, pContext.get(), pSession);
-        // write update to ctxdef
-        tfctxupd.SerializeToString(resp->mutable_context()->mutable_extra());
+        auto tfupd = pSession->finalizeContext(pContext.get());
+        tfupd.SerializeToString(resp->mutable_context()->mutable_extra());
         done(std::move(resp));
     };
 
@@ -298,35 +275,31 @@ void TFRunTask::runAsync(DoneCallback cb)
 
 TFRunTask::~TFRunTask() = default;
 
-PTask TFOpLibrary::createInitSessionTask(ZmqServer::Sender sender, const rpc::EvenlopDef &evenlop,
-                                         const rpc::InitSessionRequest &req)
+PTask TFOpLibrary::createRunGraphTask(ZmqServer::Sender sender,
+                                      const executor::EvenlopDef &evenlop,
+                                      const executor::RunGraphRequest &request)
 {
     UNUSED(sender);
-    UNUSED(evenlop);
 
-    auto tfreq = utils::createMessage<rpc::TFSessionArgs>("executor.TFSessionArgs",
-                                                          req.extra().data(),
-                                                          req.extra().size());
-    if (!tfreq) {
-        return {};
+    auto sess = findSession(evenlop.sessionid());
+    if (!sess) { return {}; }
+
+    tensorflow::GraphDef graphdef;
+    if (!graphdef.ParseFromString(request.computation().extra())) {
+        ERR("Malformated graphdef from RunGraphRequest");
     }
 
-    auto sessSeq = m_sessionSeq.fetch_add(1);
-    return make_lambda_task([tfreq = std::move(tfreq), sessSeq, this]() -> ProtoPtr {
-        std::string session_id = "session";
-        session_id += std::to_string(sessSeq);
+    return make_lambda_task([sess, graphdef = std::move(graphdef)]() mutable {
+        auto resp = std::make_unique<executor::RunGraphResponse>();
 
-        auto sess = getOrCreateSession(session_id, tfreq->graph_def_version(),
-                                       tfreq->cfgproto(), tfreq->funcdef());
-        if (!sess) {
-            ERR("Session creation failed");
-            return {};
+        auto execState = sess->prepareExecution(std::move(graphdef));
+        if (!execState) {
+            ERR("Failed to get execution state");
+            resp->mutable_result()->set_code(-1);
+            return resp;
         }
 
-        auto resp = std::make_unique<executor::InitSessionResponse>();
-        executor::TFSessionCreated tfsesscreated;
-        tfsesscreated.set_sessionid(session_id);
-        tfsesscreated.SerializeToString(resp->mutable_extra());
+        resp->set_execid(execState->execId());
         return resp;
     });
 }
@@ -341,6 +314,12 @@ PTask TFOpLibrary::createCustomTask(ZmqServer::Sender sender, const rpc::Evenlop
     static std::unordered_map<std::string, Method> funcs{
         {"executor.TFRendezRecvUpdate", [this](auto sender, const auto &evenlop, const auto &req) {
             return this->createRendezRecvTask(std::move(sender), evenlop, req);
+        }},
+        {"executor.TFSessionArgs", [this](auto sender, const auto &evenlop, const auto &req) {
+            return this->createInitSessionTask(std::move(sender), evenlop, req);
+        }},
+        {"executor.TFSessionClose", [this](auto sender, const auto &evenlop, const auto &req) {
+            return this->createCloseSessionTask(std::move(sender), evenlop, req);
         }},
     };
 
@@ -391,5 +370,59 @@ PTask TFOpLibrary::createRendezRecvTask(ZmqServer::Sender sender, const rpc::Eve
                                          *t, item.isdead()));
         }
         return {};
+    });
+}
+
+PTask TFOpLibrary::createInitSessionTask(ZmqServer::Sender sender, const rpc::EvenlopDef &evenlop,
+                                         const rpc::CustomRequest &req)
+{
+    UNUSED(sender);
+    UNUSED(evenlop);
+
+    auto tfreq = utils::createMessage<rpc::TFSessionArgs>("executor.TFSessionArgs",
+                                                          req.extra().data(),
+                                                          req.extra().size());
+    if (!tfreq) {
+        return {};
+    }
+
+    auto sessSeq = m_sessionSeq.fetch_add(1);
+    return make_lambda_task([tfreq = std::move(tfreq), sessSeq, this]() -> ProtoPtr {
+        std::string session_id = "session";
+        session_id += std::to_string(sessSeq);
+
+        auto sess = getOrCreateSession(session_id, tfreq->cfgproto());
+        if (!sess) {
+            ERR("Session creation failed");
+            return {};
+        }
+
+        auto resp = std::make_unique<executor::CustomResponse>();
+        executor::TFSessionCreated tfsesscreated;
+        tfsesscreated.set_sessionid(session_id);
+        tfsesscreated.SerializeToString(resp->mutable_extra());
+        return resp;
+    });
+}
+
+PTask TFOpLibrary::createCloseSessionTask(ZmqServer::Sender sender,
+                                          const executor::EvenlopDef &evenlop,
+                                          const executor::CustomRequest &req)
+{
+    UNUSED(sender);
+    UNUSED(evenlop);
+
+    auto tfclose = utils::createMessage<rpc::TFSessionClose>("executor.TFSessionClose",
+                                                             req.extra().data(),
+                                                             req.extra().size());
+    if (!tfclose) {
+        return {};
+    }
+
+    return make_lambda_task([tfclose = std::move(tfclose), this]() {
+        destorySession(tfclose->sessionid());
+
+        auto resp = std::make_unique<executor::CustomResponse>();
+        return resp;
     });
 }

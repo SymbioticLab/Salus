@@ -9,13 +9,15 @@ import "tensorflow/core/protobuf/config.proto";
 import "tensorflow/core/lib/core/error_codes.proto";
 
 message TFSessionArgs {
-    int32 graph_def_version = 1;
-    tensorflow.ConfigProto cfgProto = 3;
-    tensorflow.FunctionDefLibrary funcDef = 4;
+    tensorflow.ConfigProto cfgProto = 1;
 }
 
 message TFSessionCreated {
     bytes sessionId = 2;
+}
+
+message TFSessionClose {
+    bytes sessionId = 1;
 }
 
 message TFOpKernelDef {

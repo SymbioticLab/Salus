@@ -35,6 +35,7 @@ class OpKernel;
 }
 
 class TFSession;
+class TFExecutionState;
 class TFContext;
 
 /**
@@ -48,12 +49,11 @@ public:
     bool accepts(const executor::OpKernelDef &operation) override;
     PTask createRunTask(ZmqServer::Sender sender,
                         const executor::EvenlopDef &evenlop,
-                        const executor::OpKernelDef &opdef,
-                        const executor::OpContextDef &ctxdef) override;
+                        const executor::RunRequest &request) override;
 
-    PTask createInitSessionTask(ZmqServer::Sender sender,
-                                const executor::EvenlopDef &evenlop,
-                                const executor::InitSessionRequest &req) override;
+    PTask createRunGraphTask(ZmqServer::Sender sender,
+                             const executor::EvenlopDef &evenlop,
+                             const executor::RunGraphRequest &request) override;
 
     PTask createCustomTask(ZmqServer::Sender sender,
                            const executor::EvenlopDef &evenlop,
@@ -68,11 +68,23 @@ private:
     PTask createRendezRecvTask(ZmqServer::Sender sender, const executor::EvenlopDef &evenlop,
                                const executor::CustomRequest &req);
 
+    /**
+     * Called when new session created
+     */
+    PTask createInitSessionTask(ZmqServer::Sender sender,
+                                const executor::EvenlopDef &evenlop,
+                                const executor::CustomRequest &req);
+    /**
+     * Called when session closed
+     */
+    PTask createCloseSessionTask(ZmqServer::Sender sender,
+                                 const executor::EvenlopDef &evenlop,
+                                 const executor::CustomRequest &req);
+
 private:
-    TFSession *getOrCreateSession(const std::string &sess_id, int graph_def_version,
-                                  const tensorflow::ConfigProto &cfgProto,
-                                  const tensorflow::FunctionDefLibrary &fDefLib);
+    TFSession *getOrCreateSession(const std::string &sess_id, const tensorflow::ConfigProto &cfgProto);
     TFSession *findSession(const std::string &sess_id);
+    void destorySession(const std::string &sess_id);
 
     std::mutex m_mu; // protects m_sessions
     std::unordered_map<std::string, std::unique_ptr<TFSession>> m_sessions;
@@ -85,7 +97,7 @@ class TFRunTask : public ITask
 public:
     ~TFRunTask() override;
 
-    TFRunTask(TFSession *sess, ZmqServer::Sender &&sender,
+    TFRunTask(TFExecutionState *execState, ZmqServer::Sender &&sender,
               std::unique_ptr<tensorflow::NodeDef> &&nodedef, bool async,
               std::unique_ptr<executor::TFOpContextDef> &&tfctxdef);
 
@@ -98,9 +110,7 @@ public:
     bool prepare(DeviceType dev) override;
 
 private:
-    static void populateUpdate(executor::TFOpContextUpdate &tfctxupd, TFContext *pContext, TFSession *pSession);
-
-    TFSession *m_session;
+    TFExecutionState *m_exec;
 
     ZmqServer::Sender m_sender;
 
