@@ -7,50 +7,40 @@ import numpy.testing as npt
 
 class TestBasicOps(unittest.TestCase):
 
+    @classmethod
+    def setUpClass(cls):
+        cls.config = tf.ConfigProto()
+        cls.config.graph_options.optimizer_options.do_constant_folding = False
+
+    def setUp(self):
+        tf.reset_default_graph()
+
     def test_variable(self):
         with tf.device('/device:RPC:0'):
             a = tf.Variable(tf.zeros([200]))
         with tf.device('/device:CPU:0'):
             b = tf.Variable(tf.zeros([200]))
 
-        config = tf.ConfigProto()
-        config.graph_options.optimizer_options.do_constant_folding = False
-        with tf.Session(config=config) as sess:
+        with tf.Session(config=self.config) as sess:
             sess.run(tf.global_variables_initializer())
             npt.assert_array_equal(sess.run(a), sess.run(b))
 
     def test_randomop(self):
-        tf.set_random_seed(233)
+        seed = 233
+
         with tf.device('/device:RPC:0'):
-            a = tf.random_normal([20, 20])
-
-        config = tf.ConfigProto()
-        config.graph_options.optimizer_options.do_constant_folding = False
-        with tf.Session(config=config) as sess:
-            actual = sess.run(a)
-
-        tf.reset_default_graph()
-        tf.set_random_seed(233)
+            actual = tf.random_normal([20, 20], seed=seed)
         with tf.device('/device:CPU:0'):
-            b = tf.random_normal([20, 20])
-        config = tf.ConfigProto()
-        config.graph_options.optimizer_options.do_constant_folding = False
-        with tf.Session(config=config) as sess:
-            expected = sess.run(b)
+            expected = tf.random_normal([20, 20], seed=seed)
 
-        npt.assert_array_equal(actual, expected)
+        with tf.Session(config=self.config) as sess:
+            npt.assert_array_equal(sess.run(actual), sess.run(expected))
 
     def test_noop(self):
         with tf.device('/device:RPC:0'):
             a = tf.no_op(name='mynoop')
-
-        config = tf.ConfigProto()
-        config.graph_options.optimizer_options.do_constant_folding = False
-        with tf.Session(config=config) as sess:
-            try:
-                sess.run(a)
-            except:
-                self.fail("running noop should not raise exception")
+        with tf.Session(config=self.config) as sess:
+            sess.run(a)
 
     def test_multiply(self):
         with tf.device('/device:RPC:0'):
@@ -67,9 +57,7 @@ class TestBasicOps(unittest.TestCase):
             d = tf.multiply(a, b, name='mul_first')
             expected = tf.multiply(c, d, name='mul_second')
 
-        config = tf.ConfigProto()
-        config.graph_options.optimizer_options.do_constant_folding = False
-        with tf.Session(config=config) as sess:
+        with tf.Session(config=self.config) as sess:
             npt.assert_array_equal(sess.run(actual), sess.run(expected))
 
     def test_matmul(self):
