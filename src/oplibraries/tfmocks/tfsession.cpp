@@ -141,7 +141,7 @@ void TFSession::tensorToProtoData(tensorflow::TensorProto *data, TensorValue val
 
 TFExecutionState *TFSession::prepareExecution(tensorflow::GraphDef &&graphdef)
 {
-    static std::atomic_uint64_t counter(0);
+    static std::atomic_uint_fast64_t counter(0);
     std::string execId("executor");
     execId += std::to_string(counter.fetch_add(1));
 
