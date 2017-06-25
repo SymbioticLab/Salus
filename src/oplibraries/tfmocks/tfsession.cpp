@@ -164,6 +164,7 @@ TFExecutionState *TFSession::findExecution(const std::string &execId)
     if (it != m_execStates.end()) {
         return it->second.get();
     }
+    ERR("Execution {} not found in session {}", execId, m_sessHandle);
     return nullptr;
 }
 

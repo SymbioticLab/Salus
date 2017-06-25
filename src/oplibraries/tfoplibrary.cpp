@@ -117,6 +117,7 @@ TFSession *TFOpLibrary::findSession(const std::string& sess_id)
     if (it != m_sessions.end()) {
         return it->second.get();
     }
+    ERR("Session {} not found", sess_id);
     return {};
 }
 
@@ -145,7 +146,6 @@ PTask TFOpLibrary::createRunTask(ZmqServer::Sender sender, const rpc::EvenlopDef
 
     auto sess = findSession(evenlop.sessionid());
     if (!sess) {
-        ERR("Session {} not found", evenlop.sessionid());
         return {};
     }
 
@@ -329,6 +329,7 @@ PTask TFOpLibrary::createCustomTask(ZmqServer::Sender sender, const rpc::Evenlop
         return nullptr;
     }
 
+    DEBUG("Dispatching custom task {} of seq {}", it->first, evenlop.seq());
     return it->second(std::move(sender), evenlop, req);
 }
 
@@ -351,6 +352,7 @@ PTask TFOpLibrary::createRendezRecvTask(ZmqServer::Sender sender, const rpc::Eve
     }
 
     return make_lambda_task([sess, recvupd = std::move(recvupd)]() -> ProtoPtr {
+        DEBUG("executor.TFRendezRecvUpdate for seq {}", recvupd->forseq());
         auto tfctx = sess->findContext(recvupd->forseq());
         if (!tfctx) {
             ERR("Context for given seq {} not found", recvupd->forseq());

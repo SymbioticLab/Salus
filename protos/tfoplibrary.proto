@@ -31,8 +31,6 @@ message TFOpContextDef {
     uint64 frame_id = 2;
     int64 iter_id = 3;
 
-    // SessionState
-    // TensorStore
     // CancellationManager
     // CallFrame
 // Inputs
