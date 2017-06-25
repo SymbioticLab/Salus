@@ -31,7 +31,7 @@ class TFAllocator;
 class TFDevice : public tensorflow::LocalDevice
 {
 public:
-    explicit TFDevice(const tensorflow::SessionOptions &options);
+    explicit TFDevice(const tensorflow::SessionOptions &options, std::shared_ptr<TFAllocator> allocator);
     ~TFDevice() override;
 
     void Compute(tensorflow::OpKernel* op_kernel, tensorflow::OpKernelContext* context) override;
@@ -43,7 +43,7 @@ public:
     tensorflow::Status Sync() override { return tensorflow::Status::OK(); }
 
 private:
-    std::unique_ptr<TFAllocator> m_allocator;
+    std::shared_ptr<TFAllocator> m_allocator;
 };
 
 #endif // TFDEVICE_H

@@ -24,13 +24,16 @@
 #include <tensorflow/core/platform/types.h>
 #include <third_party/eigen3/unsupported/Eigen/CXX11/Tensor>
 
+#include <memory>
+
 /**
  * @todo write docs
  */
 class TFAllocator : public tensorflow::Allocator
 {
 public:
-    TFAllocator();
+    static std::shared_ptr<TFAllocator> New();
+
     ~TFAllocator() override;
 
     // bring up all AllocateRaw signiture from base class to surpass -Woverloaded-virtual
@@ -42,6 +45,8 @@ public:
     bool ShouldAllocateEmptyTensors() override;
 
 private:
+    TFAllocator();
+
     TF_DISALLOW_COPY_AND_ASSIGN(TFAllocator);
 };
 

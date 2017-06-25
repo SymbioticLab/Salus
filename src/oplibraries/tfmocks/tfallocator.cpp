@@ -22,16 +22,15 @@
 #include "memorymgr/memorymgr.h"
 #include "platform/logging.h"
 
-
-TFAllocator::TFAllocator()
+std::shared_ptr<TFAllocator> TFAllocator::New()
 {
-
+    struct make_shared_enabler : public TFAllocator {};
+    return std::make_shared<make_shared_enabler>();
 }
 
-TFAllocator::~TFAllocator()
-{
+TFAllocator::TFAllocator() = default;
 
-}
+TFAllocator::~TFAllocator() = default;
 
 std::string TFAllocator::Name()
 {

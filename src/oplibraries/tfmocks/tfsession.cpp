@@ -35,13 +35,15 @@
 TFSession::TFSession(TFOpLibrary *opLibrary, const tensorflow::ConfigProto &configProto)
     : m_oplibrary(opLibrary)
     , m_sessHandle("executor_session")
+    , m_options()
+    , m_allocator(TFAllocator::New())
     , m_opseg()
 {
     DEBUG("Creating new TFSession at {:x}", reinterpret_cast<uint64_t>(this));
 
     m_options.config = configProto;
 
-    m_device = std::make_unique<TFDevice>(m_options);
+    m_device = std::make_unique<TFDevice>(m_options, m_allocator);
 
     m_opseg.AddHold(m_sessHandle);
 }
@@ -308,7 +310,10 @@ TFContext::TFContext(TFExecutionState *exec, uint64_t seq)
 {
 }
 
-TFContext::~TFContext() = default;
+TFContext::~TFContext()
+{
+    m_exec->session()->deregisterContext(seq);
+}
 
 tensorflow::OpKernelContext *TFContext::ctx()
 {
@@ -371,6 +376,17 @@ TFContext *TFSession::findContext(uint64_t taskId)
         return it->second;
     }
     return nullptr;
+}
+
+void TFSession::deregisterContext(uint64_t taskId)
+{
+    tensorflow::mutex_lock locker(m_muctx);
+    auto it = m_contexts.find(taskId);
+    if (it != m_contexts.end()) {
+        m_contexts.erase(it);
+    } else {
+        WARN("Deregistering non-exist context: {}", taskId);
+    }
 }
 
 executor::TFOpContextUpdate TFSession::finalizeContext(TFContext *pContext)

@@ -52,6 +52,7 @@ class FunctionDefLibrary;
 class ConfigProto;
 }
 
+class TFAllocator;
 class TFDevice;
 class TFSession;
 class TFExecutionState;
@@ -152,6 +153,7 @@ public:
                                              TFExecutionState *execState);
     void registerContext(uint64_t taskId, TFContext *ctx);
     TFContext *findContext(uint64_t taskId);
+    void deregisterContext(uint64_t taskId);
 
     // Tensor memory management
     bool findTensorFromName(const std::string &name, TensorValue &val);
@@ -178,19 +180,26 @@ private:
 
     tensorflow::SessionOptions m_options;
 
+    /**
+     * The allocator used by this session.
+     * NOTE: must come before all other fields containing tensors in order to
+     * be destructed after any tensor deallocation.
+     */
+    std::shared_ptr<TFAllocator> m_allocator;
+
+    std::unique_ptr<TFDevice> m_device;
+
     tensorflow::OpSegment m_opseg;
     std::vector<std::unique_ptr<tensorflow::OpKernel>> m_kernels;
 
     tensorflow::SessionState m_sessState;
-
-    std::unique_ptr<TFDevice> m_device;
 
     tensorflow::mutex m_mu;
     std::unordered_map<std::string, TensorValue> m_tensors;
 
     tensorflow::mutex m_muctx;
     /**
-     * Map RunRequest seq number to TFContext. Protected by m_muctx.
+     * Mapping RunRequest seq number to TFContext. Protected by m_muctx.
      */
     std::unordered_map<uint64_t, TFContext*> m_contexts;
 

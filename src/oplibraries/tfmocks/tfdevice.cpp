@@ -24,12 +24,12 @@
 #include "platform/logging.h"
 #include "utils/macros.h"
 
-TFDevice::TFDevice(const tensorflow::SessionOptions &options)
+TFDevice::TFDevice(const tensorflow::SessionOptions &options, std::shared_ptr<TFAllocator> allocator)
     : LocalDevice(options,
                   Device::BuildDeviceAttributes("/device:CPU:0", tensorflow::DEVICE_CPU,
                                                 tensorflow::Bytes(256 << 20), tensorflow::DeviceLocality()),
                   nullptr)
-    , m_allocator(new TFAllocator)
+    , m_allocator(allocator)
 { }
 
 TFDevice::~TFDevice() = default;
