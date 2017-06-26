@@ -263,14 +263,18 @@ void TFRunTask::runAsync(DoneCallback cb)
     }
 
     DEBUG("ComputeAsync returned for opkernel ", m_opkernel->name());
+
     // Send out a message for any pending rendezvous recv request immediately
-    auto reqs = std::make_unique<executor::TFRendezRecvRequests>();
-    for (auto &elem : pContext->rendez.releasePendingRecv()) {
-        INFO("Found pending recv request: ", elem.first);
-        reqs->add_key(elem.first);
-        reqs->add_allocattributes(elem.second.args.alloc_attrs.value);
+    auto pending = pContext->rendez.releasePendingRecv();
+    if (pending.size() != 0) {
+        auto reqs = std::make_unique<executor::TFRendezRecvRequests>();
+        for (auto &elem : pending) {
+            INFO("Found pending recv request: ", elem.first);
+            reqs->add_key(elem.first);
+            reqs->add_allocattributes(elem.second.args.alloc_attrs.value);
+        }
+        m_sender->sendMessage(std::move(reqs));
     }
-    m_sender->sendMessage(std::move(reqs));
 }
 
 TFRunTask::~TFRunTask() = default;
