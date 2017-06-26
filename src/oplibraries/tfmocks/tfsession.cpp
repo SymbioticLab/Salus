@@ -32,25 +32,25 @@
 #include <tensorflow/core/common_runtime/function.h>
 #include <tensorflow/core/lib/gtl/stl_util.h>
 
-TFSession::TFSession(TFOpLibrary *opLibrary, const tensorflow::ConfigProto &configProto)
+TFSession::TFSession(TFOpLibrary *opLibrary, const std::string &sessionId, const tensorflow::ConfigProto &configProto)
     : m_oplibrary(opLibrary)
-    , m_sessHandle("executor_session")
+    , m_sessionId(sessionId)
     , m_options()
     , m_allocator(TFAllocator::New())
     , m_opseg()
 {
-    DEBUG("Creating new TFSession at {:x}", reinterpret_cast<uint64_t>(this));
+    DEBUG("TFSession created at {:x}, sessionId: {}", reinterpret_cast<uint64_t>(this), m_sessionId);
 
     m_options.config = configProto;
 
     m_device = std::make_unique<TFDevice>(m_options, m_allocator);
 
-    m_opseg.AddHold(m_sessHandle);
+    m_opseg.AddHold(m_sessionId);
 }
 
 TFSession::~TFSession()
 {
-    m_opseg.RemoveHold(m_sessHandle);
+    m_opseg.RemoveHold(m_sessionId);
     for (auto p : m_tensors) {
         if (!p.second.is_ref()) {
             delete p.second.tensor;
@@ -149,6 +149,7 @@ TFExecutionState *TFSession::prepareExecution(tensorflow::GraphDef &&graphdef)
 
     auto e = findExecution(execId);
     if (e) {
+        DEBUG("Reuse existing Execution {} in session {}", execId, m_sessionId);
         return e;
     }
 
@@ -166,7 +167,6 @@ TFExecutionState *TFSession::findExecution(const std::string &execId)
     if (it != m_execStates.end()) {
         return it->second.get();
     }
-    ERR("Execution {} not found in session {}", execId, m_sessHandle);
     return nullptr;
 }
 
@@ -240,7 +240,7 @@ tensorflow::OpKernel *TFSession::findOrCreateKernel(const tensorflow::NodeDef &n
     auto create_fn = [fruntime, &ndef](tensorflow::OpKernel** kernel) {
         return fruntime->CreateKernel(ndef, kernel);
     };
-    auto ok = m_opseg.FindOrCreate(m_sessHandle, ndef.name(), &kernel, create_fn);
+    auto ok = m_opseg.FindOrCreate(m_sessionId, ndef.name(), &kernel, create_fn);
     if (!ok.ok()) {
         ERR("Failed to create kernel with status {} for NodeDef: {}", ok,
             ndef.DebugString());
@@ -294,6 +294,16 @@ std::unique_ptr<TFContext> TFSession::createContext(const executor::TFOpContextD
         if (initem.is_ref() && !input.is_ref()) {
             ERR("{}-th input expects a ref type", i);
             return {};
+        } else if (!initem.is_ref() && input.is_ref()) {
+            // Automatically deref the tensor ref when the op expects a
+            // tensor but is given a ref to a tensor.  Need to deref it
+            // under the mutex.
+            {
+                tensorflow::mutex_lock l(*(input.mutex_if_ref));
+                tfctx->deref_tensors.emplace_back(*input.tensor);
+                auto &t = tfctx->deref_tensors.back();
+                input = {nullptr, &t};
+            }
         }
         tfctx->inputs.push_back(input);
     }

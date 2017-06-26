@@ -102,7 +102,7 @@ TFSession *TFOpLibrary::getOrCreateSession(const std::string& sess_id,
 
     auto &sess = m_sessions[sess_id];
     if (!sess) {
-        sess = std::make_unique<TFSession>(this, cfgProto);
+        sess = std::make_unique<TFSession>(this, sess_id, cfgProto);
     } else {
         DEBUG("Reuse previously created session");
     }
@@ -402,6 +402,7 @@ PTask TFOpLibrary::createInitSessionTask(ZmqServer::Sender sender, const rpc::Ev
             ERR("Session creation failed");
             return {};
         }
+        INFO("Created session {}", session_id);
 
         auto resp = std::make_unique<executor::CustomResponse>();
         executor::TFSessionCreated tfsesscreated;

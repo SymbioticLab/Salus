@@ -34,7 +34,6 @@
 #include <tensorflow/core/public/session_options.h>
 
 #include <memory>
-#include <mutex>
 #include <string>
 #include <unordered_map>
 #include <utility>
@@ -97,6 +96,9 @@ public:
 
     tensorflow::TensorStore tensorStore;
 
+    // Holds tensors that are created due to automatic deref
+    std::vector<tensorflow::Tensor> deref_tensors;
+
     TensorValueVec inputs;
     DeviceContextVec input_device_contexts;
     AllocatorAttributeVec input_alloc_attrs;
@@ -139,7 +141,8 @@ private:
 class TFSession
 {
 public:
-    TFSession(TFOpLibrary *opLibrary, const tensorflow::ConfigProto &configProto);
+    TFSession(TFOpLibrary *opLibrary, const std::string &sessionId,
+              const tensorflow::ConfigProto &configProto);
 
     ~TFSession();
 
@@ -176,7 +179,7 @@ private:
 
     TFOpLibrary *m_oplibrary;
 
-    std::string m_sessHandle;
+    std::string m_sessionId;
 
     tensorflow::SessionOptions m_options;
 
