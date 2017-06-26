@@ -310,10 +310,7 @@ TFContext::TFContext(TFExecutionState *exec, uint64_t seq)
 {
 }
 
-TFContext::~TFContext()
-{
-    m_exec->session()->deregisterContext(seq);
-}
+TFContext::~TFContext() = default;
 
 tensorflow::OpKernelContext *TFContext::ctx()
 {
@@ -436,8 +433,7 @@ executor::TFOpContextUpdate TFSession::finalizeContext(TFContext *pContext)
     }
 
     // Remove from context registary
-    tensorflow::mutex_lock locker(m_muctx);
-    m_contexts.erase(pContext->seq);
+    deregisterContext(pContext->seq);
 
     return tfctxupd;
 }
