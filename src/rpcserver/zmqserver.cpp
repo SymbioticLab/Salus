@@ -294,12 +294,9 @@ void ZmqServer::dispatch(zmq::socket_t &sock)
 
     // step 4. send response back
     .then([sender = std::move(sender)](ProtoPtr &&pResponse) mutable {
-        INFO("callback called in thread {}", std::this_thread::get_id());
-        if (!pResponse) {
-            ERR("Skipped to send one reply due to error in logic dispatch");
-            return;
+        if (pResponse) {
+            sender->sendMessage(std::move(pResponse));
         }
-        sender->sendMessage(std::move(pResponse));
     }).fail([](std::exception_ptr e){
         ERR("Caught exception in logic dispatch: {}", e);
     });

@@ -392,18 +392,20 @@ PTask TFOpLibrary::createInitSessionTask(ZmqServer::Sender sender, const rpc::Ev
     }
 
     auto sessSeq = m_sessionSeq.fetch_add(1);
-    return make_lambda_task([tfreq = std::move(tfreq), sessSeq, this]() -> ProtoPtr {
+    return make_lambda_task([tfreq = std::move(tfreq), sessSeq, this]() {
+        auto resp = std::make_unique<executor::CustomResponse>();
+
         std::string session_id = "session";
         session_id += std::to_string(sessSeq);
 
         auto sess = getOrCreateSession(session_id, tfreq->cfgproto());
         if (!sess) {
             ERR("Session creation failed");
-            return {};
+            resp->mutable_result()->set_code(-1);
+            return resp;
         }
         INFO("Created session {}", session_id);
 
-        auto resp = std::make_unique<executor::CustomResponse>();
         executor::TFSessionCreated tfsesscreated;
         tfsesscreated.set_sessionid(session_id);
         tfsesscreated.SerializeToString(resp->mutable_extra());
