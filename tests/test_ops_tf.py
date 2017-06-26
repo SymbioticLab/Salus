@@ -10,7 +10,6 @@ class TestBasicOps(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.config = tf.ConfigProto()
-        cls.config.graph_options.optimizer_options.do_constant_folding = False
 
     def setUp(self):
         tf.reset_default_graph()

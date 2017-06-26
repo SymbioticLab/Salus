@@ -81,6 +81,7 @@ class TestMnistConv(unittest.TestCase):
         cls.mnist = input_data.read_data_sets('MNIST_data', one_hot=True)
 
     def test_softmax(self):
+        tf.reset_default_graph()
         tf.set_random_seed(233)
         np.random.seed(233)
         with tf.device('/device:RPC:0'):
@@ -99,6 +100,7 @@ class TestMnistConv(unittest.TestCase):
         self.assertEquals(actual, expected)
 
     def test_conv(self):
+        tf.reset_default_graph()
         tf.set_random_seed(233)
         np.random.seed(233)
         with tf.device('/device:RPC:0'):
