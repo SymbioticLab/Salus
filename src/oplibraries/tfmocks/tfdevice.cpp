@@ -51,7 +51,6 @@ tensorflow::Status TFDevice::MakeTensorFromProto(const tensorflow::TensorProto& 
                             const tensorflow::AllocatorAttributes alloc_attrs,
                             tensorflow::Tensor* tensor)
 {
-    INFO("TFDevice::MakeTensorFromProto got tensor_proto {}", tensor_proto.DebugString());
     INFO("TFDevice::MakeTensorFromProto got alloc_attrs {}", alloc_attrs);
 
     tensorflow::Tensor parsed(tensor_proto.dtype());
