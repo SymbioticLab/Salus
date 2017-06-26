@@ -54,6 +54,7 @@ public:
     explicit TFRendezvous(TFExecutionState *exec);
     ~TFRendezvous() override;
 
+
     tensorflow::Status Send(const ParsedKey& parsed,
                             const Args& send_args,
                             const tensorflow::Tensor& val,
@@ -72,6 +73,14 @@ public:
      * Release pending recv requests
      */
     RecvTable releasePendingRecv();
+
+    /**
+     * Send update got from RecvUpdate, this send is not recorded as pending sent tensors.
+     */
+    tensorflow::Status triggerSend(const ParsedKey& parsed,
+                                   const Args& send_args,
+                                   const tensorflow::Tensor& val,
+                                   const bool is_dead);
 
 private:
     TFExecutionState *m_exec;

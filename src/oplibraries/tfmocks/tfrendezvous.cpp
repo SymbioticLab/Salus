@@ -62,6 +62,11 @@ TFRendezvous::~TFRendezvous()
 {
     m_local->Unref();
 }
+tensorflow::Status TFRendezvous::triggerSend(const ParsedKey& parsed, const Args& send_args,
+                                             const tensorflow::Tensor& val, const bool is_dead)
+{
+    return m_local->Send(parsed, send_args, val, is_dead);
+}
 
 tensorflow::Status TFRendezvous::Send(const ParsedKey &parsed, const Args &send_args,
                                       const tensorflow::Tensor &val, const bool is_dead)

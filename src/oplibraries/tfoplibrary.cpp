@@ -372,8 +372,7 @@ PTask TFOpLibrary::createRendezRecvTask(ZmqServer::Sender sender, const rpc::Eve
                 ERR("Failed to create tensor for rendezrecv");
                 return {};
             }
-            ok.Update(tfctx->rendez.Send(parsed, tensorflow::Rendezvous::Args(),
-                                         *t, item.isdead()));
+            ok.Update(tfctx->rendez.triggerSend(parsed, tensorflow::Rendezvous::Args(), *t, item.isdead()));
         }
         return {};
     });
