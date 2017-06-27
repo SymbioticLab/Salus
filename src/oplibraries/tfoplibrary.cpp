@@ -238,8 +238,16 @@ ProtoPtr TFRunTask::run()
         return resp;
     }
 
+    auto device = static_cast<tensorflow::Device*>(m_context->ctx()->device());
+    if (!device) {
+        ERR("Got nullptr for device in context");
+        resp->mutable_result()->set_code(-1);
+        return resp;
+    }
+
     try {
-        m_opkernel->Compute(m_context->ctx());
+        device->Compute(m_opkernel, m_context->ctx());
+//         m_opkernel->Compute(m_context->ctx());
     } catch (std::exception &err) {
         ERR("Caught exception when run kernel compute: ", err.what());
     }
@@ -265,6 +273,15 @@ void TFRunTask::runAsync(DoneCallback cb)
         return;
     }
 
+    auto device = static_cast<tensorflow::Device*>(m_context->ctx()->device());
+    if (!device) {
+        ERR("Got nullptr for device in context");
+        auto resp = std::make_unique<executor::RunResponse>();
+        resp->mutable_result()->set_code(-1);
+        cb(std::move(resp));
+        return;
+    }
+
     auto pContext = m_context.get(); // we need this later
     auto pSession = m_exec->session();
     // NOTE: this might be deleted by the time done_cb got called. So move out the pieces we need.
@@ -280,7 +297,8 @@ void TFRunTask::runAsync(DoneCallback cb)
     };
 
     try {
-        m_opkernel->AsAsync()->ComputeAsync(pContext->ctx(), std::move(done_cb));
+        device->ComputeAsync(m_opkernel->AsAsync(), pContext->ctx(), std::move(done_cb));
+//         m_opkernel->AsAsync()->ComputeAsync(pContext->ctx(), std::move(done_cb));
     } catch (std::exception &err) {
         ERR("Caught exception when run kernel compute async: ", err.what());
     }

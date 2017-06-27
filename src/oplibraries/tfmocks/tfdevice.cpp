@@ -38,7 +38,8 @@ void TFDevice::Compute(tensorflow::OpKernel* op_kernel, tensorflow::OpKernelCont
 {
     UNUSED(op_kernel);
     UNUSED(context);
-    WARN("Empty compute");
+    WARN("Legacy compute");
+    op_kernel->Compute(context);
 }
 
 tensorflow::Allocator* TFDevice::GetAllocator(tensorflow::AllocatorAttributes attr)
