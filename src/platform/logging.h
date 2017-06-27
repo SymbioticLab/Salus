@@ -70,6 +70,10 @@ class Message;
 
 std::ostream &operator<<(std::ostream &os, const google::protobuf::Message &c);
 
+
+class DeviceSpec;
+std::ostream &operator<<(std::ostream &os, const DeviceSpec &c);
+
 /**
  * Generic operator<< for strong enum classes
  */

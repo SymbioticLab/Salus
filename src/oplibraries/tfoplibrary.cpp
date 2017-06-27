@@ -120,6 +120,7 @@ TFSession *TFOpLibrary::getOrCreateSession(const std::string& sess_id,
         std::vector<tensorflow::Device*> devices;
         tensorflow::SessionOptions options;
         (*options.config.mutable_device_count())["RPC"] = 0;
+        // FIXME: use device with our own allocator
         auto s = tensorflow::DeviceFactory::AddDevices(options, "/job:localhost/replica:0/task:0",
                                                        &devices);
         if (!s.ok()) {
@@ -207,7 +208,7 @@ bool TFRunTask::isAsync()
     return m_async;
 }
 
-bool TFRunTask::prepare(DeviceType &dev)
+bool TFRunTask::prepare(DeviceSpec &dev)
 {
     auto session = m_exec->session();
 

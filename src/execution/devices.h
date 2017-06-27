@@ -20,9 +20,39 @@
 #ifndef DEVICES_H
 #define DEVICES_H
 
-enum class DeviceType {
+#include <string>
+#include <tuple>
+
+enum class DeviceType
+{
     CPU,
     GPU
 };
+
+struct DeviceSpec
+{
+    DeviceType type;
+    int id;
+
+    DeviceSpec() = default;
+
+    DeviceSpec(DeviceType t, int id = 0) : type(t), id(id) {}
+
+private:
+    friend bool operator==(const DeviceSpec &lhs, const DeviceSpec &rhs);
+    friend bool operator!=(const DeviceSpec &lhs, const DeviceSpec &rhs);
+
+    auto tie() const { return std::tie(type, id); }
+};
+
+inline bool operator==(const DeviceSpec &lhs, const DeviceSpec &rhs)
+{
+    return lhs.tie() == rhs.tie();
+}
+
+inline bool operator!=(const DeviceSpec &lhs, const DeviceSpec &rhs)
+{
+    return lhs.tie() != rhs.tie();
+}
 
 #endif // DEVICES_H

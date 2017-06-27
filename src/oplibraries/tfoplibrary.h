@@ -61,6 +61,7 @@ public:
                            const executor::EvenlopDef &evenlop,
                            const executor::CustomRequest &push) override;
 
+    tensorflow::DeviceMgr *deviceManager() const { return m_deviceMgr.get(); };
 
 private:
     // subtasks for custom tasks
@@ -82,8 +83,6 @@ private:
     PTask createCloseSessionTask(ZmqServer::Sender sender,
                                  const executor::EvenlopDef &evenlop,
                                  const executor::CustomRequest &req);
-
-    tensorflow::DeviceMgr *deviceManager() const { return m_deviceMgr.get(); };
 
 private:
     TFSession *getOrCreateSession(const std::string &sess_id, const tensorflow::ConfigProto &cfgProto);
@@ -113,7 +112,7 @@ public:
 
     void runAsync(DoneCallback cb) override;
 
-    bool prepare(DeviceType &dev) override;
+    bool prepare(DeviceSpec &dev) override;
 
 private:
     TFExecutionState *m_exec;

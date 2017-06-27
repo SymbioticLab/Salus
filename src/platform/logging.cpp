@@ -21,6 +21,7 @@
 
 #include "crashhandler/crashhandler.hpp"
 #include "utils/stringutils.h"
+#include "execution/devices.h"
 
 #include "executor.pb.h"
 
@@ -140,4 +141,9 @@ std::ostream &operator<<(std::ostream &os, const tensorflow::AllocatorAttributes
 std::ostream &operator<<(std::ostream &os, const google::protobuf::Message &c)
 {
     return os << c.DebugString();
+}
+
+std::ostream &operator<<(std::ostream &os, const DeviceSpec &c)
+{
+    return os << "DeviceSpec(type=" << c.type << ", id=" << c.id << ")";
 }

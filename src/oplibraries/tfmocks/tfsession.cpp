@@ -22,6 +22,7 @@
 #include "tfallocator.h"
 #include "tfrendezvous.h"
 
+#include "oplibraries/tfoplibrary.h"
 #include "platform/logging.h"
 #include "memorymgr/memorymgr.h"
 #include "utils/macros.h"
@@ -30,6 +31,7 @@
 
 #include <tensorflow/core/framework/node_def.pb.h>
 #include <tensorflow/core/common_runtime/function.h>
+#include <tensorflow/core/common_runtime/device_mgr.h>
 #include <tensorflow/core/lib/gtl/stl_util.h>
 #include <tensorflow/core/protobuf/config.pb.h>
 
@@ -159,11 +161,30 @@ TFExecutionState *TFSession::findExecution(const std::string &execId)
     return nullptr;
 }
 
-tensorflow::Device *TFSession::findDevice(DeviceType dev) const
+tensorflow::Device *TFSession::findDevice(const DeviceSpec &dev) const
 {
-    // FIXME: return device according to DeviceType
-    UNUSED(dev);
-    return m_device.get();
+    std::string name;
+    // TODO: support multible device for a type
+    switch (dev.type) {
+    case DeviceType::CPU:
+        name = "CPU:";
+        break;
+    case DeviceType::GPU:
+        name = "GPU:";
+        break;
+    default:
+        name = "CPU:";
+        break;
+    }
+
+    name += std::to_string(dev.id);
+
+    tensorflow::Device *device = nullptr;
+    auto ok = m_oplibrary->deviceManager()->LookupDevice(name, &device);
+    if (!ok.ok()) {
+        ERR("Cannot find device for {}: {}", dev, ok);
+    }
+    return device;
 }
 
 TFExecutionState::TFExecutionState(TFSession *sess, const std::string &execId, tensorflow::GraphDef &&graph,
@@ -189,18 +210,20 @@ TFSession *TFExecutionState::session() const
     return m_session;
 }
 
-tensorflow::FunctionLibraryRuntime *TFExecutionState::functionRuntime(DeviceType dev)
+tensorflow::FunctionLibraryRuntime *TFExecutionState::functionRuntime(tensorflow::Device *tfdev)
 {
     tensorflow::mutex_lock l(m_mu);
 
-    if (m_fruntimes.count(dev) == 0) {
-        m_fruntimes.emplace(dev, tensorflow::NewFunctionLibraryRuntime(nullptr,
-                                                           m_session->sessionOptions().env,
-                                                           m_session->findDevice(dev),
-                                                           m_graphdef.versions().producer(),
-                                                           m_fdefinition.get(), m_optOptions));
+    if (m_fruntimes.count(tfdev) == 0) {
+        m_fruntimes.emplace(tfdev,
+                            tensorflow::NewFunctionLibraryRuntime(nullptr,
+                                                                  m_session->sessionOptions().env,
+                                                                  tfdev,
+                                                                  m_graphdef.versions().producer(),
+                                                                  m_fdefinition.get(),
+                                                                  m_optOptions));
     }
-    return m_fruntimes[dev].get();
+    return m_fruntimes[tfdev].get();
 }
 
 tensorflow::Rendezvous *TFExecutionState::rendez() const
@@ -214,7 +237,7 @@ TFExecutionState::~TFExecutionState()
 }
 
 bool TFSession::findOrCreateKernel(TFExecutionState *execState, const tensorflow::NodeDef &ndef,
-                                   tensorflow::OpKernel *&kernel, DeviceType &dev)
+                                   tensorflow::OpKernel *&kernel, DeviceSpec &dev)
 {
     kernel = nullptr;
 
@@ -226,12 +249,15 @@ bool TFSession::findOrCreateKernel(TFExecutionState *execState, const tensorflow
     });
     if (ok.ok() && found) {
         // we saw this kernel before, check if the device match
-        tensorflow::mutex_lock l(m_muk);
-        auto it = m_kernelDevice.find(kernel);
-        if (it == m_kernelDevice.end()) {
-            ERR("We've created the kernel, but don't remember its device: {}", ndef);
-            kernel = nullptr;
-            return false;
+        auto it = m_kernelDevice.end();
+        {
+            tensorflow::mutex_lock l(m_muk);
+            it = m_kernelDevice.find(kernel);
+            if (it == m_kernelDevice.end()) {
+                ERR("We've created the kernel, but don't remember its device: {}", ndef);
+                kernel = nullptr;
+                return false;
+            }
         }
         if (dev == it->second) {
             // We are on the same device, good.
@@ -245,8 +271,14 @@ bool TFSession::findOrCreateKernel(TFExecutionState *execState, const tensorflow
         // continue to create the kernel
     }
 
+    auto tfdev = findDevice(dev);
+    if (!tfdev) {
+        ERR("Cannot find suitable device for spec: {}", dev);
+        return false;
+    }
+
     // Caches the kernel only if the node is stateful.
-    auto fruntime = execState->functionRuntime(dev);
+    auto fruntime = execState->functionRuntime(tfdev);
     if (!fruntime->IsStateful(ndef.op())) {
         auto ok = fruntime->CreateKernel(ndef, &kernel);
         if (!ok.ok()) {
@@ -285,7 +317,7 @@ bool TFSession::findOrCreateKernel(TFExecutionState *execState, const tensorflow
 
 std::unique_ptr<TFContext> TFSession::createContext(const executor::TFOpContextDef &tfdef,
                                                     tensorflow::OpKernel *opkernel, uint64_t seq,
-                                                    TFExecutionState *execState, DeviceType dev)
+                                                    TFExecutionState *execState, const DeviceSpec &dev)
 {
     auto tfctx = std::make_unique<TFContext>(execState, seq);
     registerContext(seq, tfctx.get());
@@ -296,7 +328,7 @@ std::unique_ptr<TFContext> TFSession::createContext(const executor::TFOpContextD
     tfctx->params.step_container = &tfctx->step_container;
     tfctx->params.slice_reader_cache = &tfctx->slice_reader_cache_wrapper;
     tfctx->params.resource_manager = device->resource_manager();
-    tfctx->params.function_library = execState->functionRuntime(dev);
+    tfctx->params.function_library = execState->functionRuntime(device);
     tfctx->params.rendezvous = &tfctx->rendez;
     tfctx->params.tensor_store = &tfctx->tensorStore;
 

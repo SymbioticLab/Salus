@@ -22,6 +22,8 @@
 
 #include "tfrendezvous.h"
 
+#include "execution/devices.h"
+
 #include "executor.pb.h"
 #include "tfoplibrary.pb.h"
 
@@ -56,7 +58,6 @@ class TFDevice;
 class TFSession;
 class TFExecutionState;
 class TFOpLibrary;
-enum class DeviceType;
 
 class MaybeLock
 {
@@ -121,7 +122,7 @@ public:
 
     const std::string &execId() const;
 
-    tensorflow::FunctionLibraryRuntime *functionRuntime(DeviceType dev);
+    tensorflow::FunctionLibraryRuntime *functionRuntime(tensorflow::Device *tfdev);
 
     TFSession *session() const;
 
@@ -139,7 +140,7 @@ private:
     std::unique_ptr<tensorflow::FunctionLibraryDefinition> m_fdefinition;
 
     tensorflow::mutex m_mu;
-    std::unordered_map<DeviceType, std::unique_ptr<tensorflow::FunctionLibraryRuntime>> m_fruntimes;
+    std::unordered_map<tensorflow::Device*, std::unique_ptr<tensorflow::FunctionLibraryRuntime>> m_fruntimes;
 };
 
 class TFSession
@@ -163,11 +164,11 @@ public:
      * Otherwise, returns false with kernel set up nullptr
      */
     bool findOrCreateKernel(TFExecutionState *execState, const tensorflow::NodeDef &ndef,
-                            tensorflow::OpKernel *&kernel, DeviceType &dev);
+                            tensorflow::OpKernel *&kernel, DeviceSpec &dev);
 
     std::unique_ptr<TFContext> createContext(const executor::TFOpContextDef &tfdef,
                                              tensorflow::OpKernel *opkernel, uint64_t taskId,
-                                             TFExecutionState *execState, DeviceType dev);
+                                             TFExecutionState *execState, const DeviceSpec &dev);
     void registerContext(uint64_t taskId, TFContext *ctx);
     TFContext *findContext(uint64_t taskId);
     void deregisterContext(uint64_t taskId);
@@ -186,7 +187,7 @@ public:
 
     // Accessors
     const tensorflow::SessionOptions &sessionOptions() const { return m_options; }
-    tensorflow::Device *findDevice(DeviceType dev) const;
+    tensorflow::Device *findDevice(const DeviceSpec &dev) const;
 
 private:
     TFOpLibrary *m_oplibrary;
@@ -209,7 +210,7 @@ private:
      * Remember the device for cached stateful kernels
      */
     tensorflow::mutex m_muk;
-    std::unordered_map<tensorflow::OpKernel*, DeviceType> m_kernelDevice;
+    std::unordered_map<tensorflow::OpKernel*, DeviceSpec> m_kernelDevice;
     std::vector<std::unique_ptr<tensorflow::OpKernel>> m_kernels;
 
     tensorflow::SessionState m_sessState;

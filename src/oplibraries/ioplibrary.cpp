@@ -24,7 +24,7 @@
 
 ITask::~ITask() = default;
 
-bool ITask::prepare(DeviceType &dev)
+bool ITask::prepare(DeviceSpec &dev)
 {
     UNUSED(dev);
 

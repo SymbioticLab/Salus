@@ -44,7 +44,7 @@ ExecutionEngine::~ExecutionEngine() = default;
 bool ExecutionEngine::schedule(ITask *t)
 {
     // TODO: implement device selection
-    auto selectedDev = DeviceType::CPU;
+    DeviceSpec selectedDev(DeviceType::CPU);
 
     auto expectedDev = selectedDev;
     if (t->prepare(expectedDev)) {
