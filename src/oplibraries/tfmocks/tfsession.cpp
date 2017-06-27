@@ -31,10 +31,10 @@
 #include <tensorflow/core/framework/node_def.pb.h>
 #include <tensorflow/core/common_runtime/function.h>
 #include <tensorflow/core/lib/gtl/stl_util.h>
-#include <tensorflow/core/common_runtime/device_mgr.h>
-#include <tensorflow/core/common_runtime/device_factory.h>
+#include <tensorflow/core/protobuf/config.pb.h>
 
-TFSession::TFSession(TFOpLibrary *opLibrary, const std::string &sessionId, const tensorflow::ConfigProto &configProto)
+TFSession::TFSession(TFOpLibrary *opLibrary, const std::string &sessionId,
+                     const tensorflow::ConfigProto &configProto)
     : m_oplibrary(opLibrary)
     , m_sessionId(sessionId)
     , m_options()
@@ -42,6 +42,7 @@ TFSession::TFSession(TFOpLibrary *opLibrary, const std::string &sessionId, const
     , m_opseg()
 {
     m_options.config = configProto;
+
     m_opseg.AddHold(m_sessionId);
 
     DEBUG("TFSession created at {:x}, sessionId: {}", reinterpret_cast<uint64_t>(this), m_sessionId);
@@ -49,15 +50,6 @@ TFSession::TFSession(TFOpLibrary *opLibrary, const std::string &sessionId, const
 
 bool TFSession::initialize()
 {
-    std::vector<tensorflow::Device*> devices;
-    auto s = tensorflow::DeviceFactory::AddDevices(m_options, "/job:localhost/replica:0/task:0",
-                                                   &devices);
-    if (!s.ok()) {
-        ERR("Error when adding devices to TFSession: {}", s);
-        return false;
-    }
-    m_deviceMgr = std::make_unique<tensorflow::DeviceMgr>(devices);
-
     m_device = std::make_unique<TFDevice>(m_options, m_allocator);
     return true;
 }

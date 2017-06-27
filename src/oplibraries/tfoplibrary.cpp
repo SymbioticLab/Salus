@@ -36,7 +36,10 @@
 #include <tensorflow/core/protobuf/config.pb.h>
 #include <tensorflow/core/platform/mutex.h>
 #include <tensorflow/core/lib/strings/strcat.h>
+#include <tensorflow/core/common_runtime/device_mgr.h>
+#include <tensorflow/core/common_runtime/device_factory.h>
 
+#include <vector>
 #include <thread>
 #include <functional>
 
@@ -99,6 +102,19 @@ TFSession *TFOpLibrary::getOrCreateSession(const std::string& sess_id,
                                            const tensorflow::ConfigProto& cfgProto)
 {
     std::lock_guard<std::mutex> guard(m_mu);
+
+    if (!m_deviceMgr) {
+        std::vector<tensorflow::Device*> devices;
+        tensorflow::SessionOptions options;
+        (*options.config.mutable_device_count())["RPC"] = 0;
+        auto s = tensorflow::DeviceFactory::AddDevices(options, "/job:localhost/replica:0/task:0",
+                                                       &devices);
+        if (!s.ok()) {
+            ERR("Error when adding devices to TFSession: {}", s);
+            return nullptr;
+        }
+        m_deviceMgr = std::make_unique<tensorflow::DeviceMgr>(devices);
+    }
 
     auto &sess = m_sessions[sess_id];
     if (!sess) {

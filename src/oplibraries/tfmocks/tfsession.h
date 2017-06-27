@@ -49,7 +49,6 @@ class OptimizerOptions;
 class NodeDef;
 class FunctionDefLibrary;
 class ConfigProto;
-class DeviceMgr;
 }
 
 class TFAllocator;
@@ -203,7 +202,6 @@ private:
      */
     std::shared_ptr<TFAllocator> m_allocator;
 
-    std::unique_ptr<tensorflow::DeviceMgr> m_deviceMgr;
     std::unique_ptr<TFDevice> m_device;
 
     tensorflow::OpSegment m_opseg;

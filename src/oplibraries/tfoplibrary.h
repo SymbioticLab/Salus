@@ -29,9 +29,11 @@
 
 #include <memory>
 #include <atomic>
+#include <mutex>
 
 namespace tensorflow {
 class OpKernel;
+class DeviceMgr;
 }
 
 class TFSession;
@@ -81,6 +83,8 @@ private:
                                  const executor::EvenlopDef &evenlop,
                                  const executor::CustomRequest &req);
 
+    tensorflow::DeviceMgr *deviceManager() const { return m_deviceMgr.get(); };
+
 private:
     TFSession *getOrCreateSession(const std::string &sess_id, const tensorflow::ConfigProto &cfgProto);
     TFSession *findSession(const std::string &sess_id);
@@ -90,6 +94,8 @@ private:
     std::unordered_map<std::string, std::unique_ptr<TFSession>> m_sessions;
 
     std::atomic_uint_fast64_t m_sessionSeq;
+
+    std::unique_ptr<tensorflow::DeviceMgr> m_deviceMgr;
 };
 
 class TFRunTask : public ITask
