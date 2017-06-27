@@ -169,17 +169,14 @@ void ZmqServer::proxyRecvLoop()
     bool shouldDispatch = false;
     while (m_keepRunning) {
         // first blocking wait on pollin (read) events
-        int rc = 0;
-        TRACE("Blocking pool on {}", wait_events == pollin_events ? "pollin events" : "all events");
-        rc = pollWithCheck(wait_events, 2, -1);
-        if (rc < 0) {
+        TRACE("Blocking pool on {}", wait_events == &pollin_events ? "pollin events" : "all events");
+        if (!pollWithCheck(*wait_events, -1)) {
             break;
         }
         // something happened, so we poll w/o waiting on all_events
         // to set events in all_events
         TRACE("Non-blocking poll on all events");
-        rc = pollWithCheck(all_events, 2, 0);
-        if (rc < 0) {
+        if (!pollWithCheck(all_events, 0)) {
             break;
         }
 
