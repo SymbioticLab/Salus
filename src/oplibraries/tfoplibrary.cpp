@@ -17,6 +17,19 @@
  * 
  */
 
+// Force to use non-debug version of protobuf map, which changes its hashing function
+// according to debug state, causing problems when two libraries both use protobuf, but
+// only one of them is built with debug. Then passing a map from one library to the other
+// becomes impossible because values inserted using one hashing function can't be found
+// using another hashing function.
+#ifdef NDEBUG
+#undef NDEBUG
+#include "google/protobuf/map.h"
+#define NDEBUG
+#else
+#include "google/protobuf/map.h"
+#endif
+
 #include "tfoplibrary.h"
 
 #include "tfmocks/tfsession.h"
