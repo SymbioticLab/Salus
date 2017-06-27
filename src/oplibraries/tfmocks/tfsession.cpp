@@ -31,6 +31,8 @@
 #include <tensorflow/core/framework/node_def.pb.h>
 #include <tensorflow/core/common_runtime/function.h>
 #include <tensorflow/core/lib/gtl/stl_util.h>
+#include <tensorflow/core/common_runtime/device_mgr.h>
+#include <tensorflow/core/common_runtime/device_factory.h>
 
 TFSession::TFSession(TFOpLibrary *opLibrary, const std::string &sessionId, const tensorflow::ConfigProto &configProto)
     : m_oplibrary(opLibrary)
@@ -39,13 +41,25 @@ TFSession::TFSession(TFOpLibrary *opLibrary, const std::string &sessionId, const
     , m_allocator(TFAllocator::New())
     , m_opseg()
 {
-    DEBUG("TFSession created at {:x}, sessionId: {}", reinterpret_cast<uint64_t>(this), m_sessionId);
-
     m_options.config = configProto;
+    m_opseg.AddHold(m_sessionId);
+
+    DEBUG("TFSession created at {:x}, sessionId: {}", reinterpret_cast<uint64_t>(this), m_sessionId);
+}
+
+bool TFSession::initialize()
+{
+    std::vector<tensorflow::Device*> devices;
+    auto s = tensorflow::DeviceFactory::AddDevices(m_options, "/job:localhost/replica:0/task:0",
+                                                   &devices);
+    if (!s.ok()) {
+        ERR("Error when adding devices to TFSession: {}", s);
+        return false;
+    }
+    m_deviceMgr = std::make_unique<tensorflow::DeviceMgr>(devices);
 
     m_device = std::make_unique<TFDevice>(m_options, m_allocator);
-
-    m_opseg.AddHold(m_sessionId);
+    return true;
 }
 
 TFSession::~TFSession()
@@ -56,23 +70,6 @@ TFSession::~TFSession()
             delete p.second.tensor;
         }
     }
-}
-
-std::unique_ptr<tensorflow::Tensor> TFSession::tensorFromProtoData(const tensorflow::TensorProto &proto)
-{
-    if (!m_device) {
-        ERR("m_device should not be nullptr for TFSession");
-        return nullptr;
-    }
-
-    auto tensor = std::make_unique<tensorflow::Tensor>();
-
-    auto status = m_device->MakeTensorFromProto(proto, {}, tensor.get());
-    if (!status.ok()) {
-        ERR("Error when create tensor");
-        tensor.reset();
-    }
-    return tensor;
 }
 
 bool TFSession::findTensorFromName(const std::string &name, TensorValue &val)
@@ -170,22 +167,24 @@ TFExecutionState *TFSession::findExecution(const std::string &execId)
     return nullptr;
 }
 
+tensorflow::Device *TFSession::findDevice(DeviceType dev) const
+{
+    // FIXME: return device according to DeviceType
+    UNUSED(dev);
+    return m_device.get();
+}
+
 TFExecutionState::TFExecutionState(TFSession *sess, const std::string &execId, tensorflow::GraphDef &&graph,
                                    const tensorflow::OptimizerOptions &optOptions)
     : m_session(sess)
     , m_execId(execId)
     , m_graphdef(std::move(graph))
+    , m_optOptions(optOptions)
     , m_rendez(tensorflow::NewLocalRendezvous())
     , m_fdefinition(nullptr)
-    , m_fruntime(nullptr)
 {
     m_fdefinition = std::make_unique<tensorflow::FunctionLibraryDefinition>(tensorflow::OpRegistry::Global(),
                                                                             m_graphdef.library());
-    m_fruntime.reset(tensorflow::NewFunctionLibraryRuntime(nullptr,
-                                                           m_session->m_options.env,
-                                                           m_session->m_device.get(),
-                                                           m_graphdef.versions().producer(),
-                                                           m_fdefinition.get(), optOptions));
 }
 
 const std::string &TFExecutionState::execId() const
@@ -193,17 +192,26 @@ const std::string &TFExecutionState::execId() const
     return m_execId;
 }
 
-TFSession *TFExecutionState::session()
+TFSession *TFExecutionState::session() const
 {
     return m_session;
 }
 
-tensorflow::FunctionLibraryRuntime *TFExecutionState::functionRuntime()
+tensorflow::FunctionLibraryRuntime *TFExecutionState::functionRuntime(DeviceType dev)
 {
-    return m_fruntime.get();
+    tensorflow::mutex_lock l(m_mu);
+
+    if (m_fruntimes.count(dev) == 0) {
+        m_fruntimes.emplace(dev, tensorflow::NewFunctionLibraryRuntime(nullptr,
+                                                           m_session->sessionOptions().env,
+                                                           m_session->findDevice(dev),
+                                                           m_graphdef.versions().producer(),
+                                                           m_fdefinition.get(), m_optOptions));
+    }
+    return m_fruntimes[dev].get();
 }
 
-tensorflow::Rendezvous *TFExecutionState::rendez()
+tensorflow::Rendezvous *TFExecutionState::rendez() const
 {
     return m_rendez;
 }
@@ -213,55 +221,90 @@ TFExecutionState::~TFExecutionState()
     m_rendez->Unref();
 }
 
-tensorflow::OpKernel *TFSession::findOrCreateKernel(const tensorflow::NodeDef &ndef,
-                                                    TFExecutionState *execState)
+bool TFSession::findOrCreateKernel(TFExecutionState *execState, const tensorflow::NodeDef &ndef,
+                                   tensorflow::OpKernel *&kernel, DeviceType &dev)
 {
-    tensorflow::OpKernel *kernel = nullptr;
+    kernel = nullptr;
+
+    // First check if we already created the kernel on some device
+    bool found = true;
+    auto ok = m_opseg.FindOrCreate(m_sessionId, ndef.name(), &kernel, [&found](auto){
+        found = false;
+        return tensorflow::Status::OK();
+    });
+    if (ok.ok() && found) {
+        // we saw this kernel before, check if the device match
+        tensorflow::mutex_lock l(m_muk);
+        auto it = m_kernelDevice.find(kernel);
+        if (it == m_kernelDevice.end()) {
+            ERR("We've created the kernel, but don't remember its device: {}", ndef);
+            kernel = nullptr;
+            return false;
+        }
+        if (dev == it->second) {
+            // We are on the same device, good.
+            return true;
+        }
+        ERR("Stateful kernel can not be moved: previously created on {}, now requested on {}",
+            it->second, dev);
+        return false;
+    } else if (!ok.ok()) {
+        ERR("Failed to create kernel with status {} for NodeDef: {}", ok, ndef);
+        // continue to create the kernel
+    }
+
     // Caches the kernel only if the node is stateful.
-    auto fruntime = execState->functionRuntime();
+    auto fruntime = execState->functionRuntime(dev);
     if (!fruntime->IsStateful(ndef.op())) {
         auto ok = fruntime->CreateKernel(ndef, &kernel);
         if (!ok.ok()) {
-            ERR("Failed to create kernel with status {} for NodeDef: {}", ok,
-                ndef.DebugString());
+            ERR("Failed to create kernel with status {} for NodeDef: {}", ok, ndef);
             delete kernel;
             kernel = nullptr;
+            return false;
         }
-        if (kernel) {
-            m_kernels.emplace_back(kernel);
-        }
-        return kernel;
+        tensorflow::mutex_lock l(m_muk);
+        // TODO: kernel created in this way can be deleted after tfctx is done
+        m_kernels.emplace_back(kernel);
+        return true;
     }
 
     // Kernels created for subgraph nodes need to be cached.  On
     // cache miss, create_fn() is invoked to create a kernel based
     // on the function library here + global op registry.
     // OpSegment takes ownership of the created kernel.
-    auto create_fn = [fruntime, &ndef](tensorflow::OpKernel** kernel) {
-        return fruntime->CreateKernel(ndef, kernel);
+    auto create_fn = [fruntime, &ndef, &dev, this](tensorflow::OpKernel** kernel) {
+        auto ok = fruntime->CreateKernel(ndef, kernel);
+        if (ok.ok()) {
+            tensorflow::mutex_lock l(m_muk);
+            m_kernelDevice[*kernel] = dev;
+        }
+        return ok;
     };
-    auto ok = m_opseg.FindOrCreate(m_sessionId, ndef.name(), &kernel, create_fn);
+    ok = m_opseg.FindOrCreate(m_sessionId, ndef.name(), &kernel, create_fn);
     if (!ok.ok()) {
-        ERR("Failed to create kernel with status {} for NodeDef: {}", ok,
-            ndef.DebugString());
+        ERR("Failed to create kernel with status {} for NodeDef: {}", ok, ndef);
+        kernel = nullptr;
+        return false;
     }
 
-    return kernel;
+    return true;
 }
 
 std::unique_ptr<TFContext> TFSession::createContext(const executor::TFOpContextDef &tfdef,
                                                     tensorflow::OpKernel *opkernel, uint64_t seq,
-                                                    TFExecutionState *execState)
+                                                    TFExecutionState *execState, DeviceType dev)
 {
     auto tfctx = std::make_unique<TFContext>(execState, seq);
     registerContext(seq, tfctx.get());
 
-    tfctx->params.device = m_device.get();
+    auto device = findDevice(dev);
+    tfctx->params.device = device;
     tfctx->params.op_kernel = opkernel;
     tfctx->params.step_container = &tfctx->step_container;
     tfctx->params.slice_reader_cache = &tfctx->slice_reader_cache_wrapper;
-    tfctx->params.resource_manager = m_device->resource_manager();
-    tfctx->params.function_library = execState->functionRuntime();
+    tfctx->params.resource_manager = device->resource_manager();
+    tfctx->params.function_library = execState->functionRuntime(dev);
     tfctx->params.rendezvous = &tfctx->rendez;
     tfctx->params.tensor_store = &tfctx->tensorStore;
 

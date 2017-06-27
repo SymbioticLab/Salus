@@ -27,6 +27,8 @@
 #include <tensorflow/core/framework/allocator.h>
 #include <tensorflow/core/lib/core/status.h>
 
+#include <google/protobuf/message.h>
+
 #include <zmq.hpp>
 
 namespace {
@@ -133,4 +135,9 @@ std::ostream &operator<<(std::ostream &os, const tensorflow::AllocatorAttributes
     << ", gpu_compatible=" << c.gpu_compatible()
     << ", track_sizes=" << c.track_sizes()
     << ")";
+}
+
+std::ostream &operator<<(std::ostream &os, const google::protobuf::Message &c)
+{
+    return os << c.DebugString();
 }

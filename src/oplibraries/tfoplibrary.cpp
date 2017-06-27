@@ -73,7 +73,7 @@ void dumpOpKernel(tensorflow::OpKernel *opkernel)
     for (size_t i = 0; i != opkernel->output_memory_types().size(); i++) {
         TRACE("m_opkernel.output_memory_types()[{}] {}", i, opkernel->output_memory_types()[i]);
     }
-    TRACE("m_opkernel.def() {}", opkernel->def().DebugString());
+    TRACE("m_opkernel.def() {}", opkernel->def());
 }
 
 void dumpOpContext(tensorflow::OpKernelContext *ctx)
@@ -103,6 +103,9 @@ TFSession *TFOpLibrary::getOrCreateSession(const std::string& sess_id,
     auto &sess = m_sessions[sess_id];
     if (!sess) {
         sess = std::make_unique<TFSession>(this, sess_id, cfgProto);
+        if (!sess->initialize()) {
+            sess.reset();
+        }
     } else {
         DEBUG("Reuse previously created session");
     }
@@ -164,9 +167,9 @@ TFRunTask::TFRunTask(TFExecutionState *execState, ZmqServer::Sender &&sender, un
                      bool async, unique_ptr<executor::TFOpContextDef> &&tfctxdef)
     : m_exec(execState)
     , m_sender(std::move(sender))
+    , m_async(async)
     , m_ndef(std::move(nodedef))
     , m_tfctxdef(std::move(tfctxdef))
-    , m_async(async)
 {
 }
 
@@ -175,25 +178,29 @@ bool TFRunTask::isAsync()
     return m_async;
 }
 
-bool TFRunTask::prepare(DeviceType dev)
+bool TFRunTask::prepare(DeviceType &dev)
 {
-    UNUSED(dev);
+    auto session = m_exec->session();
 
-    auto kernel = m_exec->session()->findOrCreateKernel(*m_ndef, m_exec);
+    tensorflow::OpKernel *kernel = nullptr;
+    auto ok = session->findOrCreateKernel(m_exec, *m_ndef, kernel, dev);
+    if (!ok) {
+        if (!kernel) {
+            ERR("Kernel creation failed");
+        }
+        // kernel on mismatched device
+        return false;
+    }
     if (m_async) {
         m_opkernel = kernel->AsAsync();
     } else {
         m_opkernel = kernel;
     }
-    if (!m_opkernel) {
-        ERR("Kernel creation failed, got {:x}, after conversion {:x}",
-            reinterpret_cast<uint64_t>(kernel), reinterpret_cast<uint64_t>(m_opkernel));
-        return false;
-    }
     INFO("Created OpKernel");
     dumpOpKernel(m_opkernel);
 
-    m_context = m_exec->session()->createContext(*m_tfctxdef, m_opkernel, m_sender->sequenceNumber(), m_exec);
+    m_context = session->createContext(*m_tfctxdef, m_opkernel,
+                                       m_sender->sequenceNumber(), m_exec, dev);
     if (!m_context) {
         return false;
     }
@@ -367,12 +374,20 @@ PTask TFOpLibrary::createRendezRecvTask(ZmqServer::Sender sender, const rpc::Eve
 
             tensorflow::Rendezvous::ParsedKey parsed;
             auto ok = tensorflow::Rendezvous::ParseKey(item.key(), &parsed);
-            auto t = sess->tensorFromProtoData(item.val());
-            if (!t) {
+            if (!ok.ok()) {
+                ERR("Failed to parsekey: {}", ok.error_message());
+                return {};
+            }
+
+            tensorflow::Tensor tensor;
+            ok.Update(tfctx->params.device->MakeTensorFromProto(item.val(), {}, &tensor));
+            if (!ok.ok()) {
                 ERR("Failed to create tensor for rendezrecv");
                 return {};
             }
-            ok.Update(tfctx->rendez.triggerSend(parsed, tensorflow::Rendezvous::Args(), *t, item.isdead()));
+
+            ok.Update(tfctx->rendez.triggerSend(parsed, tensorflow::Rendezvous::Args(),
+                                                tensor, item.isdead()));
         }
         return {};
     });

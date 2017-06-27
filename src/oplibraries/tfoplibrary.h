@@ -107,19 +107,20 @@ public:
 
     void runAsync(DoneCallback cb) override;
 
-    bool prepare(DeviceType dev) override;
+    bool prepare(DeviceType &dev) override;
 
 private:
     TFExecutionState *m_exec;
 
     ZmqServer::Sender m_sender;
 
+    bool m_async;
+
     std::unique_ptr<tensorflow::NodeDef> m_ndef;
     std::unique_ptr<executor::TFOpContextDef> m_tfctxdef;
 
     tensorflow::OpKernel *m_opkernel;
     std::shared_ptr<TFContext> m_context;
-    bool m_async;
 };
 
 #endif // TFOPLIBRARY_H

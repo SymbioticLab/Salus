@@ -37,7 +37,11 @@ class ITask
 public:
     virtual ~ITask();
 
-    virtual bool prepare(DeviceType dev);
+    /**
+     * Prepare the task on device dev. The task may propose to run on different device
+     * by returning false and modifying dev.
+     */
+    virtual bool prepare(DeviceType &dev);
 
     virtual bool isAsync();
 

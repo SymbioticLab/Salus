@@ -49,6 +49,7 @@ class OptimizerOptions;
 class NodeDef;
 class FunctionDefLibrary;
 class ConfigProto;
+class DeviceMgr;
 }
 
 class TFAllocator;
@@ -56,6 +57,7 @@ class TFDevice;
 class TFSession;
 class TFExecutionState;
 class TFOpLibrary;
+enum class DeviceType;
 
 class MaybeLock
 {
@@ -120,22 +122,25 @@ public:
 
     const std::string &execId() const;
 
-    tensorflow::FunctionLibraryRuntime *functionRuntime();
+    tensorflow::FunctionLibraryRuntime *functionRuntime(DeviceType dev);
 
-    TFSession *session();
+    TFSession *session() const;
 
-    tensorflow::Rendezvous *rendez();
+    tensorflow::Rendezvous *rendez() const;
 
 private:
     TFSession *m_session;
     std::string m_execId;
 
     tensorflow::GraphDef m_graphdef;
+    tensorflow::OptimizerOptions m_optOptions;
 
     tensorflow::Rendezvous *m_rendez;
 
     std::unique_ptr<tensorflow::FunctionLibraryDefinition> m_fdefinition;
-    std::unique_ptr<tensorflow::FunctionLibraryRuntime> m_fruntime;
+
+    tensorflow::mutex m_mu;
+    std::unordered_map<DeviceType, std::unique_ptr<tensorflow::FunctionLibraryRuntime>> m_fruntimes;
 };
 
 class TFSession
@@ -144,16 +149,26 @@ public:
     TFSession(TFOpLibrary *opLibrary, const std::string &sessionId,
               const tensorflow::ConfigProto &configProto);
 
+    bool initialize();
+
     ~TFSession();
 
     TFExecutionState *prepareExecution(tensorflow::GraphDef &&graphdef);
     TFExecutionState *findExecution(const std::string &execId);
 
-    tensorflow::OpKernel *findOrCreateKernel(const tensorflow::NodeDef &nodedef, TFExecutionState *execState);
+    /**
+     * Find or create a kernel on dev.
+     * If a matching kernel found or created successfully, returns true, with kernel set to not null
+     * If a kernel is found but on nonmatching device, returns false, kernel set to not null, dev set to
+     *   previous device
+     * Otherwise, returns false with kernel set up nullptr
+     */
+    bool findOrCreateKernel(TFExecutionState *execState, const tensorflow::NodeDef &ndef,
+                            tensorflow::OpKernel *&kernel, DeviceType &dev);
 
     std::unique_ptr<TFContext> createContext(const executor::TFOpContextDef &tfdef,
                                              tensorflow::OpKernel *opkernel, uint64_t taskId,
-                                             TFExecutionState *execState);
+                                             TFExecutionState *execState, DeviceType dev);
     void registerContext(uint64_t taskId, TFContext *ctx);
     TFContext *findContext(uint64_t taskId);
     void deregisterContext(uint64_t taskId);
@@ -161,10 +176,6 @@ public:
     // Tensor memory management
     bool findTensorFromName(const std::string &name, TensorValue &val);
     void registerTensorForName(const std::string &name, TensorValue val);
-    /**
-     * Create a tensor from proto, allocate and fill in memory,
-     */
-    std::unique_ptr<tensorflow::Tensor> tensorFromProtoData(const tensorflow::TensorProto &proto);
 
     void tensorToProtoMeta(tensorflow::TensorProto *meta, TensorValue val);
     void tensorToProtoData(tensorflow::TensorProto *data, TensorValue val);
@@ -174,9 +185,11 @@ public:
     // Helper methods for run
     executor::TFOpContextUpdate finalizeContext(TFContext *pContext);
 
-private:
-    friend class TFExecutionState;
+    // Accessors
+    const tensorflow::SessionOptions &sessionOptions() const { return m_options; }
+    tensorflow::Device *findDevice(DeviceType dev) const;
 
+private:
     TFOpLibrary *m_oplibrary;
 
     std::string m_sessionId;
@@ -190,9 +203,15 @@ private:
      */
     std::shared_ptr<TFAllocator> m_allocator;
 
+    std::unique_ptr<tensorflow::DeviceMgr> m_deviceMgr;
     std::unique_ptr<TFDevice> m_device;
 
     tensorflow::OpSegment m_opseg;
+    /**
+     * Remember the device for cached stateful kernels
+     */
+    tensorflow::mutex m_muk;
+    std::unordered_map<tensorflow::OpKernel*, DeviceType> m_kernelDevice;
     std::vector<std::unique_ptr<tensorflow::OpKernel>> m_kernels;
 
     tensorflow::SessionState m_sessState;

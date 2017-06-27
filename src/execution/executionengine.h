@@ -23,6 +23,7 @@
 #include "devices.h"
 
 #include "oplibraries/ioplibrary.h"
+#include "platform/logging.h"
 
 #include <q/lib.hpp>
 #include <q/promise.hpp>
@@ -46,10 +47,11 @@ public:
     {
         using PResponse = std::unique_ptr<ResponseType>;
 
-        if (task->prepare(DeviceType::CPU)) {
-            return q::make_promise_of<PResponse>(m_qec->queue(),
-                                                 [task = std::move(task)](auto resolve, auto reject){
-                try {
+        return q::make_promise_of<PResponse>(m_qec->queue(),
+                                             [this, task = std::move(task)](auto resolve,
+                                                                            auto reject){
+            try {
+                if (this->schedule(task.get())) {
                     if (task->isAsync()) {
                         task->runAsync<ResponseType>([resolve](PResponse &&ptr){
                             resolve(std::move(ptr));
@@ -57,13 +59,13 @@ public:
                     } else {
                         resolve(task->run<ResponseType>());
                     }
-                } catch (std::exception &err) {
-                    reject(err);
+                } else {
+                    reject(std::logic_error("Task failed to prepare"));
                 }
-            });
-        } else {
-            return q::with(m_qec->queue(), PResponse(nullptr));
-        }
+            } catch (std::exception &err) {
+                reject(err);
+            }
+        });
     }
 
     template<typename ResponseType>
@@ -85,7 +87,8 @@ public:
         return q::with(m_qec->queue(), t);
     }
 
-
+protected:
+    bool schedule(ITask *t);
 
 private:
     ExecutionEngine();

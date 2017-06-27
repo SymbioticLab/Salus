@@ -63,6 +63,22 @@ struct AllocatorAttributes;
 }
 std::ostream &operator<<(std::ostream &os, const tensorflow::AllocatorAttributes &c);
 
+namespace google { namespace protobuf {
+class Message;
+}
+}
+
+std::ostream &operator<<(std::ostream &os, const google::protobuf::Message &c);
+
+/**
+ * Generic operator<< for strong enum classes
+ */
+template<typename T>
+std::ostream& operator<<(typename std::enable_if<std::is_enum<T>::value, std::ostream>::type &os, const T &e)
+{
+    return os << static_cast<typename std::underlying_type<T>::type>(e);
+}
+
 #define TRACE(...) logging::LoggerWrapper::logger()->trace(__VA_ARGS__)
 #define DEBUG(...) logging::LoggerWrapper::logger()->debug(__VA_ARGS__)
 #define INFO(...) logging::LoggerWrapper::logger()->info(__VA_ARGS__)

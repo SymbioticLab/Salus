@@ -19,6 +19,8 @@
 
 #include "executionengine.h"
 
+#include "utils/macros.h"
+
 ExecutionEngine &ExecutionEngine::instance()
 {
     static ExecutionEngine eng;
@@ -37,7 +39,21 @@ ExecutionEngine::ExecutionEngine()
 
 }
 
-ExecutionEngine::~ExecutionEngine()
-{
+ExecutionEngine::~ExecutionEngine() = default;
 
+bool ExecutionEngine::schedule(ITask *t)
+{
+    // TODO: implement device selection
+    auto selectedDev = DeviceType::CPU;
+
+    auto expectedDev = selectedDev;
+    if (t->prepare(expectedDev)) {
+        return true;
+    }
+
+    if (expectedDev != selectedDev) {
+        // the task wants to run on a different device
+        return t->prepare(expectedDev);
+    }
+    return false;
 }
