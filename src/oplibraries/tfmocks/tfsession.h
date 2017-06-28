@@ -51,6 +51,7 @@ class OptimizerOptions;
 class NodeDef;
 class FunctionDefLibrary;
 class ConfigProto;
+class Graph;
 }
 
 class TFAllocator;
@@ -101,6 +102,9 @@ public:
     // Holds tensors that are created due to automatic deref
     std::vector<tensorflow::Tensor> deref_tensors;
 
+    // Which device this context runs on
+    DeviceSpec devSpec;
+
     TensorValueVec inputs;
     DeviceContextVec input_device_contexts;
     AllocatorAttributeVec input_alloc_attrs;
@@ -118,21 +122,30 @@ class TFExecutionState
 public:
     explicit TFExecutionState(TFSession *sess, const std::string &execId, tensorflow::GraphDef &&graphdef,
                               const tensorflow::OptimizerOptions &optOptions);
+    bool initialize();
+
     ~TFExecutionState();
 
     const std::string &execId() const;
 
     tensorflow::FunctionLibraryRuntime *functionRuntime(tensorflow::Device *tfdev);
 
+    tensorflow::DeviceContext *deviceContext(const std::string &name, tensorflow::Device *tfdev);
+
     TFSession *session() const;
 
     tensorflow::Rendezvous *rendez() const;
+
+    tensorflow::Graph *graph() const;
 
 private:
     TFSession *m_session;
     std::string m_execId;
 
     tensorflow::GraphDef m_graphdef;
+    std::unique_ptr<tensorflow::Graph> m_graph;
+    std::unordered_map<std::string, int> m_gindex;
+
     tensorflow::OptimizerOptions m_optOptions;
 
     tensorflow::Rendezvous *m_rendez;
@@ -141,6 +154,7 @@ private:
 
     tensorflow::mutex m_mu;
     std::unordered_map<tensorflow::Device*, std::unique_ptr<tensorflow::FunctionLibraryRuntime>> m_fruntimes;
+    std::unordered_map<tensorflow::Device*, tensorflow::DeviceContextMap> m_deviceContexts;
 };
 
 class TFSession
@@ -174,8 +188,14 @@ public:
     void deregisterContext(uint64_t taskId);
 
     // Tensor memory management
-    bool findTensorFromName(const std::string &name, TensorValue &val);
-    void registerTensorForName(const std::string &name, TensorValue val);
+    struct TensorItem
+    {
+        TensorValue val;
+        tensorflow::DeviceContext *context;
+        tensorflow::DeviceBase *device;
+    };
+    bool findTensorFromName(const std::string &name, TensorItem &val);
+    void registerTensorForName(const std::string &name, TensorItem val);
 
     void tensorToProtoMeta(tensorflow::TensorProto *meta, TensorValue val);
     void tensorToProtoData(tensorflow::TensorProto *data, TensorValue val);
@@ -216,7 +236,7 @@ private:
     tensorflow::SessionState m_sessState;
 
     tensorflow::mutex m_mu;
-    std::unordered_map<std::string, TensorValue> m_tensors;
+    std::unordered_map<std::string, TensorItem> m_tensors;
 
     tensorflow::mutex m_muctx;
     /**

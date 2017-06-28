@@ -18,6 +18,7 @@ set(SRC_LIST
     "utils/protoutils.cpp"
     "utils/pointerutils.cpp"
     "utils/stringutils.cpp"
+    "utils/threadutils.cpp"
 
     "executor.cpp"
 )

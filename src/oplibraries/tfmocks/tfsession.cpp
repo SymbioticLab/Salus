@@ -26,9 +26,12 @@
 #include "platform/logging.h"
 #include "memorymgr/memorymgr.h"
 #include "utils/macros.h"
+#include "utils/threadutils.h"
 
 #include "tfoplibrary.pb.h"
 
+#include <tensorflow/core/graph/graph.h>
+#include <tensorflow/core/graph/graph_constructor.h>
 #include <tensorflow/core/framework/node_def.pb.h>
 #include <tensorflow/core/common_runtime/function.h>
 #include <tensorflow/core/common_runtime/device_mgr.h>
@@ -60,13 +63,14 @@ TFSession::~TFSession()
 {
     m_opseg.RemoveHold(m_sessionId);
     for (auto p : m_tensors) {
-        if (!p.second.is_ref()) {
-            delete p.second.tensor;
+        if (!p.second.val.is_ref()) {
+            delete p.second.val.tensor;
         }
+        p.second.context->Unref();
     }
 }
 
-bool TFSession::findTensorFromName(const std::string &name, TensorValue &val)
+bool TFSession::findTensorFromName(const std::string &name, TensorItem &item)
 {
     tensorflow::mutex_lock locker(m_mu);
     auto it = m_tensors.find(name);
@@ -74,23 +78,25 @@ bool TFSession::findTensorFromName(const std::string &name, TensorValue &val)
         ERR("Tensor not found under name: {}", name);
         return false;
     }
-    val = it->second;
+    item = it->second;
     return true;
 }
 
-void TFSession::registerTensorForName(const std::string &name, TensorValue val)
+void TFSession::registerTensorForName(const std::string &name, TensorItem item)
 {
     INFO("Registering tensor: {}, is ref: {} under name: {}",
-         val->DebugString(), val.is_ref(), name);
+         item.val->shape().DebugString(), item.val.is_ref(), name);
+
+    item.context->Ref();
     tensorflow::mutex_lock locker(m_mu);
     auto it = m_tensors.find(name);
     if (it == m_tensors.end()) {
-        m_tensors.emplace(name, val);
+        m_tensors.emplace(name, item);
     } else {
-        if (it->second.mutex_if_ref != val.mutex_if_ref) {
+        if (it->second.val.mutex_if_ref != item.val.mutex_if_ref) {
             WARN("The tensor going to be registered already exists, and is under a different mutex");
         }
-        it->second = val;
+        it->second = item;
     }
 }
 
@@ -146,6 +152,12 @@ TFExecutionState *TFSession::prepareExecution(tensorflow::GraphDef &&graphdef)
 
     auto execState = std::make_unique<TFExecutionState>(this, execId, std::move(graphdef),
                                                         m_options.config.graph_options().optimizer_options());
+    if (!execState->initialize()) {
+        ERR("Failed to initialize execution state");
+        execState.reset();
+        return nullptr;
+    }
+
     tensorflow::mutex_lock locker(m_muexec);
     auto p = m_execStates.emplace(execId, std::move(execState));
     return p.first->second.get();
@@ -192,12 +204,29 @@ TFExecutionState::TFExecutionState(TFSession *sess, const std::string &execId, t
     : m_session(sess)
     , m_execId(execId)
     , m_graphdef(std::move(graph))
+    , m_graph(nullptr)
     , m_optOptions(optOptions)
     , m_rendez(tensorflow::NewLocalRendezvous())
     , m_fdefinition(nullptr)
 {
     m_fdefinition = std::make_unique<tensorflow::FunctionLibraryDefinition>(tensorflow::OpRegistry::Global(),
                                                                             m_graphdef.library());
+    m_graph = std::make_unique<tensorflow::Graph>(m_fdefinition.get());
+
+}
+
+bool TFExecutionState::initialize()
+{
+    tensorflow::GraphConstructorOptions opts;
+    auto ok = tensorflow::ConvertGraphDefToGraph(opts, m_graphdef, m_graph.get());
+    if (!ok.ok()) {
+        ERR("Create graph from graphdef failed: {}", ok);
+        return false;
+    }
+    for (auto node: m_graph->nodes()) {
+        m_gindex[node->name()] = node->id();
+    }
+    return true;
 }
 
 const std::string &TFExecutionState::execId() const
@@ -226,14 +255,52 @@ tensorflow::FunctionLibraryRuntime *TFExecutionState::functionRuntime(tensorflow
     return m_fruntimes[tfdev].get();
 }
 
+tensorflow::DeviceContext *TFExecutionState::deviceContext(const std::string &name, tensorflow::Device *tfdev)
+{
+    auto nit = m_gindex.find(name);
+    if (nit == m_gindex.end()) {
+        ERR("{} not found in graph", name);
+        return nullptr;
+    }
+
+    auto it = m_deviceContexts.end();
+    {
+        tensorflow::mutex_lock l(m_mu);
+
+        it = m_deviceContexts.find(tfdev);
+        if (it == m_deviceContexts.end()) {
+            tensorflow::DeviceContextMap contexts;
+            auto ok = tfdev->FillContextMap(m_graph.get(), &contexts);
+            if (!ok.ok()) {
+                ERR("filling contextmap failed: {}", ok);
+            }
+            std::tie(it, std::ignore) = m_deviceContexts.emplace(tfdev, std::move(contexts));
+        }
+    }
+    if (it != m_deviceContexts.end()) {
+        return it->second[nit->second];
+    }
+    return nullptr;
+}
+
 tensorflow::Rendezvous *TFExecutionState::rendez() const
 {
     return m_rendez;
 }
 
+tensorflow::Graph *TFExecutionState::graph() const
+{
+    return m_graph.get();
+}
+
 TFExecutionState::~TFExecutionState()
 {
     m_rendez->Unref();
+    for (auto &item : m_deviceContexts) {
+        for (auto ctx : item.second) {
+            ctx->Unref();
+        }
+    }
 }
 
 bool TFSession::findOrCreateKernel(TFExecutionState *execState, const tensorflow::NodeDef &ndef,
@@ -323,22 +390,19 @@ std::unique_ptr<TFContext> TFSession::createContext(const executor::TFOpContextD
     registerContext(seq, tfctx.get());
 
     auto device = findDevice(dev);
+
     tfctx->params.device = device;
     tfctx->params.op_kernel = opkernel;
-    tfctx->params.step_container = &tfctx->step_container;
-    tfctx->params.slice_reader_cache = &tfctx->slice_reader_cache_wrapper;
+    tfctx->params.op_device_context = execState->deviceContext(opkernel->name(), device);
     tfctx->params.resource_manager = device->resource_manager();
     tfctx->params.function_library = execState->functionRuntime(device);
-    tfctx->params.rendezvous = &tfctx->rendez;
-    tfctx->params.tensor_store = &tfctx->tensorStore;
 
     tfctx->params.step_id = tfdef.step_id();
     tfctx->params.frame_iter = tensorflow::FrameAndIter(tfdef.frame_id(), tfdef.iter_id());
     tfctx->params.is_input_dead = tfdef.is_input_dead();
-    tfctx->FillOutputAttrs();
 
+    tfctx->FillOutputAttrs();
     tfctx->FillInputAttrs();
-    tfctx->FillInputDeviceContext();
 
     auto num_inputs = opkernel->num_inputs();
     if (num_inputs != tfdef.inputs_size()) {
@@ -347,34 +411,36 @@ std::unique_ptr<TFContext> TFSession::createContext(const executor::TFOpContextD
         return {};
     }
     tfctx->inputs.reserve(num_inputs);
-    for (int i = 0; i != tfdef.inputs_size(); ++i) {
+    tfctx->input_device_contexts.reserve(num_inputs);
+    for (int i = 0; i != num_inputs; ++i) {
         const auto &initem = tfdef.inputs(i);
         if (initem.name() != opkernel->def().input(i)) {
             ERR("Mismatch input: {}, expected: {}", initem.name(), opkernel->def().input(i));
             return {};
         }
-        TensorValue input;
+        TensorItem input;
         if (!findTensorFromName(initem.name(), input)) {
             ERR("Input not found");
             return {};
         }
-        if (initem.is_ref() && !input.is_ref()) {
+        if (initem.is_ref() && !input.val.is_ref()) {
             ERR("{}-th input expects a ref type", i);
             return {};
-        } else if (!initem.is_ref() && input.is_ref()) {
+        } else if (!initem.is_ref() && input.val.is_ref()) {
             // Automatically deref the tensor ref when the op expects a
             // tensor but is given a ref to a tensor.  Need to deref it
             // under the mutex.
             {
-                tensorflow::mutex_lock l(*(input.mutex_if_ref));
-                tfctx->deref_tensors.emplace_back(*input.tensor);
+                tensorflow::mutex_lock l(*(input.val.mutex_if_ref));
+                tfctx->deref_tensors.emplace_back(*input.val.tensor);
                 auto &t = tfctx->deref_tensors.back();
-                input = {nullptr, &t};
+                input.val = {nullptr, &t};
             }
         }
-        tfctx->inputs.push_back(input);
+        tfctx->inputs.push_back(input.val);
+
+        tfctx->input_device_contexts.push_back(input.context);
     }
-    tfctx->params.inputs = &tfctx->inputs;
 
     return tfctx;
 }
@@ -385,6 +451,12 @@ TFContext::TFContext(TFExecutionState *exec, uint64_t seq)
     , rendez(exec)
     , m_exec(exec)
 {
+    params.step_container = &step_container;
+    params.slice_reader_cache = &slice_reader_cache_wrapper;
+    params.rendezvous = &rendez;
+    params.tensor_store = &tensorStore;
+    params.input_alloc_attrs = &input_alloc_attrs;
+    params.input_device_contexts = &input_device_contexts;
 }
 
 TFContext::~TFContext() = default;
@@ -420,7 +492,6 @@ inline void TFContext::FillInputAttrs()
         attr.set_on_host(on_host);
         input_alloc_attrs.push_back(attr);
     }
-    params.input_alloc_attrs = &input_alloc_attrs;
 }
 
 inline void TFContext::FillInputDeviceContext()
@@ -430,7 +501,6 @@ inline void TFContext::FillInputDeviceContext()
     for (int index = 0; index < params.op_kernel->num_inputs(); index++) {
         input_device_contexts.push_back(nullptr);
     }
-    params.input_device_contexts = &input_device_contexts;
 }
 
 void TFSession::registerContext(uint64_t taskId, TFContext *ctx)
@@ -474,13 +544,26 @@ executor::TFOpContextUpdate TFSession::finalizeContext(TFContext *pContext)
 
     // process tensor received by rendezvous
     // And this will clear tensors table in rendezvous
-    for (auto &elem : pContext->rendez.releasePendingSentTensors()) {
+    auto pending = pContext->rendez.releasePendingSentTensors();
+    utils::semaphore se;
+    for (auto &elem : pending) {
         auto item = tfctxupd.add_rendeztensors();
         item->set_key(elem.first);
         item->set_allocattributes(elem.second.args.alloc_attrs.value);
         item->set_isdead(elem.second.isDead);
-        tensorToProtoData(item->mutable_val(), &elem.second.val);
+
+        auto &val = elem.second.val;
+        tensorflow::Tensor copy(m_allocator.get(), val.dtype(), val.shape());
+        auto devCtx = context->op_device_context();
+        auto dev = static_cast<tensorflow::Device*>(context->device());
+        auto mval = item->mutable_val();
+        devCtx->CopyDeviceTensorToCPU(&val, elem.first, dev, &copy,
+                                      [&se, &mval, &copy, this](auto){
+            this->tensorToProtoData(mval, &copy);
+            se.notify();
+        });
     }
+    se.wait(pending.size());
 
     // process tensor set as outputs
     std::vector<std::string> output_names;
@@ -495,7 +578,7 @@ executor::TFOpContextUpdate TFSession::finalizeContext(TFContext *pContext)
         auto out = context->release_output(i);
         // Let the session manage the tensor memory
         // The session takes the ownership of tensor in non-ref case
-        registerTensorForName(output_name, out);
+        registerTensorForName(output_name, {out, context->op_device_context(), context->device()});
 
         auto outitem = tfctxupd.add_outputs();
         outitem->set_name(output_name);

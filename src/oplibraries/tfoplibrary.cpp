@@ -237,6 +237,8 @@ bool TFRunTask::prepare(DeviceSpec &dev)
     TRACE("Created OpKernelContext");
     dumpOpContext(m_context->ctx());
 
+    m_context->devSpec = dev;
+
     return true;
 }
 
