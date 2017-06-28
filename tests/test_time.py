@@ -3,14 +3,16 @@ from timeit import default_timer, timeit
 import sys
 
 config = tf.ConfigProto()
+config.graph_options.optimizer_options.opt_level = tf.OptimizerOptions.L0
+config.graph_options.optimizer_options.do_constant_folding = False
 
 def build_graph(x):
-    tf.reset_default_graph()
     m = tf.matmul(tf.random_normal((x,x)), tf.random_normal((x,x)))
     return tf.reduce_sum(m)
 
 def time_on(dev, x, rep = 10):
     print('Run on {}'.format(dev))
+    tf.reset_default_graph()
     with tf.device('/device:' + dev + ':0'):
         op = build_graph(x)
         with tf.Session(config=config) as sess:
