@@ -26,11 +26,13 @@ option(WITH_BUNDLED_SPDLOG "Use bundled spdlog library instead of system provide
 # Find packages
 #---------------------------------------------------------------------------------------
 # Protobuf
-find_package(Protobuf REQUIRED)
-set_package_properties(Protobuf PROPERTIES TYPE REQUIRED PURPOSE "For message serialization")
+find_package(Protobuf 3.2.0 EXACT REQUIRED)
+set_package_properties(Protobuf PROPERTIES TYPE REQUIRED PURPOSE
+    "For message serialization, version must match the one used in TensorFlow"
+)
 
 # TensorFlow
-# TensorFlow root must be passed in command line as -DTensorFlow_ROOT=/path/to/tensorflow
+# TensorFlow root must be passed in command line as -DTENSORFLOW_ROOT=/path/to/tensorflow
 set(USE_TENSORFLOW OFF)
 if(WITH_TENSORFLOW)
     find_package(TensorFlow REQUIRED)
