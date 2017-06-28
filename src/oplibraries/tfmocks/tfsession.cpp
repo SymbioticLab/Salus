@@ -66,7 +66,9 @@ TFSession::~TFSession()
         if (!p.second.val.is_ref()) {
             delete p.second.val.tensor;
         }
-        p.second.context->Unref();
+        if (p.second.context) {
+            p.second.context->Unref();
+        }
     }
 }
 
@@ -87,7 +89,10 @@ void TFSession::registerTensorForName(const std::string &name, TensorItem item)
     INFO("Registering tensor: {}, is ref: {} under name: {}",
          item.val->shape().DebugString(), item.val.is_ref(), name);
 
-    item.context->Ref();
+    if (item.context) {
+        item.context->Ref();
+    }
+
     tensorflow::mutex_lock locker(m_mu);
     auto it = m_tensors.find(name);
     if (it == m_tensors.end()) {
@@ -175,6 +180,9 @@ TFExecutionState *TFSession::findExecution(const std::string &execId)
 
 tensorflow::Device *TFSession::findDevice(const DeviceSpec &dev) const
 {
+    // FIXME: use proper device finding
+    return m_device.get();
+
     std::string name;
     // TODO: support multible device for a type
     switch (dev.type) {
@@ -217,6 +225,8 @@ TFExecutionState::TFExecutionState(TFSession *sess, const std::string &execId, t
 
 bool TFExecutionState::initialize()
 {
+    // Disable for now
+    /*
     tensorflow::GraphConstructorOptions opts;
     auto ok = tensorflow::ConvertGraphDefToGraph(opts, m_graphdef, m_graph.get());
     if (!ok.ok()) {
@@ -226,6 +236,7 @@ bool TFExecutionState::initialize()
     for (auto node: m_graph->nodes()) {
         m_gindex[node->name()] = node->id();
     }
+    */
     return true;
 }
 
@@ -457,6 +468,7 @@ TFContext::TFContext(TFExecutionState *exec, uint64_t seq)
     params.tensor_store = &tensorStore;
     params.input_alloc_attrs = &input_alloc_attrs;
     params.input_device_contexts = &input_device_contexts;
+    params.inputs = &inputs;
 }
 
 TFContext::~TFContext() = default;
@@ -553,15 +565,22 @@ executor::TFOpContextUpdate TFSession::finalizeContext(TFContext *pContext)
         item->set_isdead(elem.second.isDead);
 
         auto &val = elem.second.val;
-        tensorflow::Tensor copy(m_allocator.get(), val.dtype(), val.shape());
         auto devCtx = context->op_device_context();
-        auto dev = static_cast<tensorflow::Device*>(context->device());
         auto mval = item->mutable_val();
-        devCtx->CopyDeviceTensorToCPU(&val, elem.first, dev, &copy,
-                                      [&se, &mval, &copy, this](auto){
-            this->tensorToProtoData(mval, &copy);
+        if (devCtx) {
+            tensorflow::Tensor copy(m_allocator.get(), val.dtype(), val.shape());
+            auto dev = static_cast<tensorflow::Device*>(context->device());
+            devCtx->CopyDeviceTensorToCPU(&val, elem.first, dev, &copy,
+                                        [&se, &mval, &copy, this](auto){
+                this->tensorToProtoData(mval, &copy);
+                se.notify();
+            });
+        } else {
+            WARN("The tensor not copied from device to cpu. Assuming CPU device");
+            // FIXME: create and use devCtx
+            tensorToProtoData(mval, &val);
             se.notify();
-        });
+        }
     }
     se.wait(pending.size());
 
