@@ -11,7 +11,8 @@ def build_graph(x):
     return tf.reduce_sum(m)
 
 def time_on(dev, x, rep = 10):
-    print('Run on {}'.format(dev))
+    print('-----------------------------------------------------------------')
+    print('Run on {} with {} repetations, data size {}'.format(dev, rep, x))
     tf.reset_default_graph()
     with tf.device('/device:' + dev + ':0'):
         op = build_graph(x)
@@ -21,7 +22,8 @@ def time_on(dev, x, rep = 10):
             for _ in range(rep):
                 sess.run(op)
             dur = (default_timer() - st) / rep
-            print('Used time: {}s'.format(dur))
+            print('Average time per run: {:.5f}s'.format(dur))
+    print('=================================================================')
 
 def gpu(x, rep):
     return time_on('GPU', x, rep)
