@@ -90,6 +90,8 @@ public:
 protected:
     bool schedule(ITask *t);
 
+    bool trySchedule(ITask *t, const DeviceSpec &dev);
+
 private:
     ExecutionEngine();
 

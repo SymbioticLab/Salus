@@ -45,13 +45,26 @@ bool ExecutionEngine::schedule(ITask *t)
 {
     // TODO: implement device selection
     DeviceSpec selectedDev(DeviceType::CPU);
+    if (trySchedule(t, DeviceType::GPU)) {
+        INFO("Task scheduled on GPU");
+        return true;
+    }
 
-    auto expectedDev = selectedDev;
+    if (trySchedule(t, DeviceType::CPU)) {
+        INFO("Task scheduled on CPU");
+        return true;
+    }
+    return false;
+}
+
+bool ExecutionEngine::trySchedule(ITask *t, const DeviceSpec &dev)
+{
+    auto expectedDev = dev;
     if (t->prepare(expectedDev)) {
         return true;
     }
 
-    if (expectedDev != selectedDev) {
+    if (expectedDev != dev) {
         // the task wants to run on a different device
         return t->prepare(expectedDev);
     }
