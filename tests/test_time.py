@@ -1,5 +1,6 @@
 import tensorflow as tf
 from timeit import default_timer, timeit
+import sys
 
 config = tf.ConfigProto()
 
@@ -8,28 +9,36 @@ def build_graph(x):
     m = tf.matmul(tf.random_normal((x,x)), tf.random_normal((x,x)))
     return tf.reduce_sum(m)
 
-def time_on(dev, x):
+def time_on(dev, x, rep = 10):
     print('Run on {}'.format(dev))
     with tf.device('/device:' + dev + ':0'):
         op = build_graph(x)
         with tf.Session(config=config) as sess:
             sess.run(op)  # warm up
             st = default_timer()
-            rep = 10
             for _ in range(rep):
                 sess.run(op)
             dur = (default_timer() - st) / rep
             print('Used time: {}s'.format(dur))
 
-def gpu(x):
-    return time_on('GPU', x)
+def gpu(x, rep):
+    return time_on('GPU', x, rep)
 
-def cpu(x):
-    return time_on('CPU', x)
+def cpu(x, rep):
+    return time_on('CPU', x, rep)
 
-def rpc(x):
-    return time_on('RPC', x)
+def rpc(x, rep):
+    return time_on('RPC', x, rep)
 
-gpu(200)
-cpu(200)
-rpc(200)
+argc = len(sys.argv)
+size = 200
+rep = 10
+
+if argc > 1:
+    size = int(sys.argv[1])
+if argc > 2:
+    rep = int(sys.argv[2])
+
+gpu(size, rep)
+cpu(size, rep)
+rpc(size, rep)
