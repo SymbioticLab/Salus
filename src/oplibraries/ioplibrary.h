@@ -22,6 +22,7 @@
 
 #include "execution/devices.h"
 #include "utils/pointerutils.h"
+#include "utils/macros.h"
 #include "rpcserver/zmqserver.h"
 
 #include "executor.pb.h"

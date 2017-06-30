@@ -20,7 +20,6 @@
 #include "ioplibrary.h"
 
 #include "platform/logging.h"
-#include "utils/macros.h"
 
 ITask::~ITask() = default;
 
