@@ -70,24 +70,7 @@ if(NOT WITH_BUNDLED_SPDLOG)
 endif(NOT WITH_BUNDLED_SPDLOG)
 
 if(USE_BUNDLED_SPDLOG)
-    if(NOT EXISTS thirdparty/spdlog/CMakeLists.txt)
-        message(STATUS "Initialize submodule")
-        execute_process(COMMAND "git" "submodule" "update" "--init" "thirdparty/spdlog"
-            WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
-            RESULT_VARIABLE retcode
-        )
-        if(NOT "${retcode}" STREQUAL "0")
-            message(FATAL_ERROR "Failed to checkout spdlog as submodule")
-        endif(NOT "${retcode}" STREQUAL "0")
-    endif(NOT EXISTS thirdparty/spdlog/CMakeLists.txt)
-    SET(SPDLOG_BUILD_TESTING OFF CACHE BOOL "Build spdlog tests" FORCE)
-    add_subdirectory(thirdparty/spdlog)
-    # make a imported target from it to keep consistency with find_package
-    add_library(spdlog::spdlog INTERFACE IMPORTED)
-    get_target_property(spdlog_inc spdlog INTERFACE_INCLUDE_DIRECTORIES)
-    set_target_properties(spdlog::spdlog PROPERTIES
-        INTERFACE_INCLUDE_DIRECTORIES "${spdlog_inc}"
-    )
+    include(thirdparty/UseSpdlog.cmake)
 endif(USE_BUNDLED_SPDLOG)
 
 #---------------------------------------------------------------------------------------
