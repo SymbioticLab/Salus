@@ -5,6 +5,7 @@ CMakeLists.txt.user*
 
 # KDevelop files
 *.kdev4
+*.kate-swp
 
 # Sublime text workspace file
 *.sublime-workspace

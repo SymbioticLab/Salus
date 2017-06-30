@@ -37,6 +37,7 @@
 #include <tensorflow/core/common_runtime/device_mgr.h>
 #include <tensorflow/core/lib/gtl/stl_util.h>
 #include <tensorflow/core/protobuf/config.pb.h>
+#include <tensorflow/core/common_runtime/rpc_device/exec_helpers/exechelpers.h>
 
 TFSession::TFSession(TFOpLibrary *opLibrary, const std::string &sessionId,
                      const tensorflow::ConfigProto &configProto)
@@ -226,17 +227,17 @@ TFExecutionState::TFExecutionState(TFSession *sess, const std::string &execId, t
 bool TFExecutionState::initialize()
 {
     // Disable for now
-    /*
     tensorflow::GraphConstructorOptions opts;
-    auto ok = tensorflow::ConvertGraphDefToGraph(opts, m_graphdef, m_graph.get());
+    auto ok = tensorflow::ExecHelpers::convertGraphDefToGraph(opts, m_graphdef, m_graph.get());
     if (!ok.ok()) {
         ERR("Create graph from graphdef failed: {}", ok);
         return false;
     }
     for (auto node: m_graph->nodes()) {
+        INFO("Procssing node id {}", node->id());
+        logging::logger()->flush();
         m_gindex[node->name()] = node->id();
     }
-    */
     return true;
 }
 

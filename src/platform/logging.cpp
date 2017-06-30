@@ -67,6 +67,11 @@ uint64_t maxBytesDumpLen()
 
 } // namespace
 
+std::shared_ptr<spdlog::logger> &logging::logger()
+{
+    return LoggerWrapper::logger();
+}
+
 logging::LoggerWrapper::LoggerWrapper()
 {
     spdlog::set_async_mode(8192);
