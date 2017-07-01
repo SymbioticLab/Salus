@@ -213,24 +213,22 @@ TFExecutionState::TFExecutionState(TFSession *sess, const std::string &execId, t
     : m_session(sess)
     , m_execId(execId)
     , m_graphdef(std::move(graph))
+    , m_fdefinition(nullptr)
     , m_graph(nullptr)
     , m_optOptions(optOptions)
     , m_rendez(tensorflow::NewLocalRendezvous())
-    , m_fdefinition(nullptr)
 {
     m_fdefinition = std::make_unique<tensorflow::FunctionLibraryDefinition>(tensorflow::OpRegistry::Global(),
                                                                             m_graphdef.library());
-    m_graph = std::make_unique<tensorflow::Graph>(m_fdefinition.get());
 
 }
 
 bool TFExecutionState::initialize()
 {
     // Disable for now
-    tensorflow::GraphConstructorOptions opts;
-    auto ok = tensorflow::ExecHelpers::convertGraphDefToGraph(opts, m_graphdef, m_graph.get());
-    if (!ok.ok()) {
-        ERR("Create graph from graphdef failed: {}", ok);
+    m_graph = tensorflow::ExecHelpers::convertGraphDefToGraph(m_graphdef, m_fdefinition.get());
+    if (!m_graph) {
+        ERR("Create graph from graphdef failed");
         return false;
     }
     for (auto node: m_graph->nodes()) {

@@ -143,14 +143,14 @@ private:
     std::string m_execId;
 
     tensorflow::GraphDef m_graphdef;
+
+    std::unique_ptr<tensorflow::FunctionLibraryDefinition> m_fdefinition;
     std::unique_ptr<tensorflow::Graph> m_graph;
     std::unordered_map<std::string, int> m_gindex;
 
     tensorflow::OptimizerOptions m_optOptions;
 
     tensorflow::Rendezvous *m_rendez;
-
-    std::unique_ptr<tensorflow::FunctionLibraryDefinition> m_fdefinition;
 
     tensorflow::mutex m_mu;
     std::unordered_map<tensorflow::Device*, std::unique_ptr<tensorflow::FunctionLibraryRuntime>> m_fruntimes;
