@@ -30,16 +30,21 @@ namespace logging {
 class LoggerWrapper
 {
 public:
-    LoggerWrapper();
-    ~LoggerWrapper();
+    LoggerWrapper(std::shared_ptr<spdlog::logger> logger);
+    LoggerWrapper(LoggerWrapper &&wrapper);
 
-    static std::shared_ptr<spdlog::logger> &logger();
+    spdlog::logger *operator->();
 
 private:
-    std::shared_ptr<spdlog::logger> m_logger;
+    struct Stream
+    {
+        std::shared_ptr<spdlog::logger> logger;
+        ~Stream();
+    };
+    std::unique_ptr<Stream> m_stream;
 };
 
-std::shared_ptr<spdlog::logger> &logger();
+LoggerWrapper logger();
 
 } // namespace logging
 
@@ -85,11 +90,11 @@ std::ostream& operator<<(typename std::enable_if<std::is_enum<T>::value, std::os
     return os << static_cast<typename std::underlying_type<T>::type>(e);
 }
 
-#define TRACE(...) logging::LoggerWrapper::logger()->trace(__VA_ARGS__)
-#define DEBUG(...) logging::LoggerWrapper::logger()->debug(__VA_ARGS__)
-#define INFO(...) logging::LoggerWrapper::logger()->info(__VA_ARGS__)
-#define WARN(...) logging::LoggerWrapper::logger()->warn(__VA_ARGS__)
-#define ERR(...) logging::LoggerWrapper::logger()->error(__VA_ARGS__)
-#define FATAL(...) logging::LoggerWrapper::logger()->critical(__VA_ARGS__)
+#define TRACE(...) logging::logger()->trace(__VA_ARGS__)
+#define DEBUG(...) logging::logger()->debug(__VA_ARGS__)
+#define INFO(...) logging::logger()->info(__VA_ARGS__)
+#define WARN(...) logging::logger()->warn(__VA_ARGS__)
+#define ERR(...) logging::logger()->error(__VA_ARGS__)
+#define FATAL(...) logging::logger()->critical(__VA_ARGS__)
 
 #endif // LOGGING_H

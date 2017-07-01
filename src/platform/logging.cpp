@@ -65,31 +65,46 @@ uint64_t maxBytesDumpLen()
     return len;
 }
 
+struct LoggerStaticInitializer
+{
+    std::shared_ptr<spdlog::logger> logger = spdlog::stdout_color_mt("console");
+    LoggerStaticInitializer()
+    {
+        spdlog::set_async_mode(8192);
+        logger = spdlog::stdout_color_mt("console");
+
+        logger->flush_on(spdlog::level::trace);
+        logger->set_level(spdlog::level::trace);
+        logger->set_pattern("[%Y-%m-%d %T.%e] [%t] [%n] [%L] %v");
+        //g3::installCrashHandler();
+    }
+};
+
 } // namespace
 
-std::shared_ptr<spdlog::logger> &logging::logger()
+logging::LoggerWrapper logging::logger()
 {
-    return LoggerWrapper::logger();
+    static LoggerStaticInitializer init;
+
+    return LoggerWrapper(init.logger);
 }
 
-logging::LoggerWrapper::LoggerWrapper()
+logging::LoggerWrapper::LoggerWrapper(std::shared_ptr<spdlog::logger> logger)
+    : m_stream(std::make_unique<Stream>(std::move(logger)))
 {
-    spdlog::set_async_mode(8192);
-    m_logger = spdlog::stdout_color_mt("console");
-
-    m_logger->flush_on(spdlog::level::trace);
-    m_logger->set_level(spdlog::level::trace);
-    m_logger->set_pattern("[%Y-%m-%d %T.%e] [%t] [%n] [%L] %v");
-
-    //g3::installCrashHandler();
 }
 
-logging::LoggerWrapper::~LoggerWrapper() = default;
-
-std::shared_ptr<spdlog::logger> &logging::LoggerWrapper::logger()
+logging::LoggerWrapper::LoggerWrapper(LoggerWrapper &&wrapper)
+    : m_stream(std::move(wrapper.m_stream))
 {
-    static LoggerWrapper wrapper;
-    return wrapper.m_logger;
+}
+
+logging::LoggerWrapper::Stream::~Stream() = default;
+
+spdlog::logger *logging::LoggerWrapper::operator->()
+{
+    if (m_stream)
+        return m_stream->logger.get();
 }
 
 std::ostream &operator<<(std::ostream &os, const std::exception_ptr &ep)
