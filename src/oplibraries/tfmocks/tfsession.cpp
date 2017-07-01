@@ -561,15 +561,17 @@ executor::TFOpContextUpdate TFSession::finalizeContext(TFContext *pContext)
         item->set_isdead(elem.second.isDead);
 
         auto &val = elem.second.val;
-        auto devCtx = context->op_device_context();
+        auto devCtx = elem.second.args.device_context;
         auto mval = item->mutable_val();
         if (devCtx) {
             tensorflow::Tensor cputensor(m_allocator.get(), val.dtype(), val.shape());
             auto dev = static_cast<tensorflow::Device*>(context->device());
             devCtx->CopyDeviceTensorToCPU(&val, elem.first, dev, &cputensor,
-                                        [&se, &mval, copy = cputensor, this](auto) mutable {
+                                        [&se, &mval, devCtx,
+                                         copy = cputensor, this](auto) mutable {
                 this->tensorToProtoData(mval, &copy);
                 se.notify();
+                devCtx->Unref();
             });
         } else {
             WARN("The tensor not copied from device to cpu. Assuming CPU device");

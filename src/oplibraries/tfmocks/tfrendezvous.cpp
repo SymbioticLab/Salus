@@ -73,6 +73,10 @@ tensorflow::Status TFRendezvous::Send(const ParsedKey &parsed, const Args &send_
 {
     INFO("TFRendezvous::Send {}", parsed.FullKey().ToString());
 
+    if (send_args.device_context) {
+        send_args.device_context->Ref();
+    }
+
     if (!isSameDevice(parsed.src, parsed.dst)) {
         auto key = parsed.FullKey().ToString();
         auto it = m_tensors.end();
@@ -95,6 +99,10 @@ tensorflow::Status TFRendezvous::Send(const ParsedKey &parsed, const Args &send_
 void TFRendezvous::RecvAsync(const ParsedKey &parsed, const Args &recv_args, DoneCallback done)
 {
     INFO("TFRendezvous::RecvAsync {}", parsed.FullKey().ToString());
+
+    if (recv_args.device_context) {
+        recv_args.device_context->Ref();
+    }
 
     if (!isSameDevice(parsed.src, parsed.dst)) {
         // Pending recv must be fullfilled later by RPC

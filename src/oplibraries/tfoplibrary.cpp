@@ -329,6 +329,10 @@ void TFRunTask::runAsync(DoneCallback cb)
             INFO("Found pending recv request: ", elem.first);
             reqs->add_key(elem.first);
             reqs->add_allocattributes(elem.second.args.alloc_attrs.value);
+
+            if (elem.second.args.device_context) {
+                elem.second.args.device_context->Unref();
+            }
         }
         m_sender->sendMessage(std::move(reqs));
     }
@@ -430,13 +434,21 @@ PTask TFOpLibrary::createRendezRecvTask(ZmqServer::Sender sender, const rpc::Eve
             }
 
             tensorflow::Tensor tensor;
-            ok.Update(tfctx->params.device->MakeTensorFromProto(item.val(), {}, &tensor));
+            tensorflow::AllocatorAttributes attr;
+
+            // TODO: find a way to directly create tensor on device.
+            // Currently force to create on CPU, because otherwise the tensor
+            // may end up on different device than the one encoded in key, which
+            // may cause problem.
+            attr.set_on_host(true);
+            ok.Update(tfctx->params.device->MakeTensorFromProto(item.val(), attr, &tensor));
             if (!ok.ok()) {
                 ERR("Failed to create tensor for rendezrecv");
                 return {};
             }
 
-            ok.Update(tfctx->rendez.triggerSend(parsed, tensorflow::Rendezvous::Args(),
+            ok.Update(tfctx->rendez.triggerSend(parsed,
+                                                tensorflow::Rendezvous::Args{nullptr, attr},
                                                 tensor, item.isdead()));
         }
         return {};
