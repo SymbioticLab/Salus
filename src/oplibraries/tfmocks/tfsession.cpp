@@ -255,16 +255,17 @@ tensorflow::FunctionLibraryRuntime *TFExecutionState::functionRuntime(tensorflow
 {
     tensorflow::mutex_lock l(m_mu);
 
-    if (m_fruntimes.count(tfdev) == 0) {
-        m_fruntimes.emplace(tfdev,
-                            tensorflow::NewFunctionLibraryRuntime(nullptr,
-                                                                  m_session->sessionOptions().env,
-                                                                  tfdev,
-                                                                  m_graphdef.versions().producer(),
-                                                                  m_fdefinition.get(),
-                                                                  m_optOptions));
+    auto &ptr = m_fruntimes[tfdev];
+
+    if (!ptr) {
+        ptr.reset(tensorflow::NewFunctionLibraryRuntime(nullptr,
+                                                m_session->sessionOptions().env,
+                                                tfdev,
+                                                m_graphdef.versions().producer(),
+                                                m_fdefinition.get(),
+                                                m_optOptions));
     }
-    return m_fruntimes[tfdev].get();
+    return ptr.get();
 }
 
 tensorflow::DeviceContext *TFExecutionState::deviceContext(const std::string &name, tensorflow::Device *tfdev)
