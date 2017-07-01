@@ -1,0 +1,6 @@
+#ifndef EXECUTOR_CONFIG_H
+#define EXECUTOR_CONFIG_H
+
+#cmakedefine HAS_CXX_ENUM_HASH
+
+#endif // EXECUTOR_CONFIG_H

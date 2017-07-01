@@ -1,4 +1,5 @@
-cmake_minimum_required(VERSION 3.1.0)
+# Version 3.8 required from CheckCXXFeature.cmake
+cmake_minimum_required(VERSION 3.8.0)
 
 project(executor)
 
@@ -82,11 +83,22 @@ add_feature_info(WITH_TESTS WITH_TESTS "build test suite with default target")
 feature_summary(INCLUDE_QUIET_PACKAGES FATAL_ON_MISSING_REQUIRED_PACKAGES WHAT ALL)
 
 #---------------------------------------------------------------------------------------
-# Put code together
+# Set compiler options and detect features
 #---------------------------------------------------------------------------------------
 
 # Only set compile options after any inclusion of third party code
 include(cmake/CompileOptions.cmake)
+
+# Detect features
+include(cmake/CheckCXXFeature.cmake)
+check_cxx_feature(cxx_enum_hash HAS_CXX_ENUM_HASH)
+
+configure_file(src/config.h.in ${CMAKE_CURRENT_BINARY_DIR}/config.h)
+include_directories(${CMAKE_CURRENT_BINARY_DIR})
+
+#---------------------------------------------------------------------------------------
+# Put code together
+#---------------------------------------------------------------------------------------
 
 add_subdirectory(protos)
 
