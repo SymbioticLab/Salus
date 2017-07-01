@@ -38,6 +38,7 @@ public:
 private:
     struct Stream
     {
+        explicit Stream(std::shared_ptr<spdlog::logger> &&l) : logger(l) {}
         std::shared_ptr<spdlog::logger> logger;
         ~Stream();
     };

@@ -67,7 +67,7 @@ uint64_t maxBytesDumpLen()
 
 struct LoggerStaticInitializer
 {
-    std::shared_ptr<spdlog::logger> logger = spdlog::stdout_color_mt("console");
+    std::shared_ptr<spdlog::logger> logger;
     LoggerStaticInitializer()
     {
         spdlog::set_async_mode(8192);
@@ -105,6 +105,7 @@ spdlog::logger *logging::LoggerWrapper::operator->()
 {
     if (m_stream)
         return m_stream->logger.get();
+    return nullptr;
 }
 
 std::ostream &operator<<(std::ostream &os, const std::exception_ptr &ep)

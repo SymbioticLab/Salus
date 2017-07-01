@@ -226,15 +226,13 @@ TFExecutionState::TFExecutionState(TFSession *sess, const std::string &execId, t
 bool TFExecutionState::initialize()
 {
     // Disable for now
-    m_graph = tensorflow::ExecHelpers::convertGraphDefToGraph(m_graphdef, m_fdefinition.get());
+    m_graph = tensorflow::ExecHelpers::convertGraphDefToGraph(m_graphdef, m_fdefinition.get(), m_gindex);
     if (!m_graph) {
         ERR("Create graph from graphdef failed");
         return false;
     }
-    for (auto node: m_graph->nodes()) {
-        INFO("Procssing node id {}", node->id());
-        logging::logger()->flush();
-        m_gindex[node->name()] = node->id();
+    for (auto &elem : m_gindex) {
+        INFO("GIndex: {} -> {}", elem.first, elem.second);
     }
     return true;
 }
