@@ -44,12 +44,10 @@ ExecutionEngine::~ExecutionEngine() = default;
 bool ExecutionEngine::schedule(ITask *t)
 {
     // TODO: implement device selection
-    /*
     if (trySchedule(t, DeviceType::GPU)) {
         INFO("Task scheduled on GPU");
         return true;
     }
-    */
 
     if (trySchedule(t, DeviceType::CPU)) {
         INFO("Task scheduled on CPU");

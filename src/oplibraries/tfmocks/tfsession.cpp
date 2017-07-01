@@ -181,11 +181,7 @@ TFExecutionState *TFSession::findExecution(const std::string &execId)
 
 tensorflow::Device *TFSession::findDevice(const DeviceSpec &dev) const
 {
-    // FIXME: use proper device finding
-    return m_device.get();
-
     std::string name;
-    // TODO: support multible device for a type
     switch (dev.type) {
     case DeviceType::CPU:
         name = "CPU:";
@@ -197,7 +193,6 @@ tensorflow::Device *TFSession::findDevice(const DeviceSpec &dev) const
         name = "CPU:";
         break;
     }
-
     name += std::to_string(dev.id);
 
     tensorflow::Device *device = nullptr;
@@ -231,6 +226,7 @@ bool TFExecutionState::initialize()
         ERR("Create graph from graphdef failed");
         return false;
     }
+    logging::logger()->flush();
     for (auto &elem : m_gindex) {
         INFO("GIndex: {} -> {}", elem.first, elem.second);
     }
@@ -271,6 +267,7 @@ tensorflow::DeviceContext *TFExecutionState::deviceContext(const std::string &na
         ERR("{} not found in graph", name);
         return nullptr;
     }
+    uint32_t nid = nit->second;
 
     auto it = m_deviceContexts.end();
     {
@@ -286,8 +283,9 @@ tensorflow::DeviceContext *TFExecutionState::deviceContext(const std::string &na
             std::tie(it, std::ignore) = m_deviceContexts.emplace(tfdev, std::move(contexts));
         }
     }
-    if (it != m_deviceContexts.end()) {
-        return it->second[nit->second];
+    if (it != m_deviceContexts.end()
+        && nid < it->second.size()) {
+        return it->second[nid];
     }
     return nullptr;
 }
@@ -566,16 +564,15 @@ executor::TFOpContextUpdate TFSession::finalizeContext(TFContext *pContext)
         auto devCtx = context->op_device_context();
         auto mval = item->mutable_val();
         if (devCtx) {
-            tensorflow::Tensor copy(m_allocator.get(), val.dtype(), val.shape());
+            tensorflow::Tensor cputensor(m_allocator.get(), val.dtype(), val.shape());
             auto dev = static_cast<tensorflow::Device*>(context->device());
-            devCtx->CopyDeviceTensorToCPU(&val, elem.first, dev, &copy,
-                                        [&se, &mval, &copy, this](auto){
+            devCtx->CopyDeviceTensorToCPU(&val, elem.first, dev, &cputensor,
+                                        [&se, &mval, copy = cputensor, this](auto) mutable {
                 this->tensorToProtoData(mval, &copy);
                 se.notify();
             });
         } else {
             WARN("The tensor not copied from device to cpu. Assuming CPU device");
-            // FIXME: create and use devCtx
             tensorToProtoData(mval, &val);
             se.notify();
         }
