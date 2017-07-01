@@ -23,7 +23,12 @@
 #define SIGNAL_HANDLER_VERIFY() do {} while(0)
 #endif
 
+void g3::setDumpStack(bool val)
+{
+    LogCapture::dumpStack = val;
+}
 
+bool LogCapture::dumpStack = true;
 
 /** logCapture is a simple struct for capturing log/fatal entries. At destruction the
 * captured message is forwarded to background worker.
@@ -34,8 +39,12 @@ LogCapture::~LogCapture() {
    using namespace g3::internal;
    SIGNAL_HANDLER_VERIFY();
    //saveMessage(_stream.str().c_str(), _file, _line, _function, _level, _expression, _fatal_signal, _stack_trace.c_str());
-   FATAL("Fatal signal ({}) caught at {}:{} {}\n{}\n{}\n\n{}",
-         _fatal_signal, _file, _line, _function, _expression,  _stream.str(), _stack_trace.c_str());
+   if (dumpStack) {
+      FATAL("Fatal signal ({}) caught at {}:{} {}\n{}\n{}\n\n{}",
+            _fatal_signal, _file, _line, _function, _expression,  _stream.str(), _stack_trace.c_str());
+   }
+
+   logging::logger()->flush();
 }
 
 

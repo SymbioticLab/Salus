@@ -87,8 +87,9 @@ bool TFSession::findTensorFromName(const std::string &name, TensorItem &item)
 
 void TFSession::registerTensorForName(const std::string &name, TensorItem item)
 {
-    INFO("Registering tensor: {}, is ref: {} under name: {}",
-         item.val->shape().DebugString(), item.val.is_ref(), name);
+    INFO("Registering tensor: {}, is ref: {}, under name: {}, buffer: {:x}",
+         item.val->shape().DebugString(), item.val.is_ref(), name,
+         reinterpret_cast<uint64_t>(item.val->tensor_data().data()));
 
     if (item.context) {
         item.context->Ref();
@@ -594,6 +595,7 @@ executor::TFOpContextUpdate TFSession::finalizeContext(TFContext *pContext)
         auto out = context->release_output(i);
         // Let the session manage the tensor memory
         // The session takes the ownership of tensor in non-ref case
+        // TODO: what if tensor is ref and comes from a different device?
         registerTensorForName(output_name, {out, context->op_device_context(), context->device()});
 
         auto outitem = tfctxupd.add_outputs();

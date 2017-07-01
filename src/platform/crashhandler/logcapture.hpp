@@ -81,5 +81,6 @@ struct LogCapture {
    const char *_expression;
    const g3::SignalType _fatal_signal;
 
+   static bool dumpStack;
 };
 //} // g3

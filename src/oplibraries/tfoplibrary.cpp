@@ -261,6 +261,7 @@ ProtoPtr TFRunTask::run()
         return resp;
     }
 
+    INFO("Running on device: {}", device->name());
     try {
         device->Compute(m_opkernel, m_context->ctx());
 //         m_opkernel->Compute(m_context->ctx());

@@ -31,6 +31,7 @@ namespace g3 {
      SIGSEGV  Segmentation violation i.e. illegal memory reference
      SIGTERM  TERMINATION (ANSI)  */
    void installCrashHandler();
+   void setDumpStack(bool val);
 
 
 #if (defined(WIN32) || defined(_WIN32) || defined(__WIN32__))
