@@ -409,8 +409,8 @@ std::unique_ptr<TFContext> TFSession::createContext(const executor::TFOpContextD
     tfctx->params.frame_iter = tensorflow::FrameAndIter(tfdef.frame_id(), tfdef.iter_id());
     tfctx->params.is_input_dead = tfdef.is_input_dead();
 
-    tfctx->FillOutputAttrs();
-    tfctx->FillInputAttrs();
+    tfctx->FillOutputAttrs(tfdef);
+    tfctx->FillInputAttrs(tfdef);
 
     auto num_inputs = opkernel->num_inputs();
     if (num_inputs != tfdef.inputs_size()) {
@@ -478,37 +478,25 @@ tensorflow::OpKernelContext *TFContext::ctx()
     return context.get();
 }
 
-inline void TFContext::FillOutputAttrs() {
+inline void TFContext::FillOutputAttrs(const executor::TFOpContextDef &tfdef) {
     output_attrs.clear();
-    for (int index = 0; index < params.op_kernel->num_outputs(); index++) {
+    output_attrs.reserve(tfdef.output_alloc_attrs_size());
+    for (int index = 0; index < tfdef.output_alloc_attrs_size(); index++) {
         tensorflow::AllocatorAttributes attr;
-        const bool on_host =
-        (params.op_kernel->output_memory_types()[index] == tensorflow::HOST_MEMORY);
-        attr.set_on_host(on_host);
+        attr.value = tfdef.output_alloc_attrs(index);
         output_attrs.push_back(attr);
     }
     params.output_attr_array = tensorflow::gtl::vector_as_array(&output_attrs);
 }
 
-inline void TFContext::FillInputAttrs()
+inline void TFContext::FillInputAttrs(const executor::TFOpContextDef &tfdef)
 {
     input_alloc_attrs.clear();
-    input_alloc_attrs.reserve(params.op_kernel->num_inputs());
-    for (int index = 0; index < params.op_kernel->num_inputs(); index++) {
+    input_alloc_attrs.reserve(tfdef.input_alloc_attrs_size());
+    for (int index = 0; index < tfdef.input_alloc_attrs_size(); index++) {
         tensorflow::AllocatorAttributes attr;
-        const bool on_host =
-        (params.op_kernel->input_memory_types()[index] == tensorflow::HOST_MEMORY);
-        attr.set_on_host(on_host);
+        attr.value = tfdef.input_alloc_attrs(index);
         input_alloc_attrs.push_back(attr);
-    }
-}
-
-inline void TFContext::FillInputDeviceContext()
-{
-    input_device_contexts.clear();
-    input_device_contexts.reserve(params.op_kernel->num_inputs());
-    for (int index = 0; index < params.op_kernel->num_inputs(); index++) {
-        input_device_contexts.push_back(nullptr);
     }
 }
 

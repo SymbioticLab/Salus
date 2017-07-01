@@ -87,9 +87,8 @@ public:
 
     tensorflow::OpKernelContext *ctx();
 
-    void FillOutputAttrs();
-    void FillInputAttrs();
-    void FillInputDeviceContext();
+    void FillOutputAttrs(const executor::TFOpContextDef &tfdef);
+    void FillInputAttrs(const executor::TFOpContextDef &tfdef);
 
     uint64_t seq;
 

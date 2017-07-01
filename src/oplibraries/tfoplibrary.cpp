@@ -96,8 +96,14 @@ void dumpOpContext(tensorflow::OpKernelContext *ctx)
 {
     if (!ctx) return;
 
+    for (int i = 0; i != ctx->num_inputs(); ++i) {
+        TRACE("context.input_alloc_attr({}) {}", i, ctx->input_alloc_attr(i));
+    }
     TRACE("context.is_output_dead() {}", *ctx->is_output_dead());
     TRACE("context.num_outputs() {}", ctx->num_outputs());
+    for (int i = 0; i != ctx->num_outputs(); ++i) {
+        TRACE("context.output_alloc_attr({}) {}", i, ctx->output_alloc_attr(i));
+    }
 }
 
 } // namespace

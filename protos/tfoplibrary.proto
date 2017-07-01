@@ -36,6 +36,9 @@ message TFOpContextDef {
 // Inputs
     bool is_input_dead = 4;
     repeated TFTensorItem inputs = 5;
+    repeated uint32 input_alloc_attrs = 6;
+
+    repeated uint32 output_alloc_attrs = 7;
 }
 
 message TFOpContextUpdate {
