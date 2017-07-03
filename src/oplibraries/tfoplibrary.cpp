@@ -232,7 +232,7 @@ bool TFRunTask::prepare(DeviceSpec &dev)
     } else {
         m_opkernel = kernel;
     }
-    INFO("Created OpKernel");
+    INFO("Created OpKernel for seq {}", m_sender->sequenceNumber());
     dumpOpKernel(m_opkernel);
 
     m_context = session->createContext(*m_tfctxdef, m_opkernel,
@@ -240,7 +240,7 @@ bool TFRunTask::prepare(DeviceSpec &dev)
     if (!m_context) {
         return false;
     }
-    TRACE("Created OpKernelContext");
+    TRACE("Created OpKernelContext for seq {}", m_sender->sequenceNumber());
     dumpOpContext(m_context->ctx());
 
     m_context->devSpec = dev;
