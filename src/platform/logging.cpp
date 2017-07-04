@@ -21,6 +21,7 @@
 
 #include "crashhandler/crashhandler.hpp"
 #include "utils/stringutils.h"
+#include "utils/envutils.h"
 #include "execution/devices.h"
 
 #include "executor.pb.h"
@@ -33,36 +34,10 @@
 #include <zmq.hpp>
 
 namespace {
-// Parse log level (int64) from environment variable (char*)
-uint64_t logLevelStrToIntOr(const char* env_var_val, uint64_t val) {
-    if (env_var_val == nullptr) {
-        return val;
-    }
-
-    // Ideally we would use env_var / safe_strto64, but it is
-    // hard to use here without pulling in a lot of dependencies,
-    // so we use std:istringstream instead
-    std::string levelstr(env_var_val);
-    std::istringstream ss(levelstr);
-    uint64_t level;
-    if (!(ss >> level)) {
-        // Invalid vlog level setting, set level to default (0)
-        level = val;
-    }
-
-    return level;
-}
-
-uint64_t maxBytesDumpLenFromEnv()
-{
-    const char* env_var_val = std::getenv("EXEC_MAX_BYTES_DUMP_LEN");
-    return logLevelStrToIntOr(env_var_val, 20);
-}
 
 uint64_t maxBytesDumpLen()
 {
-    static uint64_t len = maxBytesDumpLenFromEnv();
-    return len;
+    return utils::fromEnvVarCached("EXEC_MAX_BYTES_DUMP_LEN", UINT64_C(20));
 }
 
 struct LoggerStaticInitializer

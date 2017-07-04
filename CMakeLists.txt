@@ -53,7 +53,7 @@ set_package_properties(ZeroMQ PROPERTIES TYPE REQUIRED PURPOSE "For communicatio
 
 # Boost
 find_package(Boost 1.64 REQUIRED)
-set_package_properties(Boost PROPERTIES TYPE REQUIRED PURPOSE "For lock free queue")
+set_package_properties(Boost PROPERTIES TYPE REQUIRED PURPOSE "For lock free queue and some utilities")
 
 # Q
 find_package(Q REQUIRED)
