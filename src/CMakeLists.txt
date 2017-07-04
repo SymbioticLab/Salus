@@ -19,6 +19,7 @@ set(SRC_LIST
     "utils/pointerutils.cpp"
     "utils/stringutils.cpp"
     "utils/threadutils.cpp"
+    "utils/envutils.cpp"
 
     "executor.cpp"
 )
