@@ -20,6 +20,7 @@
 #include "executionengine.h"
 
 #include "utils/macros.h"
+#include "utils/envutils.h"
 
 ExecutionEngine &ExecutionEngine::instance()
 {
@@ -41,12 +42,23 @@ ExecutionEngine::ExecutionEngine()
 
 ExecutionEngine::~ExecutionEngine() = default;
 
+namespace {
+bool useGPU()
+{
+    return utils::fromEnvVar("EXEC_SCHED_USE_GPU", true);
+}
+
+} // namespace
+
 bool ExecutionEngine::schedule(ITask *t)
 {
     // TODO: implement device selection
-    if (trySchedule(t, DeviceType::GPU)) {
-        INFO("Task scheduled on GPU");
-        return true;
+
+    if (useGPU()) {
+        if (trySchedule(t, DeviceType::GPU)) {
+            INFO("Task scheduled on GPU");
+            return true;
+        }
     }
 
     if (trySchedule(t, DeviceType::CPU)) {
