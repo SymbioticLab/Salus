@@ -1,4 +1,5 @@
 # Version 3.8 required from CheckCXXFeature.cmake
+# Version 3.5 required from Boost for imported target
 cmake_minimum_required(VERSION 3.8.0)
 
 project(executor)
