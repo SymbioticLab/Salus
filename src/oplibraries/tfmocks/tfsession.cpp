@@ -594,6 +594,9 @@ executor::TFOpContextUpdate TFSession::finalizeContext(TFContext *pContext)
         if (!context->output_alloc_attr(i).on_host() || !devCtx) {
             tensorToProtoMeta(mval, out);
         } else {
+            // FIXME: proper handle in tensorflow required.
+            tensorToProtoMeta(mval, out);
+            /*
             MaybeLock l(out);
             tensorflow::Tensor copy(m_allocator.get(), out->dtype(), out->shape());
             auto dev = static_cast<tensorflow::Device*>(context->device());
@@ -604,6 +607,7 @@ executor::TFOpContextUpdate TFSession::finalizeContext(TFContext *pContext)
             });
             n.WaitForNotification();
             tensorToProtoData(mval, &copy);
+            */
         }
     }
 
