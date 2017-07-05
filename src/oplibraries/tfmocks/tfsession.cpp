@@ -590,12 +590,12 @@ executor::TFOpContextUpdate TFSession::finalizeContext(TFContext *pContext)
         outitem->set_name(output_name);
         outitem->set_is_ref(out.is_ref());
         auto mval = outitem->mutable_meta();
-        if (!context->output_alloc_attr(i).on_host()) {
+        auto devCtx = context->op_device_context();
+        if (!context->output_alloc_attr(i).on_host() || !devCtx) {
             tensorToProtoMeta(mval, out);
         } else {
             MaybeLock l(out);
             tensorflow::Tensor copy(m_allocator.get(), out->dtype(), out->shape());
-            auto devCtx = context->op_device_context();
             auto dev = static_cast<tensorflow::Device*>(context->device());
             tensorflow::Notification n;
             devCtx->CopyDeviceTensorToCPU(out.tensor, output_name, dev, &copy,
