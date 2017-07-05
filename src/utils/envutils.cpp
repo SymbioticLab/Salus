@@ -18,26 +18,3 @@
  */
 
 #include "envutils.h"
-
-#include <boost/lexical_cast.hpp>
-
-template<typename T>
-T utils::fromEnvVar(const char *env, const T &def)
-{
-    const char* env_var_val = std::getenv(env);
-    if (!env_var_val) {
-        return def;
-    }
-    T res;
-    if (!boost::conversion::try_lexical_convert(env_var_val, res))
-        return def;
-
-    return res;
-}
-
-template<typename T>
-T utils::fromEnvVarCached(const char *env, const T &def)
-{
-    static T res = fromEnvVar(env, def);
-    return res;
-}

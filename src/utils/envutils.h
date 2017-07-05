@@ -20,6 +20,8 @@
 #ifndef ENVUTILS_H
 #define ENVUTILS_H
 
+#include <boost/lexical_cast.hpp>
+
 namespace utils {
 
 /**
@@ -31,7 +33,18 @@ namespace utils {
  * @return the read value or default value
  */
 template<typename T>
-T fromEnvVar(const char *env, const T &def);
+T fromEnvVar(const char *env, const T &def)
+{
+    const char* env_var_val = std::getenv(env);
+    if (!env_var_val) {
+        return def;
+    }
+    T res;
+    if (!boost::conversion::try_lexical_convert(env_var_val, res))
+        return def;
+
+    return res;
+}
 
 /**
  * @brief Read a value of type `T` from environment variable. Use `def` as default value in case of
@@ -43,7 +56,11 @@ T fromEnvVar(const char *env, const T &def);
  * @return the read value or default value
  */
 template<typename T>
-T fromEnvVarCached(const char *env, const T &def);
+T fromEnvVarCached(const char *env, const T &def)
+{
+    static T res = fromEnvVar(env, def);
+    return res;
+}
 
 } // namespace utils
 #endif // ENVUTILS_H
