@@ -42,6 +42,9 @@ class TestBasicOps(unittest.TestCase):
         with tf.Session(config=self.config) as sess:
             sess.run(a)
 
+    # TODO: implement the device selection as a session option.
+    # So we can test both CPU and GPU using the same code.
+    @unittest.skip("Segfault in GPU. See #1.")
     def test_multiply(self):
         with tf.device('/device:RPC:0'):
             a = tf.constant([3, 7], name='const_1')
@@ -61,8 +64,8 @@ class TestBasicOps(unittest.TestCase):
             npt.assert_array_equal(sess.run(actual), sess.run(expected))
 
     def test_matmul(self):
-        m1 = np.random.normal(size=(20, 20))
-        m2 = np.random.normal(size=(20, 20))
+        m1 = np.random.normal(size=(20, 50))
+        m2 = np.random.normal(size=(50, 60))
         with tf.device('/device:RPC:0'):
             actual = tf.matmul(m1, m2)
         with tf.device('/device:CPU:0'):
