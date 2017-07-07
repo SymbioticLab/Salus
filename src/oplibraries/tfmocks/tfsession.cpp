@@ -351,6 +351,7 @@ bool TFSession::findOrCreateKernel(TFExecutionState *execState, const tensorflow
         ERR("Cannot find suitable device for spec: {}", dev);
         return false;
     }
+    INFO("Creating a kernel for device: {}", tfdev->name());
 
     // Caches the kernel only if the node is stateful.
     auto fruntime = execState->functionRuntime(tfdev);
@@ -486,6 +487,7 @@ inline void TFContext::FillOutputAttrs(const executor::TFOpContextDef &tfdef) {
         attr.value = tfdef.output_alloc_attrs(index);
         output_attrs.push_back(attr);
     }
+    // FIXME: infer output attr using kernel to handle special kernel that have host memory input/output
     params.output_attr_array = tensorflow::gtl::vector_as_array(&output_attrs);
 }
 
