@@ -4,6 +4,7 @@ import unittest
 import tensorflow as tf
 import numpy as np
 import numpy.testing as npt
+from ddt import ddt, data, unpack
 
 class TestBasicOps(unittest.TestCase):
 
@@ -45,8 +46,8 @@ class TestBasicOps(unittest.TestCase):
 
     # TODO: implement the device selection as a session option.
     # So we can test both CPU and GPU using the same code.
-    @unittest.skip("Segfault in GPU. See #1.")
-    def test_multiply(self):
+    @unittest.skip("Segfault in GPU. See #12.")
+    def test_multiply_int32(self):
         with tf.device('/device:RPC:0'):
             a = tf.constant([3, 7], name='const_1')
             b = tf.constant([7, 3] , name='const_2')
@@ -64,18 +65,40 @@ class TestBasicOps(unittest.TestCase):
         with tf.Session(config=self.config) as sess:
             npt.assert_array_equal(sess.run(actual), sess.run(expected))
 
-    def test_add(self):
+    @data(tf.bool, tf.float32, tf.double, tf.int64, tf.uint8, tf.int8, tf.uint16, tf.int16,
+          tf.complex64, tf.complex128)
+    def test_multiply(self, dtype):
         with tf.device('/device:RPC:0'):
-            a = tf.constant([3, 7], name='const_1')
-            b = tf.constant([7, 3] , name='const_2')
-            c = tf.constant(2, name='const_3')
+            a = tf.constant([3, 7], name='const_1', dtype=dtype)
+            b = tf.constant([7, 3] , name='const_2', dtype=dtype)
+            c = tf.constant(2, name='const_3', dtype=dtype)
+            d = tf.multiply(a, b, name='mul_first')
+            actual = tf.multiply(c, d, name='mul_second')
+
+        with tf.device('/device:CPU:0'):
+            a = tf.constant([3, 7], name='const_1', dtype=dtype)
+            b = tf.constant([7, 3] , name='const_2', dtype=dtype)
+            c = tf.constant(2, name='const_3', dtype=dtype)
+            d = tf.multiply(a, b, name='mul_first')
+            expected = tf.multiply(c, d, name='mul_second')
+
+        with tf.Session(config=self.config) as sess:
+            npt.assert_array_equal(sess.run(actual), sess.run(expected))
+
+    @data(tf.bool, tf.float32, tf.double, tf.int64, tf.uint8, tf.int8, tf.uint16, tf.int16,
+          tf.complex64, tf.complex128)
+    def test_add(self, dtype):
+        with tf.device('/device:RPC:0'):
+            a = tf.constant([3, 7], name='const_1', dtype=dtype)
+            b = tf.constant([7, 3] , name='const_2', dtype=dtype)
+            c = tf.constant(2, name='const_3', dtype=dtype)
             d = tf.add(a, b, name='add_first')
             actual = tf.add(c, d, name='add_second')
 
         with tf.device('/device:CPU:0'):
-            a = tf.constant([3, 7], name='const_1')
-            b = tf.constant([7, 3] , name='const_2')
-            c = tf.constant(2, name='const_3')
+            a = tf.constant([3, 7], name='const_1', dtype=dtype)
+            b = tf.constant([7, 3] , name='const_2', dtype=dtype)
+            c = tf.constant(2, name='const_3', dtype=dtype)
             d = tf.add(a, b, name='mul_first')
             expected = tf.add(c, d, name='add_second')
 
