@@ -351,6 +351,7 @@ bool TFSession::findOrCreateKernel(TFExecutionState *execState, const tensorflow
         ERR("Cannot find suitable device for spec: {}", dev);
         return false;
     }
+    INFO("Creating a kernel for device: {}", tfdev->name());
 
     // Caches the kernel only if the node is stateful.
     auto fruntime = execState->functionRuntime(tfdev);
