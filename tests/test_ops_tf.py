@@ -11,6 +11,7 @@ class TestBasicOps(unittest.TestCase):
     def setUpClass(cls):
         cls.config = tf.ConfigProto()
         cls.config.graph_options.optimizer_options.do_constant_folding = False
+        cls.config.graph_options.optimizer_options.opt_level = tf.OptimizerOptions.L0
 
     def setUp(self):
         tf.reset_default_graph()
@@ -59,6 +60,24 @@ class TestBasicOps(unittest.TestCase):
             c = tf.constant(2, name='const_3')
             d = tf.multiply(a, b, name='mul_first')
             expected = tf.multiply(c, d, name='mul_second')
+
+        with tf.Session(config=self.config) as sess:
+            npt.assert_array_equal(sess.run(actual), sess.run(expected))
+
+    def test_add(self):
+        with tf.device('/device:RPC:0'):
+            a = tf.constant([3, 7], name='const_1')
+            b = tf.constant([7, 3] , name='const_2')
+            c = tf.constant(2, name='const_3')
+            d = tf.add(a, b, name='add_first')
+            actual = tf.add(c, d, name='add_second')
+
+        with tf.device('/device:CPU:0'):
+            a = tf.constant([3, 7], name='const_1')
+            b = tf.constant([7, 3] , name='const_2')
+            c = tf.constant(2, name='const_3')
+            d = tf.add(a, b, name='mul_first')
+            expected = tf.add(c, d, name='add_second')
 
         with tf.Session(config=self.config) as sess:
             npt.assert_array_equal(sess.run(actual), sess.run(expected))
