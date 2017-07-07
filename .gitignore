@@ -22,3 +22,8 @@ MNIST_data
 
 # Scripts
 scripts
+
+# python
+.cache
+__pycache__
+*.pyc
