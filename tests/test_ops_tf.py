@@ -10,6 +10,7 @@ class TestBasicOps(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.config = tf.ConfigProto()
+        cls.config.graph_options.optimizer_options.do_constant_folding = False
 
     def setUp(self):
         tf.reset_default_graph()
@@ -67,9 +68,7 @@ class TestBasicOps(unittest.TestCase):
         with tf.device('/device:CPU:0'):
             expected = tf.matmul(m1, m2)
 
-        config = tf.ConfigProto()
-        config.graph_options.optimizer_options.do_constant_folding = False
-        with tf.Session(config=config) as sess:
+        with tf.Session(config=self.config) as sess:
             npt.assert_array_equal(sess.run(actual), sess.run(expected))
 
     def test_conv2d(self):
@@ -82,9 +81,7 @@ class TestBasicOps(unittest.TestCase):
             filter = tf.constant([1, 4, 7, 2, 5, 8, 3, 6, 9], shape=(3, 3, 1, 1), dtype=tf.float32)
             expected = tf.nn.conv2d(image, filter, [1, 1, 1, 1], 'SAME')
 
-        config = tf.ConfigProto()
-        config.graph_options.optimizer_options.do_constant_folding = False
-        with tf.Session(config=config) as sess:
+        with tf.Session(config=self.config) as sess:
             npt.assert_array_equal(sess.run(actual), sess.run(expected))
 
 
