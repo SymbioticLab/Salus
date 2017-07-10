@@ -6,9 +6,9 @@ Must be used with a customized tensorflow at Aetf/tensorflow-rpcdev. Note that t
 Requires `CMake 3.8` and `GCC 5.4` as minimum.
 
 ### Dependencies
-- ZeroMQ
+- ZeroMQ with C++ binding & libmq
 - Boost 1.64
-- Q
+- Q at https://github.com/grantila/q
 - spdlog (optional)
 
 See [toplevel CMakeLists.txt](CMakeLists.txt) for details.
