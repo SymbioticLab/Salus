@@ -289,8 +289,8 @@ void ZmqServer::dispatch(zmq::socket_t &sock)
     // step 3. dispatch
     // [issue#11] passing shared_ptr "sender" may cause nullptr segmentationf fault 
     // as dispatch is executed in an asynchronous manner.
-    //auto f = m_pLogic->dispatch(sender, *pEvenlop, *pRequest)
-    auto f = m_pLogic->dispatch(std::make_shared<SenderImpl>(*this, pEvenlop->seq(), std::move(identities)), *pEvenlop, *pRequest)
+    auto f = m_pLogic->dispatch(sender, *pEvenlop, *pRequest)
+    //auto f = m_pLogic->dispatch(std::make_shared<SenderImpl>(*this, pEvenlop->seq(), std::move(identities)), *pEvenlop, *pRequest)
 
     // step 4. send response back
     .then([sender = std::move(sender)](ProtoPtr &&pResponse) mutable {
