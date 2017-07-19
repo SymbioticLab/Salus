@@ -57,6 +57,7 @@ q::promise<ProtoPtr> RpcServerCore::dispatch(ZmqServer::Sender sender, const Eve
 #undef ITEM
 
     assert(funcs.count(evenlop.type()) == 1);
+    assert(sender);
 
     INFO("Serving {} for oplibrary {}", evenlop.type(), OpLibraryType_Name(evenlop.oplibrary()));
 

@@ -207,6 +207,7 @@ TFRunTask::TFRunTask(TFExecutionState *execState, ZmqServer::Sender &&sender, un
     , m_ndef(std::move(nodedef))
     , m_tfctxdef(std::move(tfctxdef))
 {
+    assert(sender);
 }
 
 bool TFRunTask::isAsync()
@@ -216,6 +217,9 @@ bool TFRunTask::isAsync()
 
 bool TFRunTask::prepare(DeviceSpec &dev)
 {
+    assert(m_sender);
+
+    auto seq = m_sender->sequenceNumber();
     auto session = m_exec->session();
 
     tensorflow::OpKernel *kernel = nullptr;
@@ -232,15 +236,14 @@ bool TFRunTask::prepare(DeviceSpec &dev)
     } else {
         m_opkernel = kernel;
     }
-    INFO("Created OpKernel for seq {}", m_sender->sequenceNumber());
+    INFO("Created OpKernel for seq {}", seq);
     dumpOpKernel(m_opkernel);
 
-    m_context = session->createContext(*m_tfctxdef, m_opkernel,
-                                       m_sender->sequenceNumber(), m_exec, dev);
+    m_context = session->createContext(*m_tfctxdef, m_opkernel, seq, m_exec, dev);
     if (!m_context) {
         return false;
     }
-    TRACE("Created OpKernelContext for seq {}", m_sender->sequenceNumber());
+    TRACE("Created OpKernelContext for seq {}", seq);
     dumpOpContext(m_context->ctx());
 
     m_context->devSpec = dev;
