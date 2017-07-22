@@ -170,31 +170,3 @@ class TestBasicOps(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
-
-    def test_matmul(self):
-        m1 = np.random.normal(size=(20, 50))
-        m2 = np.random.normal(size=(50, 60))
-        with tf.device('/device:RPC:0'):
-            actual = tf.matmul(m1, m2)
-        with tf.device('/device:CPU:0'):
-            expected = tf.matmul(m1, m2)
-
-        with tf.Session(config=self.config) as sess:
-            npt.assert_array_equal(sess.run(actual), sess.run(expected))
-
-    def test_conv2d(self):
-        with tf.device('/device:RPC:0'):
-            image = tf.constant([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12], shape=(1, 4, 3, 1), dtype=tf.float32)
-            filter = tf.constant([1, 4, 7, 2, 5, 8, 3, 6, 9], shape=(3, 3, 1, 1), dtype=tf.float32)
-            actual = tf.nn.conv2d(image, filter, [1, 1, 1, 1], 'SAME')
-        with tf.device('/device:CPU:0'):
-            image = tf.constant([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12], shape=(1, 4, 3, 1), dtype=tf.float32)
-            filter = tf.constant([1, 4, 7, 2, 5, 8, 3, 6, 9], shape=(3, 3, 1, 1), dtype=tf.float32)
-            expected = tf.nn.conv2d(image, filter, [1, 1, 1, 1], 'SAME')
-
-        with tf.Session(config=self.config) as sess:
-            npt.assert_array_equal(sess.run(actual), sess.run(expected))
-
-
-if __name__ == '__main__':
-    unittest.main()
