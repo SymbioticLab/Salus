@@ -207,7 +207,7 @@ TFRunTask::TFRunTask(TFExecutionState *execState, ZmqServer::Sender &&sender, un
     , m_ndef(std::move(nodedef))
     , m_tfctxdef(std::move(tfctxdef))
 {
-    assert(sender);
+    assert(m_sender);
 }
 
 bool TFRunTask::isAsync()
