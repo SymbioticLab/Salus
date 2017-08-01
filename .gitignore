@@ -13,6 +13,7 @@ CMakeLists.txt.user*
 # Build dir
 build/*
 build-kdev/*
+spack_packages
 
 # Vagrant
 .vagrant

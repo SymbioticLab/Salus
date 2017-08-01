@@ -44,7 +44,7 @@ TFSession::TFSession(TFOpLibrary *opLibrary, const std::string &sessionId,
     : m_oplibrary(opLibrary)
     , m_sessionId(sessionId)
     , m_options()
-    , m_allocator(TFAllocator::New())
+    , m_cpuAllocator(std::make_unique<TFAllocator>())
     , m_opseg()
 {
     m_options.config = configProto;
@@ -56,7 +56,6 @@ TFSession::TFSession(TFOpLibrary *opLibrary, const std::string &sessionId,
 
 bool TFSession::initialize()
 {
-    m_device = std::make_unique<TFDevice>(m_options, m_allocator);
     return true;
 }
 
@@ -555,7 +554,7 @@ executor::TFOpContextUpdate TFSession::finalizeContext(TFContext *pContext)
         auto devCtx = elem.second.args.device_context;
         auto mval = item->mutable_val();
         if (devCtx) {
-            tensorflow::Tensor cputensor(m_allocator.get(), val.dtype(), val.shape());
+            tensorflow::Tensor cputensor(m_cpuAllocator.get(), val.dtype(), val.shape());
             auto dev = static_cast<tensorflow::Device*>(context->device());
             devCtx->CopyDeviceTensorToCPU(&val, elem.first, dev, &cputensor,
                                         [&se, &mval, devCtx,
@@ -613,7 +612,7 @@ executor::TFOpContextUpdate TFSession::finalizeContext(TFContext *pContext)
         }
     }
 
-    // Save tensors in TensorStore to session
+    // Save tensors in context's TensorStore to session
     auto ok = pContext->tensorStore.SaveTensors(output_names, &m_sessState);
     if (!ok.ok()) {
         ERR("Error when save tensor store to session: {}", ok);

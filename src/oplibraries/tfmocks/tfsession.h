@@ -215,14 +215,7 @@ private:
 
     tensorflow::SessionOptions m_options;
 
-    /**
-     * The allocator used by this session.
-     * NOTE: must come before all other fields containing tensors in order to
-     * be destructed after any tensor deallocation.
-     */
-    std::shared_ptr<TFAllocator> m_allocator;
-
-    std::unique_ptr<TFDevice> m_device;
+    std::unique_ptr<TFAllocator> m_cpuAllocator;
 
     tensorflow::OpSegment m_opseg;
     /**

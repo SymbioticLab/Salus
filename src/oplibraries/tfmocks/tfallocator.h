@@ -32,7 +32,7 @@
 class TFAllocator : public tensorflow::Allocator
 {
 public:
-    static std::shared_ptr<TFAllocator> New();
+    TFAllocator(tensorflow::Allocator *other = nullptr);
 
     ~TFAllocator() override;
 
@@ -45,7 +45,7 @@ public:
     bool ShouldAllocateEmptyTensors() override;
 
 private:
-    TFAllocator();
+    tensorflow::Allocator *m_actualAlloc;
 
     TF_DISALLOW_COPY_AND_ASSIGN(TFAllocator);
 };

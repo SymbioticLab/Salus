@@ -22,13 +22,10 @@
 #include "memorymgr/memorymgr.h"
 #include "platform/logging.h"
 
-std::shared_ptr<TFAllocator> TFAllocator::New()
+TFAllocator::TFAllocator(tensorflow::Allocator *other)
+    : m_actualAlloc(other)
 {
-    struct make_shared_enabler : public TFAllocator {};
-    return std::make_shared<make_shared_enabler>();
 }
-
-TFAllocator::TFAllocator() = default;
 
 TFAllocator::~TFAllocator() = default;
 
@@ -39,17 +36,19 @@ std::string TFAllocator::Name()
 
 bool TFAllocator::ShouldAllocateEmptyTensors()
 {
-    return false;
+    if (m_actualAlloc)
+        return m_actualAlloc->ShouldAllocateEmptyTensors();
+    return true;
 }
 
 void *TFAllocator::AllocateRaw(size_t alignment, size_t num_bytes)
 {
-    if (num_bytes == 0) {
-        INFO("Allocation for tracking purpose");
-        num_bytes = 1;
+    void *ptr = nullptr;
+    if (m_actualAlloc) {
+        ptr = m_actualAlloc->AllocateRaw(alignment, num_bytes);
+    } else {
+        ptr = MemoryMgr::instance().allocate(alignment, num_bytes);
     }
-
-    auto ptr = MemoryMgr::instance().allocate(num_bytes, alignment);
 
     INFO("TFAllocator allocated {} bytes of memory at {:x} with alignment {}",
          num_bytes, reinterpret_cast<uint64_t>(ptr), alignment);
@@ -60,5 +59,9 @@ void *TFAllocator::AllocateRaw(size_t alignment, size_t num_bytes)
 void TFAllocator::DeallocateRaw(void *ptr)
 {
     INFO("TFAllocator deallocating memory at {:x}", reinterpret_cast<uint64_t>(ptr));
-    MemoryMgr::instance().deallocate(ptr);
+    if (m_actualAlloc) {
+        m_actualAlloc->DeallocateRaw(ptr);
+    } else {
+        MemoryMgr::instance().deallocate(ptr);
+    }
 }

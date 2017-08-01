@@ -45,7 +45,9 @@ ExecutionEngine::~ExecutionEngine() = default;
 namespace {
 bool useGPU()
 {
-    return utils::fromEnvVar("EXEC_SCHED_USE_GPU", true);
+    auto use = utils::fromEnvVar("EXEC_SCHED_USE_GPU", true);
+    INFO("Scheduling using: {}", use ? "GPU,CPU" : "CPU");
+    return use;
 }
 
 } // namespace

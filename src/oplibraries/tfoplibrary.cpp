@@ -33,6 +33,7 @@
 #include "tfoplibrary.h"
 
 #include "tfmocks/tfsession.h"
+#include "tfmocks/tfallocator.h"
 
 #include "utils/protoutils.h"
 #include "utils/pointerutils.h"
@@ -51,6 +52,7 @@
 #include <tensorflow/core/lib/strings/strcat.h>
 #include <tensorflow/core/common_runtime/device_mgr.h>
 #include <tensorflow/core/common_runtime/device_factory.h>
+#include <tensorflow/core/common_runtime/rpc_device/exec_helpers/devicefactories.h>
 
 #include <vector>
 #include <thread>
@@ -126,7 +128,12 @@ TFSession *TFOpLibrary::getOrCreateSession(const std::string& sess_id,
         std::vector<tensorflow::Device*> devices;
         tensorflow::SessionOptions options;
         (*options.config.mutable_device_count())["RPC"] = 0;
-        // FIXME: use device with our own allocator
+
+        // use device with our own allocator
+        tensorflow::WrappedDeviceSettings::setWrapperFactory([](auto *alloc){
+            return std::make_unique<TFAllocator>(alloc);
+        });
+
         auto s = tensorflow::DeviceFactory::AddDevices(options, "/job:localhost/replica:0/task:0",
                                                        &devices);
         if (!s.ok()) {
