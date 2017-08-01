@@ -139,7 +139,7 @@ std::ostream &operator<<(std::ostream &os, const tensorflow::AllocationAttribute
 {
     return os << "tensorflow::AllocationAttributes("
     << "allocation_will_be_logged=" << c.allocation_will_be_logged
-    << "no_retry_on_failure=" << c.no_retry_on_failure
+    << ", no_retry_on_failure=" << c.no_retry_on_failure
     << ")";
 }
 
