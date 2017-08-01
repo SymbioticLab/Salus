@@ -22,6 +22,25 @@
 #include "memorymgr/memorymgr.h"
 #include "platform/logging.h"
 
+namespace {
+void checkMemory(void *ptr, size_t num_bytes)
+{
+#ifndef NDEBUG
+    DEBUG("Checking memory at {:x} of size {}", reinterpret_cast<uint64_t>(ptr), num_bytes);
+    uint8_t *pbegin = reinterpret_cast<uint8_t*>(ptr);
+    uint8_t *pend = pbegin + num_bytes;
+    for (auto p = pbegin; p != pend; ++p) {
+        *p = 0xde;
+        if (*p != 0xde) {
+            ERR("Some wrong at address {:x}, which belongs to block {:x}",
+                reinterpret_cast<uint64_t>(p), reinterpret_cast<uint64_t>(pbegin));
+        }
+    }
+}
+#endif
+
+} // namespace
+
 TFAllocator::TFAllocator(tensorflow::Allocator *other)
     : m_actualAlloc(other)
 {
@@ -53,6 +72,7 @@ void *TFAllocator::AllocateRaw(size_t alignment, size_t num_bytes)
     INFO("TFAllocator allocated {} bytes of memory at {:x} with alignment {}",
          num_bytes, reinterpret_cast<uint64_t>(ptr), alignment);
 
+    checkMemory(ptr, num_bytes);
     return ptr;
 }
 
@@ -62,10 +82,15 @@ void *TFAllocator::AllocateRaw(size_t alignment, size_t num_bytes,
     INFO("TFAllocator called for attributes {} of {} bytes of memory at {:x} with alignment {}",
          allocation_attr, num_bytes, alignment);
 
+    void *ptr = nullptr;
+
     if (m_actualAlloc) {
-        return m_actualAlloc->AllocateRaw(alignment, num_bytes, allocation_attr);
+        ptr = m_actualAlloc->AllocateRaw(alignment, num_bytes, allocation_attr);
+        checkMemory(ptr, num_bytes);
+    } else {
+        ptr = AllocateRaw(alignment, num_bytes);
     }
-    return AllocateRaw(alignment, num_bytes);
+    return ptr;
 }
 
 void TFAllocator::DeallocateRaw(void *ptr)
