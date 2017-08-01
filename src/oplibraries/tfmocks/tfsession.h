@@ -40,6 +40,7 @@
 #include <unordered_map>
 #include <utility>
 #include <vector>
+#include <list>
 
 using tensorflow::TensorValue;
 typedef tensorflow::gtl::InlinedVector<tensorflow::TensorValue, 4> TensorValueVec;
@@ -101,7 +102,9 @@ public:
     tensorflow::TensorStore tensorStore;
 
     // Holds tensors that are created due to automatic deref
-    std::vector<tensorflow::Tensor> deref_tensors;
+    // Must use a list because we take address of these elements
+    // so they must remain valid after later insertion.
+    std::list<tensorflow::Tensor> deref_tensors;
 
     // Which device this context runs on
     DeviceSpec devSpec;

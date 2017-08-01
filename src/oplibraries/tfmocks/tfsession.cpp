@@ -514,6 +514,10 @@ std::unique_ptr<TFContext> TFSession::createContext(const executor::TFOpContextD
 
                 tensorflow::Notification n;
                 tensorflow::Status ok;
+                INFO("Copying from device {} to device {} to prepare {}-th input {} for op {}. "
+                     " target tensor object addr: {:x}",
+                     input.device->name(), device->name(), i, initem.name(), opkernel->name(),
+                     reinterpret_cast<uint64_t>(&copy));
                 tensorflow::CopyTensor::ViaDMA(initem.name(), input.context, tfctx->params.op_device_context,
                                                input.device, device, inattrs, {}, input.val.tensor, &copy,
                                                [&n, &ok](auto status) {
