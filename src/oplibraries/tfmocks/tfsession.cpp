@@ -411,6 +411,33 @@ bool TFSession::findOrCreateKernel(TFExecutionState *execState, const tensorflow
     return true;
 }
 
+NodeItem *TFExecutionState::prepareNodeItemOnDevice(tensorflow::OpKernel *opkernel, tensorflow::Device *d)
+{
+    assert(opkernel);
+    assert(d);
+
+    auto node = findNodeInGraph(opkernel->name());
+    if (!node) {
+        return nullptr;
+    }
+
+    m_gview->SetAllocAttrForNode(node, d);
+    auto nodeItem = m_gview->node(node->id());
+    nodeItem->kernel = opkernel;
+
+    nodeItem->kernel_is_expensive = nodeItem->kernel->IsExpensive();
+    nodeItem->kernel_is_async = (nodeItem->kernel->AsAsync() != nullptr);
+    nodeItem->is_merge = tensorflow::IsMerge(node);
+    nodeItem->is_enter = tensorflow::IsEnter(node);
+    nodeItem->is_exit = tensorflow::IsExit(node);
+    nodeItem->is_control_trigger = tensorflow::IsControlTrigger(node);
+    nodeItem->is_sink = tensorflow::IsSink(node);
+    nodeItem->is_enter_exit_or_next_iter =
+        (tensorflow::IsEnter(node) || tensorflow::IsExit(node) || tensorflow::IsNextIteration(node));
+
+    return nodeItem;
+}
+
 std::unique_ptr<TFContext> TFSession::createContext(const executor::TFOpContextDef &tfdef,
                                                     tensorflow::OpKernel *opkernel, uint64_t seq,
                                                     TFExecutionState *execState, const DeviceSpec &dev)
@@ -419,9 +446,8 @@ std::unique_ptr<TFContext> TFSession::createContext(const executor::TFOpContextD
     registerContext(seq, tfctx.get());
 
     auto device = findDevice(dev);
-    auto node = execState->findNodeInGraph(opkernel->name());
-    execState->gview()->SetAllocAttrForNode(node, device);
-    auto nodeItem = execState->gview()->node(node->id());
+
+    tfctx->node_item = execState->prepareNodeItemOnDevice(opkernel, device);
 
     tfctx->params.device = device;
     tfctx->params.op_kernel = opkernel;
@@ -433,7 +459,7 @@ std::unique_ptr<TFContext> TFSession::createContext(const executor::TFOpContextD
     tfctx->params.frame_iter = tensorflow::FrameAndIter(tfdef.frame_id(), tfdef.iter_id());
     tfctx->params.is_input_dead = tfdef.is_input_dead();
 
-    tfctx->params.output_attr_array = nodeItem->output_attrs();
+    tfctx->params.output_attr_array = tfctx->node_item->output_attrs();
 //     tfctx->FillOutputAttrs(tfdef);
 
     auto num_inputs = opkernel->num_inputs();
@@ -474,13 +500,8 @@ std::unique_ptr<TFContext> TFSession::createContext(const executor::TFOpContextD
 
         tfctx->input_device_contexts.push_back(input.context);
 
-        // FIXME: find input node name from initem.name(),
-        // which also contains the number of the output of the node,
-        // then set input alloc attr based on that.
-//         auto inputNode = execState->findNodeInGraph(initem.name());
-//         auto inputNodeItem = execState->gview()->node(node->id());
+        tfctx->input_alloc_attrs.push_back(input.nodeItem->output_attrs()[input.slot]);
     }
-    tfctx->FillInputAttrs(tfdef);
 
     return tfctx;
 }
@@ -508,29 +529,6 @@ tensorflow::OpKernelContext *TFContext::ctx()
         context.reset(new tensorflow::OpKernelContext(&params));
     }
     return context.get();
-}
-
-inline void TFContext::FillOutputAttrs(const executor::TFOpContextDef &tfdef) {
-    output_attrs.clear();
-    output_attrs.reserve(tfdef.output_alloc_attrs_size());
-    for (int index = 0; index < tfdef.output_alloc_attrs_size(); index++) {
-        tensorflow::AllocatorAttributes attr;
-        attr.value = tfdef.output_alloc_attrs(index);
-        output_attrs.push_back(attr);
-    }
-    // FIXME: infer output attr using kernel to handle special kernel that have host memory input/output
-    params.output_attr_array = tensorflow::gtl::vector_as_array(&output_attrs);
-}
-
-inline void TFContext::FillInputAttrs(const executor::TFOpContextDef &tfdef)
-{
-    input_alloc_attrs.clear();
-    input_alloc_attrs.reserve(tfdef.input_alloc_attrs_size());
-    for (int index = 0; index < tfdef.input_alloc_attrs_size(); index++) {
-        tensorflow::AllocatorAttributes attr;
-        attr.value = tfdef.input_alloc_attrs(index);
-        input_alloc_attrs.push_back(attr);
-    }
 }
 
 void TFSession::registerContext(uint64_t taskId, TFContext *ctx)
@@ -617,7 +615,9 @@ executor::TFOpContextUpdate TFSession::finalizeContext(TFContext *pContext)
         // Let the session manage the tensor memory
         // The session takes the ownership of tensor in non-ref case
         // TODO: what if tensor is ref and comes from a different device?
-        registerTensorForName(output_name, {out, context->op_device_context(), context->device()});
+        registerTensorForName(output_name,
+                              {out, context->op_device_context(), context->device(),
+                               pContext->node_item, i});
 
         auto outitem = tfctxupd.add_outputs();
         outitem->set_name(output_name);

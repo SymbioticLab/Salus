@@ -55,6 +55,7 @@ class Graph;
 class Node;
 namespace remote {
 class GraphView;
+struct NodeItem;
 } // namespace remote
 } // namespace tensorflow
 
@@ -91,9 +92,6 @@ public:
 
     tensorflow::OpKernelContext *ctx();
 
-    void FillOutputAttrs(const executor::TFOpContextDef &tfdef);
-    void FillInputAttrs(const executor::TFOpContextDef &tfdef);
-
     uint64_t seq;
 
     tensorflow::ScopedStepContainer step_container;
@@ -112,7 +110,8 @@ public:
     DeviceContextVec input_device_contexts;
     AllocatorAttributeVec input_alloc_attrs;
 
-    std::vector<tensorflow::AllocatorAttributes> output_attrs;
+    // A reference to NodeItem in GraphView
+    tensorflow::remote::NodeItem *node_item;
 
     tensorflow::OpKernelContext::Params params;
 private:
@@ -142,6 +141,8 @@ public:
     tensorflow::Graph *graph() const;
     tensorflow::remote::GraphView *gview() const;
     tensorflow::Node *findNodeInGraph(const std::string &name) const;
+    tensorflow::remote::NodeItem *prepareNodeItemOnDevice(tensorflow::OpKernel *opkernel,
+                                                          tensorflow::Device *d);
 
 private:
     TFSession *m_session;
@@ -199,6 +200,8 @@ public:
         TensorValue val;
         tensorflow::DeviceContext *context;
         tensorflow::DeviceBase *device;
+        tensorflow::remote::NodeItem *nodeItem;
+        int slot; // which output is this tensor item in nodeItem
     };
     bool findTensorFromName(const std::string &name, TensorItem &val);
     void registerTensorForName(const std::string &name, TensorItem val);
