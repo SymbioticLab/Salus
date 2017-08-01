@@ -421,9 +421,9 @@ NodeItem *TFExecutionState::prepareNodeItemOnDevice(tensorflow::OpKernel *opkern
         return nullptr;
     }
 
-    m_gview->SetAllocAttrForNode(node, d);
     auto nodeItem = m_gview->node(node->id());
     nodeItem->kernel = opkernel;
+    m_gview->SetAllocAttrForNode(node, d);
 
     nodeItem->kernel_is_expensive = nodeItem->kernel->IsExpensive();
     nodeItem->kernel_is_async = (nodeItem->kernel->AsAsync() != nullptr);
