@@ -68,8 +68,10 @@ std::ostream &operator<<(std::ostream &os, const zmq::error_t &c);
 
 namespace tensorflow {
 struct AllocatorAttributes;
+struct AllocationAttributes;
 }
 std::ostream &operator<<(std::ostream &os, const tensorflow::AllocatorAttributes &c);
+std::ostream &operator<<(std::ostream &os, const tensorflow::AllocationAttributes &c);
 
 namespace google { namespace protobuf {
 class Message;

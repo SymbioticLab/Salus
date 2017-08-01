@@ -56,6 +56,18 @@ void *TFAllocator::AllocateRaw(size_t alignment, size_t num_bytes)
     return ptr;
 }
 
+void *TFAllocator::AllocateRaw(size_t alignment, size_t num_bytes,
+                               const tensorflow::AllocationAttributes& allocation_attr)
+{
+    INFO("TFAllocator called for attributes {} of {} bytes of memory at {:x} with alignment {}",
+         allocation_attr, num_bytes, alignment);
+
+    if (m_actualAlloc) {
+        return m_actualAlloc->AllocateRaw(alignment, num_bytes, allocation_attr);
+    }
+    return AllocateRaw(alignment, num_bytes);
+}
+
 void TFAllocator::DeallocateRaw(void *ptr)
 {
     INFO("TFAllocator deallocating memory at {:x}", reinterpret_cast<uint64_t>(ptr));

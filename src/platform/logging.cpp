@@ -135,6 +135,14 @@ std::ostream &operator<<(std::ostream &os, const tensorflow::AllocatorAttributes
     << ")";
 }
 
+std::ostream &operator<<(std::ostream &os, const tensorflow::AllocationAttributes &c)
+{
+    return os << "tensorflow::AllocationAttributes("
+    << "allocation_will_be_logged=" << c.allocation_will_be_logged
+    << "no_retry_on_failure=" << c.no_retry_on_failure
+    << ")";
+}
+
 std::ostream &operator<<(std::ostream &os, const google::protobuf::Message &c)
 {
     return os << c.DebugString();
