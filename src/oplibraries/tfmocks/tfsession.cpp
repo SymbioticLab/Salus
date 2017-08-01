@@ -39,6 +39,8 @@
 #include <tensorflow/core/protobuf/config.pb.h>
 #include <tensorflow/core/common_runtime/rpc_device/exec_helpers/exechelpers.h>
 
+using namespace tensorflow::remote;
+
 TFSession::TFSession(TFOpLibrary *opLibrary, const std::string &sessionId,
                      const tensorflow::ConfigProto &configProto)
     : m_oplibrary(opLibrary)
@@ -220,12 +222,15 @@ TFExecutionState::TFExecutionState(TFSession *sess, const std::string &execId, t
 
 bool TFExecutionState::initialize()
 {
-    // Disable for now
-    m_graph = tensorflow::ExecHelpers::convertGraphDefToGraph(m_graphdef, m_fdefinition.get(), m_gindex);
+    m_graph = ExecHelpers::convertGraphDefToGraph(m_graphdef, m_fdefinition.get(), m_gindex);
     if (!m_graph) {
         ERR("Create graph from graphdef failed");
         return false;
     }
+
+    m_gview = std::make_unique<GraphView>();
+    m_gview->Initialize(m_graph.get());
+
     logging::logger()->flush();
     for (auto &elem : m_gindex) {
         INFO("GIndex: {} -> {}", elem.first, elem.second);
@@ -298,6 +303,22 @@ tensorflow::Rendezvous *TFExecutionState::rendez() const
 tensorflow::Graph *TFExecutionState::graph() const
 {
     return m_graph.get();
+}
+
+GraphView *TFExecutionState::gview() const
+{
+    return m_gview.get();
+}
+
+tensorflow::Node *TFExecutionState::findNodeInGraph(const std::string &name) const
+{
+    auto nit = m_gindex.find(name);
+    if (nit == m_gindex.end()) {
+        ERR("{} not found in graph", name);
+        return nullptr;
+    }
+    uint32_t nid = nit->second;
+    return m_graph->FindNodeId(nid);
 }
 
 TFExecutionState::~TFExecutionState()
@@ -398,6 +419,9 @@ std::unique_ptr<TFContext> TFSession::createContext(const executor::TFOpContextD
     registerContext(seq, tfctx.get());
 
     auto device = findDevice(dev);
+    auto node = execState->findNodeInGraph(opkernel->name());
+    execState->gview()->SetAllocAttrForNode(node, device);
+    auto nodeItem = execState->gview()->node(node->id());
 
     tfctx->params.device = device;
     tfctx->params.op_kernel = opkernel;
@@ -409,8 +433,8 @@ std::unique_ptr<TFContext> TFSession::createContext(const executor::TFOpContextD
     tfctx->params.frame_iter = tensorflow::FrameAndIter(tfdef.frame_id(), tfdef.iter_id());
     tfctx->params.is_input_dead = tfdef.is_input_dead();
 
-    tfctx->FillOutputAttrs(tfdef);
-    tfctx->FillInputAttrs(tfdef);
+    tfctx->params.output_attr_array = nodeItem->output_attrs();
+//     tfctx->FillOutputAttrs(tfdef);
 
     auto num_inputs = opkernel->num_inputs();
     if (num_inputs != tfdef.inputs_size()) {
@@ -420,6 +444,7 @@ std::unique_ptr<TFContext> TFSession::createContext(const executor::TFOpContextD
     }
     tfctx->inputs.reserve(num_inputs);
     tfctx->input_device_contexts.reserve(num_inputs);
+    tfctx->input_alloc_attrs.reserve(num_inputs);
     for (int i = 0; i != num_inputs; ++i) {
         const auto &initem = tfdef.inputs(i);
         if (initem.name() != opkernel->def().input(i)) {
@@ -448,7 +473,14 @@ std::unique_ptr<TFContext> TFSession::createContext(const executor::TFOpContextD
         tfctx->inputs.push_back(input.val);
 
         tfctx->input_device_contexts.push_back(input.context);
+
+        // FIXME: find input node name from initem.name(),
+        // which also contains the number of the output of the node,
+        // then set input alloc attr based on that.
+//         auto inputNode = execState->findNodeInGraph(initem.name());
+//         auto inputNodeItem = execState->gview()->node(node->id());
     }
+    tfctx->FillInputAttrs(tfdef);
 
     return tfctx;
 }

@@ -25,6 +25,7 @@
 namespace {
 void checkMemory(void *ptr, size_t num_bytes)
 {
+    return;
 #ifndef NDEBUG
     DEBUG("Checking memory at {:x} of size {}", reinterpret_cast<uint64_t>(ptr), num_bytes);
     uint8_t *pbegin = reinterpret_cast<uint8_t*>(ptr);

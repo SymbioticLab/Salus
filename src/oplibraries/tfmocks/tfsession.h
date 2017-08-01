@@ -52,7 +52,11 @@ class NodeDef;
 class FunctionDefLibrary;
 class ConfigProto;
 class Graph;
-}
+class Node;
+namespace remote {
+class GraphView;
+} // namespace remote
+} // namespace tensorflow
 
 class TFAllocator;
 class TFDevice;
@@ -136,6 +140,8 @@ public:
     tensorflow::Rendezvous *rendez() const;
 
     tensorflow::Graph *graph() const;
+    tensorflow::remote::GraphView *gview() const;
+    tensorflow::Node *findNodeInGraph(const std::string &name) const;
 
 private:
     TFSession *m_session;
@@ -145,6 +151,7 @@ private:
 
     std::unique_ptr<tensorflow::FunctionLibraryDefinition> m_fdefinition;
     std::unique_ptr<tensorflow::Graph> m_graph;
+    std::unique_ptr<tensorflow::remote::GraphView> m_gview;
     std::unordered_map<std::string, int> m_gindex;
 
     tensorflow::OptimizerOptions m_optOptions;

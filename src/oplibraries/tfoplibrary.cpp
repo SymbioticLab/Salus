@@ -59,6 +59,7 @@
 #include <functional>
 
 namespace rpc = executor;
+using namespace tensorflow::remote;
 using ::tensorflow::NodeDef;
 using ::tensorflow::ConfigProto;
 using ::tensorflow::FunctionDefLibrary;
@@ -130,7 +131,7 @@ TFSession *TFOpLibrary::getOrCreateSession(const std::string& sess_id,
         (*options.config.mutable_device_count())["RPC"] = 0;
 
         // use device with our own allocator
-        tensorflow::WrappedDeviceSettings::setWrapperFactory([](auto *alloc){
+        WrappedDeviceSettings::setWrapperFactory([](auto *alloc){
             return std::make_unique<TFAllocator>(alloc);
         });
 
