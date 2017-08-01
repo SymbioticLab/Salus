@@ -423,7 +423,11 @@ NodeItem *TFExecutionState::prepareNodeItemOnDevice(tensorflow::OpKernel *opkern
 
     auto nodeItem = m_gview->node(node->id());
     nodeItem->kernel = opkernel;
-    m_gview->SetAllocAttrForNode(node, d);
+    auto ok = m_gview->SetAllocAttrForNode(node, d);
+    if (!ok.ok()) {
+        ERR("Infering alloc attr for node {} failed: {}", opkernel->name(), ok);
+        return nullptr;
+    }
 
     nodeItem->kernel_is_expensive = nodeItem->kernel->IsExpensive();
     nodeItem->kernel_is_async = (nodeItem->kernel->AsAsync() != nullptr);
@@ -584,17 +588,22 @@ executor::TFOpContextUpdate TFSession::finalizeContext(TFContext *pContext)
         auto devCtx = elem.second.args.device_context;
         auto mval = item->mutable_val();
         if (devCtx) {
-            tensorflow::Tensor cputensor(m_cpuAllocator.get(), val.dtype(), val.shape());
-            auto dev = static_cast<tensorflow::Device*>(context->device());
-            devCtx->CopyDeviceTensorToCPU(&val, elem.first, dev, &cputensor,
-                                        [&se, &mval, devCtx,
-                                         copy = cputensor, this](auto) mutable {
-                this->tensorToProtoData(mval, &copy);
+            if (!elem.second.args.alloc_attrs.on_host()) {
+                tensorflow::Tensor cputensor(m_cpuAllocator.get(), val.dtype(), val.shape());
+                auto dev = static_cast<tensorflow::Device*>(context->device());
+                devCtx->CopyDeviceTensorToCPU(&val, elem.first, dev, &cputensor,
+                                            [&se, &mval, devCtx,
+                                            copy = cputensor, this](auto) mutable {
+                    this->tensorToProtoData(mval, &copy);
+                    se.notify();
+                    devCtx->Unref();
+                });
+            } else {
+                tensorToProtoData(mval, &val);
                 se.notify();
-                devCtx->Unref();
-            });
+            }
         } else {
-            WARN("The tensor not copied from device to cpu. Assuming CPU device");
+            WARN("Device context is nullptr, assuming CPU device. The tensor not copied from device to cpu.");
             tensorToProtoData(mval, &val);
             se.notify();
         }
