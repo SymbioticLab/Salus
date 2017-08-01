@@ -199,7 +199,7 @@ public:
     {
         TensorValue val;
         tensorflow::DeviceContext *context;
-        tensorflow::DeviceBase *device;
+        tensorflow::Device *device;
         tensorflow::remote::NodeItem *nodeItem;
         int slot; // which output is this tensor item in nodeItem
     };
