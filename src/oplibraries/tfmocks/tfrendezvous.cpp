@@ -49,37 +49,53 @@ public:
         : m_device(dev)
         , m_actualCtx(actual)
     {
-        assert(m_actualCtx);
+        assert(m_device);
     }
 
     ~WrapperDeviceContext() override
     {
-        m_actualCtx->Unref();
+        if (m_actualCtx) m_actualCtx->Unref();
     }
 
     perftools::gputools::Stream *stream() const override
     {
-        return m_actualCtx->stream();
+        if (m_actualCtx) {
+            return m_actualCtx->stream();
+        } else {
+            return tensorflow::DeviceContext::stream();
+        }
     }
 
     void MaintainLifetimeOnStream(const tensorflow::Tensor *t,
                                   perftools::gputools::Stream *stream) const override
     {
-        return m_actualCtx->MaintainLifetimeOnStream(t, stream);
+        if (m_actualCtx) {
+            return m_actualCtx->MaintainLifetimeOnStream(t, stream);
+        } else {
+            return tensorflow::DeviceContext::MaintainLifetimeOnStream(t, stream);
+        }
     }
 
     void CopyCPUTensorToDevice(const tensorflow::Tensor *cpu_tensor, tensorflow::Device *device,
                                tensorflow::Tensor *device_tensor,
                                tensorflow::StatusCallback done) const override
     {
-        return m_actualCtx->CopyCPUTensorToDevice(cpu_tensor, device, device_tensor, done);
+        if (m_actualCtx) {
+            return m_actualCtx->CopyCPUTensorToDevice(cpu_tensor, device, device_tensor, done);
+        } else {
+            return tensorflow::DeviceContext::CopyCPUTensorToDevice(cpu_tensor, device, device_tensor, done);
+        }
     }
 
     void CopyDeviceTensorToCPU(const tensorflow::Tensor *device_tensor, tensorflow::StringPiece tensor_name,
                                tensorflow::Device *device, tensorflow::Tensor *cpu_tensor,
                                tensorflow::StatusCallback done) override
     {
-        return m_actualCtx->CopyDeviceTensorToCPU(device_tensor, tensor_name, device, cpu_tensor, done);
+        if (m_actualCtx) {
+            return m_actualCtx->CopyDeviceTensorToCPU(device_tensor, tensor_name, device, cpu_tensor, done);
+        } else {
+            return tensorflow::DeviceContext::CopyDeviceTensorToCPU(device_tensor, tensor_name, device, cpu_tensor, done);
+        }
     }
 
     tensorflow::Device *device() const
