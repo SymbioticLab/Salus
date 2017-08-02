@@ -523,10 +523,14 @@ std::unique_ptr<TFContext> TFSession::createContext(const executor::TFOpContextD
                 return {};
             }
         } else if (!initem.is_ref()) {
-            if (!onSameDevice(device, {}, input.device, inattrs)) {
+            tensorflow::AllocatorAttributes expected;
+            if (opkernel->input_memory_types()[i] == tensorflow::HOST_MEMORY) {
+                expected.set_on_host(true);
+            }
+            if (!onSameDevice(device, expected, input.device, inattrs)) {
                 // Operation and input on different device,
                 // do a copy tensor to ensure input tensor is on the same device
-                tfctx->deref_tensors.emplace_back(device->GetAllocator({}), input.val->dtype(),
+                tfctx->deref_tensors.emplace_back(device->GetAllocator(expected), input.val->dtype(),
                                                   input.val->shape());
                 auto &copy = tfctx->deref_tensors.back();
 
@@ -541,7 +545,7 @@ std::unique_ptr<TFContext> TFSession::createContext(const executor::TFOpContextD
                 INFO("Src dev context {}, dst dev context {}", as_hex(input.context), as_hex(dstDevCtx));
 
                 tensorflow::CopyTensor::ViaDMA(initem.name(), input.context, tfctx->ctx()->op_device_context(),
-                                               input.device, device, inattrs, {}, input.val.tensor, &copy,
+                                               input.device, device, inattrs, expected, input.val.tensor, &copy,
                                                [&n, &ok](auto status) {
                                                    ok = status;
                                                    n.Notify();
@@ -557,7 +561,7 @@ std::unique_ptr<TFContext> TFSession::createContext(const executor::TFOpContextD
                 input.context = dstDevCtx;
                 input.device = device;
                 input.val = {nullptr, &copy};
-                inattrs = {};
+                inattrs = expected;
             } else if (input.val.is_ref()) {
                 // Automatically deref the tensor ref when the op expects a
                 // tensor but is given a ref to a tensor.  Need to deref it
@@ -574,7 +578,7 @@ std::unique_ptr<TFContext> TFSession::createContext(const executor::TFOpContextD
         tfctx->inputs.push_back(input.val);
         INFO("Input {} is tensor: {}, is ref: {}, under name: {}, buffer: {}, alloc: {}",
              i, input.val->shape().DebugString(), input.val.is_ref(), initem.name(),
-             as_hex(input.val->tensor_data().data()), input.allocAttr());
+             as_hex(input.val->tensor_data().data()), inattrs);
     }
 
     return tfctx;
