@@ -20,8 +20,6 @@
 #ifndef TFSESSION_H
 #define TFSESSION_H
 
-#include "tfrendezvous.h"
-
 #include "execution/devices.h"
 
 #include "executor.pb.h"
@@ -40,6 +38,7 @@
 #include <unordered_map>
 #include <utility>
 #include <vector>
+#include <list>
 
 using tensorflow::TensorValue;
 typedef tensorflow::gtl::InlinedVector<tensorflow::TensorValue, 4> TensorValueVec;
@@ -52,8 +51,14 @@ class NodeDef;
 class FunctionDefLibrary;
 class ConfigProto;
 class Graph;
-}
+class Node;
+namespace remote {
+class GraphView;
+struct NodeItem;
+} // namespace remote
+} // namespace tensorflow
 
+class TFRendezvous;
 class TFAllocator;
 class TFDevice;
 class TFSession;
@@ -81,25 +86,28 @@ private:
 
 class TFContext
 {
+    std::unique_ptr<tensorflow::OpKernelContext> context;
+
 public:
     TFContext(TFExecutionState *exec, uint64_t taskId);
     ~TFContext();
 
     tensorflow::OpKernelContext *ctx();
 
-    void FillOutputAttrs(const executor::TFOpContextDef &tfdef);
-    void FillInputAttrs(const executor::TFOpContextDef &tfdef);
+    TFExecutionState *execState;
 
     uint64_t seq;
 
     tensorflow::ScopedStepContainer step_container;
     tensorflow::checkpoint::TensorSliceReaderCacheWrapper slice_reader_cache_wrapper;
-    TFRendezvous rendez;
+    std::unique_ptr<TFRendezvous> rendez;
 
     tensorflow::TensorStore tensorStore;
 
     // Holds tensors that are created due to automatic deref
-    std::vector<tensorflow::Tensor> deref_tensors;
+    // Must use a list because we take address of these elements
+    // so they must remain valid after later insertion.
+    std::list<tensorflow::Tensor> deref_tensors;
 
     // Which device this context runs on
     DeviceSpec devSpec;
@@ -108,12 +116,10 @@ public:
     DeviceContextVec input_device_contexts;
     AllocatorAttributeVec input_alloc_attrs;
 
-    std::vector<tensorflow::AllocatorAttributes> output_attrs;
+    // A reference to NodeItem in GraphView
+    tensorflow::remote::NodeItem *node_item;
 
     tensorflow::OpKernelContext::Params params;
-private:
-    std::unique_ptr<tensorflow::OpKernelContext> context;
-    TFExecutionState *m_exec;
 };
 
 class TFExecutionState
@@ -136,6 +142,10 @@ public:
     tensorflow::Rendezvous *rendez() const;
 
     tensorflow::Graph *graph() const;
+    tensorflow::remote::GraphView *gview() const;
+    tensorflow::Node *findNodeInGraph(const std::string &name) const;
+    tensorflow::remote::NodeItem *prepareNodeItemOnDevice(tensorflow::OpKernel *opkernel,
+                                                          tensorflow::Device *d);
 
 private:
     TFSession *m_session;
@@ -145,6 +155,7 @@ private:
 
     std::unique_ptr<tensorflow::FunctionLibraryDefinition> m_fdefinition;
     std::unique_ptr<tensorflow::Graph> m_graph;
+    std::unique_ptr<tensorflow::remote::GraphView> m_gview;
     std::unordered_map<std::string, int> m_gindex;
 
     tensorflow::OptimizerOptions m_optOptions;
@@ -179,11 +190,11 @@ public:
     bool findOrCreateKernel(TFExecutionState *execState, const tensorflow::NodeDef &ndef,
                             tensorflow::OpKernel *&kernel, DeviceSpec &dev);
 
-    std::unique_ptr<TFContext> createContext(const executor::TFOpContextDef &tfdef,
+    std::shared_ptr<TFContext> createContext(const executor::TFOpContextDef &tfdef,
                                              tensorflow::OpKernel *opkernel, uint64_t taskId,
                                              TFExecutionState *execState, const DeviceSpec &dev);
-    void registerContext(uint64_t taskId, TFContext *ctx);
-    TFContext *findContext(uint64_t taskId);
+    void registerContext(uint64_t taskId, std::shared_ptr<TFContext> ctx);
+    std::shared_ptr<TFContext> findContext(uint64_t taskId);
     void deregisterContext(uint64_t taskId);
 
     // Tensor memory management
@@ -191,7 +202,11 @@ public:
     {
         TensorValue val;
         tensorflow::DeviceContext *context;
-        tensorflow::DeviceBase *device;
+        tensorflow::Device *device;
+        tensorflow::remote::NodeItem *nodeItem;
+        int slot; // which output is this tensor item in nodeItem
+
+        inline tensorflow::AllocatorAttributes allocAttr() const;
     };
     bool findTensorFromName(const std::string &name, TensorItem &val);
     void registerTensorForName(const std::string &name, TensorItem val);
@@ -234,7 +249,7 @@ private:
     /**
      * Mapping RunRequest seq number to TFContext. Protected by m_muctx.
      */
-    std::unordered_map<uint64_t, TFContext*> m_contexts;
+    std::unordered_map<uint64_t, std::shared_ptr<TFContext>> m_contexts;
 
     tensorflow::mutex m_muexec;
     std::unordered_map<std::string, std::unique_ptr<TFExecutionState>> m_execStates;

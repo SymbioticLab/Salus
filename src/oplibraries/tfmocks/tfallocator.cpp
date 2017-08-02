@@ -25,6 +25,7 @@
 namespace {
 void checkMemory(void *ptr, size_t num_bytes)
 {
+    return;
 #ifndef NDEBUG
     DEBUG("Checking memory at {:x} of size {}", reinterpret_cast<uint64_t>(ptr), num_bytes);
     uint8_t *pbegin = reinterpret_cast<uint8_t*>(ptr);
@@ -64,6 +65,7 @@ void *TFAllocator::AllocateRaw(size_t alignment, size_t num_bytes)
 {
     void *ptr = nullptr;
     if (m_actualAlloc) {
+        INFO("Using actual allocator: {}", m_actualAlloc->Name());
         ptr = m_actualAlloc->AllocateRaw(alignment, num_bytes);
     } else {
         ptr = MemoryMgr::instance().allocate(alignment, num_bytes);
@@ -82,6 +84,7 @@ void *TFAllocator::AllocateRaw(size_t alignment, size_t num_bytes,
     void *ptr = nullptr;
 
     if (m_actualAlloc) {
+        INFO("Using actual allocator: {}", m_actualAlloc->Name());
         ptr = m_actualAlloc->AllocateRaw(alignment, num_bytes, allocation_attr);
         checkMemory(ptr, num_bytes);
     } else {
@@ -97,6 +100,7 @@ void TFAllocator::DeallocateRaw(void *ptr)
 {
     INFO("TFAllocator deallocating memory at {:x}", reinterpret_cast<uint64_t>(ptr));
     if (m_actualAlloc) {
+        INFO("Using actual allocator: {}", m_actualAlloc->Name());
         m_actualAlloc->DeallocateRaw(ptr);
     } else {
         MemoryMgr::instance().deallocate(ptr);

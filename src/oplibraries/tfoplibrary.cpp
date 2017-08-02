@@ -34,6 +34,7 @@
 
 #include "tfmocks/tfsession.h"
 #include "tfmocks/tfallocator.h"
+#include "tfmocks/tfrendezvous.h"
 
 #include "utils/protoutils.h"
 #include "utils/pointerutils.h"
@@ -59,6 +60,7 @@
 #include <functional>
 
 namespace rpc = executor;
+using namespace tensorflow::remote;
 using ::tensorflow::NodeDef;
 using ::tensorflow::ConfigProto;
 using ::tensorflow::FunctionDefLibrary;
@@ -130,7 +132,7 @@ TFSession *TFOpLibrary::getOrCreateSession(const std::string& sess_id,
         (*options.config.mutable_device_count())["RPC"] = 0;
 
         // use device with our own allocator
-        tensorflow::WrappedDeviceSettings::setWrapperFactory([](auto *alloc){
+        WrappedDeviceSettings::setWrapperFactory([](auto *alloc){
             return std::make_unique<TFAllocator>(alloc);
         });
 
@@ -315,12 +317,10 @@ void TFRunTask::runAsync(DoneCallback cb)
         return;
     }
 
-    auto pContext = m_context.get(); // we need this later
-    auto pSession = m_exec->session();
-    // NOTE: this might be deleted by the time done_cb got called. So move out the pieces we need.
+    // NOTE: *this might be deleted by the time done_cb got called. So move out the pieces we need.
     // NOTE: both done and pContext are CopyConstructable, thus the done_cb is CopyConstructable,
     // because move-only lambda can't be assigned to std::function
-    auto done_cb = [done = std::move(cb), pContext = std::move(m_context), pSession]() mutable {
+    auto done_cb = [done = std::move(cb), pContext = m_context, pSession = m_exec->session()]() mutable {
         INFO("OpKernel->ComputeAsync finished with status {}", pContext->ctx()->status());
 
         auto resp = std::make_unique<executor::RunResponse>();
@@ -330,7 +330,7 @@ void TFRunTask::runAsync(DoneCallback cb)
     };
 
     try {
-        device->ComputeAsync(m_opkernel->AsAsync(), pContext->ctx(), std::move(done_cb));
+        device->ComputeAsync(m_opkernel->AsAsync(), m_context->ctx(), std::move(done_cb));
 //         m_opkernel->AsAsync()->ComputeAsync(pContext->ctx(), std::move(done_cb));
     } catch (std::exception &err) {
         ERR("Caught exception when run kernel compute async: ", err.what());
@@ -339,7 +339,7 @@ void TFRunTask::runAsync(DoneCallback cb)
     DEBUG("ComputeAsync returned for opkernel ", m_opkernel->name());
 
     // Send out a message for any pending rendezvous recv request immediately
-    auto pending = pContext->rendez.releasePendingRecv();
+    auto pending = m_context->rendez->releasePendingRecv();
     if (pending.size() != 0) {
         auto reqs = std::make_unique<executor::TFRendezRecvRequests>();
         for (auto &elem : pending) {
@@ -464,9 +464,9 @@ PTask TFOpLibrary::createRendezRecvTask(ZmqServer::Sender sender, const rpc::Eve
                 return {};
             }
 
-            ok.Update(tfctx->rendez.triggerSend(parsed,
-                                                tensorflow::Rendezvous::Args{nullptr, attr},
-                                                tensor, item.isdead()));
+            ok.Update(tfctx->rendez->triggerSend(parsed,
+                                                 tensorflow::Rendezvous::Args{nullptr, attr},
+                                                 tensor, item.isdead()));
         }
         return {};
     });

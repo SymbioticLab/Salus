@@ -152,3 +152,8 @@ std::ostream &operator<<(std::ostream &os, const DeviceSpec &c)
 {
     return os << "DeviceSpec(type=" << c.type << ", id=" << c.id << ")";
 }
+
+std::ostream &operator<<(std::ostream &os, const PtrPrintHelper &helper)
+{
+    return os << "0x" << std::hex << helper.value;
+}

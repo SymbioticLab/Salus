@@ -25,6 +25,9 @@
 // For additional operator<< implementations to work
 #include "spdlog/fmt/ostr.h"
 
+#include <iomanip>
+#include <type_traits>
+
 namespace logging {
 
 class LoggerWrapper
@@ -38,7 +41,10 @@ public:
 private:
     struct Stream
     {
-        explicit Stream(std::shared_ptr<spdlog::logger> &&l) : logger(l) {}
+        explicit Stream(std::shared_ptr<spdlog::logger> &&l)
+            : logger(l)
+        {
+        }
         std::shared_ptr<spdlog::logger> logger;
         ~Stream();
     };
@@ -73,25 +79,37 @@ struct AllocationAttributes;
 std::ostream &operator<<(std::ostream &os, const tensorflow::AllocatorAttributes &c);
 std::ostream &operator<<(std::ostream &os, const tensorflow::AllocationAttributes &c);
 
-namespace google { namespace protobuf {
+namespace google {
+namespace protobuf {
 class Message;
 }
 }
 
 std::ostream &operator<<(std::ostream &os, const google::protobuf::Message &c);
 
-
-class DeviceSpec;
+struct DeviceSpec;
 std::ostream &operator<<(std::ostream &os, const DeviceSpec &c);
 
 /**
  * Generic operator<< for strong enum classes
  */
 template<typename T>
-std::ostream& operator<<(typename std::enable_if<std::is_enum<T>::value, std::ostream>::type &os, const T &e)
+std::ostream &operator<<(typename std::enable_if<std::is_enum<T>::value, std::ostream>::type &os, const T &e)
 {
     return os << static_cast<typename std::underlying_type<T>::type>(e);
 }
+
+/**
+ * Generic operator<< for pointer types, excluding char*
+ */
+struct PtrPrintHelper { uint64_t value; };
+
+template<typename T>
+PtrPrintHelper as_hex(T *p)
+{
+    return { reinterpret_cast<uint64_t>(p) };
+}
+std::ostream &operator<<(std::ostream &os, const PtrPrintHelper &helper);
 
 #define TRACE(...) logging::logger()->trace(__VA_ARGS__)
 #define DEBUG(...) logging::logger()->debug(__VA_ARGS__)

@@ -47,27 +47,8 @@ class TestBasicOps(unittest.TestCase):
 
     # TODO: implement the device selection as a session option.
     # So we can test both CPU and GPU using the same code.
-    @unittest.skip("Segfault in GPU. See #12.")
-    def test_multiply_int32(self):
-        with tf.device('/device:RPC:0'):
-            a = tf.constant([3, 7], name='const_1', dtype=tf.int32)
-            b = tf.constant([7, 3] , name='const_2')
-            c = tf.constant(2, name='const_3')
-            d = tf.multiply(a, b, name='mul_first')
-            actual = tf.multiply(c, d, name='mul_second')
-
-        with tf.device('/device:CPU:0'):
-            a = tf.constant([3, 7], name='const_1')
-            b = tf.constant([7, 3] , name='const_2')
-            c = tf.constant(2, name='const_3')
-            d = tf.multiply(a, b, name='mul_first')
-            expected = tf.multiply(c, d, name='mul_second')
-
-        with tf.Session(config=self.config) as sess:
-            npt.assert_array_equal(sess.run(actual), sess.run(expected))
-
-    @data(tf.int8, tf.int16)
-    def test_multiply_shortint(self, dtype):
+    @data(tf.int8, tf.int16, tf.int32, tf.int64)
+    def test_multiply_int(self, dtype):
         with tf.device('/device:RPC:0'):
             a = tf.constant([3, 7], name='const_1', dtype=dtype)
             b = tf.constant([7, 3] , name='const_2', dtype=dtype)
@@ -85,7 +66,7 @@ class TestBasicOps(unittest.TestCase):
         with tf.Session(config=self.config) as sess:
             npt.assert_array_equal(sess.run(actual), sess.run(expected))
 
-    @data(tf.float32, tf.double, tf.int64, tf.complex64, tf.complex128)
+    @data(tf.float32, tf.double, tf.complex64, tf.complex128)
     def test_multiply(self, dtype):
         with tf.device('/device:RPC:0'):
             a = tf.constant([3, 7], name='const_1', dtype=dtype)
@@ -104,7 +85,7 @@ class TestBasicOps(unittest.TestCase):
         with tf.Session(config=self.config) as sess:
             npt.assert_array_equal(sess.run(actual), sess.run(expected))
 
-    @data(tf.float32, tf.double, tf.int64, tf.complex64, tf.complex128)
+    @data(tf.float32, tf.double, tf.complex64, tf.complex128)
     def test_add(self, dtype):
         with tf.device('/device:RPC:0'):
             a = tf.constant([3, 7], name='const_1', dtype=dtype)
@@ -123,9 +104,8 @@ class TestBasicOps(unittest.TestCase):
         with tf.Session(config=self.config) as sess:
             npt.assert_array_equal(sess.run(actual), sess.run(expected))
 
-    @unittest.skip("Segfault in GPU.")
-    @data(tf.int16, tf.int8)
-    def test_add_shortint(self, dtype):
+    @data(tf.int64, tf.int32, tf.int16, tf.int8)
+    def test_add_int(self, dtype):
         with tf.device('/device:RPC:0'):
             a = tf.constant([3, 7], name='const_1', dtype=dtype)
             b = tf.constant([7, 3] , name='const_2', dtype=dtype)
