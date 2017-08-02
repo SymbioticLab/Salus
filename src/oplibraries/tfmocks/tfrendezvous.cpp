@@ -202,6 +202,7 @@ void TFRendezvous::RecvAsync(const ParsedKey &parsed, const Args &recv_args, Don
         if (!isSameDevice(parsed.src, parsed.dst)) {
             // this is triggered by triggerSend, meaning this is a rendez between outside and rpc.
             // simply return.
+            done(status, send_args, recv_args, in, is_dead);
             return;
         }
 
