@@ -286,6 +286,7 @@ tensorflow::DeviceContext *TFExecutionState::deviceContext(const std::string &na
     if (it != m_deviceContexts.end() && nid < it->second.size()) {
         return it->second[nid];
     }
+    DEBUG("Device does not provide a context for op kernel {} on device {}, a default one may be used", name, tfdev->name());
     return nullptr;
 }
 
@@ -518,7 +519,11 @@ std::unique_ptr<TFContext> TFSession::createContext(const executor::TFOpContextD
                      " target tensor object addr: {:x}",
                      input.device->name(), device->name(), i, initem.name(), opkernel->name(),
                      reinterpret_cast<uint64_t>(&copy));
-                tensorflow::CopyTensor::ViaDMA(initem.name(), input.context, tfctx->params.op_device_context,
+
+                auto dstDevCtx = tfctx->ctx()->op_device_context();
+                INFO("Src dev context {}, dst dev context {}", as_hex(input.context), as_hex(dstDevCtx));
+
+                tensorflow::CopyTensor::ViaDMA(initem.name(), input.context, tfctx->ctx()->op_device_context(),
                                                input.device, device, inattrs, {}, input.val.tensor, &copy,
                                                [&n, &ok](auto status) {
                                                    ok = status;
@@ -532,7 +537,7 @@ std::unique_ptr<TFContext> TFSession::createContext(const executor::TFOpContextD
                         input.device->name(), device->name(), i, initem.name(), opkernel->name(), ok);
                 }
 
-                input.context = tfctx->params.op_device_context;
+                input.context = dstDevCtx;
                 input.device = device;
                 input.val = {nullptr, &copy};
                 inattrs = {};
