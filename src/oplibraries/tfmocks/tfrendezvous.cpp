@@ -156,6 +156,7 @@ tensorflow::Status TFRendezvous::Send(const ParsedKey &parsed, const Args &send_
             m_tensors.emplace(
                 std::make_pair(parsed.FullKey().ToString(), SendItem{send_args, is_dead, std::move(copy)}));
         }
+        return tensorflow::Status::OK();
     }
 
     auto args = send_args;
@@ -190,6 +191,7 @@ void TFRendezvous::RecvAsync(const ParsedKey &parsed, const Args &recv_args, Don
             }
             m_recv.emplace(std::make_pair(parsed.FullKey().ToString(), RecvItem{recv_args}));
         }
+        return;
     }
 
     auto args = recv_args;
