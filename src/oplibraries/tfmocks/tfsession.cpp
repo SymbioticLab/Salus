@@ -664,11 +664,12 @@ executor::TFOpContextUpdate TFSession::finalizeContext(TFContext *pContext)
         auto mval = item->mutable_val();
         if (devCtx) {
             if (!elem.second.args.alloc_attrs.on_host()) {
-                tensorflow::Tensor cputensor(m_cpuAllocator.get(), val.dtype(), val.shape());
+                auto cputensor = new tensorflow::Tensor(m_cpuAllocator.get(), val.dtype(), val.shape());
                 auto dev = static_cast<tensorflow::Device *>(context->device());
-                devCtx->CopyDeviceTensorToCPU(&val, elem.first, dev, &cputensor,
-                                              [&se, &mval, devCtx, copy = cputensor, this ](auto) mutable {
-                                                  this->tensorToProtoData(mval, &copy);
+                devCtx->CopyDeviceTensorToCPU(&val, elem.first, dev, cputensor,
+                                              [&se, &mval, devCtx, cputensor, this](auto) mutable {
+                                                  this->tensorToProtoData(mval, cputensor);
+                                                  delete cputensor;
                                                   devCtx->Unref();
                                                   se.notify();
                                               });
