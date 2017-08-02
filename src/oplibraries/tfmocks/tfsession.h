@@ -20,8 +20,6 @@
 #ifndef TFSESSION_H
 #define TFSESSION_H
 
-#include "tfrendezvous.h"
-
 #include "execution/devices.h"
 
 #include "executor.pb.h"
@@ -60,6 +58,7 @@ struct NodeItem;
 } // namespace remote
 } // namespace tensorflow
 
+class TFRendezvous;
 class TFAllocator;
 class TFDevice;
 class TFSession;
@@ -87,17 +86,21 @@ private:
 
 class TFContext
 {
+    std::unique_ptr<tensorflow::OpKernelContext> context;
+
 public:
     TFContext(TFExecutionState *exec, uint64_t taskId);
     ~TFContext();
 
     tensorflow::OpKernelContext *ctx();
 
+    TFExecutionState *execState;
+
     uint64_t seq;
 
     tensorflow::ScopedStepContainer step_container;
     tensorflow::checkpoint::TensorSliceReaderCacheWrapper slice_reader_cache_wrapper;
-    TFRendezvous rendez;
+    std::unique_ptr<TFRendezvous> rendez;
 
     tensorflow::TensorStore tensorStore;
 
@@ -117,9 +120,6 @@ public:
     tensorflow::remote::NodeItem *node_item;
 
     tensorflow::OpKernelContext::Params params;
-private:
-    std::unique_ptr<tensorflow::OpKernelContext> context;
-    TFExecutionState *m_exec;
 };
 
 class TFExecutionState
@@ -205,6 +205,8 @@ public:
         tensorflow::Device *device;
         tensorflow::remote::NodeItem *nodeItem;
         int slot; // which output is this tensor item in nodeItem
+
+        inline tensorflow::AllocatorAttributes allocAttr() const;
     };
     bool findTensorFromName(const std::string &name, TensorItem &val);
     void registerTensorForName(const std::string &name, TensorItem val);

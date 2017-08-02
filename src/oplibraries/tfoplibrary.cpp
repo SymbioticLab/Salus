@@ -34,6 +34,7 @@
 
 #include "tfmocks/tfsession.h"
 #include "tfmocks/tfallocator.h"
+#include "tfmocks/tfrendezvous.h"
 
 #include "utils/protoutils.h"
 #include "utils/pointerutils.h"
@@ -340,7 +341,7 @@ void TFRunTask::runAsync(DoneCallback cb)
     DEBUG("ComputeAsync returned for opkernel ", m_opkernel->name());
 
     // Send out a message for any pending rendezvous recv request immediately
-    auto pending = pContext->rendez.releasePendingRecv();
+    auto pending = pContext->rendez->releasePendingRecv();
     if (pending.size() != 0) {
         auto reqs = std::make_unique<executor::TFRendezRecvRequests>();
         for (auto &elem : pending) {
@@ -465,9 +466,9 @@ PTask TFOpLibrary::createRendezRecvTask(ZmqServer::Sender sender, const rpc::Eve
                 return {};
             }
 
-            ok.Update(tfctx->rendez.triggerSend(parsed,
-                                                tensorflow::Rendezvous::Args{nullptr, attr},
-                                                tensor, item.isdead()));
+            ok.Update(tfctx->rendez->triggerSend(parsed,
+                                                 tensorflow::Rendezvous::Args{nullptr, attr},
+                                                 tensor, item.isdead()));
         }
         return {};
     });

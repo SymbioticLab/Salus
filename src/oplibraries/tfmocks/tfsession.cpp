@@ -54,6 +54,10 @@ bool onSameDevice(tensorflow::Device *devA, const tensorflow::AllocatorAttribute
 }
 } // namespace
 
+inline tensorflow::AllocatorAttributes TFSession::TensorItem::allocAttr() const {
+    return nodeItem->output_attrs()[slot];
+}
+
 TFSession::TFSession(TFOpLibrary *opLibrary, const std::string &sessionId,
                      const tensorflow::ConfigProto &configProto)
     : m_oplibrary(opLibrary)
@@ -101,8 +105,9 @@ bool TFSession::findTensorFromName(const std::string &name, TensorItem &item)
 
 void TFSession::registerTensorForName(const std::string &name, TensorItem item)
 {
-    INFO("Registering tensor: {}, is ref: {}, under name: {}, buffer: {:x}", item.val->shape().DebugString(),
-         item.val.is_ref(), name, reinterpret_cast<uint64_t>(item.val->tensor_data().data()));
+    INFO("Registering tensor: {}, is ref: {}, under name: {}, buffer: {:x}, alloc: {}",
+         item.val->shape().DebugString(), item.val.is_ref(), name,
+         as_hex(item.val->tensor_data().data()), item.allocAttr());
 
     if (item.context) {
         item.context->Ref();
@@ -494,7 +499,7 @@ std::unique_ptr<TFContext> TFSession::createContext(const executor::TFOpContextD
             return {};
         }
 
-        auto inattrs = input.nodeItem->output_attrs()[input.slot];
+        auto inattrs = input.allocAttr();
 
         // Handle every combination of input and op types
         // ----------------------------------------------
@@ -567,20 +572,24 @@ std::unique_ptr<TFContext> TFSession::createContext(const executor::TFOpContextD
         tfctx->input_alloc_attrs.push_back(inattrs);
         tfctx->input_device_contexts.push_back(input.context);
         tfctx->inputs.push_back(input.val);
+        INFO("Input {} is tensor: {}, is ref: {}, under name: {}, buffer: {:x}, alloc: {}",
+             i, input.val->shape().DebugString(), input.val.is_ref(), initem.name(),
+             as_hex(input.val->tensor_data().data()), input.allocAttr());
     }
 
     return tfctx;
 }
 
 TFContext::TFContext(TFExecutionState *exec, uint64_t seq)
-    : seq(seq)
+    : execState(exec)
+    , seq(seq)
     , step_container(0, [](const std::string &) {})
-    , rendez(exec)
-    , m_exec(exec)
 {
+    rendez = std::make_unique<TFRendezvous>(this);
+
     params.step_container = &step_container;
     params.slice_reader_cache = &slice_reader_cache_wrapper;
-    params.rendezvous = &rendez;
+    params.rendezvous = rendez.get();
     params.tensor_store = &tensorStore;
     params.input_alloc_attrs = &input_alloc_attrs;
     params.input_device_contexts = &input_device_contexts;
@@ -638,7 +647,7 @@ executor::TFOpContextUpdate TFSession::finalizeContext(TFContext *pContext)
 
     // process tensor received by rendezvous
     // And this will clear tensors table in rendezvous
-    auto pending = pContext->rendez.releasePendingSentTensors();
+    auto pending = pContext->rendez->releasePendingSentTensors();
     utils::semaphore se;
     for (auto &elem : pending) {
         auto item = tfctxupd.add_rendeztensors();
@@ -656,11 +665,12 @@ executor::TFOpContextUpdate TFSession::finalizeContext(TFContext *pContext)
                 devCtx->CopyDeviceTensorToCPU(&val, elem.first, dev, &cputensor,
                                               [&se, &mval, devCtx, copy = cputensor, this ](auto) mutable {
                                                   this->tensorToProtoData(mval, &copy);
-                                                  se.notify();
                                                   devCtx->Unref();
+                                                  se.notify();
                                               });
             } else {
                 tensorToProtoData(mval, &val);
+                devCtx->Unref();
                 se.notify();
             }
         } else {
