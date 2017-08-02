@@ -156,7 +156,6 @@ tensorflow::Status TFRendezvous::Send(const ParsedKey &parsed, const Args &send_
             m_tensors.emplace(
                 std::make_pair(parsed.FullKey().ToString(), SendItem{send_args, is_dead, std::move(copy)}));
         }
-        return tensorflow::Status::OK();
     }
 
     auto args = send_args;
@@ -191,7 +190,6 @@ void TFRendezvous::RecvAsync(const ParsedKey &parsed, const Args &recv_args, Don
             }
             m_recv.emplace(std::make_pair(parsed.FullKey().ToString(), RecvItem{recv_args}));
         }
-        return;
     }
 
     auto args = recv_args;
@@ -201,15 +199,21 @@ void TFRendezvous::RecvAsync(const ParsedKey &parsed, const Args &recv_args, Don
 
     m_local->RecvAsync(parsed, args, [this, parsed, done](auto status, auto send_args, auto recv_args,
                                                           auto in, auto is_dead) {
-        // If "in" is an uninitialized tensor, do copy-construction to preserve
-        // the uninitialized state, along with data type and shape info, which
-        // is useful for debugger purposes.
-        auto out = in.IsInitialized() ? new tensorflow::Tensor : new tensorflow::Tensor(in);
+        if (!isSameDevice(parsed.src, parsed.dst)) {
+            // this is triggered by triggerSend, meaning this is a rendez between outside and rpc.
+            // simply return.
+            return;
+        }
 
         auto send_wrapper = static_cast<WrapperDeviceContext *>(send_args.device_context);
         auto recv_wrapper = static_cast<WrapperDeviceContext *>(recv_args.device_context);
         assert(send_wrapper);
         assert(recv_wrapper);
+
+        // If "in" is an uninitialized tensor, do copy-construction to preserve
+        // the uninitialized state, along with data type and shape info, which
+        // is useful for debugger purposes.
+        auto out = in.IsInitialized() ? new tensorflow::Tensor : new tensorflow::Tensor(in);
 
         auto actual_send_args = send_args;
         auto actual_recv_args = recv_args;

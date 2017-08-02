@@ -190,11 +190,11 @@ public:
     bool findOrCreateKernel(TFExecutionState *execState, const tensorflow::NodeDef &ndef,
                             tensorflow::OpKernel *&kernel, DeviceSpec &dev);
 
-    std::unique_ptr<TFContext> createContext(const executor::TFOpContextDef &tfdef,
+    std::shared_ptr<TFContext> createContext(const executor::TFOpContextDef &tfdef,
                                              tensorflow::OpKernel *opkernel, uint64_t taskId,
                                              TFExecutionState *execState, const DeviceSpec &dev);
-    void registerContext(uint64_t taskId, TFContext *ctx);
-    TFContext *findContext(uint64_t taskId);
+    void registerContext(uint64_t taskId, std::shared_ptr<TFContext> ctx);
+    std::shared_ptr<TFContext> findContext(uint64_t taskId);
     void deregisterContext(uint64_t taskId);
 
     // Tensor memory management
@@ -249,7 +249,7 @@ private:
     /**
      * Mapping RunRequest seq number to TFContext. Protected by m_muctx.
      */
-    std::unordered_map<uint64_t, TFContext*> m_contexts;
+    std::unordered_map<uint64_t, std::shared_ptr<TFContext>> m_contexts;
 
     tensorflow::mutex m_muexec;
     std::unordered_map<std::string, std::unique_ptr<TFExecutionState>> m_execStates;

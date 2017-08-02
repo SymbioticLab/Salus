@@ -454,12 +454,12 @@ NodeItem *TFExecutionState::prepareNodeItemOnDevice(tensorflow::OpKernel *opkern
     return nodeItem;
 }
 
-std::unique_ptr<TFContext> TFSession::createContext(const executor::TFOpContextDef &tfdef,
+std::shared_ptr<TFContext> TFSession::createContext(const executor::TFOpContextDef &tfdef,
                                                     tensorflow::OpKernel *opkernel, uint64_t seq,
                                                     TFExecutionState *execState, const DeviceSpec &dev)
 {
-    auto tfctx = std::make_unique<TFContext>(execState, seq);
-    registerContext(seq, tfctx.get());
+    auto tfctx = std::make_shared<TFContext>(execState, seq);
+    registerContext(seq, tfctx);
 
     auto device = findDevice(dev);
 
@@ -610,16 +610,16 @@ tensorflow::OpKernelContext *TFContext::ctx()
     return context.get();
 }
 
-void TFSession::registerContext(uint64_t taskId, TFContext *ctx)
+void TFSession::registerContext(uint64_t taskId, std::shared_ptr<TFContext> ctx)
 {
     tensorflow::mutex_lock locker(m_muctx);
-    auto res = m_contexts.insert({taskId, ctx});
+    auto res = m_contexts.insert({taskId, std::move(ctx)});
     if (!res.second) {
         ERR("Register context failed. TaskId: {}", taskId);
     }
 }
 
-TFContext *TFSession::findContext(uint64_t taskId)
+std::shared_ptr<TFContext> TFSession::findContext(uint64_t taskId)
 {
     tensorflow::mutex_lock locker(m_muctx);
     auto it = m_contexts.find(taskId);
