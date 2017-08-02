@@ -42,6 +42,18 @@
 
 using namespace tensorflow::remote;
 
+namespace {
+bool onSameDevice(tensorflow::Device *devA, const tensorflow::AllocatorAttributes &attrA,
+                  tensorflow::Device *devB, const tensorflow::AllocatorAttributes &attrB)
+{
+    if (devA == devB) {
+        return attrA.on_host() == attrB.on_host();
+    } else {
+        return attrA.on_host() && attrB.on_host();
+    }
+}
+} // namespace
+
 TFSession::TFSession(TFOpLibrary *opLibrary, const std::string &sessionId,
                      const tensorflow::ConfigProto &configProto)
     : m_oplibrary(opLibrary)
@@ -506,7 +518,7 @@ std::unique_ptr<TFContext> TFSession::createContext(const executor::TFOpContextD
                 return {};
             }
         } else if (!initem.is_ref()) {
-            if (device != input.device) {
+            if (!onSameDevice(device, {}, input.device, inattrs)) {
                 // Operation and input on different device,
                 // do a copy tensor to ensure input tensor is on the same device
                 tfctx->deref_tensors.emplace_back(device->GetAllocator({}), input.val->dtype(),
