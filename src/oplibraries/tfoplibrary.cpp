@@ -317,11 +317,10 @@ void TFRunTask::runAsync(DoneCallback cb)
         return;
     }
 
-    auto pSession = m_exec->session();
-    // NOTE: this might be deleted by the time done_cb got called. So move out the pieces we need.
+    // NOTE: *this might be deleted by the time done_cb got called. So move out the pieces we need.
     // NOTE: both done and pContext are CopyConstructable, thus the done_cb is CopyConstructable,
     // because move-only lambda can't be assigned to std::function
-    auto done_cb = [done = std::move(cb), pContext = m_context, pSession]() mutable {
+    auto done_cb = [done = std::move(cb), pContext = m_context, pSession = m_exec->session()]() mutable {
         INFO("OpKernel->ComputeAsync finished with status {}", pContext->ctx()->status());
 
         auto resp = std::make_unique<executor::RunResponse>();
