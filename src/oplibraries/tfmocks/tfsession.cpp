@@ -105,7 +105,7 @@ bool TFSession::findTensorFromName(const std::string &name, TensorItem &item)
 
 void TFSession::registerTensorForName(const std::string &name, TensorItem item)
 {
-    INFO("Registering tensor: {}, is ref: {}, under name: {}, buffer: {:x}, alloc: {}",
+    INFO("Registering tensor: {}, is ref: {}, under name: {}, buffer: {}, alloc: {}",
          item.val->shape().DebugString(), item.val.is_ref(), name,
          as_hex(item.val->tensor_data().data()), item.allocAttr());
 
@@ -572,7 +572,7 @@ std::unique_ptr<TFContext> TFSession::createContext(const executor::TFOpContextD
         tfctx->input_alloc_attrs.push_back(inattrs);
         tfctx->input_device_contexts.push_back(input.context);
         tfctx->inputs.push_back(input.val);
-        INFO("Input {} is tensor: {}, is ref: {}, under name: {}, buffer: {:x}, alloc: {}",
+        INFO("Input {} is tensor: {}, is ref: {}, under name: {}, buffer: {}, alloc: {}",
              i, input.val->shape().DebugString(), input.val.is_ref(), initem.name(),
              as_hex(input.val->tensor_data().data()), input.allocAttr());
     }
