@@ -27,6 +27,7 @@
 #include "executor.pb.h"
 
 #include <tensorflow/core/framework/allocator.h>
+#include <tensorflow/core/framework/op_kernel.h>
 #include <tensorflow/core/lib/core/status.h>
 
 #include <google/protobuf/message.h>
@@ -141,6 +142,18 @@ std::ostream &operator<<(std::ostream &os, const tensorflow::AllocationAttribute
     << "allocation_will_be_logged=" << c.allocation_will_be_logged
     << ", no_retry_on_failure=" << c.no_retry_on_failure
     << ")";
+}
+
+std::ostream &operator<<(std::ostream &os, const tensorflow::TensorValue &c)
+{
+    os << "TensorValue(shape: " << c->shape().DebugString()
+       << ", is ref: " << c.is_ref();
+    if (c.is_ref()) {
+        os << " (mutex: " << as_hex(c.mutex_if_ref) << ")";
+    }
+    os << ", buffer: " << as_hex(c->tensor_data().data())
+       << ")";
+    return os;
 }
 
 std::ostream &operator<<(std::ostream &os, const google::protobuf::Message &c)
