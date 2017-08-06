@@ -54,6 +54,23 @@ bool onSameDevice(tensorflow::Device *devA, const tensorflow::AllocatorAttribute
 }
 } // namespace
 
+MaybeLock::MaybeLock(TensorValue &val)
+    : m_mu(val.mutex_if_ref)
+{
+    if (m_mu) {
+        DEBUG("Locking {}", as_hex(m_mu));
+        m_mu->lock();
+    }
+}
+
+MaybeLock::~MaybeLock()
+{
+    if (m_mu) {
+        DEBUG("Unlocking {}", as_hex(m_mu));
+        m_mu->unlock();
+    }
+}
+
 inline tensorflow::AllocatorAttributes TFSession::TensorItem::allocAttr() const {
     return nodeItem->output_attrs()[slot];
 }
@@ -562,8 +579,9 @@ std::shared_ptr<TFContext> TFSession::createContext(const executor::TFOpContextD
                 inattrs = expected;
             } else if (input.val.is_ref()) {
                 // Automatically deref the tensor ref when the op expects a
-                // tensor but is given a ref to a tensor.  Need to deref it
+                // tensor but is given a ref to a tensor. Need to deref it
                 // under the mutex.
+                INFO("Auto deref tensor: {}", input.val);
                 MaybeLock l(input.val);
                 tfctx->deref_tensors.emplace_back(*input.val.tensor);
                 auto &t = tfctx->deref_tensors.back();

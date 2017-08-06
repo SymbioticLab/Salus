@@ -68,20 +68,11 @@ class TFOpLibrary;
 class MaybeLock
 {
 public:
-    explicit MaybeLock(TensorValue &val) : m_val(val)
-    {
-        if (m_val.is_ref()) {
-            m_val.mutex_if_ref->lock();
-        }
-    }
-    ~MaybeLock()
-    {
-        if (m_val.is_ref()) {
-            m_val.mutex_if_ref->unlock();
-        }
-    }
+    inline explicit MaybeLock(TensorValue &val);
+    inline ~MaybeLock();
+
 private:
-    TensorValue &m_val;
+    tensorflow::mutex *m_mu;
 };
 
 class TFContext
