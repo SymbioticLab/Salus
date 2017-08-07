@@ -132,6 +132,7 @@ TFSession *TFOpLibrary::getOrCreateSession(const std::string& sess_id,
         (*options.config.mutable_device_count())["RPC"] = 0;
 
         // use device with our own allocator
+        WrappedDeviceSettings::maybeRegisterWrappedDeviceFactories();
         WrappedDeviceSettings::setWrapperFactory([](auto *alloc){
             return std::make_unique<TFAllocator>(alloc);
         });
