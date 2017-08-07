@@ -33,7 +33,6 @@
 
 namespace tensorflow {
 class OpKernel;
-class DeviceMgr;
 }
 
 class TFSession;
@@ -60,8 +59,6 @@ public:
     PTask createCustomTask(ZmqServer::Sender sender,
                            const executor::EvenlopDef &evenlop,
                            const executor::CustomRequest &push) override;
-
-    tensorflow::DeviceMgr *deviceManager() const { return m_deviceMgr.get(); };
 
 private:
     // subtasks for custom tasks
@@ -93,8 +90,6 @@ private:
     std::unordered_map<std::string, std::unique_ptr<TFSession>> m_sessions;
 
     std::atomic_uint_fast64_t m_sessionSeq;
-
-    std::unique_ptr<tensorflow::DeviceMgr> m_deviceMgr;
 };
 
 class TFRunTask : public ITask

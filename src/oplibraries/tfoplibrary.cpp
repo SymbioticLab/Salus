@@ -1,20 +1,20 @@
 /*
  * <one line to give the library's name and an idea of what it does.>
  * Copyright (C) 2017  Aetf <aetf@unlimitedcodeworks.xyz>
- * 
+ *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation, either version 3 of the License, or
  * (at your option) any later version.
- * 
+ *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
- * 
+ *
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
- * 
+ *
  */
 
 // Force to use non-debug version of protobuf map, which changes its hashing function
@@ -32,35 +32,32 @@
 
 #include "tfoplibrary.h"
 
-#include "tfmocks/tfsession.h"
 #include "tfmocks/tfallocator.h"
 #include "tfmocks/tfrendezvous.h"
+#include "tfmocks/tfsession.h"
 
-#include "utils/protoutils.h"
-#include "utils/pointerutils.h"
 #include "platform/logging.h"
 #include "utils/macros.h"
+#include "utils/pointerutils.h"
+#include "utils/protoutils.h"
 
 #include "executor.pb.h"
 #include "tfoplibrary.pb.h"
 
+#include <tensorflow/core/common_runtime/device.h>
+#include <tensorflow/core/framework/function.pb.h>
+#include <tensorflow/core/framework/node_def.pb.h>
 #include <tensorflow/core/framework/op_kernel.h>
 #include <tensorflow/core/framework/op_segment.h>
-#include <tensorflow/core/framework/node_def.pb.h>
-#include <tensorflow/core/framework/function.pb.h>
-#include <tensorflow/core/protobuf/config.pb.h>
-#include <tensorflow/core/platform/mutex.h>
 #include <tensorflow/core/lib/strings/strcat.h>
-#include <tensorflow/core/common_runtime/device_mgr.h>
-#include <tensorflow/core/common_runtime/device_factory.h>
-#include <tensorflow/core/common_runtime/rpc_device/exec_helpers/devicefactories.h>
+#include <tensorflow/core/platform/mutex.h>
+#include <tensorflow/core/protobuf/config.pb.h>
 
-#include <vector>
-#include <thread>
 #include <functional>
+#include <thread>
+#include <vector>
 
 namespace rpc = executor;
-using namespace tensorflow::remote;
 using ::tensorflow::NodeDef;
 using ::tensorflow::ConfigProto;
 using ::tensorflow::FunctionDefLibrary;
@@ -72,7 +69,8 @@ namespace {
 
 void dumpOpKernel(tensorflow::OpKernel *opkernel)
 {
-    if (!opkernel) return;
+    if (!opkernel)
+        return;
 
     TRACE("m_opkernel.name() {}", opkernel->name());
     TRACE("m_opkernel.type_string() {}", opkernel->type_string());
@@ -98,7 +96,8 @@ void dumpOpKernel(tensorflow::OpKernel *opkernel)
 
 void dumpOpContext(tensorflow::OpKernelContext *ctx)
 {
-    if (!ctx) return;
+    if (!ctx)
+        return;
 
     for (int i = 0; i != ctx->num_inputs(); ++i) {
         TRACE("context.input_alloc_attr({}) {}", i, ctx->input_alloc_attr(i));
@@ -116,35 +115,15 @@ REGISTER_OPLIBRARY(executor::TENSORFLOW, TFOpLibrary);
 
 TFOpLibrary::~TFOpLibrary() = default;
 
-bool TFOpLibrary::accepts(const rpc::OpKernelDef& operation)
+bool TFOpLibrary::accepts(const rpc::OpKernelDef &operation)
 {
     return operation.oplibrary() == rpc::TENSORFLOW;
 }
 
-TFSession *TFOpLibrary::getOrCreateSession(const std::string& sess_id,
-                                           const tensorflow::ConfigProto& cfgProto)
+TFSession *TFOpLibrary::getOrCreateSession(const std::string &sess_id,
+                                           const tensorflow::ConfigProto &cfgProto)
 {
     std::lock_guard<std::mutex> guard(m_mu);
-
-    if (!m_deviceMgr) {
-        std::vector<tensorflow::Device*> devices;
-        tensorflow::SessionOptions options;
-        (*options.config.mutable_device_count())["RPC"] = 0;
-
-        // use device with our own allocator
-        WrappedDeviceSettings::maybeRegisterWrappedDeviceFactories();
-        WrappedDeviceSettings::setWrapperFactory([](auto *alloc){
-            return std::make_unique<TFAllocator>(alloc);
-        });
-
-        auto s = tensorflow::DeviceFactory::AddDevices(options, "/job:localhost/replica:0/task:0",
-                                                       &devices);
-        if (!s.ok()) {
-            ERR("Error when adding devices to TFSession: {}", s);
-            return nullptr;
-        }
-        m_deviceMgr = std::make_unique<tensorflow::DeviceMgr>(devices);
-    }
 
     auto &sess = m_sessions[sess_id];
     if (!sess) {
@@ -159,7 +138,7 @@ TFSession *TFOpLibrary::getOrCreateSession(const std::string& sess_id,
     return sess.get();
 }
 
-TFSession *TFOpLibrary::findSession(const std::string& sess_id)
+TFSession *TFOpLibrary::findSession(const std::string &sess_id)
 {
     std::lock_guard<std::mutex> guard(m_mu);
     auto it = m_sessions.find(sess_id);
@@ -185,13 +164,15 @@ PTask TFOpLibrary::createRunTask(ZmqServer::Sender sender, const rpc::EvenlopDef
                                  const rpc::RunRequest &request)
 {
     auto tfdef = utils::createMessage<executor::TFOpKernelDef>("executor.TFOpKernelDef",
-                                                             request.opkernel().extra().data(),
-                                                             request.opkernel().extra().size());
+                                                               request.opkernel().extra().data(),
+                                                               request.opkernel().extra().size());
     auto tfctxdef = utils::createMessage<executor::TFOpContextDef>("executor.TFOpContextDef",
                                                                    request.context().extra().data(),
                                                                    request.context().extra().size());
 
-    if (!tfdef || !tfctxdef) { return {}; }
+    if (!tfdef || !tfctxdef) {
+        return {};
+    }
 
     auto sess = findSession(evenlop.sessionid());
     if (!sess) {
@@ -205,8 +186,8 @@ PTask TFOpLibrary::createRunTask(ZmqServer::Sender sender, const rpc::EvenlopDef
     }
 
     auto ndef = std::unique_ptr<NodeDef>(tfdef->release_nodedef());
-    return std::make_unique<TFRunTask>(exec, std::move(sender), std::move(ndef),
-                                       tfdef->isasync(), std::move(tfctxdef));
+    return std::make_unique<TFRunTask>(exec, std::move(sender), std::move(ndef), tfdef->isasync(),
+                                       std::move(tfctxdef));
 }
 
 TFRunTask::TFRunTask(TFExecutionState *execState, ZmqServer::Sender &&sender, unique_ptr<NodeDef> &&nodedef,
@@ -273,7 +254,7 @@ ProtoPtr TFRunTask::run()
         return resp;
     }
 
-    auto device = static_cast<tensorflow::Device*>(m_context->ctx()->device());
+    auto device = static_cast<tensorflow::Device *>(m_context->ctx()->device());
     if (!device) {
         ERR("Got nullptr for device in context");
         resp->mutable_result()->set_code(-1);
@@ -283,7 +264,7 @@ ProtoPtr TFRunTask::run()
     INFO("Running on device: {}", device->name());
     try {
         device->Compute(m_opkernel, m_context->ctx());
-//         m_opkernel->Compute(m_context->ctx());
+        //         m_opkernel->Compute(m_context->ctx());
     } catch (std::exception &err) {
         ERR("Caught exception when run kernel compute: ", err.what());
     }
@@ -309,7 +290,7 @@ void TFRunTask::runAsync(DoneCallback cb)
         return;
     }
 
-    auto device = static_cast<tensorflow::Device*>(m_context->ctx()->device());
+    auto device = static_cast<tensorflow::Device *>(m_context->ctx()->device());
     if (!device) {
         ERR("Got nullptr for device in context");
         auto resp = std::make_unique<executor::RunResponse>();
@@ -321,7 +302,8 @@ void TFRunTask::runAsync(DoneCallback cb)
     // NOTE: *this might be deleted by the time done_cb got called. So move out the pieces we need.
     // NOTE: both done and pContext are CopyConstructable, thus the done_cb is CopyConstructable,
     // because move-only lambda can't be assigned to std::function
-    auto done_cb = [done = std::move(cb), pContext = m_context, pSession = m_exec->session()]() mutable {
+    auto done_cb = [done = std::move(cb), pContext = m_context, pSession = m_exec->session()]() mutable
+    {
         INFO("OpKernel->ComputeAsync finished with status {}", pContext->ctx()->status());
 
         auto resp = std::make_unique<executor::RunResponse>();
@@ -332,7 +314,7 @@ void TFRunTask::runAsync(DoneCallback cb)
 
     try {
         device->ComputeAsync(m_opkernel->AsAsync(), m_context->ctx(), std::move(done_cb));
-//         m_opkernel->AsAsync()->ComputeAsync(pContext->ctx(), std::move(done_cb));
+        //         m_opkernel->AsAsync()->ComputeAsync(pContext->ctx(), std::move(done_cb));
     } catch (std::exception &err) {
         ERR("Caught exception when run kernel compute async: ", err.what());
     }
@@ -358,14 +340,15 @@ void TFRunTask::runAsync(DoneCallback cb)
 
 TFRunTask::~TFRunTask() = default;
 
-PTask TFOpLibrary::createRunGraphTask(ZmqServer::Sender sender,
-                                      const executor::EvenlopDef &evenlop,
+PTask TFOpLibrary::createRunGraphTask(ZmqServer::Sender sender, const executor::EvenlopDef &evenlop,
                                       const executor::RunGraphRequest &request)
 {
     UNUSED(sender);
 
     auto sess = findSession(evenlop.sessionid());
-    if (!sess) { return {}; }
+    if (!sess) {
+        return {};
+    }
 
     tensorflow::GraphDef graphdef;
     if (!graphdef.ParseFromString(request.computation().extra())) {
@@ -392,18 +375,21 @@ PTask TFOpLibrary::createCustomTask(ZmqServer::Sender sender, const rpc::Evenlop
 {
     // NOTE: this-> is need to workaround a bug in GCC 6.x where member function lookup is broken
     // for generic lambda. See https://gcc.gnu.org/bugzilla/show_bug.cgi?id=61636
-    using Method = std::function<PTask(ZmqServer::Sender, const rpc::EvenlopDef &evenlop,
-                                       const rpc::CustomRequest &)>;
+    using Method =
+        std::function<PTask(ZmqServer::Sender, const rpc::EvenlopDef &evenlop, const rpc::CustomRequest &)>;
     static std::unordered_map<std::string, Method> funcs{
-        {"executor.TFRendezRecvUpdate", [this](auto sender, const auto &evenlop, const auto &req) {
-            return this->createRendezRecvTask(std::move(sender), evenlop, req);
-        }},
-        {"executor.TFSessionArgs", [this](auto sender, const auto &evenlop, const auto &req) {
-            return this->createInitSessionTask(std::move(sender), evenlop, req);
-        }},
-        {"executor.TFSessionClose", [this](auto sender, const auto &evenlop, const auto &req) {
-            return this->createCloseSessionTask(std::move(sender), evenlop, req);
-        }},
+        {"executor.TFRendezRecvUpdate",
+         [this](auto sender, const auto &evenlop, const auto &req) {
+             return this->createRendezRecvTask(std::move(sender), evenlop, req);
+         }},
+        {"executor.TFSessionArgs",
+         [this](auto sender, const auto &evenlop, const auto &req) {
+             return this->createInitSessionTask(std::move(sender), evenlop, req);
+         }},
+        {"executor.TFSessionClose",
+         [this](auto sender, const auto &evenlop, const auto &req) {
+             return this->createCloseSessionTask(std::move(sender), evenlop, req);
+         }},
     };
 
     auto it = funcs.find(req.type());
@@ -422,8 +408,7 @@ PTask TFOpLibrary::createRendezRecvTask(ZmqServer::Sender sender, const rpc::Eve
     UNUSED(sender);
 
     auto recvupd = utils::createMessage<rpc::TFRendezRecvUpdate>("executor.TFRendezRecvUpdate",
-                                                                 req.extra().data(),
-                                                                 req.extra().size());
+                                                                 req.extra().data(), req.extra().size());
     if (!recvupd) {
         return {};
     }
@@ -434,7 +419,7 @@ PTask TFOpLibrary::createRendezRecvTask(ZmqServer::Sender sender, const rpc::Eve
         return {};
     }
 
-    return make_lambda_task([sess, recvupd = std::move(recvupd)]() -> ProtoPtr {
+    return make_lambda_task([sess, recvupd = std::move(recvupd)]()->ProtoPtr {
         DEBUG("executor.TFRendezRecvUpdate for seq {}", recvupd->forseq());
         auto tfctx = sess->findContext(recvupd->forseq());
         if (!tfctx) {
@@ -465,9 +450,8 @@ PTask TFOpLibrary::createRendezRecvTask(ZmqServer::Sender sender, const rpc::Eve
                 return {};
             }
 
-            ok.Update(tfctx->rendez->triggerSend(parsed,
-                                                 tensorflow::Rendezvous::Args{nullptr, attr},
-                                                 tensor, item.isdead()));
+            ok.Update(tfctx->rendez->triggerSend(parsed, tensorflow::Rendezvous::Args{nullptr, attr}, tensor,
+                                                 item.isdead()));
         }
         return {};
     });
@@ -479,8 +463,7 @@ PTask TFOpLibrary::createInitSessionTask(ZmqServer::Sender sender, const rpc::Ev
     UNUSED(sender);
     UNUSED(evenlop);
 
-    auto tfreq = utils::createMessage<rpc::TFSessionArgs>("executor.TFSessionArgs",
-                                                          req.extra().data(),
+    auto tfreq = utils::createMessage<rpc::TFSessionArgs>("executor.TFSessionArgs", req.extra().data(),
                                                           req.extra().size());
     if (!tfreq) {
         return {};
@@ -508,15 +491,13 @@ PTask TFOpLibrary::createInitSessionTask(ZmqServer::Sender sender, const rpc::Ev
     });
 }
 
-PTask TFOpLibrary::createCloseSessionTask(ZmqServer::Sender sender,
-                                          const executor::EvenlopDef &evenlop,
+PTask TFOpLibrary::createCloseSessionTask(ZmqServer::Sender sender, const executor::EvenlopDef &evenlop,
                                           const executor::CustomRequest &req)
 {
     UNUSED(sender);
     UNUSED(evenlop);
 
-    auto tfclose = utils::createMessage<rpc::TFSessionClose>("executor.TFSessionClose",
-                                                             req.extra().data(),
+    auto tfclose = utils::createMessage<rpc::TFSessionClose>("executor.TFSessionClose", req.extra().data(),
                                                              req.extra().size());
     if (!tfclose) {
         return {};

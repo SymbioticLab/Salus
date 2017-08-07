@@ -52,6 +52,7 @@ class FunctionDefLibrary;
 class ConfigProto;
 class Graph;
 class Node;
+class DeviceMgr;
 namespace remote {
 class GraphView;
 struct NodeItem;
@@ -231,15 +232,17 @@ private:
     std::unordered_map<tensorflow::OpKernel*, DeviceSpec> m_kernelDevice;
     std::vector<std::unique_ptr<tensorflow::OpKernel>> m_kernels;
 
+    std::unique_ptr<tensorflow::DeviceMgr> m_deviceMgr;
+
     tensorflow::SessionState m_sessState;
 
     tensorflow::mutex m_mu;
     std::unordered_map<std::string, TensorItem> m_tensors;
 
-    tensorflow::mutex m_muctx;
     /**
      * Mapping RunRequest seq number to TFContext. Protected by m_muctx.
      */
+    tensorflow::mutex m_muctx;
     std::unordered_map<uint64_t, std::shared_ptr<TFContext>> m_contexts;
 
     tensorflow::mutex m_muexec;

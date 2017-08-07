@@ -34,11 +34,14 @@
 #include <tensorflow/core/common_runtime/device_mgr.h>
 #include <tensorflow/core/common_runtime/function.h>
 #include <tensorflow/core/common_runtime/rpc_device/exec_helpers/exechelpers.h>
+#include <tensorflow/core/common_runtime/rpc_device/exec_helpers/devicefactories.h>
 #include <tensorflow/core/framework/node_def.pb.h>
 #include <tensorflow/core/graph/graph.h>
 #include <tensorflow/core/graph/graph_constructor.h>
 #include <tensorflow/core/lib/gtl/stl_util.h>
 #include <tensorflow/core/protobuf/config.pb.h>
+#include <tensorflow/core/common_runtime/device_mgr.h>
+#include <tensorflow/core/common_runtime/device_factory.h>
 
 using namespace tensorflow::remote;
 
@@ -82,6 +85,7 @@ TFSession::TFSession(TFOpLibrary *opLibrary, const std::string &sessionId,
     , m_options()
     , m_cpuAllocator(std::make_unique<TFAllocator>())
     , m_opseg()
+    , m_deviceMgr()
 {
     m_options.config = configProto;
 
@@ -92,6 +96,23 @@ TFSession::TFSession(TFOpLibrary *opLibrary, const std::string &sessionId,
 
 bool TFSession::initialize()
 {
+    std::vector<tensorflow::Device*> devices;
+    tensorflow::SessionOptions options;
+    (*options.config.mutable_device_count())["RPC"] = 0;
+
+    // use device with our own allocator
+    WrappedDeviceSettings::maybeRegisterWrappedDeviceFactories();
+    WrappedDeviceSettings::setWrapperFactory([](auto *alloc){
+        return std::make_unique<TFAllocator>(alloc);
+    });
+
+    auto s = tensorflow::DeviceFactory::AddDevices(options, "/job:localhost/replica:0/task:0",
+                                                   &devices);
+    if (!s.ok()) {
+        ERR("Error when adding devices to TFSession: {}", s);
+        return false;
+    }
+    m_deviceMgr = std::make_unique<tensorflow::DeviceMgr>(devices);
     return true;
 }
 
@@ -229,7 +250,7 @@ tensorflow::Device *TFSession::findDevice(const DeviceSpec &dev) const
     name += std::to_string(dev.id);
 
     tensorflow::Device *device = nullptr;
-    auto ok = m_oplibrary->deviceManager()->LookupDevice(name, &device);
+    auto ok = m_deviceMgr->LookupDevice(name, &device);
     if (!ok.ok()) {
         ERR("Cannot find device for {}: {}", dev, ok);
     }
