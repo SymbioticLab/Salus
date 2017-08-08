@@ -82,4 +82,5 @@ class TestLinreg(unittest.TestCase):
             with tf.Session() as sess:
                 expected = run_linear_reg(sess, training_epochs=epochs)
 
+        self.maxDiff = None
         self.assertEquals(actual, expected)
