@@ -7,146 +7,116 @@ import numpy.testing as npt
 
 from parameterized import parameterized, param
 
+from . import run_on_rpc_and_cpu, device_and_sess
+
 class TestBasicOps(unittest.TestCase):
-
-    @classmethod
-    def setUpClass(cls):
-        cls.config = tf.ConfigProto()
-        cls.config.graph_options.optimizer_options.do_constant_folding = False
-        cls.config.graph_options.optimizer_options.opt_level = tf.OptimizerOptions.L0
-
     def setUp(self):
         tf.reset_default_graph()
 
     def test_variable(self):
-        with tf.device('/device:RPC:0'):
+        def func():
             a = tf.Variable(tf.zeros([200]))
-        with tf.device('/device:CPU:0'):
-            b = tf.Variable(tf.zeros([200]))
+            tf.global_variables_initializer().eval()
+            return a.eval()
 
-        with tf.Session(config=self.config) as sess:
-            sess.run(tf.global_variables_initializer())
-            npt.assert_array_equal(sess.run(a), sess.run(b))
+        actual, expected = run_on_rpc_and_cpu(func)
+        npt.assert_array_equal(actual, expected)
 
     def test_randomop(self):
-        seed = 233
+        def func():
+            seed = 233
+            r = tf.random_normal([20, 20], seed=seed)
+            return r.eval()
 
-        with tf.device('/device:RPC:0'):
-            actual = tf.random_normal([20, 20], seed=seed)
-        with tf.device('/device:CPU:0'):
-            expected = tf.random_normal([20, 20], seed=seed)
-
-        with tf.Session(config=self.config) as sess:
-            npt.assert_allclose(sess.run(actual), sess.run(expected), rtol=1e-6)
+        actual, expected = run_on_rpc_and_cpu(func)
+        npt.assert_allclose(actual, expected, rtol=1e-6)
 
     def test_noop(self):
-        with tf.device('/device:RPC:0'):
+        with device_and_sess('/device:RPC:0'):
             a = tf.no_op(name='mynoop')
-        with tf.Session(config=self.config) as sess:
-            sess.run(a)
+            a.eval()
 
-    # TODO: implement the device selection as a session option.
-    # So we can test both CPU and GPU using the same code.
     @parameterized.expand([(tf.int8,), (tf.int16,), (tf.int32,), (tf.int64,)])
     def test_multiply_int(self, dtype):
-        with tf.device('/device:RPC:0'):
+        def func():
             a = tf.constant([3, 7], name='const_1', dtype=dtype)
             b = tf.constant([7, 3] , name='const_2', dtype=dtype)
             c = tf.constant(2, name='const_3', dtype=dtype)
             d = tf.multiply(a, b, name='mul_first')
-            actual = tf.multiply(c, d, name='mul_second')
+            mul = tf.multiply(c, d, name='mul_second')
+            return mul.eval()
 
-        with tf.device('/device:CPU:0'):
-            a = tf.constant([3, 7], name='const_1', dtype=dtype)
-            b = tf.constant([7, 3] , name='const_2', dtype=dtype)
-            c = tf.constant(2, name='const_3', dtype=dtype)
-            d = tf.multiply(a, b, name='mul_first')
-            expected = tf.multiply(c, d, name='mul_second')
-
-        with tf.Session(config=self.config) as sess:
-            npt.assert_array_equal(sess.run(actual), sess.run(expected))
+        actual, expected = run_on_rpc_and_cpu(func)
+        npt.assert_array_equal(actual, expected)
 
     @parameterized.expand([(tf.float32,), (tf.float64,), (tf.complex64,), (tf.complex128,)])
     def test_multiply(self, dtype):
-        with tf.device('/device:RPC:0'):
+        def func():
             a = tf.constant([3, 7], name='const_1', dtype=dtype)
             b = tf.constant([7, 3] , name='const_2', dtype=dtype)
             c = tf.constant(2, name='const_3', dtype=dtype)
             d = tf.multiply(a, b, name='mul_first')
-            actual = tf.multiply(c, d, name='mul_second')
+            mul = tf.multiply(c, d, name='mul_second')
+            return mul.eval()
 
-        with tf.device('/device:CPU:0'):
-            a = tf.constant([3, 7], name='const_1', dtype=dtype)
-            b = tf.constant([7, 3] , name='const_2', dtype=dtype)
-            c = tf.constant(2, name='const_3', dtype=dtype)
-            d = tf.multiply(a, b, name='mul_first')
-            expected = tf.multiply(c, d, name='mul_second')
-
-        with tf.Session(config=self.config) as sess:
-            npt.assert_array_equal(sess.run(actual), sess.run(expected))
+        actual, expected = run_on_rpc_and_cpu(func)
+        npt.assert_array_equal(actual, expected)
 
     @parameterized.expand([(tf.float32,), (tf.float64,), (tf.complex64,), (tf.complex128,)])
     def test_add(self, dtype):
-        with tf.device('/device:RPC:0'):
+        def func():
             a = tf.constant([3, 7], name='const_1', dtype=dtype)
             b = tf.constant([7, 3] , name='const_2', dtype=dtype)
             c = tf.constant(2, name='const_3', dtype=dtype)
             d = tf.add(a, b, name='add_first')
-            actual = tf.add(c, d, name='add_second')
+            add = tf.add(c, d, name='add_second')
+            return add.eval()
 
-        with tf.device('/device:CPU:0'):
-            a = tf.constant([3, 7], name='const_1', dtype=dtype)
-            b = tf.constant([7, 3] , name='const_2', dtype=dtype)
-            c = tf.constant(2, name='const_3', dtype=dtype)
-            d = tf.add(a, b, name='mul_first')
-            expected = tf.add(c, d, name='add_second')
-
-        with tf.Session(config=self.config) as sess:
-            npt.assert_array_equal(sess.run(actual), sess.run(expected))
+        actual, expected = run_on_rpc_and_cpu(func)
+        npt.assert_array_equal(actual, expected)
 
     @parameterized.expand([(tf.int8,), (tf.int16,), (tf.int32,), (tf.int64,)])
     def test_add_int(self, dtype):
-        with tf.device('/device:RPC:0'):
+        def func():
             a = tf.constant([3, 7], name='const_1', dtype=dtype)
             b = tf.constant([7, 3] , name='const_2', dtype=dtype)
             c = tf.constant(2, name='const_3', dtype=dtype)
             d = tf.add(a, b, name='add_first')
-            actual = tf.add(c, d, name='add_second')
+            add = tf.add(c, d, name='add_second')
+            return add.eval()
 
-        with tf.device('/device:CPU:0'):
-            a = tf.constant([3, 7], name='const_1', dtype=dtype)
-            b = tf.constant([7, 3] , name='const_2', dtype=dtype)
-            c = tf.constant(2, name='const_3', dtype=dtype)
-            d = tf.add(a, b, name='mul_first')
-            expected = tf.add(c, d, name='add_second')
-
-        with tf.Session(config=self.config) as sess:
-            npt.assert_array_equal(sess.run(actual), sess.run(expected))
+        actual, expected = run_on_rpc_and_cpu(func)
+        npt.assert_array_equal(actual, expected)
 
     def test_matmul(self):
-        m1 = np.random.normal(size=(20, 50))
-        m2 = np.random.normal(size=(50, 60))
-        with tf.device('/device:RPC:0'):
-            actual = tf.matmul(m1, m2)
-        with tf.device('/device:CPU:0'):
-            expected = tf.matmul(m1, m2)
+        def func():
+            m1 = np.random.normal(size=(20, 50))
+            m2 = np.random.normal(size=(50, 60))
+            m = tf.matmul(m1, m2)
+            return m.eval()
 
-        with tf.Session(config=self.config) as sess:
-            npt.assert_array_equal(sess.run(actual), sess.run(expected))
+        actual, expected = run_on_rpc_and_cpu(func)
+        npt.assert_array_equal(actual, expected)
 
     def test_conv2d(self):
-        with tf.device('/device:RPC:0'):
+        def func():
             image = tf.constant([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12], shape=(1, 4, 3, 1), dtype=tf.float32)
             filter = tf.constant([1, 4, 7, 2, 5, 8, 3, 6, 9], shape=(3, 3, 1, 1), dtype=tf.float32)
-            actual = tf.nn.conv2d(image, filter, [1, 1, 1, 1], 'SAME')
-        with tf.device('/device:CPU:0'):
-            image = tf.constant([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12], shape=(1, 4, 3, 1), dtype=tf.float32)
-            filter = tf.constant([1, 4, 7, 2, 5, 8, 3, 6, 9], shape=(3, 3, 1, 1), dtype=tf.float32)
-            expected = tf.nn.conv2d(image, filter, [1, 1, 1, 1], 'SAME')
+            conv = tf.nn.conv2d(image, filter, [1, 1, 1, 1], 'SAME')
+            return conv.eval()
 
-        with tf.Session(config=self.config) as sess:
-            npt.assert_array_equal(sess.run(actual), sess.run(expected))
+        actual, expected = run_on_rpc_and_cpu(func)
+        npt.assert_array_equal(actual, expected)
 
+    @parameterized.expand([(tf.float16,), (tf.float32,), (tf.float64,), (tf.int32,), (tf.int64,)])
+    def test_relu(self, dtype):
+        def func():
+            np_features = np.array([[-9, 7, -5, 3, -1], [1, -3, 5, -7, 9]]).astype(dtype.as_numpy_dtype),
+            relu = tf.nn.relu(np_features)
+            return relu.eval()
+
+        actual, expected = run_on_rpc_and_cpu(func)
+        npt.assert_array_equal(actual, expected)
 
 if __name__ == '__main__':
     unittest.main()

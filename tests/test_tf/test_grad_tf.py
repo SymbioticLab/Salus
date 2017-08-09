@@ -7,7 +7,7 @@ import numpy.testing as npt
 import tensorflow as tf
 from parameterized import parameterized
 
-from . import device_and_sess
+from . import run_on_rpc_and_cpu
 from .gradients import compute_gradient
 
 
@@ -15,15 +15,6 @@ class TestOpGradients(unittest.TestCase):
     def setUp(self):
         tf.reset_default_graph()
 
-    def _run_on_rpc_and_cpu(self, func):
-        with device_and_sess('/device:RPC:0'):
-            actual = func()
-        with device_and_sess('/device:CPU:0'):
-            expected = func()
-        return actual, expected
-
-    # TODO: implement the device selection as a session option.
-    # So we can test both CPU and GPU using the same code.
     @parameterized.expand([(tf.int8,), (tf.int16,), (tf.int32,), (tf.int64,)])
     def test_multiply_int(self, dtype):
         def func():
@@ -41,7 +32,7 @@ class TestOpGradients(unittest.TestCase):
             z = tf.multiply(x, y, name="mul_test")
             return compute_gradient(x, [2, 5], z, [2, 5], x_init_value=x_init)
 
-        actual, expected = self._run_on_rpc_and_cpu(func)
+        actual, expected = run_on_rpc_and_cpu(func)
         npt.assert_array_equal(actual, expected)
 
     @parameterized.expand([(tf.float32,), (tf.float64,), (tf.complex64,), (tf.complex128,)])
@@ -61,7 +52,7 @@ class TestOpGradients(unittest.TestCase):
                 dtype=dtype.as_numpy_dtype, order="F")
             return compute_gradient(x, [2, 5], z, [2, 5], x_init_value=x_init)
 
-        actual, expected = self._run_on_rpc_and_cpu(func)
+        actual, expected = run_on_rpc_and_cpu(func)
         npt.assert_array_equal(actual, expected)
 
     @parameterized.expand([(tf.int8,), (tf.int16,), (tf.int32,), (tf.int64,)])
@@ -82,7 +73,7 @@ class TestOpGradients(unittest.TestCase):
             return compute_gradient(
                 x, [2, 5], z, [2, 5], x_init_value=x_init)
 
-        actual, expected = self._run_on_rpc_and_cpu(func)
+        actual, expected = run_on_rpc_and_cpu(func)
         npt.assert_array_equal(actual, expected)
 
     @parameterized.expand([(tf.float32,), (tf.float64,), (tf.complex64,), (tf.complex128,)])
@@ -102,7 +93,7 @@ class TestOpGradients(unittest.TestCase):
                 dtype=dtype.as_numpy_dtype, order="F")
             return compute_gradient(x, [2, 5], z, [2, 5], x_init_value=x_init)
 
-        actual, expected = self._run_on_rpc_and_cpu(func)
+        actual, expected = run_on_rpc_and_cpu(func)
         npt.assert_array_equal(actual, expected)
 
     @parameterized.expand([(tf.float32,), (tf.float64,), (tf.complex64,), (tf.complex128,)])
@@ -118,7 +109,7 @@ class TestOpGradients(unittest.TestCase):
             dy = compute_gradient(y, m2.shape, z, m3.shape, x_init_value=m2)
             return dx, dy
 
-        actual, expected = self._run_on_rpc_and_cpu(func)
+        actual, expected = run_on_rpc_and_cpu(func)
         npt.assert_array_equal(actual, expected)
 
     @parameterized.expand([(tf.float16,), (tf.float32,)])
@@ -136,7 +127,48 @@ class TestOpGradients(unittest.TestCase):
             df = compute_gradient(filter, mf.shape, z, mi.shape, x_init_value=mf)
             return di, df
 
-        actual, expected = self._run_on_rpc_and_cpu(func)
+        actual, expected = run_on_rpc_and_cpu(func)
+        npt.assert_array_equal(actual, expected)
+
+    @parameterized.expand([(tf.float32,), (tf.float64,)])
+    def test_grad_relu(self, dtype):
+        def func():
+            x = tf.constant([-0.9, -0.7, -0.5, -0.3, -0.1, 0.1, 0.3, 0.5, 0.7, 0.9],
+                            shape=[2, 5], dtype=dtype, name="x")
+            y = tf.nn.relu(x, name="relu")
+            x_init = np.asarray([[-0.9, -0.7, -0.5, -0.3, -0.1], [0.1, 0.3, 0.5, 0.7, 0.9]],
+                                dtype=dtype.as_numpy_dtype, order="F")
+            return compute_gradient(x, [2, 5], y, [2, 5], x_init_value=x_init)
+
+        actual, expected = run_on_rpc_and_cpu(func)
+        npt.assert_array_equal(actual, expected)
+
+    @parameterized.expand([(tf.float32,), (tf.float64,)])
+    def test_grad_grad_relu(self, dtype):
+        def func():
+            x = tf.constant([-0.9, -0.7, -0.5, -0.3, -0.1, 0.1, 0.3, 0.5, 0.7, 0.9],
+                            shape=[2, 5], dtype=dtype, name="x")
+            y = tf.nn.relu(x, name="relu")
+            z = tf.gradients(y, x)
+            x_init = np.asarray([[-0.9, -0.7, -0.5, -0.3, -0.1], [0.1, 0.3, 0.5, 0.7, 0.9]],
+                                dtype=dtype.as_numpy_dtype, order="F")
+            return compute_gradient(x, [2, 5], z[0], [2, 5], x_init_value=x_init)
+
+        actual, expected = run_on_rpc_and_cpu(func)
+        npt.assert_array_equal(actual, expected)
+
+    def test_grad_relu_scala(self):
+        def func():
+            x = tf.Variable(100.)
+            y = tf.nn.relu(x)
+            loss = y**2
+            optimizer = tf.train.GradientDescentOptimizer(learning_rate=0.25)
+            train_op = optimizer.minimize(loss)
+            tf.global_variables_initializer().eval()
+            train_op.eval()
+            return x.eval()
+
+        actual, expected = run_on_rpc_and_cpu(func)
         npt.assert_array_equal(actual, expected)
 
 

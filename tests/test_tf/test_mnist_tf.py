@@ -6,6 +6,8 @@ import numpy as np
 
 from tensorflow.examples.tutorials.mnist import input_data
 
+from . import run_on_rpc_and_cpu
+
 
 def run_mnist_softmax(sess, mnist):
         x = tf.placeholder(tf.float32, shape=[None, 784])
@@ -76,7 +78,6 @@ def run_mnist_conv(sess, mnist):
 
 
 class TestMnistConv(unittest.TestCase):
-
     def test_cpu(self):
         tf.reset_default_graph()
         mnist = input_data.read_data_sets('MNIST_data', one_hot=True)
@@ -87,45 +88,22 @@ class TestMnistConv(unittest.TestCase):
             with tf.Session() as sess:
                 expected = run_mnist_softmax(sess, mnist)
 
-
     def test_softmax(self):
-        tf.reset_default_graph()
-        mnist = input_data.read_data_sets('MNIST_data', one_hot=True)
-        tf.set_random_seed(233)
-        np.random.seed(233)
-        with tf.device('/device:RPC:0'):
-            with tf.Session() as sess:
-                actual = run_mnist_softmax(sess, mnist)
+        def func():
+            mnist = input_data.read_data_sets('MNIST_data', one_hot=True)
+            sess = tf.get_default_session()
+            return run_mnist_softmax(sess, mnist)
 
-        tf.reset_default_graph()
-        mnist = input_data.read_data_sets('MNIST_data', one_hot=True)
-        tf.set_random_seed(233)
-        np.random.seed(233)
-
-        with tf.device('/device:CPU:0'):
-            with tf.Session() as sess:
-                expected = run_mnist_softmax(sess, mnist)
-
+        actual, expected = run_on_rpc_and_cpu(func)
         self.assertEquals(actual, expected)
 
     def test_conv(self):
-        tf.reset_default_graph()
-        mnist = input_data.read_data_sets('MNIST_data', one_hot=True)
-        tf.set_random_seed(233)
-        np.random.seed(233)
-        with tf.device('/device:RPC:0'):
-            with tf.Session() as sess:
-                actual = run_mnist_conv(sess, mnist)
+        def func():
+            mnist = input_data.read_data_sets('MNIST_data', one_hot=True)
+            sess = tf.get_default_session()
+            return run_mnist_conv(sess, mnist)
 
-        tf.reset_default_graph()
-        mnist = input_data.read_data_sets('MNIST_data', one_hot=True)
-        tf.set_random_seed(233)
-        np.random.seed(233)
-
-        with tf.device('/device:CPU:0'):
-            with tf.Session() as sess:
-                expected = run_mnist_conv(sess, mnist)
-
+        actual, expected = run_on_rpc_and_cpu(func)
         self.assertEquals(actual, expected)
 
 

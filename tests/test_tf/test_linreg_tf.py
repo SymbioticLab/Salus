@@ -14,6 +14,8 @@ import numpy.testing as npt
 
 from parameterized import parameterized, param
 
+from . import run_on_rpc_and_cpu
+
 
 def run_linear_reg(sess, training_epochs=100, learning_rate=0.01):
     # Training Data
@@ -64,23 +66,12 @@ def run_linear_reg(sess, training_epochs=100, learning_rate=0.01):
 
 
 class TestLinreg(unittest.TestCase):
-
     @parameterized.expand((2**i,) for i in range(0,8))
     def test_linear_regression(self, epochs):
-        tf.reset_default_graph()
-        tf.set_random_seed(233)
-        np.random.seed(233)
-        with tf.device('/device:RPC:0'):
-            with tf.Session() as sess:
-                actual = run_linear_reg(sess, training_epochs=epochs)
+        def func():
+            sess = tf.get_default_session()
+            return run_linear_reg(sess, training_epochs=epochs)
 
-        tf.reset_default_graph()
-        tf.set_random_seed(233)
-        np.random.seed(233)
-
-        with tf.device('/device:CPU:0'):
-            with tf.Session() as sess:
-                expected = run_linear_reg(sess, training_epochs=epochs)
-
+        actual, expected = run_on_rpc_and_cpu(func)
         self.maxDiff = None
         self.assertEquals(actual, expected)
