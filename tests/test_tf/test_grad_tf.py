@@ -162,13 +162,21 @@ class TestOpGradients(unittest.TestCase):
             x = tf.Variable(100.)
             y = tf.nn.relu(x)
             loss = y**2
-            optimizer = tf.train.GradientDescentOptimizer(learning_rate=0.25)
-            train_op = optimizer.minimize(loss)
+            opt = tf.train.GradientDescentOptimizer(learning_rate=0.25)
+            grads_and_vars = opt.compute_gradients(loss)
+            train_op = opt.apply_gradients(grads_and_vars)
+            #train_op = opt.minimize(loss)
 
             sess = tf.get_default_session()
             sess.run(tf.global_variables_initializer())
             sess.run(train_op)
-            return x.eval()
+
+            xold = sess.run(x)
+            gv = sess.run(grads_and_vars)
+
+            sess.run(train_op)
+            xnew = sess.run(x)
+            return xold, gv, xnew
 
         actual, expected = run_on_rpc_and_cpu(func)
         assertAllClose(actual, expected)
