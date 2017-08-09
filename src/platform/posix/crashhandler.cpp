@@ -8,9 +8,9 @@
  * Adapted by Peifeng Yu <peifeng at umich dot edu> in 2017 to work with spdlog.
  * ============================================================================*/
 
-#include "crashhandler.hpp"
-#include "logcapture.hpp"
+#include "platform/crashhandler/crashhandler.hpp"
 
+#include "platform/crashhandler/logcapture.hpp"
 #include "utils/macros.h"
 
 #if (defined(WIN32) || defined(_WIN32) || defined(__WIN32__) && !defined(__GNUC__))

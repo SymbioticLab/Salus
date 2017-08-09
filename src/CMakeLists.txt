@@ -11,10 +11,6 @@ set(SRC_LIST
     "rpcserver/rpcservercore.cpp"
     "rpcserver/zmqserver.cpp"
 
-    "platform/memory.cpp"
-    "platform/logging.cpp"
-    "platform/crashhandler/logcapture.cpp"
-
     "utils/protoutils.cpp"
     "utils/pointerutils.cpp"
     "utils/stringutils.cpp"
@@ -24,16 +20,7 @@ set(SRC_LIST
     "executor.cpp"
 )
 
-if(WIN32)
-    list(APPEND SRC_LIST
-        "platform/crashhandler/crashhandler_windows.cpp"
-        "platform/crashhandler/stacktrace_windows.cpp"
-    )
-else(WIN32)
-    list(APPEND SRC_LIST
-        "platform/crashhandler/crashhandler_unix.cpp"
-    )
-endif(WIN32)
+add_subdirectory(platform)
 
 if(USE_TENSORFLOW)
     list(APPEND SRC_LIST
@@ -48,6 +35,7 @@ endif(USE_TENSORFLOW)
 add_executable(executor ${SRC_LIST})
 target_link_libraries(executor
     protos_gen
+    platform
 
     spdlog::spdlog
     protobuf::libprotobuf

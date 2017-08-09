@@ -93,6 +93,7 @@ include(cmake/CompileOptions.cmake)
 # Detect features
 include(cmake/CheckCXXFeature.cmake)
 check_cxx_feature(cxx_enum_hash HAS_CXX_ENUM_HASH)
+check_cxx_feature(cxx_aligned_alloc HAS_CXX_ALIGNED_ALLOC)
 
 configure_file(src/config.h.in ${CMAKE_CURRENT_BINARY_DIR}/config.h)
 include_directories(${CMAKE_CURRENT_BINARY_DIR})

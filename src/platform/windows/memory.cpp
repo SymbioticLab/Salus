@@ -17,19 +17,30 @@
  *
  */
 
-#include "memory.h"
+#include "platform/memory.h"
+
+#include "config.h"
+
+#include <Windows.h>
 
 #include <cstdlib>
 
 void *mem::alignedAlloc(size_t size, int minimum_alignment)
 {
-    return aligned_alloc(minimum_alignment, size);
+#if HAS_CXX_ALIGNED_ALLOC
+    return std::aligned_alloc(minimum_alignment, size);
+#else
+    return _aligned_malloc(size, minimum_alignment);
+#endif
 }
 
 void mem::alignedFree(void *aligned_memory)
 {
-    // FUTURE: change to use mem::free after aligned_alloc is added to c++ standard.
-    ::free(aligned_memory);
+#if HAS_CXX_ALIGNED_ALLOC
+    free(aligned_memory);
+#else
+    _aligned_free(aligned_memory);
+#endif
 }
 
 void *mem::malloc(size_t size)

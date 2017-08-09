@@ -12,14 +12,19 @@
 #error "crashhandler_windows.cpp used but not on a windows system"
 #endif
 
+#include "platform/crashhandler/crashhandler.hpp"
+
+#include "stacktrace.hpp"
+
+#include "platform/crashhandler/logcapture.hpp"
+
+#include <process.h> // getpid
 #include <windows.h>
+
 #include <csignal>
 #include <sstream>
 #include <atomic>
-#include <process.h> // getpid
-#include "crashhandler.hpp"
-#include "stacktrace_windows.hpp"
-#include "logcapture.hpp"
+
 
 #define getpid _getpid
 

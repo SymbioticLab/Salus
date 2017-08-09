@@ -14,8 +14,8 @@
  * Adapted by Peifeng Yu <peifeng at umich dot edu> in 2017 to work with spdlog.
  * ============================================================================*/
 
-#include "crashhandler.hpp"
-#include "stacktrace_windows.hpp"
+#include "platform/crashhandler/crashhandler.hpp"
+#include "stacktrace.hpp"
 
 #include <windows.h>
 #include <dbghelp.h>
