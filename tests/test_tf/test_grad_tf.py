@@ -169,7 +169,6 @@ class TestOpGradients(unittest.TestCase):
 
             sess = tf.get_default_session()
             sess.run(tf.global_variables_initializer())
-            sess.run(train_op)
 
             xold = sess.run(x)
             gv = sess.run(grads_and_vars)
