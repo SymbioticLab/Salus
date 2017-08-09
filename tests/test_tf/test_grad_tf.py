@@ -164,7 +164,9 @@ class TestOpGradients(unittest.TestCase):
             loss = y**2
             optimizer = tf.train.GradientDescentOptimizer(learning_rate=0.25)
             train_op = optimizer.minimize(loss)
-            tf.global_variables_initializer().eval()
+
+            sess = tf.get_default_session()
+            sess.run(tf.global_variables_initializer())
             train_op.eval()
             return x.eval()
 
