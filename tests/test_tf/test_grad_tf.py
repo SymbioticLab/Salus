@@ -1,139 +1,143 @@
 from __future__ import print_function
 
 import unittest
-import tensorflow as tf
+
 import numpy as np
 import numpy.testing as npt
+import tensorflow as tf
+from parameterized import parameterized
 
-from parameterized import parameterized, param
+from . import device_and_sess
+from .gradients import compute_gradient
+
 
 class TestOpGradients(unittest.TestCase):
-
-    def get_session(self):
-        config = tf.ConfigProto()
-        config.graph_options.optimizer_options.do_constant_folding = False
-        config.graph_options.optimizer_options.opt_level = tf.OptimizerOptions.L0
-        return tf.Session(config=config)
-
     def setUp(self):
         tf.reset_default_graph()
+
+    def _run_on_rpc_and_cpu(self, func):
+        with device_and_sess('/device:RPC:0'):
+            actual = func()
+        with device_and_sess('/device:CPU:0'):
+            expected = func()
+        return actual, expected
 
     # TODO: implement the device selection as a session option.
     # So we can test both CPU and GPU using the same code.
     @parameterized.expand([(tf.int8,), (tf.int16,), (tf.int32,), (tf.int64,)])
     def test_multiply_int(self, dtype):
-        with self.get_session():
-            with tf.device('/device:RPC:0'):
-                x = tf.constant(
-                    [-9, -7, -5, -3, -1, 1, 3, 5, 7, 9],
-                    shape=[2, 5], dtype=dtype,
-                    name="x")
-                y = tf.constant(
-                    [-9, -7, -5, -3, -1, 1, 3, 5, 7, 9],
-                    shape=[2, 5], dtype=dtype,
-                    name="y")
-                z = tf.multiply(x, y, name="mul_test")
-                x_init = np.asarray(
-                    [[-9, -7, -5, -3, -1], [1, 3, 5, 7, 9]],
-                    dtype=dtype.as_numpy_dtype, order="F")
-                err = tf.test.compute_gradient_error(
-                    x, [2, 5], z, [2, 5], x_init_value=x_init)
-                self.assertLess(err, 1e-4)
+        def func():
+            x_init = np.asarray(
+                [[-9, -7, -5, -3, -1], [1, 3, 5, 7, 9]],
+                dtype=dtype.as_numpy_dtype, order="F")
+            x = tf.constant(
+                [-9, -7, -5, -3, -1, 1, 3, 5, 7, 9],
+                shape=[2, 5], dtype=dtype,
+                name="x")
+            y = tf.constant(
+                [-9, -7, -5, -3, -1, 1, 3, 5, 7, 9],
+                shape=[2, 5], dtype=dtype,
+                name="y")
+            z = tf.multiply(x, y, name="mul_test")
+            return compute_gradient(x, [2, 5], z, [2, 5], x_init_value=x_init)
+
+        actual, expected = self._run_on_rpc_and_cpu(func)
+        npt.assert_array_equal(actual, expected)
 
     @parameterized.expand([(tf.float32,), (tf.float64,), (tf.complex64,), (tf.complex128,)])
     def test_multiply(self, dtype):
-        with self.get_session():
-            with tf.device('/device:RPC:0'):
-                x = tf.constant(
-                    [-0.9, -0.7, -0.5, -0.3, -0.1, 0.1, 0.3, 0.5, 0.7, 0.9],
-                    shape=[2, 5], dtype=dtype,
-                    name="x")
-                y = tf.constant(
-                    [-0.9, -0.7, -0.5, -0.3, -0.1, 0.1, 0.3, 0.5, 0.7, 0.9],
-                    shape=[2, 5], dtype=dtype,
-                    name="y")
-                z = tf.multiply(x, y, name="mul_test")
-                x_init = np.asarray(
-                    [[-0.9, -0.7, -0.5, -0.3, -0.1], [0.1, 0.3, 0.5, 0.7, 0.9]],
-                    dtype=dtype.as_numpy_dtype, order="F")
-                err = tf.test.compute_gradient_error(
-                    x, [2, 5], z, [2, 5], x_init_value=x_init)
-                self.assertLess(err, 1e-4)
+        def func():
+            x = tf.constant(
+                [-0.9, -0.7, -0.5, -0.3, -0.1, 0.1, 0.3, 0.5, 0.7, 0.9],
+                shape=[2, 5], dtype=dtype,
+                name="x")
+            y = tf.constant(
+                [-0.9, -0.7, -0.5, -0.3, -0.1, 0.1, 0.3, 0.5, 0.7, 0.9],
+                shape=[2, 5], dtype=dtype,
+                name="y")
+            z = tf.multiply(x, y, name="mul_test")
+            x_init = np.asarray(
+                [[-0.9, -0.7, -0.5, -0.3, -0.1], [0.1, 0.3, 0.5, 0.7, 0.9]],
+                dtype=dtype.as_numpy_dtype, order="F")
+            return compute_gradient(x, [2, 5], z, [2, 5], x_init_value=x_init)
+
+        actual, expected = self._run_on_rpc_and_cpu(func)
+        npt.assert_array_equal(actual, expected)
 
     @parameterized.expand([(tf.int8,), (tf.int16,), (tf.int32,), (tf.int64,)])
     def test_add_int(self, dtype):
-        with self.get_session():
-            with tf.device('/device:RPC:0'):
-                x = tf.constant(
-                    [-9, -7, -5, -3, -1, 1, 3, 5, 7, 9],
-                    shape=[2, 5], dtype=dtype,
-                    name="x")
-                y = tf.constant(
-                    [-9, -7, -5, -3, -1, 1, 3, 5, 7, 9],
-                    shape=[2, 5], dtype=dtype,
-                    name="y")
-                z = tf.add(x, y, name="add_test")
-                x_init = np.asarray(
-                    [[-9, -7, -5, -3, -1], [1, 3, 5, 7, 9]],
-                    dtype=dtype.as_numpy_dtype, order="F")
-                err = tf.test.compute_gradient_error(
-                    x, [2, 5], z, [2, 5], x_init_value=x_init)
-                self.assertLess(err, 1e-4)
+        def func():
+            x = tf.constant(
+                [-9, -7, -5, -3, -1, 1, 3, 5, 7, 9],
+                shape=[2, 5], dtype=dtype,
+                name="x")
+            y = tf.constant(
+                [-9, -7, -5, -3, -1, 1, 3, 5, 7, 9],
+                shape=[2, 5], dtype=dtype,
+                name="y")
+            z = tf.add(x, y, name="add_test")
+            x_init = np.asarray(
+                [[-9, -7, -5, -3, -1], [1, 3, 5, 7, 9]],
+                dtype=dtype.as_numpy_dtype, order="F")
+            return compute_gradient(
+                x, [2, 5], z, [2, 5], x_init_value=x_init)
+
+        actual, expected = self._run_on_rpc_and_cpu(func)
+        npt.assert_array_equal(actual, expected)
 
     @parameterized.expand([(tf.float32,), (tf.float64,), (tf.complex64,), (tf.complex128,)])
     def test_add(self, dtype):
-        with self.get_session():
-            with tf.device('/device:RPC:0'):
-                x = tf.constant(
-                    [-0.9, -0.7, -0.5, -0.3, -0.1, 0.1, 0.3, 0.5, 0.7, 0.9],
-                    shape=[2, 5], dtype=dtype,
-                    name="x")
-                y = tf.constant(
-                    [-0.9, -0.7, -0.5, -0.3, -0.1, 0.1, 0.3, 0.5, 0.7, 0.9],
-                    shape=[2, 5], dtype=dtype,
-                    name="y")
-                z = tf.add(x, y, name="add_test")
-                x_init = np.asarray(
-                    [[-0.9, -0.7, -0.5, -0.3, -0.1], [0.1, 0.3, 0.5, 0.7, 0.9]],
-                    dtype=dtype.as_numpy_dtype, order="F")
-                err = tf.test.compute_gradient_error(
-                    x, [2, 5], z, [2, 5], x_init_value=x_init)
-                self.assertLess(err, 1e-4)
+        def func():
+            x = tf.constant(
+                [-0.9, -0.7, -0.5, -0.3, -0.1, 0.1, 0.3, 0.5, 0.7, 0.9],
+                shape=[2, 5], dtype=dtype,
+                name="x")
+            y = tf.constant(
+                [-0.9, -0.7, -0.5, -0.3, -0.1, 0.1, 0.3, 0.5, 0.7, 0.9],
+                shape=[2, 5], dtype=dtype,
+                name="y")
+            z = tf.add(x, y, name="add_test")
+            x_init = np.asarray(
+                [[-0.9, -0.7, -0.5, -0.3, -0.1], [0.1, 0.3, 0.5, 0.7, 0.9]],
+                dtype=dtype.as_numpy_dtype, order="F")
+            return compute_gradient(x, [2, 5], z, [2, 5], x_init_value=x_init)
+
+        actual, expected = self._run_on_rpc_and_cpu(func)
+        npt.assert_array_equal(actual, expected)
 
     @parameterized.expand([(tf.float32,), (tf.float64,), (tf.complex64,), (tf.complex128,)])
     def test_matmul(self, dtype):
-        m1 = np.random.normal(size=(2, 5))
-        m2 = np.random.normal(size=(5, 6))
-        m3 = np.matmul(m1, m2)
-        with self.get_session():
-            with tf.device('/device:RPC:0'):
-                x = tf.constant(m1, dtype=dtype, name="x")
-                y = tf.constant(m2, dtype=dtype, name="y")
-                z = tf.matmul(x, y, name="matmul_test")
-                err = tf.test.compute_gradient_error(
-                    x, m1.shape, z, m3.shape, x_init_value=m1)
-                self.assertLess(err, 1e-4)
-                err = tf.test.compute_gradient_error(
-                    y, m2.shape, z, m3.shape, x_init_value=m2)
-                self.assertLess(err, 1e-4)
+        def func():
+            m1 = np.random.normal(size=(2, 5))
+            m2 = np.random.normal(size=(5, 6))
+            m3 = np.matmul(m1, m2)
+            x = tf.constant(m1, dtype=dtype, name="x")
+            y = tf.constant(m2, dtype=dtype, name="y")
+            z = tf.matmul(x, y, name="matmul_test")
+            dx = compute_gradient(x, m1.shape, z, m3.shape, x_init_value=m1)
+            dy = compute_gradient(y, m2.shape, z, m3.shape, x_init_value=m2)
+            return dx, dy
 
+        actual, expected = self._run_on_rpc_and_cpu(func)
+        npt.assert_array_equal(actual, expected)
 
     @parameterized.expand([(tf.float16,), (tf.float32,)])
     def test_conv2d(self, dtype):
-        mi = np.array([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12], dtype=dtype.as_numpy_dtype).reshape((1, 4, 3, 1))
-        mf = np.array([1, 4, 7, 2, 5, 8, 3, 6, 9], dtype=dtype.as_numpy_dtype).reshape((3, 3, 1, 1))
-        with self.get_session():
-            with tf.device('/device:RPC:0'):
-                image = tf.constant(mi, dtype=dtype, name="image")
-                filter = tf.constant(mf, dtype=dtype, name="filter")
-                z = tf.nn.conv2d(image, filter, [1, 1, 1, 1], 'SAME')
+        def func():
+            mi = np.array([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12],
+                          dtype=dtype.as_numpy_dtype).reshape((1, 4, 3, 1))
+            mf = np.array([1, 4, 7, 2, 5, 8, 3, 6, 9],
+                          dtype=dtype.as_numpy_dtype).reshape((3, 3, 1, 1))
+            image = tf.constant(mi, dtype=dtype, name="image")
+            filter = tf.constant(mf, dtype=dtype, name="filter")
+            z = tf.nn.conv2d(image, filter, [1, 1, 1, 1], 'SAME')
 
-                err = tf.test.compute_gradient_error(
-                    image, mi.shape, z, mi.shape, x_init_value=mi)
-                self.assertLess(err, 1e-4)
-                err = tf.test.compute_gradient_error(
-                    filter, mf.shape, z, mi.shape, x_init_value=mf)
-                self.assertLess(err, 1e-4)
+            di = compute_gradient(image, mi.shape, z, mi.shape, x_init_value=mi)
+            df = compute_gradient(filter, mf.shape, z, mi.shape, x_init_value=mf)
+            return di, df
+
+        actual, expected = self._run_on_rpc_and_cpu(func)
+        npt.assert_array_equal(actual, expected)
 
 
 if __name__ == '__main__':
