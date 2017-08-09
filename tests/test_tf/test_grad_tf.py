@@ -167,7 +167,7 @@ class TestOpGradients(unittest.TestCase):
 
             sess = tf.get_default_session()
             sess.run(tf.global_variables_initializer())
-            train_op.eval()
+            sess.run(train_op)
             return x.eval()
 
         actual, expected = run_on_rpc_and_cpu(func)
