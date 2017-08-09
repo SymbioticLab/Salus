@@ -20,6 +20,7 @@
 #include "memorymgr.h"
 
 #include "platform/memory.h"
+#include "platform/logging.h"
 
 MemoryMgr &MemoryMgr::instance()
 {
@@ -31,10 +32,14 @@ MemoryMgr::MemoryMgr() { }
 
 MemoryMgr::~MemoryMgr() { }
 
-void *MemoryMgr::allocate(size_t num_bytes, int alignment)
+void *MemoryMgr::allocate(int alignment, size_t num_bytes)
 {
     // TODO: proper memory management
-    return mem::alignedAlloc(num_bytes, alignment);
+    auto ptr = mem::alignedAlloc(alignment, num_bytes);
+    if (!ptr) {
+        ERR("allocation failed for request: {} bytes with alignment {}", num_bytes, alignment);
+    }
+    return ptr;
 }
 
 void MemoryMgr::deallocate(void *ptr)

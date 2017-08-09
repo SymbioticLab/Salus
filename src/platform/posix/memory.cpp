@@ -23,7 +23,7 @@
 
 #include <cstdlib>
 
-void *mem::alignedAlloc(size_t size, int minimum_alignment)
+void *mem::alignedAlloc(int minimum_alignment, size_t size)
 {
 #if HAS_CXX_ALIGNED_ALLOC
     return std::aligned_alloc(minimum_alignment, size);

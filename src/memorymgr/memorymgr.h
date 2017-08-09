@@ -32,7 +32,7 @@ public:
     static MemoryMgr &instance();
     ~MemoryMgr();
 
-    void *allocate(size_t num_bytes, int alignment);
+    void *allocate(int alignment, size_t num_bytes);
     void deallocate(void *ptr);
 
 private:

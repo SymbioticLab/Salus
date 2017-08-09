@@ -26,7 +26,7 @@ namespace mem {
 
 // Aligned allocation/deallocation. `minimum_alignment` must be a power of 2
 // and a multiple of sizeof(void*).
-void *alignedAlloc(size_t size, int minimum_alignment);
+void *alignedAlloc(int minimum_alignment, size_t size);
 void alignedFree(void *aligned_memory);
 
 void *malloc(size_t size);
