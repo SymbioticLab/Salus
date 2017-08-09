@@ -16,7 +16,8 @@ class TestBasicOps(unittest.TestCase):
     def test_variable(self):
         def func():
             a = tf.Variable(tf.zeros([200]))
-            tf.global_variables_initializer().eval()
+            sess = tf.get_default_session()
+            sess.run(tf.global_variables_initializer())
             return a.eval()
 
         actual, expected = run_on_rpc_and_cpu(func)
@@ -32,9 +33,9 @@ class TestBasicOps(unittest.TestCase):
         npt.assert_allclose(actual, expected, rtol=1e-6)
 
     def test_noop(self):
-        with device_and_sess('/device:RPC:0'):
+        with device_and_sess('/device:RPC:0') as sess:
             a = tf.no_op(name='mynoop')
-            a.eval()
+            sess.run(a)
 
     @parameterized.expand([(tf.int8,), (tf.int16,), (tf.int32,), (tf.int64,)])
     def test_multiply_int(self, dtype):
@@ -111,7 +112,7 @@ class TestBasicOps(unittest.TestCase):
     @parameterized.expand([(tf.float16,), (tf.float32,), (tf.float64,), (tf.int32,), (tf.int64,)])
     def test_relu(self, dtype):
         def func():
-            np_features = np.array([[-9, 7, -5, 3, -1], [1, -3, 5, -7, 9]]).astype(dtype.as_numpy_dtype),
+            np_features = np.array([[-9, 7, -5, 3, -1], [1, -3, 5, -7, 9]]).astype(dtype.as_numpy_dtype)
             relu = tf.nn.relu(np_features)
             return relu.eval()
 
