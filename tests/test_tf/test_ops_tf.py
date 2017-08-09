@@ -7,7 +7,7 @@ import numpy.testing as npt
 
 from parameterized import parameterized, param
 
-from . import run_on_rpc_and_cpu, device_and_sess
+from . import run_on_rpc_and_cpu, device_and_sess, assertAllClose
 
 class TestBasicOps(unittest.TestCase):
     def setUp(self):
@@ -21,7 +21,7 @@ class TestBasicOps(unittest.TestCase):
             return a.eval()
 
         actual, expected = run_on_rpc_and_cpu(func)
-        npt.assert_array_equal(actual, expected)
+        assertAllClose(actual, expected)
 
     def test_randomop(self):
         def func():
@@ -30,7 +30,7 @@ class TestBasicOps(unittest.TestCase):
             return r.eval()
 
         actual, expected = run_on_rpc_and_cpu(func)
-        npt.assert_allclose(actual, expected, rtol=1e-6)
+        assertAllClose(actual, expected)
 
     def test_noop(self):
         with device_and_sess('/device:RPC:0') as sess:
@@ -48,7 +48,7 @@ class TestBasicOps(unittest.TestCase):
             return mul.eval()
 
         actual, expected = run_on_rpc_and_cpu(func)
-        npt.assert_array_equal(actual, expected)
+        assertAllClose(actual, expected)
 
     @parameterized.expand([(tf.float32,), (tf.float64,), (tf.complex64,), (tf.complex128,)])
     def test_multiply(self, dtype):
@@ -61,7 +61,7 @@ class TestBasicOps(unittest.TestCase):
             return mul.eval()
 
         actual, expected = run_on_rpc_and_cpu(func)
-        npt.assert_array_equal(actual, expected)
+        assertAllClose(actual, expected)
 
     @parameterized.expand([(tf.float32,), (tf.float64,), (tf.complex64,), (tf.complex128,)])
     def test_add(self, dtype):
@@ -74,7 +74,7 @@ class TestBasicOps(unittest.TestCase):
             return add.eval()
 
         actual, expected = run_on_rpc_and_cpu(func)
-        npt.assert_array_equal(actual, expected)
+        assertAllClose(actual, expected)
 
     @parameterized.expand([(tf.int8,), (tf.int16,), (tf.int32,), (tf.int64,)])
     def test_add_int(self, dtype):
@@ -87,7 +87,7 @@ class TestBasicOps(unittest.TestCase):
             return add.eval()
 
         actual, expected = run_on_rpc_and_cpu(func)
-        npt.assert_array_equal(actual, expected)
+        assertAllClose(actual, expected)
 
     def test_matmul(self):
         def func():
@@ -97,7 +97,7 @@ class TestBasicOps(unittest.TestCase):
             return m.eval()
 
         actual, expected = run_on_rpc_and_cpu(func)
-        npt.assert_array_equal(actual, expected)
+        assertAllClose(actual, expected)
 
     def test_conv2d(self):
         def func():
@@ -107,7 +107,7 @@ class TestBasicOps(unittest.TestCase):
             return conv.eval()
 
         actual, expected = run_on_rpc_and_cpu(func)
-        npt.assert_array_equal(actual, expected)
+        assertAllClose(actual, expected)
 
     @parameterized.expand([(tf.float16,), (tf.float32,), (tf.float64,), (tf.int32,), (tf.int64,)])
     def test_relu(self, dtype):
@@ -117,7 +117,7 @@ class TestBasicOps(unittest.TestCase):
             return relu.eval()
 
         actual, expected = run_on_rpc_and_cpu(func)
-        npt.assert_array_equal(actual, expected)
+        assertAllClose(actual, expected)
 
 if __name__ == '__main__':
     unittest.main()

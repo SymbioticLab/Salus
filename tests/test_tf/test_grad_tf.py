@@ -7,7 +7,7 @@ import numpy.testing as npt
 import tensorflow as tf
 from parameterized import parameterized
 
-from . import run_on_rpc_and_cpu
+from . import run_on_rpc_and_cpu, assertAllClose
 from .gradients import compute_gradient
 
 
@@ -33,7 +33,7 @@ class TestOpGradients(unittest.TestCase):
             return compute_gradient(x, [2, 5], z, [2, 5], x_init_value=x_init)
 
         actual, expected = run_on_rpc_and_cpu(func)
-        npt.assert_array_equal(actual, expected)
+        assertAllClose(actual, expected)
 
     @parameterized.expand([(tf.float32,), (tf.float64,), (tf.complex64,), (tf.complex128,)])
     def test_multiply(self, dtype):
@@ -53,7 +53,7 @@ class TestOpGradients(unittest.TestCase):
             return compute_gradient(x, [2, 5], z, [2, 5], x_init_value=x_init)
 
         actual, expected = run_on_rpc_and_cpu(func)
-        npt.assert_array_equal(actual, expected)
+        assertAllClose(actual, expected)
 
     @parameterized.expand([(tf.int8,), (tf.int16,), (tf.int32,), (tf.int64,)])
     def test_add_int(self, dtype):
@@ -74,7 +74,7 @@ class TestOpGradients(unittest.TestCase):
                 x, [2, 5], z, [2, 5], x_init_value=x_init)
 
         actual, expected = run_on_rpc_and_cpu(func)
-        npt.assert_array_equal(actual, expected)
+        assertAllClose(actual, expected)
 
     @parameterized.expand([(tf.float32,), (tf.float64,), (tf.complex64,), (tf.complex128,)])
     def test_add(self, dtype):
@@ -94,7 +94,7 @@ class TestOpGradients(unittest.TestCase):
             return compute_gradient(x, [2, 5], z, [2, 5], x_init_value=x_init)
 
         actual, expected = run_on_rpc_and_cpu(func)
-        npt.assert_array_equal(actual, expected)
+        assertAllClose(actual, expected)
 
     @parameterized.expand([(tf.float32,), (tf.float64,), (tf.complex64,), (tf.complex128,)])
     def test_matmul(self, dtype):
@@ -110,7 +110,7 @@ class TestOpGradients(unittest.TestCase):
             return dx, dy
 
         actual, expected = run_on_rpc_and_cpu(func)
-        npt.assert_array_equal(actual, expected)
+        assertAllClose(actual, expected)
 
     @parameterized.expand([(tf.float16,), (tf.float32,)])
     def test_conv2d(self, dtype):
@@ -128,7 +128,7 @@ class TestOpGradients(unittest.TestCase):
             return di, df
 
         actual, expected = run_on_rpc_and_cpu(func)
-        npt.assert_array_equal(actual, expected)
+        assertAllClose(actual, expected)
 
     @parameterized.expand([(tf.float32,), (tf.float64,)])
     def test_grad_relu(self, dtype):
@@ -141,7 +141,7 @@ class TestOpGradients(unittest.TestCase):
             return compute_gradient(x, [2, 5], y, [2, 5], x_init_value=x_init)
 
         actual, expected = run_on_rpc_and_cpu(func)
-        npt.assert_array_equal(actual, expected)
+        assertAllClose(actual, expected)
 
     @parameterized.expand([(tf.float32,), (tf.float64,)])
     def test_grad_grad_relu(self, dtype):
@@ -155,7 +155,7 @@ class TestOpGradients(unittest.TestCase):
             return compute_gradient(x, [2, 5], z[0], [2, 5], x_init_value=x_init)
 
         actual, expected = run_on_rpc_and_cpu(func)
-        npt.assert_array_equal(actual, expected)
+        assertAllClose(actual, expected)
 
     def test_grad_relu_scala(self):
         def func():
@@ -169,7 +169,7 @@ class TestOpGradients(unittest.TestCase):
             return x.eval()
 
         actual, expected = run_on_rpc_and_cpu(func)
-        npt.assert_array_equal(actual, expected)
+        assertAllClose(actual, expected)
 
 
 if __name__ == '__main__':

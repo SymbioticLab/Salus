@@ -1,6 +1,7 @@
 from contextlib import contextmanager
 
 import numpy as np
+import numpy.testing as npt
 import tensorflow as tf
 
 
@@ -38,3 +39,12 @@ def run_on_devices(func, devices, *args):
 
 def run_on_rpc_and_cpu(func):
     return run_on_devices(func, '/device:RPC:0', '/device:CPU:0')
+
+
+def assertAllClose(actual, expected):
+    if not isinstance(actual, (list, tuple)):
+        actual = [actual]
+        expected = [expected]
+
+    for a, e in zip(actual, expected):
+        npt.assert_allclose(a, e)
