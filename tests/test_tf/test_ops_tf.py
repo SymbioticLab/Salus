@@ -4,9 +4,9 @@ import unittest
 import tensorflow as tf
 import numpy as np
 import numpy.testing as npt
-from ddt import ddt, data, unpack
 
-@ddt
+from parameterized import parameterized, param
+
 class TestBasicOps(unittest.TestCase):
 
     @classmethod
@@ -47,7 +47,7 @@ class TestBasicOps(unittest.TestCase):
 
     # TODO: implement the device selection as a session option.
     # So we can test both CPU and GPU using the same code.
-    @data(tf.int8, tf.int16, tf.int32, tf.int64)
+    @parameterized.expand([(tf.int8,), (tf.int16,), (tf.int32,), (tf.int64,)])
     def test_multiply_int(self, dtype):
         with tf.device('/device:RPC:0'):
             a = tf.constant([3, 7], name='const_1', dtype=dtype)
@@ -66,7 +66,7 @@ class TestBasicOps(unittest.TestCase):
         with tf.Session(config=self.config) as sess:
             npt.assert_array_equal(sess.run(actual), sess.run(expected))
 
-    @data(tf.float32, tf.double, tf.complex64, tf.complex128)
+    @parameterized.expand([(tf.float32,), (tf.float64,), (tf.complex64,), (tf.complex128,)])
     def test_multiply(self, dtype):
         with tf.device('/device:RPC:0'):
             a = tf.constant([3, 7], name='const_1', dtype=dtype)
@@ -85,7 +85,7 @@ class TestBasicOps(unittest.TestCase):
         with tf.Session(config=self.config) as sess:
             npt.assert_array_equal(sess.run(actual), sess.run(expected))
 
-    @data(tf.float32, tf.double, tf.complex64, tf.complex128)
+    @parameterized.expand([(tf.float32,), (tf.float64,), (tf.complex64,), (tf.complex128,)])
     def test_add(self, dtype):
         with tf.device('/device:RPC:0'):
             a = tf.constant([3, 7], name='const_1', dtype=dtype)
@@ -104,7 +104,7 @@ class TestBasicOps(unittest.TestCase):
         with tf.Session(config=self.config) as sess:
             npt.assert_array_equal(sess.run(actual), sess.run(expected))
 
-    @data(tf.int64, tf.int32, tf.int16, tf.int8)
+    @parameterized.expand([(tf.int8,), (tf.int16,), (tf.int32,), (tf.int64,)])
     def test_add_int(self, dtype):
         with tf.device('/device:RPC:0'):
             a = tf.constant([3, 7], name='const_1', dtype=dtype)

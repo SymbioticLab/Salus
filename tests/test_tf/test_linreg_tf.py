@@ -11,7 +11,8 @@ import unittest
 import tensorflow as tf
 import numpy as np
 import numpy.testing as npt
-from ddt import ddt, data, unpack
+
+from parameterized import parameterized, param
 
 
 def run_linear_reg(sess, training_epochs=100, learning_rate=0.01):
@@ -62,10 +63,9 @@ def run_linear_reg(sess, training_epochs=100, learning_rate=0.01):
     return preds
 
 
-@ddt
 class TestLinreg(unittest.TestCase):
 
-    @data(1, 2, 4, 8, 16, 32, 64, 128)
+    @parameterized.expand((2**i,) for i in range(0,8))
     def test_linear_regression(self, epochs):
         tf.reset_default_graph()
         tf.set_random_seed(233)
