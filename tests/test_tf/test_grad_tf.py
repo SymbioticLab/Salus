@@ -102,8 +102,8 @@ class TestOpGradients(unittest.TestCase):
 
     @parameterized.expand([(tf.float32,), (tf.float64,), (tf.complex64,), (tf.complex128,)])
     def test_matmul(self, dtype):
-        m1 = np.random.normal(size=(20, 50))
-        m2 = np.random.normal(size=(50, 60))
+        m1 = np.random.normal(size=(2, 5))
+        m2 = np.random.normal(size=(5, 6))
         m3 = np.matmul(m1, m2)
         with self.get_session():
             with tf.device('/device:RPC:0'):
