@@ -42,11 +42,14 @@ def run_on_rpc_and_cpu(func):
 
 
 def assertAllClose(actual, expected):
-    def _assertAllClose(actual, expected):
+    def _assertAllClose(actual, expected, path):
         if isinstance(actual, (list, tuple)):
-            for a, e in zip(actual, expected):
-                _assertAllClose(a, e)
+            for i, (a, e) in enumerate(zip(actual, expected)):
+                _assertAllClose(a, e, path + [i])
         else:
-            npt.assert_allclose(actual, expected)
+            msg = "at element actual"
+            if len(path) > 0:
+                msg += '[{}]'.format(']['.join(str(i) for i in path))
+            npt.assert_allclose(actual, expected, err_msg=msg)
 
-    return _assertAllClose(actual, expected)
+    return _assertAllClose(actual, expected, [])
