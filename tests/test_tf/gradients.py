@@ -126,11 +126,6 @@ def _compute_gradient(x,
                       extra_feed_dict=None):
     """Computes the jacobian."""
     t = tf.as_dtype(x.dtype)
-    allowed_types = [tf.float16, tf.float32, tf.float64,
-                     tf.complex64, tf.complex128]
-    assert t.base_dtype in allowed_types, "Don't support type %s for x" % t.name
-    t2 = tf.as_dtype(y.dtype)
-    assert t2.base_dtype in allowed_types, "Don't support type %s for y" % t2.name
 
     if x_init_value is not None:
         i_shape = list(x_init_value.shape)
