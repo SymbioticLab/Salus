@@ -31,17 +31,16 @@
 #include "tfoplibrary.pb.h"
 
 #include <tensorflow/core/common_runtime/copy_tensor.h>
+#include <tensorflow/core/common_runtime/device_factory.h>
 #include <tensorflow/core/common_runtime/device_mgr.h>
 #include <tensorflow/core/common_runtime/function.h>
-#include <tensorflow/core/common_runtime/rpc_device/exec_helpers/exechelpers.h>
 #include <tensorflow/core/common_runtime/rpc_device/exec_helpers/devicefactories.h>
+#include <tensorflow/core/common_runtime/rpc_device/exec_helpers/exechelpers.h>
 #include <tensorflow/core/framework/node_def.pb.h>
 #include <tensorflow/core/graph/graph.h>
 #include <tensorflow/core/graph/graph_constructor.h>
 #include <tensorflow/core/lib/gtl/stl_util.h>
 #include <tensorflow/core/protobuf/config.pb.h>
-#include <tensorflow/core/common_runtime/device_mgr.h>
-#include <tensorflow/core/common_runtime/device_factory.h>
 
 using namespace tensorflow::remote;
 
@@ -74,7 +73,8 @@ MaybeLock::~MaybeLock()
     }
 }
 
-inline tensorflow::AllocatorAttributes TFSession::TensorItem::allocAttr() const {
+inline tensorflow::AllocatorAttributes TFSession::TensorItem::allocAttr() const
+{
     return nodeItem->output_attrs()[slot];
 }
 
@@ -96,18 +96,16 @@ TFSession::TFSession(TFOpLibrary *opLibrary, const std::string &sessionId,
 
 bool TFSession::initialize()
 {
-    std::vector<tensorflow::Device*> devices;
+    std::vector<tensorflow::Device *> devices;
     tensorflow::SessionOptions options;
     (*options.config.mutable_device_count())["RPC"] = 0;
 
     // use device with our own allocator
     WrappedDeviceSettings::maybeRegisterWrappedDeviceFactories();
-    WrappedDeviceSettings::setWrapperFactory([](auto *alloc){
-        return std::make_unique<TFAllocator>(alloc);
-    });
+    WrappedDeviceSettings::setWrapperFactory(
+        [](auto *alloc) { return std::make_unique<TFAllocator>(alloc); });
 
-    auto s = tensorflow::DeviceFactory::AddDevices(options, "/job:localhost/replica:0/task:0",
-                                                   &devices);
+    auto s = tensorflow::DeviceFactory::AddDevices(options, "/job:localhost/replica:0/task:0", &devices);
     if (!s.ok()) {
         ERR("Error when adding devices to TFSession: {}", s);
         return false;
@@ -119,7 +117,7 @@ bool TFSession::initialize()
 TFSession::~TFSession()
 {
     m_opseg.RemoveHold(m_sessionId);
-    for (auto p : m_tensors) {
+    for (const auto &p : m_tensors) {
         if (!p.second.val.is_ref()) {
             delete p.second.val.tensor;
         }
@@ -129,7 +127,19 @@ TFSession::~TFSession()
     }
 }
 
-bool TFSession::findTensorFromName(const std::string &name, TensorItem &item)
+bool TFSession::unregisterTensor(const std::string &name)
+{
+    INFO("Unregistering tensor: {}", name);
+    tensorflow::mutex_lock locker(m_mu);
+    auto n = m_tensors.erase(name);
+    if (!n) {
+        ERR("Tensor not found under name: {}", name);
+        return false;
+    }
+    return true;
+}
+
+bool TFSession::findTensorFromName(const std::string &name, TensorItem **item)
 {
     tensorflow::mutex_lock locker(m_mu);
     auto it = m_tensors.find(name);
@@ -137,28 +147,38 @@ bool TFSession::findTensorFromName(const std::string &name, TensorItem &item)
         ERR("Tensor not found under name: {}", name);
         return false;
     }
-    item = it->second;
+    *item = &it->second;
     return true;
 }
 
-void TFSession::registerTensorForName(const std::string &name, TensorItem item)
+void TFSession::registerTensorForName(const std::string &name, TensorValue val,
+                                      tensorflow::DeviceContext *devCtx, tensorflow::Device *dev,
+                                      tensorflow::remote::NodeItem *nodeItem, int src_slot)
 {
-    INFO("Registering tensor under name {}: {}, with alloc: {}", name, item.val, item.allocAttr());
+    if (devCtx) {
+        devCtx->Ref();
+    }
 
-    if (item.context) {
-        item.context->Ref();
+    // TODO: more efficient than this.
+    int count = 0;
+    for (int i = 0; i != nodeItem->num_output_edges; ++i) {
+        const auto &ei = nodeItem->output_edge(i);
+        if (ei.output_slot == src_slot) {
+            count += 1;
+        }
     }
 
     tensorflow::mutex_lock locker(m_mu);
-    auto it = m_tensors.find(name);
-    if (it == m_tensors.end()) {
-        m_tensors.emplace(name, item);
-    } else {
-        if (it->second.val.mutex_if_ref != item.val.mutex_if_ref) {
-            WARN("The tensor going to be registered already exists, and is under a different mutex");
-        }
-        it->second = item;
-    }
+    auto &item = m_tensors[name];
+    item.val = val;
+    item.context = devCtx;
+    item.device = dev;
+    item.nodeItem = nodeItem;
+    item.slot = src_slot;
+    item.pendingUsage = count;
+
+    INFO("Registering tensor under name {}: {}, with alloc: {}, pendingUsage: {}", name, item.val,
+         item.allocAttr(), item.pendingUsage);
 }
 
 bool TFSession::isCompatible(const tensorflow::Tensor &tensor, const tensorflow::TensorProto &proto) const
@@ -339,7 +359,8 @@ tensorflow::DeviceContext *TFExecutionState::deviceContext(const std::string &na
     if (it != m_deviceContexts.end() && nid < it->second.size()) {
         return it->second[nid];
     }
-    DEBUG("Device does not provide a context for op kernel {} on device {}, a default one may be used", name, tfdev->name());
+    DEBUG("Device does not provide a context for op kernel {} on device {}, a default one may be used", name,
+          tfdev->name());
     return nullptr;
 }
 
@@ -512,7 +533,6 @@ std::shared_ptr<TFContext> TFSession::createContext(const executor::TFOpContextD
     tfctx->params.is_input_dead = tfdef.is_input_dead();
 
     tfctx->params.output_attr_array = tfctx->node_item->output_attrs();
-    //     tfctx->FillOutputAttrs(tfdef);
 
     auto num_inputs = opkernel->num_inputs();
     if (num_inputs != tfdef.inputs_size()) {
@@ -529,19 +549,21 @@ std::shared_ptr<TFContext> TFSession::createContext(const executor::TFOpContextD
             ERR("Mismatch input: {}, expected: {}", initem.name(), opkernel->def().input(i));
             return {};
         }
-        TensorItem input;
-        if (!findTensorFromName(initem.name(), input)) {
+        TensorItem *output = nullptr;
+        if (!findTensorFromName(initem.name(), &output)) {
             ERR("Input not found");
             return {};
         }
 
-        auto inattrs = input.allocAttr();
+        TensorValue input = output->val;
+        auto inattrs = output->allocAttr();
+        auto incontext = output->context;
 
         // Handle every combination of input and op types
         // ----------------------------------------------
-        //    Input   |   Op   |   Device   |   Result   |
+        //    Output   |   Op   |   Device   |   Result   |
         //     ref       noref      same         deref
-        //    noref      noref      same        nothing
+        //    noref      noref      same        maycopy
         //     ref        ref       same        nothing
         //    noref       ref       same         reject
         //     ref       noref      diff        devcopy
@@ -549,39 +571,41 @@ std::shared_ptr<TFContext> TFSession::createContext(const executor::TFOpContextD
         //     ref        ref       diff         reject
         //    noref       ref       diff         reject
 
-        if (initem.is_ref() && !input.val.is_ref()) {
+        if (initem.is_ref() && !output->val.is_ref()) {
             ERR("{}-th input expects a ref type", i);
             return {};
-        } else if (initem.is_ref() && input.val.is_ref()) {
-            if (device != input.device) {
+        } else if (initem.is_ref() && output->val.is_ref()) {
+            if (device != output->device) {
                 ERR("Operation {} expects an reference, but input[{}] {} is on different device.",
                     opkernel->name(), i, initem.name());
                 return {};
             }
-        } else if (!initem.is_ref()) {
+        }
+
+        if (!initem.is_ref()) {
             tensorflow::AllocatorAttributes expected;
             if (opkernel->input_memory_types()[i] == tensorflow::HOST_MEMORY) {
                 expected.set_on_host(true);
             }
-            if (!onSameDevice(device, expected, input.device, inattrs)) {
+            if (!onSameDevice(device, expected, output->device, inattrs)) {
                 // Operation and input on different device,
                 // do a copy tensor to ensure input tensor is on the same device
-                tfctx->deref_tensors.emplace_back(device->GetAllocator(expected), input.val->dtype(),
-                                                  input.val->shape());
+                tfctx->deref_tensors.emplace_back(device->GetAllocator(expected), output->val->dtype(),
+                                                  output->val->shape());
                 auto &copy = tfctx->deref_tensors.back();
 
                 tensorflow::Notification n;
                 tensorflow::Status ok;
                 INFO("Copying from device {} to device {} to prepare {}-th input {} for op {}. "
                      " target tensor object addr: {:x}",
-                     input.device->name(), device->name(), i, initem.name(), opkernel->name(),
+                     output->device->name(), device->name(), i, initem.name(), opkernel->name(),
                      reinterpret_cast<uint64_t>(&copy));
 
                 auto dstDevCtx = tfctx->ctx()->op_device_context();
-                INFO("Src dev context {}, dst dev context {}", as_hex(input.context), as_hex(dstDevCtx));
+                INFO("Src dev context {}, dst dev context {}", as_hex(output->context), as_hex(dstDevCtx));
 
-                tensorflow::CopyTensor::ViaDMA(initem.name(), input.context, tfctx->ctx()->op_device_context(),
-                                               input.device, device, inattrs, expected, input.val.tensor, &copy,
+                tensorflow::CopyTensor::ViaDMA(initem.name(), output->context, dstDevCtx, output->device,
+                                               device, inattrs, expected, output->val.tensor, &copy,
                                                [&n, &ok](auto status) {
                                                    ok = status;
                                                    n.Notify();
@@ -591,29 +615,46 @@ std::shared_ptr<TFContext> TFSession::createContext(const executor::TFOpContextD
                 if (!ok.ok()) {
                     ERR("Copying from device {} to device {} failed when preparing {}-th input {} "
                         "for op {}: {}",
-                        input.device->name(), device->name(), i, initem.name(), opkernel->name(), ok);
+                        output->device->name(), device->name(), i, initem.name(), opkernel->name(), ok);
                 }
 
-                input.context = dstDevCtx;
-                input.device = device;
-                input.val = {nullptr, &copy};
+                input = {nullptr, &copy};
                 inattrs = expected;
-            } else if (input.val.is_ref()) {
+                incontext = dstDevCtx;
+            } else if (output->val.is_ref()) {
                 // Automatically deref the tensor ref when the op expects a
                 // tensor but is given a ref to a tensor. Need to deref it
                 // under the mutex.
-                INFO("Auto deref tensor: {}", input.val);
-                MaybeLock l(input.val);
-                tfctx->deref_tensors.emplace_back(*input.val.tensor);
+                INFO("Auto deref tensor: {}", output->val);
+                MaybeLock l(output->val);
+                tfctx->deref_tensors.emplace_back(*output->val.tensor);
                 auto &t = tfctx->deref_tensors.back();
-                input.val = {nullptr, &t};
+                input = {nullptr, &t};
+            } else {
+                // Check if we need a copy for non ref case. This is important as op kernels checks
+                // if ref on the tensor is one to decide whether to reuse the input.
+                // This copy is cheap because internally a tensor is ref counted.
+                auto pending = output->pendingUsage.fetch_sub(1);
+                pending -= 1;
+                if (pending != 0) {
+                    INFO("Input {} still have {} potential user(s)", initem.name(), pending);
+                    // we need the copy as there's other op that may use this
+                    tfctx->deref_tensors.emplace_back(*output->val.tensor);
+                    auto &t = tfctx->deref_tensors.back();
+                    input = {nullptr, &t};
+                } else {
+                    INFO("Input {} will be unregistered since this is the last user", initem.name());
+                    // no need for the copy, this is the last one.
+                    // And we can remove it from our registration
+                    unregisterTensor(initem.name());
+                }
             }
         }
 
         tfctx->input_alloc_attrs.push_back(inattrs);
-        tfctx->input_device_contexts.push_back(input.context);
-        tfctx->inputs.push_back(input.val);
-        INFO("Input {}: {} is {}, with alloc: {}", i, initem.name(), input.val, inattrs);
+        tfctx->input_device_contexts.push_back(incontext);
+        tfctx->inputs.push_back(input);
+        INFO("Input {}: {} is {}, with alloc: {}", i, initem.name(), input, inattrs);
     }
 
     return tfctx;
@@ -735,9 +776,8 @@ executor::TFOpContextUpdate TFSession::finalizeContext(TFContext *pContext)
         auto out = context->release_output(i);
         // Let the session manage the tensor memory
         // The session takes the ownership of tensor in non-ref case
-        registerTensorForName(output_name,
-                              {out, context->op_device_context(),
-                               static_cast<tensorflow::Device *>(context->device()), pContext->node_item, i});
+        registerTensorForName(output_name, out, context->op_device_context(),
+                              static_cast<tensorflow::Device *>(context->device()), pContext->node_item, i);
 
         auto outitem = tfctxupd.add_outputs();
         outitem->set_name(output_name);

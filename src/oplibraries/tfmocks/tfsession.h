@@ -39,6 +39,7 @@
 #include <utility>
 #include <vector>
 #include <list>
+#include <atomic>
 
 using tensorflow::TensorValue;
 typedef tensorflow::gtl::InlinedVector<tensorflow::TensorValue, 4> TensorValueVec;
@@ -198,10 +199,14 @@ public:
         tensorflow::remote::NodeItem *nodeItem;
         int slot; // which output is this tensor item in nodeItem
 
+        std::atomic_int_fast32_t pendingUsage; // how many downstream op is expected to use this tensor
+
         inline tensorflow::AllocatorAttributes allocAttr() const;
     };
-    bool findTensorFromName(const std::string &name, TensorItem &val);
-    void registerTensorForName(const std::string &name, TensorItem val);
+    bool unregisterTensor(const std::string &name);
+    bool findTensorFromName(const std::string &name, TensorItem **val);
+    void registerTensorForName(const std::string &name, TensorValue val, tensorflow::DeviceContext *devCtx,
+                               tensorflow::Device *dev, tensorflow::remote::NodeItem *nodeItem, int src_slot);
 
     void tensorToProtoMeta(tensorflow::TensorProto *meta, TensorValue val);
     void tensorToProtoData(tensorflow::TensorProto *data, TensorValue val);
