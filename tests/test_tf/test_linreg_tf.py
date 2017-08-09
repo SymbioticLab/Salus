@@ -58,7 +58,9 @@ def run_linear_reg(sess, training_epochs=100, learning_rate=0.01):
     # Fit all training data
     for epoch in range(training_epochs):
         for (x, y) in zip(train_X, train_Y):
-            gv, _, p = sess.run([grads_and_vars, train_op, pred], feed_dict={X: x, Y: y})
+            gv = sess.run(grads_and_vars, feed_dict={X: x, Y: y})
+            sess.run(train_op, feed_dict={X: x, Y: y})
+            p = sess.run(pred, feed_dict={X: x, Y: y})
             preds.append([p] + gv)
 
     preds.append(sess.run([pred, W, b], feed_dict={X: 5.6}))
@@ -66,7 +68,7 @@ def run_linear_reg(sess, training_epochs=100, learning_rate=0.01):
 
 
 class TestLinreg(unittest.TestCase):
-    @parameterized.expand((2**i,) for i in range(0,8))
+    @parameterized.expand((2**i,) for i in range(4,5))
     def test_linear_regression(self, epochs):
         def func():
             sess = tf.get_default_session()

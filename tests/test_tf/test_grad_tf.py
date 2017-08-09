@@ -171,11 +171,11 @@ class TestOpGradients(unittest.TestCase):
             sess.run(tf.global_variables_initializer())
 
             xold = sess.run(x)
-            gv = sess.run(grads_and_vars)
+            g, _ = sess.run(grads_and_vars)[0]
 
             sess.run(train_op)
             xnew = sess.run(x)
-            return xold, gv, xnew
+            return xold, g, xnew
 
         actual, expected = run_on_rpc_and_cpu(func)
         assertAllClose(actual, expected)
