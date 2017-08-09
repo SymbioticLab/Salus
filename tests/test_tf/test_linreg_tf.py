@@ -14,7 +14,7 @@ import numpy.testing as npt
 
 from parameterized import parameterized, param
 
-from . import run_on_rpc_and_cpu
+from . import run_on_rpc_and_cpu, assertAllClose
 
 
 def run_linear_reg(sess, training_epochs=100, learning_rate=0.01):
@@ -73,5 +73,4 @@ class TestLinreg(unittest.TestCase):
             return run_linear_reg(sess, training_epochs=epochs)
 
         actual, expected = run_on_rpc_and_cpu(func)
-        self.maxDiff = None
-        self.assertEquals(actual, expected)
+        assertAllClose(actual, expected)

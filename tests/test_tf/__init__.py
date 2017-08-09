@@ -42,9 +42,11 @@ def run_on_rpc_and_cpu(func):
 
 
 def assertAllClose(actual, expected):
-    if not isinstance(actual, (list, tuple)):
-        actual = [actual]
-        expected = [expected]
+    def _assertAllClose(actual, expected):
+        if isinstance(actual, (list, tuple)):
+            for a, e in zip(actual, expected):
+                _assertAllClose(a, e)
+        else:
+            npt.assert_allclose(actual, expected)
 
-    for a, e in zip(actual, expected):
-        npt.assert_allclose(a, e)
+    return _assertAllClose(actual, expected)
