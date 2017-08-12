@@ -3,11 +3,11 @@ from __future__ import print_function
 import unittest
 import tensorflow as tf
 import numpy as np
-import numpy.testing as npt
 
-from parameterized import parameterized, param
+from parameterized import parameterized
 
 from . import run_on_rpc_and_cpu, device_and_sess, assertAllClose
+
 
 class TestBasicOps(unittest.TestCase):
     def setUp(self):
@@ -41,7 +41,7 @@ class TestBasicOps(unittest.TestCase):
     def test_multiply_int(self, dtype):
         def func():
             a = tf.constant([3, 7], name='const_1', dtype=dtype)
-            b = tf.constant([7, 3] , name='const_2', dtype=dtype)
+            b = tf.constant([7, 3], name='const_2', dtype=dtype)
             c = tf.constant(2, name='const_3', dtype=dtype)
             d = tf.multiply(a, b, name='mul_first')
             mul = tf.multiply(c, d, name='mul_second')
@@ -54,7 +54,7 @@ class TestBasicOps(unittest.TestCase):
     def test_multiply(self, dtype):
         def func():
             a = tf.constant([3, 7], name='const_1', dtype=dtype)
-            b = tf.constant([7, 3] , name='const_2', dtype=dtype)
+            b = tf.constant([7, 3], name='const_2', dtype=dtype)
             c = tf.constant(2, name='const_3', dtype=dtype)
             d = tf.multiply(a, b, name='mul_first')
             mul = tf.multiply(c, d, name='mul_second')
@@ -67,7 +67,7 @@ class TestBasicOps(unittest.TestCase):
     def test_add(self, dtype):
         def func():
             a = tf.constant([3, 7], name='const_1', dtype=dtype)
-            b = tf.constant([7, 3] , name='const_2', dtype=dtype)
+            b = tf.constant([7, 3], name='const_2', dtype=dtype)
             c = tf.constant(2, name='const_3', dtype=dtype)
             d = tf.add(a, b, name='add_first')
             add = tf.add(c, d, name='add_second')
@@ -80,7 +80,7 @@ class TestBasicOps(unittest.TestCase):
     def test_add_int(self, dtype):
         def func():
             a = tf.constant([3, 7], name='const_1', dtype=dtype)
-            b = tf.constant([7, 3] , name='const_2', dtype=dtype)
+            b = tf.constant([7, 3], name='const_2', dtype=dtype)
             c = tf.constant(2, name='const_3', dtype=dtype)
             d = tf.add(a, b, name='add_first')
             add = tf.add(c, d, name='add_second')
@@ -118,6 +118,7 @@ class TestBasicOps(unittest.TestCase):
 
         actual, expected = run_on_rpc_and_cpu(func)
         assertAllClose(actual, expected)
+
 
 if __name__ == '__main__':
     unittest.main()

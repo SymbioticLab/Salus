@@ -6,8 +6,7 @@ import numpy as np
 import tensorflow as tf
 from parameterized import parameterized
 
-from . import run_on_rpc_and_cpu, assertAllClose
-from .gradients import compute_gradient
+from . import run_on_rpc_and_cpu, assertAllClose, gradients
 
 
 class TestOpGradients(unittest.TestCase):
@@ -29,7 +28,7 @@ class TestOpGradients(unittest.TestCase):
                 shape=[2, 5], dtype=dtype,
                 name="y")
             z = tf.multiply(x, y, name="mul_test")
-            return compute_gradient(x, [2, 5], z, [2, 5], x_init_value=x_init)
+            return gradients.compute_gradient(x, [2, 5], z, [2, 5], x_init_value=x_init)
 
         actual, expected = run_on_rpc_and_cpu(func)
         assertAllClose(actual, expected)
@@ -49,7 +48,7 @@ class TestOpGradients(unittest.TestCase):
             x_init = np.asarray(
                 [[-0.9, -0.7, -0.5, -0.3, -0.1], [0.1, 0.3, 0.5, 0.7, 0.9]],
                 dtype=dtype.as_numpy_dtype, order="F")
-            return compute_gradient(x, [2, 5], z, [2, 5], x_init_value=x_init)
+            return gradients.compute_gradient(x, [2, 5], z, [2, 5], x_init_value=x_init)
 
         actual, expected = run_on_rpc_and_cpu(func)
         assertAllClose(actual, expected)
@@ -69,7 +68,7 @@ class TestOpGradients(unittest.TestCase):
             x_init = np.asarray(
                 [[-9, -7, -5, -3, -1], [1, 3, 5, 7, 9]],
                 dtype=dtype.as_numpy_dtype, order="F")
-            return compute_gradient(
+            return gradients.compute_gradient(
                 x, [2, 5], z, [2, 5], x_init_value=x_init)
 
         actual, expected = run_on_rpc_and_cpu(func)
@@ -90,7 +89,7 @@ class TestOpGradients(unittest.TestCase):
             x_init = np.asarray(
                 [[-0.9, -0.7, -0.5, -0.3, -0.1], [0.1, 0.3, 0.5, 0.7, 0.9]],
                 dtype=dtype.as_numpy_dtype, order="F")
-            return compute_gradient(x, [2, 5], z, [2, 5], x_init_value=x_init)
+            return gradients.compute_gradient(x, [2, 5], z, [2, 5], x_init_value=x_init)
 
         actual, expected = run_on_rpc_and_cpu(func)
         assertAllClose(actual, expected)
@@ -104,8 +103,8 @@ class TestOpGradients(unittest.TestCase):
             x = tf.constant(m1, dtype=dtype, name="x")
             y = tf.constant(m2, dtype=dtype, name="y")
             z = tf.matmul(x, y, name="matmul_test")
-            dx = compute_gradient(x, m1.shape, z, m3.shape, x_init_value=m1)
-            dy = compute_gradient(y, m2.shape, z, m3.shape, x_init_value=m2)
+            dx = gradients.compute_gradient(x, m1.shape, z, m3.shape, x_init_value=m1)
+            dy = gradients.compute_gradient(y, m2.shape, z, m3.shape, x_init_value=m2)
             return dx, dy
 
         actual, expected = run_on_rpc_and_cpu(func)
@@ -122,8 +121,8 @@ class TestOpGradients(unittest.TestCase):
             filter = tf.constant(mf, dtype=dtype, name="filter")
             z = tf.nn.conv2d(image, filter, [1, 1, 1, 1], 'SAME')
 
-            di = compute_gradient(image, mi.shape, z, mi.shape, x_init_value=mi)
-            df = compute_gradient(filter, mf.shape, z, mi.shape, x_init_value=mf)
+            di = gradients.compute_gradient(image, mi.shape, z, mi.shape, x_init_value=mi)
+            df = gradients.compute_gradient(filter, mf.shape, z, mi.shape, x_init_value=mf)
             return di, df
 
         actual, expected = run_on_rpc_and_cpu(func)
@@ -137,7 +136,7 @@ class TestOpGradients(unittest.TestCase):
             y = tf.nn.relu(x, name="relu")
             x_init = np.asarray([[-0.9, -0.7, -0.5, -0.3, -0.1], [0.1, 0.3, 0.5, 0.7, 0.9]],
                                 dtype=dtype.as_numpy_dtype, order="F")
-            return compute_gradient(x, [2, 5], y, [2, 5], x_init_value=x_init)
+            return gradients.compute_gradient(x, [2, 5], y, [2, 5], x_init_value=x_init)
 
         actual, expected = run_on_rpc_and_cpu(func)
         assertAllClose(actual, expected)
@@ -151,7 +150,7 @@ class TestOpGradients(unittest.TestCase):
             z = tf.gradients(y, x)
             x_init = np.asarray([[-0.9, -0.7, -0.5, -0.3, -0.1], [0.1, 0.3, 0.5, 0.7, 0.9]],
                                 dtype=dtype.as_numpy_dtype, order="F")
-            return compute_gradient(x, [2, 5], z[0], [2, 5], x_init_value=x_init)
+            return gradients.compute_gradient(x, [2, 5], z[0], [2, 5], x_init_value=x_init)
 
         actual, expected = run_on_rpc_and_cpu(func)
         assertAllClose(actual, expected)
@@ -162,7 +161,7 @@ class TestOpGradients(unittest.TestCase):
             y = tf.nn.relu(x)
             loss = y**2
             opt = tf.train.GradientDescentOptimizer(learning_rate=0.25)
-            grads_and_vars = opt.compute_gradients(loss)
+            grads_and_vars = opt.gradients.compute_gradients(loss)
             train_op = opt.apply_gradients(grads_and_vars)
 
             sess = tf.get_default_session()
