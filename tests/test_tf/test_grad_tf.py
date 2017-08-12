@@ -3,7 +3,6 @@ from __future__ import print_function
 import unittest
 
 import numpy as np
-import numpy.testing as npt
 import tensorflow as tf
 from parameterized import parameterized
 
@@ -165,7 +164,6 @@ class TestOpGradients(unittest.TestCase):
             opt = tf.train.GradientDescentOptimizer(learning_rate=0.25)
             grads_and_vars = opt.compute_gradients(loss)
             train_op = opt.apply_gradients(grads_and_vars)
-            #train_op = opt.minimize(loss)
 
             sess = tf.get_default_session()
             sess.run(tf.global_variables_initializer())

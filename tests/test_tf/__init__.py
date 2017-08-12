@@ -4,6 +4,10 @@ import numpy as np
 import numpy.testing as npt
 import tensorflow as tf
 
+from .lib import gradients  # NOQA: F401
+from .lib import networks  # NOQA: F401
+from .lib import datasets  # NOQA: F401
+
 
 # TODO: implement the device selection as a session option.
 # So we can test both CPU and GPU using the same code.
