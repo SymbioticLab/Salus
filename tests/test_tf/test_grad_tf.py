@@ -161,7 +161,7 @@ class TestOpGradients(unittest.TestCase):
             y = tf.nn.relu(x)
             loss = y**2
             opt = tf.train.GradientDescentOptimizer(learning_rate=0.25)
-            grads_and_vars = opt.gradients.compute_gradients(loss)
+            grads_and_vars = opt.compute_gradients(loss)
             train_op = opt.apply_gradients(grads_and_vars)
 
             sess = tf.get_default_session()
