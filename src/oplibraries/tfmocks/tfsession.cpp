@@ -551,11 +551,6 @@ std::shared_ptr<TFContext> TFSession::createContext(const executor::TFOpContextD
         tensorflow::DeviceContext *incontext = nullptr;
 
         if (initem.has_value()) {
-            if (initem.name() != opkernel->def().input(i)) {
-                ERR("Mismatch input: {}, expected: {}", initem.name(), opkernel->def().input(i));
-                return {};
-            }
-
             TensorItem *output = nullptr;
             if (!findTensorFromName(initem.name(), &output)) {
                 ERR("Input not found");
