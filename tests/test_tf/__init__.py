@@ -13,10 +13,11 @@ from .lib import datasets  # NOQA: F401
 # So we can test both CPU and GPU using the same code.
 @contextmanager
 def device_and_sess(dev, config=None, seed=None):
-    if config is None:
-        config = tf.ConfigProto()
-        config.graph_options.optimizer_options.do_constant_folding = False
-        config.graph_options.optimizer_options.opt_level = tf.OptimizerOptions.L0
+    finalCfg = tf.ConfigProto()
+    finalCfg.graph_options.optimizer_options.do_constant_folding = False
+    finalCfg.graph_options.optimizer_options.opt_level = tf.OptimizerOptions.L0
+    if config is not None:
+        finalCfg.MergeFrom(config)
 
     if seed is None:
         seed = 233
@@ -25,24 +26,24 @@ def device_and_sess(dev, config=None, seed=None):
         tf.set_random_seed(seed)
         np.random.seed(seed)
         with tf.device(dev):
-            with tf.Session(config=config) as sess:
+            with tf.Session(config=finalCfg) as sess:
                 yield sess
 
 
-def run_on_devices(func, devices, *args):
+def run_on_devices(func, devices, *args, **kwargs):
     if not isinstance(devices, (list, tuple)):
         devices = [devices] + list(args)
 
     results = []
     for d in devices:
-        with device_and_sess(d):
+        with device_and_sess(d, **kwargs):
             res = func()
             results.append(res)
     return tuple(results)
 
 
-def run_on_rpc_and_cpu(func):
-    return run_on_devices(func, '/device:RPC:0', '/device:CPU:0')
+def run_on_rpc_and_cpu(func, **kwargs):
+    return run_on_devices(func, '/device:RPC:0', '/device:CPU:0', **kwargs)
 
 
 def assertAllClose(actual, expected):

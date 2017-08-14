@@ -3,11 +3,13 @@ from __future__ import print_function
 import unittest
 
 import numpy as np
+from datetime import datetime
+from timeit import default_timer
 
 import tensorflow as tf
 from tensorflow.examples.tutorials.mnist import input_data
 
-from . import run_on_rpc_and_cpu
+from . import run_on_rpc_and_cpu, run_on_devices
 
 
 def run_mnist_softmax(sess, mnist):
@@ -72,23 +74,44 @@ def run_mnist_conv(sess, mnist):
     correct_prediction = tf.equal(tf.argmax(y_conv, 1), tf.argmax(y_, 1))
     accuracy = tf.reduce_mean(tf.cast(correct_prediction, tf.float32))
     sess.run(tf.global_variables_initializer())
-    for i in range(50):
-        batch = mnist.train.next_batch(50)
+
+    batch_num = 50
+    batch_size = 50
+    speeds = []
+    for i in range(batch_num):
+        batch = mnist.train.next_batch(batch_size)
+        print("Start running step {}".format(i))
+        start_time = default_timer()
         sess.run(train_step, feed_dict={x: batch[0], y_: batch[1], keep_prob: 0.5})
+        duration = default_timer() - start_time
+        examples_per_sec = batch_size / duration
+        sec_per_batch = float(duration)
+        speeds.append(sec_per_batch)
+        loss_value = sess.run(cross_entropy, feed_dict={x: batch[0], y_: batch[1], keep_prob: 0.5})
+
+        fmt_str = '{}: step {}, loss = {:.2f} ({:.1f} examples/sec; {:.3f} sec/batch'
+        print(fmt_str.format(datetime.now(), i, loss_value, examples_per_sec, sec_per_batch))
+    print('Average %.3f sec/batch' % np.average(speeds))
 
     return sess.run(accuracy, feed_dict={x: mnist.test.images, y_: mnist.test.labels, keep_prob: 1.0})
 
 
 class TestMnistConv(unittest.TestCase):
-    def test_cpu(self):
-        tf.reset_default_graph()
-        mnist = input_data.read_data_sets('MNIST_data', one_hot=True)
-        tf.set_random_seed(233)
-        np.random.seed(233)
+    def test_gpu(self):
+        def func():
+            mnist = input_data.read_data_sets('MNIST_data', one_hot=True)
+            sess = tf.get_default_session()
+            return run_mnist_conv(sess, mnist)
 
-        with tf.device('/device:CPU:0'):
-            with tf.Session() as sess:
-                run_mnist_softmax(sess, mnist)
+        run_on_devices(func, '/device:GPU:0')
+
+    def test_cpu(self):
+        def func():
+            mnist = input_data.read_data_sets('MNIST_data', one_hot=True)
+            sess = tf.get_default_session()
+            return run_mnist_conv(sess, mnist)
+
+        run_on_devices(func, '/device:CPU:0')
 
     def test_softmax(self):
         def func():
