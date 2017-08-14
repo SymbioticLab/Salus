@@ -545,15 +545,17 @@ std::shared_ptr<TFContext> TFSession::createContext(const executor::TFOpContextD
     tfctx->input_alloc_attrs.reserve(num_inputs);
     for (int i = 0; i != num_inputs; ++i) {
         const auto &initem = tfdef.inputs(i);
-        if (initem.name() != opkernel->def().input(i)) {
-            ERR("Mismatch input: {}, expected: {}", initem.name(), opkernel->def().input(i));
-            return {};
-        }
 
         TensorValue input;
         tensorflow::AllocatorAttributes inattrs;
         tensorflow::DeviceContext *incontext = nullptr;
+
         if (initem.has_value()) {
+            if (initem.name() != opkernel->def().input(i)) {
+                ERR("Mismatch input: {}, expected: {}", initem.name(), opkernel->def().input(i));
+                return {};
+            }
+
             TensorItem *output = nullptr;
             if (!findTensorFromName(initem.name(), &output)) {
                 ERR("Input not found");
