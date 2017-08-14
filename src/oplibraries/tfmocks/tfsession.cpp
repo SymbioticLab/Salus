@@ -549,108 +549,113 @@ std::shared_ptr<TFContext> TFSession::createContext(const executor::TFOpContextD
             ERR("Mismatch input: {}, expected: {}", initem.name(), opkernel->def().input(i));
             return {};
         }
-        TensorItem *output = nullptr;
-        if (!findTensorFromName(initem.name(), &output)) {
-            ERR("Input not found");
-            return {};
-        }
 
-        TensorValue input = output->val;
-        auto inattrs = output->allocAttr();
-        auto incontext = output->context;
-
-        // Handle every combination of input and op types
-        // ----------------------------------------------
-        //    Output   |   Op   |   Device   |   Result   |
-        //     ref       noref      same         deref
-        //    noref      noref      same        maycopy
-        //     ref        ref       same        nothing
-        //    noref       ref       same         reject
-        //     ref       noref      diff        devcopy
-        //    noref      noref      diff        devcopy
-        //     ref        ref       diff         reject
-        //    noref       ref       diff         reject
-
-        if (initem.is_ref() && !output->val.is_ref()) {
-            ERR("{}-th input expects a ref type", i);
-            return {};
-        } else if (initem.is_ref() && output->val.is_ref()) {
-            if (device != output->device) {
-                ERR("Operation {} expects an reference, but input[{}] {} is on different device.",
-                    opkernel->name(), i, initem.name());
+        TensorValue input;
+        tensorflow::AllocatorAttributes inattrs;
+        tensorflow::DeviceContext *incontext = nullptr;
+        if (initem.has_value()) {
+            TensorItem *output = nullptr;
+            if (!findTensorFromName(initem.name(), &output)) {
+                ERR("Input not found");
                 return {};
             }
-        }
 
-        if (!initem.is_ref()) {
-            tensorflow::AllocatorAttributes expected;
-            if (opkernel->input_memory_types()[i] == tensorflow::HOST_MEMORY) {
-                expected.set_on_host(true);
-            }
-            if (!onSameDevice(device, expected, output->device, inattrs)) {
-                // Operation and input on different device,
-                // do a copy tensor to ensure input tensor is on the same device
-                tfctx->deref_tensors.emplace_back(device->GetAllocator(expected), output->val->dtype(),
-                                                  output->val->shape());
-                auto &copy = tfctx->deref_tensors.back();
+            input = output->val;
+            inattrs = output->allocAttr();
+            incontext = output->context;
 
-                tensorflow::Notification n;
-                tensorflow::Status ok;
-                INFO("Copying from device {} to device {} to prepare {}-th input {} for op {}. "
-                     " target tensor object addr: {:x}",
-                     output->device->name(), device->name(), i, initem.name(), opkernel->name(),
-                     reinterpret_cast<uint64_t>(&copy));
+            // Handle every combination of input and op types
+            // ----------------------------------------------
+            //    Output   |   Op   |   Device   |   Result   |
+            //     ref       noref      same         deref
+            //    noref      noref      same        maycopy
+            //     ref        ref       same        nothing
+            //    noref       ref       same         reject
+            //     ref       noref      diff        devcopy
+            //    noref      noref      diff        devcopy
+            //     ref        ref       diff         reject
+            //    noref       ref       diff         reject
 
-                auto dstDevCtx = tfctx->ctx()->op_device_context();
-                INFO("Src dev context {}, dst dev context {}", as_hex(output->context), as_hex(dstDevCtx));
-
-                tensorflow::CopyTensor::ViaDMA(initem.name(), output->context, dstDevCtx, output->device,
-                                               device, inattrs, expected, output->val.tensor, &copy,
-                                               [&n, &ok](auto status) {
-                                                   ok = status;
-                                                   n.Notify();
-                                               });
-                n.WaitForNotification();
-
-                if (!ok.ok()) {
-                    ERR("Copying from device {} to device {} failed when preparing {}-th input {} "
-                        "for op {}: {}",
-                        output->device->name(), device->name(), i, initem.name(), opkernel->name(), ok);
+            if (initem.is_ref() && !output->val.is_ref()) {
+                ERR("{}-th input expects a ref type", i);
+                return {};
+            } else if (initem.is_ref() && output->val.is_ref()) {
+                if (device != output->device) {
+                    ERR("Operation {} expects an reference, but input[{}] {} is on different device.",
+                        opkernel->name(), i, initem.name());
+                    return {};
                 }
+            }
 
-                input = {nullptr, &copy};
-                inattrs = expected;
-                incontext = dstDevCtx;
-            } else if (output->val.is_ref()) {
-                // Automatically deref the tensor ref when the op expects a
-                // tensor but is given a ref to a tensor. Need to deref it
-                // under the mutex.
-                INFO("Auto deref tensor: {}", output->val);
-                MaybeLock l(output->val);
-                tfctx->deref_tensors.emplace_back(*output->val.tensor);
-                auto &t = tfctx->deref_tensors.back();
-                input = {nullptr, &t};
-            } else {
-                // Check if we need a copy for non ref case. This is important as op kernels checks
-                // if ref on the tensor is one to decide whether to reuse the input.
-                // This copy is cheap because internally a tensor is ref counted.
-                auto pending = output->pendingUsage.fetch_sub(1);
-                pending -= 1;
-                if (pending != 0) {
-                    INFO("Input {} still have {} potential user(s)", initem.name(), pending);
-                    // we need the copy as there's other op that may use this
+            if (!initem.is_ref()) {
+                tensorflow::AllocatorAttributes expected;
+                if (opkernel->input_memory_types()[i] == tensorflow::HOST_MEMORY) {
+                    expected.set_on_host(true);
+                }
+                if (!onSameDevice(device, expected, output->device, inattrs)) {
+                    // Operation and input on different device,
+                    // do a copy tensor to ensure input tensor is on the same device
+                    tfctx->deref_tensors.emplace_back(device->GetAllocator(expected), output->val->dtype(),
+                                                    output->val->shape());
+                    auto &copy = tfctx->deref_tensors.back();
+
+                    tensorflow::Notification n;
+                    tensorflow::Status ok;
+                    INFO("Copying from device {} to device {} to prepare {}-th input {} for op {}. "
+                        " target tensor object addr: {:x}",
+                        output->device->name(), device->name(), i, initem.name(), opkernel->name(),
+                        reinterpret_cast<uint64_t>(&copy));
+
+                    auto dstDevCtx = tfctx->ctx()->op_device_context();
+                    INFO("Src dev context {}, dst dev context {}", as_hex(output->context), as_hex(dstDevCtx));
+
+                    tensorflow::CopyTensor::ViaDMA(initem.name(), output->context, dstDevCtx, output->device,
+                                                device, inattrs, expected, output->val.tensor, &copy,
+                                                [&n, &ok](auto status) {
+                                                    ok = status;
+                                                    n.Notify();
+                                                });
+                    n.WaitForNotification();
+
+                    if (!ok.ok()) {
+                        ERR("Copying from device {} to device {} failed when preparing {}-th input {} "
+                            "for op {}: {}",
+                            output->device->name(), device->name(), i, initem.name(), opkernel->name(), ok);
+                    }
+
+                    input = {nullptr, &copy};
+                    inattrs = expected;
+                    incontext = dstDevCtx;
+                } else if (output->val.is_ref()) {
+                    // Automatically deref the tensor ref when the op expects a
+                    // tensor but is given a ref to a tensor. Need to deref it
+                    // under the mutex.
+                    INFO("Auto deref tensor: {}", output->val);
+                    MaybeLock l(output->val);
                     tfctx->deref_tensors.emplace_back(*output->val.tensor);
                     auto &t = tfctx->deref_tensors.back();
                     input = {nullptr, &t};
                 } else {
-                    INFO("Input {} will be unregistered since this is the last user", initem.name());
-                    // no need for the copy, this is the last one.
-                    // And we can remove it from our registration
-                    unregisterTensor(initem.name());
+                    // Check if we need a copy for non ref case. This is important as op kernels checks
+                    // if ref on the tensor is one to decide whether to reuse the input.
+                    // This copy is cheap because internally a tensor is ref counted.
+                    auto pending = output->pendingUsage.fetch_sub(1);
+                    pending -= 1;
+                    if (pending != 0) {
+                        INFO("Input {} still have {} potential user(s)", initem.name(), pending);
+                        // we need the copy as there's other op that may use this
+                        tfctx->deref_tensors.emplace_back(*output->val.tensor);
+                        auto &t = tfctx->deref_tensors.back();
+                        input = {nullptr, &t};
+                    } else {
+                        INFO("Input {} will be unregistered since this is the last user", initem.name());
+                        // no need for the copy, this is the last one.
+                        // And we can remove it from our registration
+                        unregisterTensor(initem.name());
+                    }
                 }
             }
         }
-
         tfctx->input_alloc_attrs.push_back(inattrs);
         tfctx->input_device_contexts.push_back(incontext);
         tfctx->inputs.push_back(input);

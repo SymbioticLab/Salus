@@ -146,13 +146,18 @@ std::ostream &operator<<(std::ostream &os, const tensorflow::AllocationAttribute
 
 std::ostream &operator<<(std::ostream &os, const tensorflow::TensorValue &c)
 {
-    os << "TensorValue(shape: " << c->shape().DebugString()
-       << ", is ref: " << c.is_ref();
-    if (c.is_ref()) {
-        os << " (mutex: " << as_hex(c.mutex_if_ref) << ")";
+    os << "TensorValue(";
+    if (c.tensor) {
+        os << "shape: " << c->shape().DebugString()
+           << ", is ref: " << c.is_ref();
+        if (c.is_ref()) {
+            os << " (mutex: " << as_hex(c.mutex_if_ref) << ")";
+        }
+        os << ", buffer: " << as_hex(c->tensor_data().data());
+    } else {
+        os << "<empty>";
     }
-    os << ", buffer: " << as_hex(c->tensor_data().data())
-       << ")";
+    os << ")";
     return os;
 }
 
