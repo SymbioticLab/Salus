@@ -546,11 +546,15 @@ std::shared_ptr<TFContext> TFSession::createContext(const executor::TFOpContextD
     for (int i = 0; i != num_inputs; ++i) {
         const auto &initem = tfdef.inputs(i);
 
-        TensorValue input;
+        TensorValue input{nullptr, nullptr};
         tensorflow::AllocatorAttributes inattrs;
         tensorflow::DeviceContext *incontext = nullptr;
 
-        if (initem.has_value()) {
+        if (tfdef.is_input_dead()) {
+            tfctx->deref_tensors.emplace_back();
+            auto &t = tfctx->deref_tensors.back();
+            input = {nullptr, &t};
+        } else if (initem.has_value()) {
             TensorItem *output = nullptr;
             if (!findTensorFromName(initem.name(), &output)) {
                 ERR("Input not found");

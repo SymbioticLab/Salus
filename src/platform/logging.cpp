@@ -149,6 +149,7 @@ std::ostream &operator<<(std::ostream &os, const tensorflow::TensorValue &c)
     os << "TensorValue(";
     if (c.tensor) {
         os << "shape: " << c->shape().DebugString()
+           << ", datatype: " << c->dtype()
            << ", is ref: " << c.is_ref();
         if (c.is_ref()) {
             os << " (mutex: " << as_hex(c.mutex_if_ref) << ")";

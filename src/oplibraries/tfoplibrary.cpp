@@ -99,6 +99,7 @@ void dumpOpContext(tensorflow::OpKernelContext *ctx)
     if (!ctx)
         return;
 
+    TRACE("context.is_input_dead() {}", ctx->is_input_dead());
     for (int i = 0; i != ctx->num_inputs(); ++i) {
         TRACE("context.input_alloc_attr({}) {}", i, ctx->input_alloc_attr(i));
     }
@@ -326,7 +327,7 @@ void TFRunTask::runAsync(DoneCallback cb)
     if (pending.size() != 0) {
         auto reqs = std::make_unique<executor::TFRendezRecvRequests>();
         for (auto &elem : pending) {
-            INFO("Found pending recv request: ", elem.first);
+            INFO("Found pending recv request: {}", elem.first);
             reqs->add_key(elem.first);
             reqs->add_allocattributes(elem.second.args.alloc_attrs.value);
 
