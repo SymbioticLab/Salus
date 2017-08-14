@@ -24,6 +24,8 @@ option(WITH_TESTS "Build test suite in default target" OFF)
 
 option(WITH_BUNDLED_SPDLOG "Use bundled spdlog library instead of system provided version" OFF)
 
+option(WITH_BUNDLED_DOCOPT "Use bundled docopt.cpp library instead of system provided version" OFF)
+
 #---------------------------------------------------------------------------------------
 # Find packages
 #---------------------------------------------------------------------------------------
@@ -70,16 +72,31 @@ if(NOT WITH_BUNDLED_SPDLOG)
         message(WARNING "spdlog requested but not found, fallback to use bundled version.")
     endif(NOT spdlog_FOUND)
 endif(NOT WITH_BUNDLED_SPDLOG)
-
 if(USE_BUNDLED_SPDLOG)
     include(thirdparty/UseSpdlog.cmake)
 endif(USE_BUNDLED_SPDLOG)
+
+# docopt.cpp
+set(USE_BUNDLED_DOCOPT ${WITH_BUNDLED_DOCOPT})
+if(NOT WITH_BUNDLED_DOCOPT)
+    find_package(docopt QUIET)
+    set_package_properties(docopt PROPERTIES TYPE OPTIONAL PURPOSE "For command line interface")
+    if(NOT docopt_FOUND)
+        ## fallback to bundled spdlog
+        set(USE_BUNDLED_DOCOPT ON)
+        message(WARNING "docopt.cpp requested but not found, fallback to use bundled version.")
+    endif(NOT docopt_FOUND)
+endif(NOT WITH_BUNDLED_DOCOPT)
+if(USE_BUNDLED_DOCOPT)
+    include(thirdparty/UseDocopt.cmake)
+endif(USE_BUNDLED_DOCOPT)
 
 #---------------------------------------------------------------------------------------
 # Print summary
 #---------------------------------------------------------------------------------------
 add_feature_info(WITH_TENSORFLOW USE_TENSORFLOW "build TensorFlow operation library")
 add_feature_info(WITH_BUNDLED_SPDLOG USE_BUNDLED_SPDLOG "use bundled spdlog library")
+add_feature_info(WITH_BUNDLED_DOCOPT USE_BUNDLED_DOCOPT "use bundled docopt.cpp library")
 add_feature_info(WITH_TESTS WITH_TESTS "build test suite with default target")
 feature_summary(INCLUDE_QUIET_PACKAGES FATAL_ON_MISSING_REQUIRED_PACKAGES WHAT ALL)
 

@@ -42,6 +42,7 @@ target_link_libraries(executor
     ZeroMQ::zmq
     Boost::boost
     q
+    docopt
 )
 
 if(USE_TENSORFLOW)
