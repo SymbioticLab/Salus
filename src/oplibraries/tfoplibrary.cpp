@@ -210,9 +210,17 @@ bool TFRunTask::isAsync()
 bool TFRunTask::prepare(DeviceSpec &dev)
 {
     assert(m_sender);
+    assert(m_exec);
+
+    auto session = m_exec->session();
+    assert(session);
+
+    bool cpu_only = session->sessionOptions().config.zmq_options().sched_cpu_only();
+    if (cpu_only && dev.type != DeviceType::CPU) {
+        return false;
+    }
 
     auto seq = m_sender->sequenceNumber();
-    auto session = m_exec->session();
 
     tensorflow::OpKernel *kernel = nullptr;
     auto ok = session->findOrCreateKernel(m_exec, *m_ndef, kernel, dev);
