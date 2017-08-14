@@ -772,15 +772,20 @@ executor::TFOpContextUpdate TFSession::finalizeContext(TFContext *pContext)
         }
         output_names.push_back(output_name);
         INFO("Processing output: {}", output_name);
+        auto outitem = tfctxupd.add_outputs();
+        outitem->set_name(output_name);
 
         auto out = context->release_output(i);
+        if (!out.tensor) {
+            outitem->set_has_value(false);
+            continue;
+        }
+        outitem->set_has_value(true);
         // Let the session manage the tensor memory
         // The session takes the ownership of tensor in non-ref case
         registerTensorForName(output_name, out, context->op_device_context(),
                               static_cast<tensorflow::Device *>(context->device()), pContext->node_item, i);
 
-        auto outitem = tfctxupd.add_outputs();
-        outitem->set_name(output_name);
         outitem->set_is_ref(out.is_ref());
         auto mval = outitem->mutable_meta();
         auto devCtx = context->op_device_context();

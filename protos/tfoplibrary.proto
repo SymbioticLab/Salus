@@ -73,4 +73,5 @@ message TFTensorItem {
     bool is_ref = 1;
     string name = 2;
     tensorflow.TensorProto meta = 3;
+    bool has_value = 4;
 }
