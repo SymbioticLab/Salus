@@ -1,13 +1,17 @@
 import tensorflow as tf
+import numpy as np
 from timeit import default_timer, timeit
 import sys
 
 config = tf.ConfigProto()
 config.graph_options.optimizer_options.opt_level = tf.OptimizerOptions.L0
 config.graph_options.optimizer_options.do_constant_folding = False
+config.allow_soft_placement = True
 
 def build_graph(x):
-    m = tf.matmul(tf.random_normal((x,x)), tf.random_normal((x,x)))
+    v1 = tf.Variable(tf.random_normal([x, x]), name="v1")
+    v2 = tf.Variable(tf.random_normal([x, x]), name="v2")
+    m = tf.matmul(v1, v2)
     return tf.reduce_sum(m)
 
 def time_on(dev, x, rep = 10):
@@ -17,7 +21,9 @@ def time_on(dev, x, rep = 10):
     with tf.device('/device:' + dev + ':0'):
         op = build_graph(x)
         with tf.Session(config=config) as sess:
-            sess.run(op)  # warm up
+            sess.run(tf.global_variables_initializer())
+            for _ in range(rep):
+                sess.run(op)  # warm up
             st = default_timer()
             for _ in range(rep):
                 sess.run(op)
