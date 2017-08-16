@@ -51,7 +51,7 @@ struct LoggerStaticInitializer
 
         logger->flush_on(spdlog::level::trace);
         logger->set_level(spdlog::level::trace);
-        logger->set_pattern("[%Y-%m-%d %T.%e] [%t] [%n] [%L] %v");
+        logger->set_pattern("[%Y-%m-%d %T.%F] [%t] [%n] [%L] %v");
 //         g3::installCrashHandler();
 //         g3::setDumpStack(false);
     }
