@@ -313,7 +313,7 @@ void TFRunTask::runAsync(DoneCallback cb)
     // because move-only lambda can't be assigned to std::function
     auto done_cb = [done = std::move(cb), pContext = m_context, pSession = m_exec->session()]() mutable
     {
-        INFO("OpKernel->ComputeAsync finished with status {}", pContext->ctx()->status());
+        INFO("OpKernel->ComputeAsync for seq {} finished with status {}", pContext->seq, pContext->ctx()->status());
 
         auto resp = std::make_unique<executor::RunResponse>();
         auto tfupd = pSession->finalizeContext(pContext.get());
