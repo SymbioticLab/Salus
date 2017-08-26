@@ -30,6 +30,7 @@
 #include <memory>
 #include <unordered_map>
 #include <functional>
+#include <mutex>
 
 typedef std::unique_ptr<google::protobuf::Message> ProtoPtr;
 
@@ -68,6 +69,16 @@ public:
 
 using PTask = std::unique_ptr<ITask>;
 
+class AsyncTask : public ITask
+{
+public:
+    ~AsyncTask() override;
+
+    bool isAsync() override { return true; }
+
+    ProtoPtr run() override;
+};
+
 template<typename Fn>
 class LambdaTask : public ITask
 {
@@ -84,9 +95,30 @@ private:
 };
 
 template<typename Fn>
-PTask make_lambda_task(Fn fn)
+PTask make_lambda_task(Fn&& fn)
 {
     return std::make_unique<LambdaTask<Fn>>(std::move(fn));
+}
+
+template<typename Fn>
+class AsyncLambdaTask : public AsyncTask
+{
+public:
+    explicit AsyncLambdaTask(Fn &&fn) : m_fn(std::move(fn)) {}
+
+    void runAsync(DoneCallback cb) override
+    {
+        m_fn(std::move(cb));
+    }
+
+private:
+    Fn m_fn;
+};
+
+template<typename Fn>
+PTask make_async_lambda_task(Fn&& fn)
+{
+    return std::make_unique<AsyncLambdaTask<Fn>>(std::move(fn));
 }
 
 /**
@@ -121,9 +153,10 @@ public:
 
     struct Register
     {
-        Register(executor::OpLibraryType libraryType, std::unique_ptr<IOpLibrary> &&library);
+        Register(executor::OpLibraryType libraryType, std::unique_ptr<IOpLibrary> &&library, int priority = 50);
     };
-    void registerOpLibrary(executor::OpLibraryType libraryType, std::unique_ptr<IOpLibrary> &&library);
+    void registerOpLibrary(executor::OpLibraryType libraryType, std::unique_ptr<IOpLibrary> &&library,
+                           int priority);
 
     IOpLibrary *findOpLibrary(const executor::OpLibraryType libraryType) const;
     IOpLibrary *findSuitableOpLibrary(const executor::OpKernelDef &opdef) const;
@@ -131,10 +164,13 @@ public:
     static OpLibraryRegistary &instance();
 
 private:
-    std::unordered_map<executor::OpLibraryType, std::unique_ptr<IOpLibrary>> m_opLibraries;
+    struct LibraryItem
+    {
+        std::unique_ptr<IOpLibrary> library;
+        int priority;
+    };
+    mutable std::mutex m_mu;
+    std::unordered_map<executor::OpLibraryType, LibraryItem> m_opLibraries;
 };
-
-#define REGISTER_OPLIBRARY(type, name) \
-    OpLibraryRegistary::Register name ## register ((type), std::make_unique<name>())
 
 #endif // IOPLIBRARY_H

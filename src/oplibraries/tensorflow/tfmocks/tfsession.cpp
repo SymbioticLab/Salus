@@ -23,7 +23,7 @@
 #include "tfrendezvous.h"
 
 #include "memorymgr/memorymgr.h"
-#include "oplibraries/tfoplibrary.h"
+#include "oplibraries/tensorflow/tfoplibrary.h"
 #include "platform/logging.h"
 #include "utils/macros.h"
 #include "utils/threadutils.h"

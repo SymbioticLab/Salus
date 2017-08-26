@@ -16,6 +16,7 @@ set(SRC_LIST
     "utils/stringutils.cpp"
     "utils/threadutils.cpp"
     "utils/envutils.cpp"
+    "utils/zmqutils.cpp"
 
     "executor.cpp"
 )
@@ -24,11 +25,12 @@ add_subdirectory(platform)
 
 if(USE_TENSORFLOW)
     list(APPEND SRC_LIST
-        "oplibraries/tfoplibrary.cpp"
-        "oplibraries/tfmocks/tfdevice.cpp"
-        "oplibraries/tfmocks/tfallocator.cpp"
-        "oplibraries/tfmocks/tfsession.cpp"
-        "oplibraries/tfmocks/tfrendezvous.cpp"
+        "oplibraries/tensorflow/tfoplibraryv2.cpp"
+#         "oplibraries/tensorflow/tfoplibrary.cpp"
+#         "oplibraries/tensorflow/tfmocks/tfdevice.cpp"
+#         "oplibraries/tensorflow/tfmocks/tfallocator.cpp"
+#         "oplibraries/tensorflow/tfmocks/tfsession.cpp"
+#         "oplibraries/tensorflow/tfmocks/tfrendezvous.cpp"
     )
 endif(USE_TENSORFLOW)
 
@@ -47,6 +49,6 @@ target_link_libraries(executor
 
 if(USE_TENSORFLOW)
     target_link_libraries(executor
-        tensorflow::kernels
+        tensorflow::all
     )
 endif(USE_TENSORFLOW)

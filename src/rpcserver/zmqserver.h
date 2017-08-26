@@ -21,8 +21,9 @@
 #define ZMQSERVER_H
 
 #include "utils/protoutils.h"
+#include "utils/zmqutils.h"
 
-#include "zmq.hpp"
+#include <zmq.hpp>
 
 #include <boost/lockfree/queue.hpp>
 
@@ -31,30 +32,10 @@
 #include <thread>
 #include <list>
 
+using utils::MultiPartMessage;
+
 class RpcServerCore;
 class ServerWorker;
-
-class MultiPartMessage
-{
-public:
-    MultiPartMessage();
-    MultiPartMessage(MultiPartMessage &&other);
-    MultiPartMessage(std::vector<zmq::message_t> *ptr);
-    MultiPartMessage(const MultiPartMessage&) = delete;
-
-    MultiPartMessage &operator=(MultiPartMessage &&other);
-    MultiPartMessage &operator=(const MultiPartMessage&) = delete;
-
-    MultiPartMessage &merge(MultiPartMessage &&other);
-    MultiPartMessage clone();
-
-    std::vector<zmq::message_t> *release();
-
-    std::vector<zmq::message_t> *operator->();
-
-private:
-    std::vector<zmq::message_t> m_parts;
-};
 
 /**
  * @todo write docs
@@ -82,6 +63,7 @@ public:
         SenderImpl(ZmqServer &server, uint64_t seq, MultiPartMessage &&m_identities);
 
         void sendMessage(ProtoPtr &&msg);
+        void sendMessage(const std::string &typeName, MultiPartMessage &&msg);
 
         uint64_t sequenceNumber() const;
 

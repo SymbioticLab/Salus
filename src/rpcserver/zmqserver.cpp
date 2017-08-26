@@ -31,56 +31,6 @@
 
 using namespace std::literals::chrono_literals;
 
-MultiPartMessage::MultiPartMessage() { }
-
-MultiPartMessage::MultiPartMessage(MultiPartMessage &&other)
-    : m_parts(std::move(other.m_parts))
-{
-}
-MultiPartMessage::MultiPartMessage(std::vector<zmq::message_t> *ptr)
-    : m_parts(std::move(*ptr))
-{
-}
-
-MultiPartMessage &MultiPartMessage::operator=(MultiPartMessage &&other)
-{
-    m_parts = std::move(other.m_parts);
-    return *this;
-}
-
-MultiPartMessage &MultiPartMessage::merge(MultiPartMessage &&other)
-{
-    if (m_parts.empty()) {
-        m_parts = std::move(other.m_parts);
-    } else {
-        m_parts.reserve(m_parts.size() + other.m_parts.size());
-        std::move(std::begin(other.m_parts), std::end(other.m_parts), std::back_inserter(m_parts));
-        other.m_parts.clear();
-    }
-    return *this;
-}
-
-MultiPartMessage MultiPartMessage::clone()
-{
-    MultiPartMessage mpm;
-    for (auto &m : m_parts) {
-        mpm->emplace_back();
-        mpm->back().copy(&m);
-    }
-    return mpm;
-}
-
-std::vector<zmq::message_t> *MultiPartMessage::release()
-{
-    auto ptr = new std::vector<zmq::message_t>(std::move(m_parts));
-    return ptr;
-}
-
-std::vector<zmq::message_t> *MultiPartMessage::operator->()
-{
-    return &m_parts;
-}
-
 ZmqServer::ZmqServer(std::unique_ptr<RpcServerCore> &&logic)
     : m_zmqCtx(1)
     , m_keepRunning(false)
@@ -258,6 +208,8 @@ void ZmqServer::dispatch(zmq::socket_t &sock)
             ERR("Skipped one iteration due to no body message part found after identity frames");
             return;
         }
+        // TODO: handle multi-part body, which is used by RecvTensorResponse
+        // though it's doubtable if we will receive this on executor side.
         sock.recv(&body);
         TRACE("Received body frame: {}", body);
     } catch (zmq::error_t &err) {
@@ -308,20 +260,27 @@ ZmqServer::SenderImpl::SenderImpl(ZmqServer &server, uint64_t seq, MultiPartMess
 
 void ZmqServer::SenderImpl::sendMessage(ProtoPtr &&msg)
 {
-    auto parts = m_identities.clone();
+    MultiPartMessage parts;
+    parts->emplace_back(msg->ByteSizeLong());
+    auto &reply = parts->back();
+    msg->SerializeToArray(reply.data(), reply.size());
+    sendMessage(msg->GetTypeName(), std::move(parts));
+}
 
+void ZmqServer::SenderImpl::sendMessage(const std::string &typeName, MultiPartMessage &&msg)
+{
+    auto parts = m_identities.clone();
     // step 4.1. unused parts of evenlop is unset to save a few bytes on the wire,
     executor::EvenlopDef evenlop;
     evenlop.set_seq(m_seq);
-    evenlop.set_type(msg->GetTypeName());
+    evenlop.set_type(typeName);
     parts->emplace_back(evenlop.ByteSizeLong());
     evenlop.SerializeToArray(parts->back().data(), parts->back().size());
 
     // step 4.2. append actual message
-    parts->emplace_back(msg->ByteSizeLong());
-    auto &reply = parts->back();
-    msg->SerializeToArray(reply.data(), reply.size());
-    TRACE("Response proto object have size {} with evenlop {}", reply.size(), evenlop);
+    TRACE("Response proto object have size {} with evenlop {}", msg.totalSize(), evenlop);
+    parts.merge(std::move(msg));
+
     m_server.sendMessage(std::move(parts));
 }
 

@@ -56,18 +56,23 @@ q::promise<ProtoPtr> RpcServerCore::dispatch(ZmqServer::Sender sender, const Eve
 
 #undef ITEM
 
-    assert(funcs.count(evenlop.type()) == 1);
     assert(sender);
 
     INFO("Serving {} for oplibrary {}", evenlop.type(), OpLibraryType_Name(evenlop.oplibrary()));
 
-    auto oplib = OpLibraryRegistary::instance().findOpLibrary(evenlop.oplibrary());
-    if (!oplib) {
-        ERR("Skipping push due to failed to find requested OpLibrary.");
+    auto fit = funcs.find(evenlop.type());
+    if (fit == funcs.end()) {
+        ERR("Skipping request because requested method not found: {}", evenlop.type());
         return ExecutionEngine::instance().emptyPromise<Message>();
     }
 
-    return funcs[evenlop.type()](std::move(sender), oplib, evenlop, request);
+    auto oplib = OpLibraryRegistary::instance().findOpLibrary(evenlop.oplibrary());
+    if (!oplib) {
+        ERR("Skipping due to failed to find requested OpLibrary.");
+        return ExecutionEngine::instance().emptyPromise<Message>();
+    }
+
+    return fit->second(std::move(sender), oplib, evenlop, request);
 }
 
 q::promise<unique_ptr<RunResponse>> RpcServerCore::Run(ZmqServer::Sender &&sender, IOpLibrary *oplib,

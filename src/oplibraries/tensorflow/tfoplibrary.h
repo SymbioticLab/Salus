@@ -20,7 +20,7 @@
 #ifndef TFOPLIBRARY_H
 #define TFOPLIBRARY_H
 
-#include "ioplibrary.h"
+#include "oplibraries/ioplibrary.h"
 
 #include "executor.pb.h"
 #include "tfoplibrary.pb.h"

@@ -112,7 +112,7 @@ void dumpOpContext(tensorflow::OpKernelContext *ctx)
 
 } // namespace
 
-REGISTER_OPLIBRARY(executor::TENSORFLOW, TFOpLibrary);
+OpLibraryRegistary::Register tfoplibrary(executor::TENSORFLOW, std::make_unique<TFOpLibrary>());
 
 TFOpLibrary::~TFOpLibrary() = default;
 

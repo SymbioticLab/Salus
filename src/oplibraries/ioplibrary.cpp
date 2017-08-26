@@ -20,6 +20,7 @@
 #include "ioplibrary.h"
 
 #include "platform/logging.h"
+#include "utils/threadutils.h"
 
 ITask::~ITask() = default;
 
@@ -41,6 +42,20 @@ void ITask::runAsync(DoneCallback cb)
     ERR("Not Implemented");
 }
 
+AsyncTask::~AsyncTask() = default;
+
+ProtoPtr AsyncTask::run()
+{
+    utils::semaphore se;
+    ProtoPtr resp;
+    runAsync([&se, &resp](auto protoptr){
+        resp = std::move(protoptr);
+        se.notify();
+    });
+    se.wait();
+    return resp;
+}
+
 IOpLibrary::~IOpLibrary() = default;
 
 OpLibraryRegistary &OpLibraryRegistary::instance()
@@ -52,32 +67,46 @@ OpLibraryRegistary &OpLibraryRegistary::instance()
 OpLibraryRegistary::OpLibraryRegistary() = default;
 
 OpLibraryRegistary::Register::Register(executor::OpLibraryType libraryType,
-                                       std::unique_ptr<IOpLibrary> &&library)
+                                       std::unique_ptr<IOpLibrary> &&library,
+                                       int priority)
 {
-    OpLibraryRegistary::instance().registerOpLibrary(libraryType, std::move(library));
+    OpLibraryRegistary::instance().registerOpLibrary(libraryType, std::move(library), priority);
 }
 
 void OpLibraryRegistary::registerOpLibrary(executor::OpLibraryType libraryType,
-                                           std::unique_ptr<IOpLibrary> &&library)
+                                           std::unique_ptr<IOpLibrary> &&library, int priority)
 {
-    m_opLibraries[libraryType] = std::move(library);
+    std::lock_guard<std::mutex> guard(m_mu);
+    auto iter = m_opLibraries.find(libraryType);
+    if (iter == m_opLibraries.end()) {
+        m_opLibraries[libraryType] = {std::move(library), priority};
+    } else {
+        if (iter->second.priority < priority) {
+            iter->second = {std::move(library), priority};
+        } else if (iter->second.priority == priority) {
+            FATAL("Duplicate registration of device factory for type {} with the same priority {}",
+                  executor::OpLibraryType_Name(libraryType), priority);
+        }
+    }
 }
 
 IOpLibrary *OpLibraryRegistary::findOpLibrary(const executor::OpLibraryType libraryType) const
 {
-    if (m_opLibraries.count(libraryType) <= 0) {
+    std::lock_guard<std::mutex> guard(m_mu);
+    auto iter = m_opLibraries.find(libraryType);
+    if (iter == m_opLibraries.end()) {
         WARN("No OpLibrary registered under the library type {}",
              executor::OpLibraryType_Name(libraryType));
         return nullptr;
     }
-    return m_opLibraries.at(libraryType).get();
+    return iter->second.library.get();
 }
 
 IOpLibrary * OpLibraryRegistary::findSuitableOpLibrary(const executor::OpKernelDef& opdef) const
 {
     for (const auto &elem : m_opLibraries) {
-        if (elem.first == opdef.oplibrary() && elem.second->accepts(opdef)) {
-            return elem.second.get();
+        if (elem.first == opdef.oplibrary() && elem.second.library->accepts(opdef)) {
+            return elem.second.library.get();
         }
     }
     WARN("No suitable OpLibrary found for {}", opdef);
