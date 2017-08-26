@@ -6,7 +6,7 @@ from timeit import default_timer
 
 import tensorflow as tf
 
-from . import run_on_rpc_and_cpu, run_on_devices
+from . import run_on_rpc_and_cpu, run_on_sessions, run_on_devices
 from . import networks, datasets
 from .lib import tfhelper
 
@@ -111,6 +111,23 @@ class TestVGG19(unittest.TestCase):
 
         actual, expected = run_on_rpc_and_cpu(func)
         self.assertEquals(actual, expected)
+
+    def test_dist(self):
+        def func():
+            def input_data(*a, **kw):
+                return datasets.fake_data(*a, height=224, width=224, num_classes=1000, **kw)
+            sess = tf.get_default_session()
+            return run_vgg19(sess, input_data)
+        run_on_sessions(func, 'grpc://localhost:2222', config=tf.ConfigProto(device_count={'RPC': 0}))
+
+    def test_dist_gpu(self):
+        def func():
+            def input_data(*a, **kw):
+                return datasets.fake_data(*a, height=224, width=224, num_classes=1000, **kw)
+            sess = tf.get_default_session()
+            return run_vgg19(sess, input_data)
+        run_on_devices(func, '/job:local/task:0/device:GPU:0', target='grpc://localhost:2222',
+                       config=tf.ConfigProto(device_count={'RPC': 0}, allow_soft_placement=True))
 
 
 if __name__ == '__main__':

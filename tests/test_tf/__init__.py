@@ -36,7 +36,7 @@ def run_on_devices(func, devices, *args, **kwargs):
 
     results = []
     for d in devices:
-        with sess_and_device(d, **kwargs):
+        with sess_and_device(dev=d, **kwargs):
             res = func()
             results.append(res)
     return tuple(results)
