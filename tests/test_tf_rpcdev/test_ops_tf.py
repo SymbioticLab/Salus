@@ -6,7 +6,7 @@ import numpy as np
 
 from parameterized import parameterized
 
-from . import run_on_rpc_and_cpu, assertAllClose
+from . import run_on_rpc_and_cpu, device_and_sess, assertAllClose
 
 
 class TestBasicOps(unittest.TestCase):
@@ -33,11 +33,9 @@ class TestBasicOps(unittest.TestCase):
         assertAllClose(actual, expected)
 
     def test_noop(self):
-        def func():
+        with device_and_sess('/device:RPC:0') as sess:
             a = tf.no_op(name='mynoop')
-            sess = tf.get_default_session()
             sess.run(a)
-        actual, expected = run_on_rpc_and_cpu(func)
 
     @parameterized.expand([(tf.int8,), (tf.int16,), (tf.int32,), (tf.int64,)])
     def test_multiply_int(self, dtype):

@@ -12,7 +12,7 @@ from .lib import datasets  # NOQA: F401
 # TODO: implement the device selection as a session option.
 # So we can test both CPU and GPU using the same code.
 @contextmanager
-def sess_and_device(target='', dev='', config=None, seed=None):
+def device_and_sess(dev, config=None, seed=None):
     finalCfg = tf.ConfigProto()
     finalCfg.graph_options.optimizer_options.do_constant_folding = False
     finalCfg.graph_options.optimizer_options.opt_level = tf.OptimizerOptions.L0
@@ -26,7 +26,7 @@ def sess_and_device(target='', dev='', config=None, seed=None):
         tf.set_random_seed(seed)
         np.random.seed(seed)
         with tf.device(dev):
-            with tf.Session(target, config=finalCfg) as sess:
+            with tf.Session(config=finalCfg) as sess:
                 yield sess
 
 
@@ -36,26 +36,14 @@ def run_on_devices(func, devices, *args, **kwargs):
 
     results = []
     for d in devices:
-        with sess_and_device(d, **kwargs):
-            res = func()
-            results.append(res)
-    return tuple(results)
-
-
-def run_on_sessions(func, targets, *args, **kwargs):
-    if not isinstance(targets, (list, tuple)):
-        targets = [targets] + list(args)
-
-    results = []
-    for t in targets:
-        with sess_and_device(t, **kwargs):
+        with device_and_sess(d, **kwargs):
             res = func()
             results.append(res)
     return tuple(results)
 
 
 def run_on_rpc_and_cpu(func, **kwargs):
-    return run_on_sessions(func, 'zrpc://tcp://localhost:5501', '', **kwargs)
+    return run_on_devices(func, '/device:RPC:0', '/device:CPU:0', **kwargs)
 
 
 def assertAllClose(actual, expected):
