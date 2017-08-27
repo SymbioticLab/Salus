@@ -33,7 +33,7 @@ def fake_data(batch_size, batch_num, is_train=True, height=256, width=256, num_c
         return images, labels, num_classes
 
 
-def flowers_data(batch_size, batch_num, is_train=True, num_threads=None):
+def flowers_data(batch_size, batch_num, height=256, width=256, is_train=True, num_threads=None):
     """Flowers dataset from Facebook"""
     if num_threads is None:
         num_threads = multiprocessing.cpu_count()
@@ -58,7 +58,7 @@ def flowers_data(batch_size, batch_num, is_train=True, num_threads=None):
         image = tf.to_float(image)
 
         # Resize and crop if needed.
-        resized_image = tf.image.resize_image_with_crop_or_pad(image, 256, 256)
+        resized_image = tf.image.resize_image_with_crop_or_pad(image, height, width)
         tf.image_summary('resized_image', tf.expand_dims(resized_image, 0))
 
         # Subtract off the mean and divide by the variance of the pixels.
