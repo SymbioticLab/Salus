@@ -114,6 +114,7 @@ class TestVGG19(unittest.TestCase):
         actual, expected = run_on_rpc_and_cpu(func)
         self.assertEquals(actual, expected)
 
+    @unittest.skip("Skip distributed runtime")
     def test_dist(self):
         def func():
             def input_data(*a, **kw):
@@ -122,6 +123,7 @@ class TestVGG19(unittest.TestCase):
             return run_vgg19(sess, input_data)
         run_on_sessions(func, 'grpc://localhost:2222')
 
+    @unittest.skip("Skip distributed runtime")
     def test_dist_gpu(self):
         def func():
             def input_data(*a, **kw):
