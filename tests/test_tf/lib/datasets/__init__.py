@@ -53,13 +53,13 @@ def flowers_data(batch_size, batch_num, height=256, width=256, is_train=True, nu
         provider = slim.dataset_data_provider.DatasetDataProvider(dataset, num_readers=num_readers,
                                                                   num_epochs=num_epochs)
         image, label = provider.get(['image', 'label'])
-        tf.image_summary('image', tf.expand_dims(image, 0))
+        tfhelper.image_summary('image', tf.expand_dims(image, 0))
         # Transform the image to floats.
         image = tf.to_float(image)
 
         # Resize and crop if needed.
         resized_image = tf.image.resize_image_with_crop_or_pad(image, height, width)
-        tf.image_summary('resized_image', tf.expand_dims(resized_image, 0))
+        tfhelper.image_summary('resized_image', tf.expand_dims(resized_image, 0))
 
         # Subtract off the mean and divide by the variance of the pixels.
         resized_image = tfhelper.image_standardization(resized_image)

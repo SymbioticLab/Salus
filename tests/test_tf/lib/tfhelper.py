@@ -23,6 +23,13 @@ def global_variables():
         return tf.all_variables()
 
 
+def image_summary(*args, **kwargs):
+    if hasattr(tf.summary, 'image'):
+        return tf.summary.image(*args, **kwargs)
+    else:
+        return tf.image_summary(*args, **kwargs)
+
+
 def scalar_summary(*args, **kwargs):
     if hasattr(tf.summary, 'scalar'):
         return tf.summary.scalar(*args, **kwargs)

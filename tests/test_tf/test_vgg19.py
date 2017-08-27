@@ -107,7 +107,7 @@ class TestVGG19(unittest.TestCase):
     def test_flowers(self):
         def func():
             def input_data(*a, **kw):
-                return datasets.flowers_data(*a, height=224, width=224, num_classes=1000, **kw)
+                return datasets.flowers_data(*a, height=224, width=224, **kw)
             sess = tf.get_default_session()
             return run_vgg19(sess, input_data)
 
