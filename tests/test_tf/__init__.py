@@ -16,6 +16,7 @@ def sess_and_device(target='', dev='', config=None, seed=None):
     finalCfg = tf.ConfigProto()
     finalCfg.graph_options.optimizer_options.do_constant_folding = False
     finalCfg.graph_options.optimizer_options.opt_level = tf.OptimizerOptions.L0
+    finalCfg.device_count['RPC'] = 0
     if config is not None:
         finalCfg.MergeFrom(config)
 

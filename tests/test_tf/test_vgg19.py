@@ -62,8 +62,10 @@ def run_vgg19(sess, input_data):
 
 
 def simple_fake(batch_size, batch_num):
-    image = tf.Variable(tf.random_normal([batch_size, 224, 224, 3], dtype=tf.float32), name='sample_image', trainable=False)
-    label = tf.Variable(tf.random_uniform([batch_size], minval=0, maxval=1000, dtype=tf.int32), name='ground_truth', trainable=False)
+    image = tf.Variable(tf.random_normal([batch_size, 224, 224, 3], dtype=tf.float32),
+                        name='sample_image', trainable=False)
+    label = tf.Variable(tf.random_uniform([batch_size], minval=0, maxval=1000, dtype=tf.int32),
+                        name='ground_truth', trainable=False)
     return image, label, 1000
 
 
@@ -81,7 +83,7 @@ class TestVGG19(unittest.TestCase):
             sess = tf.get_default_session()
             return run_vgg19(sess, input_data)
 
-        run_on_devices(func, '/device:GPU:0', config=tf.ConfigProto(allow_soft_placement=True, device_count={'RPC': 0}))
+        run_on_devices(func, '/device:GPU:0', config=tf.ConfigProto(allow_soft_placement=True))
 
     def test_cpu(self):
         def func():
@@ -118,7 +120,7 @@ class TestVGG19(unittest.TestCase):
                 return datasets.fake_data(*a, height=224, width=224, num_classes=1000, **kw)
             sess = tf.get_default_session()
             return run_vgg19(sess, input_data)
-        run_on_sessions(func, 'grpc://localhost:2222', config=tf.ConfigProto(device_count={'RPC': 0}))
+        run_on_sessions(func, 'grpc://localhost:2222')
 
     def test_dist_gpu(self):
         def func():
@@ -127,7 +129,7 @@ class TestVGG19(unittest.TestCase):
             sess = tf.get_default_session()
             return run_vgg19(sess, input_data)
         run_on_devices(func, '/job:local/task:0/device:GPU:0', target='grpc://localhost:2222',
-                       config=tf.ConfigProto(device_count={'RPC': 0}, allow_soft_placement=True))
+                       config=tf.ConfigProto(allow_soft_placement=True))
 
 
 if __name__ == '__main__':
