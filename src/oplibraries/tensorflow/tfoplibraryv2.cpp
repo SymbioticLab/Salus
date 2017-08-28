@@ -37,10 +37,14 @@ namespace zrpc = executor;
 OpLibraryRegistary::Register tfoplibraryv2(executor::TENSORFLOW, std::make_unique<TFOpLibraryV2>(), 200);
 
 TFOpLibraryV2::TFOpLibraryV2()
+    : m_maxOpenSessions(0)
 {
 }
 
-TFOpLibraryV2::~TFOpLibraryV2() = default;
+TFOpLibraryV2::~TFOpLibraryV2()
+{
+    INFO("Max open sessions: {}", m_maxOpenSessions);
+}
 
 bool TFOpLibraryV2::accepts(const zrpc::OpKernelDef &operation)
 {
@@ -171,15 +175,18 @@ tensorflow::remote::TFOpLibraryProxy * TFOpLibraryV2::getOrCreateProxy(const std
             p.reset();
         }
     }
+    if (m_proxies.size() > m_maxOpenSessions) {
+        m_maxOpenSessions = m_proxies.size();
+    }
     return p.get();
 }
 
-void TFOpLibraryV2::deregisterProxy(const std::string &sessHandle)
+void TFOpLibraryV2::deregisterProxy(const std::string &recvId)
 {
     std::lock_guard<std::mutex> g(m_mu);
-    auto c = m_proxies.erase(sessHandle);
-    if (!c) {
-        WARN("No proxy object found to deregister for sess handle {}", sessHandle);
+    auto c = m_proxies.erase(recvId);
+    if (c == 0) {
+        WARN("No proxy object found to deregister for recvId {}", recvId);
     }
 }
 
