@@ -9,7 +9,7 @@ from timeit import default_timer
 import tensorflow as tf
 from tensorflow.examples.tutorials.mnist import input_data
 
-from . import run_on_rpc_and_cpu, run_on_devices
+from . import run_on_rpc_and_cpu, run_on_devices, assertAllClose
 
 
 def run_mnist_softmax(sess, mnist):
@@ -120,7 +120,7 @@ class TestMnistConv(unittest.TestCase):
             return run_mnist_softmax(sess, mnist)
 
         actual, expected = run_on_rpc_and_cpu(func)
-        self.assertEquals(actual, expected)
+        assertAllClose(actual, expected)
 
     def test_conv(self):
         def func():
@@ -129,7 +129,7 @@ class TestMnistConv(unittest.TestCase):
             return run_mnist_conv(sess, mnist)
 
         actual, expected = run_on_rpc_and_cpu(func)
-        self.assertEquals(actual, expected)
+        assertAllClose(actual, expected)
 
 
 if __name__ == '__main__':
