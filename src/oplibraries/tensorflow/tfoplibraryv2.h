@@ -33,6 +33,10 @@ class TFOpLibraryProxy;
 } // namespace remote
 } // namespace tensorflow
 
+namespace executor {
+class CustomRequest;
+} // namespace executor
+
 /**
  * TFOpLibrary that uses MasterSession internally
  */
@@ -61,13 +65,15 @@ public:
                         const executor::RunRequest &req) override;
 
 private:
-    bool ensureProxyInitialized();
+    using Proxy = tensorflow::remote::TFOpLibraryProxy;
 
-    std::atomic_uint_fast64_t m_sessionSeq;
+    Proxy *getOrCreateProxy(const std::string &recvId);
+    void deregisterProxy(const std::string &recvId);
 
-    std::unique_ptr<tensorflow::remote::TFOpLibraryProxy> m_proxy;
-    bool m_proxyInitialized;
+    void handleCloseSession(const std::string &recvId, Proxy *proxy, const executor::CustomRequest&, ITask::DoneCallback);
+
     std::mutex m_mu;
+    std::unordered_map<std::string, std::unique_ptr<Proxy>> m_proxies;
 };
 
 #endif // TFOPLIBRARYV2_H

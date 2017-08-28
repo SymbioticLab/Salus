@@ -37,8 +37,6 @@ namespace zrpc = executor;
 OpLibraryRegistary::Register tfoplibraryv2(executor::TENSORFLOW, std::make_unique<TFOpLibraryV2>(), 200);
 
 TFOpLibraryV2::TFOpLibraryV2()
-    : m_proxy(std::make_unique<tensorflow::remote::TFOpLibraryProxy>())
-    , m_proxyInitialized(false)
 {
 }
 
@@ -49,36 +47,12 @@ bool TFOpLibraryV2::accepts(const zrpc::OpKernelDef &operation)
     return operation.oplibrary() == zrpc::TENSORFLOW;
 }
 
-bool TFOpLibraryV2::ensureProxyInitialized()
-{
-    std::lock_guard<std::mutex> g(m_mu);
-    if (m_proxyInitialized) {
-        return true;
-    }
-    auto s = m_proxy->init();
-    if (s.ok()) {
-        m_proxyInitialized = true;
-        return true;
-    }
-    ERR("Error when initializing TFOpLibraryProxy: {}", s);
-    return false;
-}
-
-#define INITIALIZE_PROXY_OR_RETURN(ret) \
-    do { \
-        if (!ensureProxyInitialized()) { \
-            return ret; \
-        } \
-    } while (false)
-
 PTask TFOpLibraryV2::createRunGraphTask(ZmqServer::Sender sender, const zrpc::EvenlopDef &evenlop,
                                         const zrpc::RunGraphRequest &request)
 {
     UNUSED(sender);
     UNUSED(evenlop);
     UNUSED(request);
-
-    INITIALIZE_PROXY_OR_RETURN({});
 
     return {};
 }
@@ -90,30 +64,35 @@ PTask TFOpLibraryV2::createRunTask(ZmqServer::Sender sender, const zrpc::Evenlop
     UNUSED(evenlop);
     UNUSED(request);
 
-    INITIALIZE_PROXY_OR_RETURN({});
-
     return {};
 }
 
 PTask TFOpLibraryV2::createCustomTask(ZmqServer::Sender sender, const zrpc::EvenlopDef &evenlop,
                                       const zrpc::CustomRequest &req)
 {
+    auto recvId = evenlop.recvidentity();
+
     // NOTE: this-> is need to workaround a bug in GCC 6.x where member function lookup is broken
     // for generic lambda. See https://gcc.gnu.org/bugzilla/show_bug.cgi?id=61636
-    using Method = std::function<void(ZmqServer::Sender&&, const zrpc::CustomRequest&, ITask::DoneCallback)>;
+    using Method = std::function<void(ZmqServer::Sender&&, Proxy *,
+                                      const zrpc::CustomRequest&, ITask::DoneCallback)>;
 
     static std::unordered_map<std::string, Method> funcs{
 #define HANDLER(name) \
     {"tensorflow." #name "Request", \
-        [this](auto sender, auto creq, auto cb) { \
+        [this](auto sender, auto proxy, auto creq, auto cb) { \
             UNUSED(sender); \
-            auto req = utils::createMessage<tensorflow::name##Request>("tensorflow." #name "Request", creq.extra().data(), creq.extra().size()).release(); \
+            auto req = utils::createMessage<tensorflow::name##Request>("tensorflow." #name "Request", \
+                                                                       creq.extra().data(), \
+                                                                       creq.extra().size()); \
             if (!req) { \
                 ERR("Failed to parse message"); \
                 cb(nullptr); \
+                return; \
             } \
-            m_proxy->Handle##name(req, [cb, req](auto resp, auto status){ \
-                delete req; \
+            auto preq = req.release(); \
+            proxy->Handle##name(preq, [cb, preq](auto resp, auto status){ \
+                delete preq; \
                 auto cresp = std::make_unique<zrpc::CustomResponse>(); \
                 cresp->mutable_result()->set_code(status.code()); \
                 cresp->mutable_result()->set_message(status.error_message()); \
@@ -126,25 +105,41 @@ PTask TFOpLibraryV2::createCustomTask(ZmqServer::Sender sender, const zrpc::Even
         } \
     },
 
-        CallWithMasterMethodName(HANDLER)
-        CallWithWorkerMethodName(HANDLER)
+        HANDLER(CreateSession)
+        HANDLER(ExtendSession)
+        HANDLER(PartialRunSetup)
         HANDLER(RunStep)
+//         HANDLER(CloseSession)
+        HANDLER(ListDevices)
+        HANDLER(Reset)
+
+        CallWithWorkerMethodName(HANDLER)
         HANDLER(RunGraph)
 #undef HANDLER
 
-        {"tensorflow.RecvTensorRequest", [this](auto sender, auto creq, auto cb) {
-            auto req = utils::createMessage<tensorflow::RecvTensorRequest>("tensorflow.RecvTensorRequest", creq.extra().data(), creq.extra().size()).release();
-            m_proxy->HandleRecvTensorRaw(req, [sender, cb, req](auto resp, auto status) {
+        {"tensorflow.RecvTensorRequest", [this](auto sender, auto proxy, auto creq, auto cb) {
+            auto req = utils::createMessage<tensorflow::RecvTensorRequest>("tensorflow.RecvTensorRequest",
+                                                                           creq.extra().data(),
+                                                                           creq.extra().size());
+            if (!req) {
+                ERR("Failed to parse message");
+                cb(nullptr);
+                return;
+            }
+            auto preq = req.release();
+            proxy->HandleRecvTensorRaw(preq, [sender, cb, preq](auto resp, auto status) {
                 UNUSED(status);
                 sender->sendMessage("tensorflow.RecvTensorResponse", MultiPartMessage(resp));
-                delete req;
+                delete preq;
                 delete resp;
                 cb(nullptr);
             });
         }},
+        {"tensorflow.CloseSessionRequest", [this, recvId](auto sender, auto proxy, auto creq, auto cb) {
+            UNUSED(sender);
+            this->handleCloseSession(recvId, proxy, creq, cb);
+        }},
     };
-
-    INITIALIZE_PROXY_OR_RETURN({});
 
     auto it = funcs.find(req.type());
     if (it == funcs.end()) {
@@ -153,7 +148,62 @@ PTask TFOpLibraryV2::createCustomTask(ZmqServer::Sender sender, const zrpc::Even
     }
 
     DEBUG("Dispatching custom task {} of seq {}", it->first, evenlop.seq());
-    return make_async_lambda_task([sender = std::move(sender), req, fn = it->second](auto cb) mutable {
-        fn(std::move(sender), req, cb);
+    return make_async_lambda_task([this,
+                                  recvId,
+                                  sender = std::move(sender),
+                                  req,
+                                  fn = it->second](auto cb) mutable {
+        auto proxy = getOrCreateProxy(recvId);
+        fn(std::move(sender), proxy, req, cb);
+    });
+}
+
+tensorflow::remote::TFOpLibraryProxy * TFOpLibraryV2::getOrCreateProxy(const std::string& recvId)
+{
+    std::lock_guard<std::mutex> g(m_mu);
+    auto &p = m_proxies[recvId];
+    if (!p) {
+        INFO("Creating proxy object for recv id {}", recvId);
+        p = std::make_unique<tensorflow::remote::TFOpLibraryProxy>();
+        auto s = p->init();
+        if (!s.ok()) {
+            ERR("Failed to create a proxy object for recv id {}: {}", recvId, s);
+            p.reset();
+        }
+    }
+    return p.get();
+}
+
+void TFOpLibraryV2::deregisterProxy(const std::string &sessHandle)
+{
+    std::lock_guard<std::mutex> g(m_mu);
+    auto c = m_proxies.erase(sessHandle);
+    if (!c) {
+        WARN("No proxy object found to deregister for sess handle {}", sessHandle);
+    }
+}
+
+void TFOpLibraryV2::handleCloseSession(const std::string &recvId, Proxy *proxy, const executor::CustomRequest &creq, ITask::DoneCallback cb)
+{
+    auto req = utils::createMessage<tensorflow::CloseSessionRequest>("tensorflow.CloseSessionRequest", creq.extra().data(), creq.extra().size());
+    if (!req) {
+        ERR("Failed to parse message");
+        cb(nullptr);
+        return;
+    }
+
+    auto preq = req.release();
+    proxy->HandleCloseSession(preq, [this, recvId, cb, preq](auto resp, auto status) {
+        this->deregisterProxy(recvId);
+        delete preq;
+
+        auto cresp = std::make_unique<zrpc::CustomResponse>();
+        cresp->mutable_result()->set_code(status.code());
+        cresp->mutable_result()->set_message(status.error_message());
+        if (resp && status.ok()) {
+            resp->SerializeToString(cresp->mutable_extra());
+        }
+        delete resp;
+        cb(std::move(cresp));
     });
 }
