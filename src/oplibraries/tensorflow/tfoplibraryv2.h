@@ -75,7 +75,7 @@ private:
     std::mutex m_mu;
     std::unordered_map<std::string, std::unique_ptr<Proxy>> m_proxies;
 
-    int m_maxOpenSessions;
+    size_t m_maxOpenSessions;
 };
 
 #endif // TFOPLIBRARYV2_H
