@@ -22,6 +22,7 @@
 #include "utils/macros.h"
 #include "utils/protoutils.h"
 #include "utils/zmqutils.h"
+#include "oplibraries/tensorflow/tfmocksv2/md_executor.h"
 
 #include "executor.pb.h"
 
@@ -168,7 +169,7 @@ tensorflow::remote::TFOpLibraryProxy * TFOpLibraryV2::getOrCreateProxy(const std
     auto &p = m_proxies[recvId];
     if (!p) {
         INFO("Creating proxy object for recv id {}", recvId);
-        p = std::make_unique<tensorflow::remote::TFOpLibraryProxy>();
+        p = std::make_unique<tensorflow::remote::TFOpLibraryProxy>(NewMultiDeviceExecutor);
         auto s = p->init();
         if (!s.ok()) {
             ERR("Failed to create a proxy object for recv id {}: {}", recvId, s);

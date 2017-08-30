@@ -26,6 +26,7 @@ add_subdirectory(platform)
 if(USE_TENSORFLOW)
     list(APPEND SRC_LIST
         "oplibraries/tensorflow/tfoplibraryv2.cpp"
+        "oplibraries/tensorflow/tfmocksv2/md_executor.cc"
 #         "oplibraries/tensorflow/tfoplibrary.cpp"
 #         "oplibraries/tensorflow/tfmocks/tfdevice.cpp"
 #         "oplibraries/tensorflow/tfmocks/tfallocator.cpp"
