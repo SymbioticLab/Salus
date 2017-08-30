@@ -39,7 +39,7 @@ def run_vgg19(sess, input_data):
     queue_threads = tf.train.start_queue_runners(sess, coord)
     print('{} threads started for queue'.format(len(queue_threads)))
     speeds = []
-    for i in range(1):
+    for i in range(5):
         if coord.should_stop():
             break
         print("Start running step {}".format(i))
