@@ -20,6 +20,7 @@ limitations under the License.
 
 #include <tensorflow/core/framework/op_kernel.h>
 #include <tensorflow/core/framework/function.h>
+#include <tensorflow/core/common_runtime/copy_tensor.h>
 #include <tensorflow/core/common_runtime/executor.h>
 #include <tensorflow/core/common_runtime/device.h>
 #include <tensorflow/core/common_runtime/device_mgr.h>
@@ -196,11 +197,6 @@ public:
     ~ExecutorImpl() override;
 
     tf::Status Initialize();
-
-    // Process all Nodes in the current graph, attempting to infer the
-    // memory allocation attributes to be used wherever they may allocate
-    // a tensor buffer.
-    tf::Status SetAllocAttrs();
 
     void RunAsync(const Args &args, DoneCallback done) override;
 
@@ -571,6 +567,7 @@ private:
         // Every entry carries an optional DeviceContext containing
         // Device-specific information about how the Tensor was produced.
         tf::DeviceContext *device_context = nullptr;
+        tf::Device *device = nullptr;
     };
 
     struct TaggedNode;
@@ -996,7 +993,9 @@ private:
     tf::FunctionLibraryRuntime *FindFunctionLibrary(tf::Device *dev);
 
     // Before invoking item->kernel, fills in its "inputs".
-    tf::Status PrepareInputs(const NodeItem &item, Entry *first_input, TensorValueVec *inputs,
+    tf::Status PrepareInputs(const NodeItem &item, tf::OpKernel *kernel, tf::Device *device,
+                             tf::DeviceContext *device_context,
+                             Entry *first_input, TensorValueVec *inputs,
                              DeviceContextVec *input_device_contexts,
                              AllocatorAttributeVec *input_alloc_attrs, bool *is_input_dead);
 
@@ -1275,7 +1274,8 @@ void ExecutorState::Process(TaggedNode tagged_node, int64_t scheduled_usec)
         } else {
             // Prepares inputs.
             bool is_input_dead = false;
-            s = PrepareInputs(item, first_input, &inputs, &input_device_contexts, &input_alloc_attrs,
+            s = PrepareInputs(item, op_kernel, ditem.device, params.op_device_context,
+                              first_input, &inputs, &input_device_contexts, &input_alloc_attrs,
                               &is_input_dead);
             if (!s.ok()) {
                 // Clear inputs.
@@ -1509,7 +1509,21 @@ tf::FunctionLibraryRuntime *ExecutorState::FindFunctionLibrary(tf::Device *dev)
     return ptr.get();
 }
 
-tf::Status ExecutorState::PrepareInputs(const NodeItem &item, Entry *first_input, TensorValueVec *inputs,
+namespace {
+bool onSameDevice(tensorflow::Device *devA, const tensorflow::AllocatorAttributes &attrA,
+                  tensorflow::Device *devB, const tensorflow::AllocatorAttributes &attrB)
+{
+    if (devA == devB) {
+        return attrA.on_host() == attrB.on_host();
+    } else {
+        return attrA.on_host() && attrB.on_host();
+    }
+}
+} // namespace
+
+tf::Status ExecutorState::PrepareInputs(const NodeItem &item, tf::OpKernel *kernel, tf::Device *device,
+                                        tf::DeviceContext *device_context,
+                                        Entry *first_input, TensorValueVec *inputs,
                                         DeviceContextVec *input_device_contexts,
                                         AllocatorAttributeVec *input_alloc_attrs, bool *is_input_dead)
 {
@@ -1528,8 +1542,6 @@ tf::Status ExecutorState::PrepareInputs(const NodeItem &item, Entry *first_input
     for (int i = 0; i < item.num_inputs; ++i) {
         const bool expect_ref = IsRefType(item.input_type(i));
         Entry *entry = first_input + i;
-        (*input_device_contexts)[i] = entry->device_context;
-        (*input_alloc_attrs)[i] = entry->alloc_attr;
 
         // i-th input.
         auto inp = &(*inputs)[i];
@@ -1547,38 +1559,132 @@ tf::Status ExecutorState::PrepareInputs(const NodeItem &item, Entry *first_input
             }
             continue;
         }
-        if (entry->ref == nullptr) {
-            if (expect_ref) {
-                return AttachDef(tf::errors::InvalidArgument(i, "-th input expects a ref type"),
-                                 node->def());
-            }
-            inp->tensor = entry->val.get();
-        } else {
-            if (!entry->ref->IsInitialized() && !IsInitializationOp(item.node)) {
-                return AttachDef(tf::errors::FailedPrecondition("Attempting to use uninitialized value ",
-                                                            node->def().input(i)),
-                                 node->def());
-            }
-            if (expect_ref) {
-                inp->mutex_if_ref = entry->ref_mu;
-                inp->tensor = entry->ref;
-            } else {
-                // Automatically deref the tensor ref when the op expects a
-                // tensor but is given a ref to a tensor.  Need to deref it
-                // under the mutex.
-                {
-                    tf::mutex_lock l(*(entry->ref_mu));
-                    DCHECK(!entry->val_field_is_set);
-                    entry->val.Init(*entry->ref);
-                    entry->val_field_is_set = true;
-                }
-                entry->ref = nullptr;
-                entry->ref_mu = nullptr;
 
-                inp->tensor = entry->val.get();
+        // Handle every combination of input and op types
+        // ----------------------------------------------
+        //    Entry   |   OpInput   |   Device   |   Result   |
+        // 1  noref         ref          same        reject
+        // 2  noref         ref          diff        reject
+        // 3   ref          ref          diff        reject
+        // 4   ref          ref          same        get ref
+
+        // 5  noref        noref         same        get val
+        // 6   ref         noref         same         deref
+        // 7  noref        noref         diff        devcopy
+        // 8   ref         noref         diff        devcopy
+
+        tensorflow::AllocatorAttributes expected;
+        if (kernel->input_memory_types()[i] == tensorflow::HOST_MEMORY) {
+            expected.set_on_host(true);
+        }
+        bool on_same_device = onSameDevice(entry->device, entry->alloc_attr, device, expected);
+
+        if (expect_ref) {
+            if (entry->ref == nullptr) {
+                // case 1, 2
+                ERR("{}-th input expects a ref type: {}", i, node->def());
+                return AttachDef(tf::errors::InvalidArgument(i, "-th input expects a ref type"),
+                                node->def());
+            }
+
+            if (!on_same_device) {
+                // case 3
+                ERR("Operation {} expects an reference, but input[{}] is on different device.",
+                    kernel->name(), i);
+                return AttachDef(tf::errors::InvalidArgument(i, "-th input got a ref on different device"),
+                                 node->def());
+            }
+            // case 4
+            inp->mutex_if_ref = entry->ref_mu;
+            inp->tensor = entry->ref;
+        } else {
+            if (on_same_device) {
+                if (entry->ref == nullptr) {
+                    // case 5
+                    inp->tensor = entry->val.get();
+                } else {
+                    // case 6
+                    // Automatically deref the tensor ref when the op expects a
+                    // tensor but is given a ref to a tensor.  Need to deref it
+                    // under the mutex.
+                    {
+                        tf::mutex_lock l(*(entry->ref_mu));
+                        DCHECK(!entry->val_field_is_set);
+                        entry->val.Init(*entry->ref);
+                        entry->val_field_is_set = true;
+                    }
+                    entry->ref = nullptr;
+                    entry->ref_mu = nullptr;
+
+                    inp->tensor = entry->val.get();
+                }
+            } else {
+                // case 7, 8
+                // Operation and input on different device,
+                // do a copy tensor to ensure input tensor is on the same device
+                tf::DataType dtype;
+                tf::TensorShape shape;
+                if (entry->ref) {
+                    tf::mutex_lock l(*(entry->ref_mu));
+                    dtype = entry->ref->dtype();
+                    shape = entry->ref->shape();
+                } else {
+                    dtype = entry->val.get()->dtype();
+                    shape = entry->val.get()->shape();
+                }
+                tf::Tensor copy(device->GetAllocator(expected), dtype, shape);
+
+                tf::Notification n;
+                INFO("Copying from device {} to device {} to prepare {}-th input for op {}. "
+                    " target tensor buffer addr: {:x}",
+                    entry->device->name(), device->name(), i, kernel->name(),
+                    as_hex(copy.tensor_data().data()));
+
+                tf::Status ok;
+                auto dstDevCtx = device_context;
+                if (!dstDevCtx) {
+                    // Copied from OpKernelContext::op_device_context
+                    auto* dev_info = device->tensorflow_gpu_device_info();
+                    if (dev_info) dstDevCtx = dev_info->default_context;
+                }
+                INFO("Src dev context {}, dst dev context {}",
+                        as_hex(entry->device_context), as_hex(dstDevCtx));
+
+                auto srctensor = entry->val.get();
+                if (entry->ref) {
+                    srctensor = entry->ref;
+                    entry->ref_mu->lock();
+                }
+                tf::CopyTensor::ViaDMA(tf::strings::StrCat(i, "-th input of ", kernel->name()),
+                                       entry->device_context, dstDevCtx,
+                                       entry->device, device, entry->alloc_attr,
+                                       expected, srctensor, &copy,
+                                       [&n, &ok, &entry](auto status) {
+                                            if (entry->ref) {
+                                                entry->ref_mu->unlock();
+                                            }
+                                            ok = status;
+                                            n.Notify();
+                                       });
+                n.WaitForNotification();
+
+                if (!ok.ok()) {
+                    ERR("Copying from device {} to device {} failed when preparing {}-th input "
+                        "for op {}: {}",
+                        entry->device->name(), device->name(), i, kernel->name(), ok);
+                    return ok;
+                }
+
+                *inp = {nullptr, &copy};
+                entry->alloc_attr = expected;
+                entry->device_context = dstDevCtx;
             }
         }
-    }
+
+        (*input_device_contexts)[i] = entry->device_context;
+        (*input_alloc_attrs)[i] = entry->alloc_attr;
+
+    } // for (int i = 0; i < item.num_inputs; ++i) {
     return tf::Status::OK();
 }
 
