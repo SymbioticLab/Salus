@@ -26,6 +26,7 @@ limitations under the License.
 #include <tensorflow/core/common_runtime/pending_counts.h>
 #include <tensorflow/core/common_runtime/step_stats_collector.h>
 #include <tensorflow/core/distributed_runtime/zrpc/exechelper/graphview.h>
+#include <tensorflow/core/distributed_runtime/zrpc/exechelper/mdgraphmgr.h>
 #include <tensorflow/core/lib/gtl/flatmap.h>
 #include <tensorflow/core/lib/gtl/flatset.h>
 #include <tensorflow/core/lib/gtl/manual_constructor.h>
@@ -190,7 +191,7 @@ bool SetTimelineLabel(tf::NodeExecStats *node_stats, const tf::Node* node)
 class ExecutorImpl : public tf::Executor
 {
 public:
-    ExecutorImpl(const MultiDeviceExecutorParams &p, const tf::Graph *g);
+    ExecutorImpl(const tf::MultiDeviceExecutorParams &p, const tf::Graph *g);
 
     ~ExecutorImpl() override;
 
@@ -252,7 +253,7 @@ private:
     }
 
     // Owned.
-    MultiDeviceExecutorParams params_;
+    tf::MultiDeviceExecutorParams params_;
     const tf::Graph *graph_;
     GraphView gview_;
 
@@ -270,7 +271,7 @@ private:
     TF_DISALLOW_COPY_AND_ASSIGN(ExecutorImpl);
 };
 
-tf::Status NewMultiDeviceExecutor(const MultiDeviceExecutorParams &params, const tf::Graph *graph,
+tf::Status NewMultiDeviceExecutor(const tf::MultiDeviceExecutorParams &params, const tf::Graph *graph,
                                   tf::Executor **executor)
 {
     auto impl = new ExecutorImpl(params, graph);
@@ -283,13 +284,13 @@ tf::Status NewMultiDeviceExecutor(const MultiDeviceExecutorParams &params, const
     return s;
 }
 
-ExecutorImpl::ExecutorImpl(const MultiDeviceExecutorParams &p, const tf::Graph *g)
+ExecutorImpl::ExecutorImpl(const tf::MultiDeviceExecutorParams &p, const tf::Graph *g)
     : params_(p)
     , graph_(g)
     , gview_()
 {
+    CHECK(p.find_kernel != nullptr);
     CHECK(p.create_kernel != nullptr);
-    CHECK(p.delete_kernel != nullptr);
 }
 
 ExecutorImpl::~ExecutorImpl()
@@ -1437,7 +1438,7 @@ tf::Status ExecutorState::SetupKernel(TaggedNode node, const DeviceItem &ditem, 
 
     INFO("Creating a kernel for device: {}", ditem.device->name());
     auto fruntime = FindFunctionLibrary(ditem.device);
-    ok = impl_->params_.create_kernel(ndef, fruntime, &kernel);
+    ok = impl_->params_.create_kernel(ndef, ditem.device, fruntime, &kernel);
     if (!ok.ok()) {
         *op_kernel = nullptr;
         ok = AttachDef(ok, ndef);
@@ -1465,7 +1466,6 @@ tf::Status ExecutorState::LookupDevice(const DeviceSpec &spec, DeviceItem &item)
     }
     name += std::to_string(spec.id);
 
-    tensorflow::Device *device = nullptr;
     auto ok = impl_->params_.deviceMgr->LookupDevice(name, &item.device);
     if (!ok.ok()) {
         ERR("Cannot find device for {}: {}", spec, ok);
