@@ -1598,43 +1598,39 @@ tf::Status ExecutorState::PrepareInputs(const NodeItem &item, tf::OpKernel *kern
             inp->mutex_if_ref = entry->ref_mu;
             inp->tensor = entry->ref;
         } else {
-            if (on_same_device) {
-                if (entry->ref == nullptr) {
-                    // case 5
-                    inp->tensor = entry->val.get();
-                } else {
-                    // case 6
-                    // Automatically deref the tensor ref when the op expects a
-                    // tensor but is given a ref to a tensor.  Need to deref it
-                    // under the mutex.
-                    {
-                        tf::mutex_lock l(*(entry->ref_mu));
-                        DCHECK(!entry->val_field_is_set);
-                        entry->val.Init(*entry->ref);
-                        entry->val_field_is_set = true;
-                    }
-                    entry->ref = nullptr;
-                    entry->ref_mu = nullptr;
-
-                    inp->tensor = entry->val.get();
-                }
+            if (entry->ref == nullptr) {
+                // case 5
+                inp->tensor = entry->val.get();
             } else {
+                if (!entry->ref->IsInitialized() && !IsInitializationOp(item.node)) {
+                    return AttachDef(
+                        tf::errors::FailedPrecondition("Attempting to use uninitialized value ",
+                                                       kernel->def().input(i)),
+                                     kernel->def());
+                }
+                // case 6
+                // Automatically deref the tensor ref when the op expects a
+                // tensor but is given a ref to a tensor.  Need to deref it
+                // under the mutex.
+                {
+                    tf::mutex_lock l(*(entry->ref_mu));
+                    DCHECK(!entry->val_field_is_set);
+                    entry->val.Init(*entry->ref);
+                    entry->val_field_is_set = true;
+                }
+                entry->ref = nullptr;
+                entry->ref_mu = nullptr;
+
+                inp->tensor = entry->val.get();
+            }
+            if (!on_same_device) {
                 // case 7, 8
                 // Operation and input on different device,
                 // do a copy tensor to ensure input tensor is on the same device
-                tf::DataType dtype;
-                tf::TensorShape shape;
-                if (entry->ref) {
-                    tf::mutex_lock l(*(entry->ref_mu));
-                    dtype = entry->ref->dtype();
-                    shape = entry->ref->shape();
-                } else {
-                    dtype = entry->val.get()->dtype();
-                    shape = entry->val.get()->shape();
-                }
-                tf::Tensor copy(device->GetAllocator(expected), dtype, shape);
+                tf::Tensor copy(device->GetAllocator(expected),
+                                inp->tensor->dtype(),
+                                inp->tensor->shape());
 
-                tf::Notification n;
                 INFO("Copying from device {} to device {} to prepare {}-th input for op {}. "
                     " target tensor buffer addr: {:x}",
                     entry->device->name(), device->name(), i, kernel->name(),
@@ -1650,19 +1646,12 @@ tf::Status ExecutorState::PrepareInputs(const NodeItem &item, tf::OpKernel *kern
                 INFO("Src dev context {}, dst dev context {}",
                         as_hex(entry->device_context), as_hex(dstDevCtx));
 
-                auto srctensor = entry->val.get();
-                if (entry->ref) {
-                    srctensor = entry->ref;
-                    entry->ref_mu->lock();
-                }
+                tf::Notification n;
                 tf::CopyTensor::ViaDMA(tf::strings::StrCat(i, "-th input of ", kernel->name()),
                                        entry->device_context, dstDevCtx,
                                        entry->device, device, entry->alloc_attr,
-                                       expected, srctensor, &copy,
-                                       [&n, &ok, &entry](auto status) {
-                                            if (entry->ref) {
-                                                entry->ref_mu->unlock();
-                                            }
+                                       expected, inp->tensor, &copy,
+                                       [&n, &ok](auto status) {
                                             ok = status;
                                             n.Notify();
                                        });
