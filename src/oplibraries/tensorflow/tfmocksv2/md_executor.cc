@@ -1411,7 +1411,7 @@ tf::Status ExecutorState::SetupKernel(TaggedNode node, const DeviceItem &ditem, 
 
     // First check if we already created the kernel on some device
     tf::OpKernel *kernel = nullptr;
-    tf::Device *device = nullptr;
+    const tf::Device *device = nullptr;
     auto ok = impl_->params_.find_kernel(ndef, &device, &kernel);
 
     if (ok.ok() && kernel) {
