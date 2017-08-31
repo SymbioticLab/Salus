@@ -22,7 +22,7 @@
 #include "utils/macros.h"
 #include "utils/protoutils.h"
 #include "utils/zmqutils.h"
-#include "oplibraries/tensorflow/tfmocksv2/md_executor.h"
+#include "oplibraries/tensorflow/v2/md_executor.h"
 
 #include "executor.pb.h"
 

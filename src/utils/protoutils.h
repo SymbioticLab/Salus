@@ -26,7 +26,7 @@
 
 #include <memory>
 
-typedef std::unique_ptr<::google::protobuf::Message> ProtoPtr;
+using ProtoPtr = std::unique_ptr<::google::protobuf::Message>;
 
 namespace utils {
 /**

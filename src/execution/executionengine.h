@@ -22,7 +22,7 @@
 
 #include "devices.h"
 
-#include "oplibraries/ioplibrary.h"
+#include "execution/itask.h"
 #include "platform/logging.h"
 
 #include <q/lib.hpp>

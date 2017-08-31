@@ -22,40 +22,6 @@
 #include "platform/logging.h"
 #include "utils/threadutils.h"
 
-ITask::~ITask() = default;
-
-bool ITask::prepare(DeviceSpec &dev)
-{
-    UNUSED(dev);
-
-    return true;
-}
-
-bool ITask::isAsync()
-{
-    return false;
-}
-
-void ITask::runAsync(DoneCallback cb)
-{
-    UNUSED(cb);
-    ERR("Not Implemented");
-}
-
-AsyncTask::~AsyncTask() = default;
-
-ProtoPtr AsyncTask::run()
-{
-    utils::semaphore se;
-    ProtoPtr resp;
-    runAsync([&se, &resp](auto protoptr){
-        resp = std::move(protoptr);
-        se.notify();
-    });
-    se.wait();
-    return resp;
-}
-
 IOpLibrary::~IOpLibrary() = default;
 
 OpLibraryRegistary &OpLibraryRegistary::instance()

@@ -7,6 +7,7 @@ set(SRC_LIST
 
     "execution/executionengine.cpp"
     "execution/devices.cpp"
+    "execution/itask.cpp"
 
     "rpcserver/rpcservercore.cpp"
     "rpcserver/zmqserver.cpp"
@@ -26,7 +27,9 @@ add_subdirectory(platform)
 if(USE_TENSORFLOW)
     list(APPEND SRC_LIST
         "oplibraries/tensorflow/tfoplibraryv2.cpp"
-        "oplibraries/tensorflow/tfmocksv2/md_executor.cc"
+        "oplibraries/tensorflow/v2/md_executor.cpp"
+        "oplibraries/tensorflow/v2/exectask.cpp"
+        "oplibraries/tensorflow/v2/md_executor_impl.cpp"
 #         "oplibraries/tensorflow/tfoplibrary.cpp"
 #         "oplibraries/tensorflow/tfmocks/tfdevice.cpp"
 #         "oplibraries/tensorflow/tfmocks/tfallocator.cpp"
