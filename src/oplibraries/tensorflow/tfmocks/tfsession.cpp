@@ -492,7 +492,7 @@ NodeItem *TFExecutionState::prepareNodeItemOnDevice(tensorflow::OpKernel *opkern
 
     auto nodeItem = m_gview->node(node->id());
     nodeItem->kernel = opkernel;
-    auto ok = m_gview->SetAllocAttrForNode(node, d);
+    auto ok = m_gview->SetAllocAttrForNode(node, d, opkernel);
     if (!ok.ok()) {
         ERR("Infering alloc attr for node {} failed: {}", opkernel->name(), ok);
         return nullptr;

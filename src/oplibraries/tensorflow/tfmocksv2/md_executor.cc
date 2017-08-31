@@ -15,7 +15,14 @@ limitations under the License.
 
 #include "md_executor.h"
 
+#include "execution/devices.h"
+#include "platform/logging.h"
+
+#include <tensorflow/core/framework/op_kernel.h>
+#include <tensorflow/core/framework/function.h>
 #include <tensorflow/core/common_runtime/executor.h>
+#include <tensorflow/core/common_runtime/device.h>
+#include <tensorflow/core/common_runtime/device_mgr.h>
 #include <tensorflow/core/common_runtime/pending_counts.h>
 #include <tensorflow/core/common_runtime/step_stats_collector.h>
 #include <tensorflow/core/distributed_runtime/zrpc/exechelper/graphview.h>
@@ -183,7 +190,7 @@ bool SetTimelineLabel(tf::NodeExecStats *node_stats, const tf::Node* node)
 class ExecutorImpl : public tf::Executor
 {
 public:
-    ExecutorImpl(const tf::LocalExecutorParams &p, const tf::Graph *g);
+    ExecutorImpl(const MultiDeviceExecutorParams &p, const tf::Graph *g);
 
     ~ExecutorImpl() override;
 
@@ -245,7 +252,7 @@ private:
     }
 
     // Owned.
-    tf::LocalExecutorParams params_;
+    MultiDeviceExecutorParams params_;
     const tf::Graph *graph_;
     GraphView gview_;
 
@@ -263,7 +270,7 @@ private:
     TF_DISALLOW_COPY_AND_ASSIGN(ExecutorImpl);
 };
 
-tf::Status NewMultiDeviceExecutor(const tf::LocalExecutorParams &params, const tf::Graph *graph,
+tf::Status NewMultiDeviceExecutor(const MultiDeviceExecutorParams &params, const tf::Graph *graph,
                                   tf::Executor **executor)
 {
     auto impl = new ExecutorImpl(params, graph);
@@ -276,7 +283,7 @@ tf::Status NewMultiDeviceExecutor(const tf::LocalExecutorParams &params, const t
     return s;
 }
 
-ExecutorImpl::ExecutorImpl(const tf::LocalExecutorParams &p, const tf::Graph *g)
+ExecutorImpl::ExecutorImpl(const MultiDeviceExecutorParams &p, const tf::Graph *g)
     : params_(p)
     , graph_(g)
     , gview_()
@@ -287,12 +294,6 @@ ExecutorImpl::ExecutorImpl(const tf::LocalExecutorParams &p, const tf::Graph *g)
 
 ExecutorImpl::~ExecutorImpl()
 {
-    for (int i = 0; i < graph_->num_node_ids(); i++) {
-        auto item = gview_.node(i);
-        if (item) {
-            params_.delete_kernel(item->kernel);
-        }
-    }
     for (auto fiter : frame_info_) {
         delete fiter.second;
     }
@@ -332,7 +333,7 @@ tf::Status ExecutorImpl::Initialize()
 
     // Cache this value so we make this virtual function call once, rather
     // that O(# steps * # nodes per step) times.
-    device_record_tensor_accesses_ = params_.device->RequiresRecordingAccessedTensors();
+    //device_record_tensor_accesses_ = params_.device->RequiresRecordingAccessedTensors();
 
     for (auto &it : cf_info.unique_frame_names) {
         EnsureFrameInfo(it)->nodes = new std::vector<const tf::Node *>;
@@ -357,18 +358,9 @@ tf::Status ExecutorImpl::Initialize()
         item->input_start = frame_info->total_inputs;
         frame_info->total_inputs += n->num_inputs();
 
-        // FIXME: defer kernel creation
-        auto s = params_.create_kernel(n->def(), &item->kernel);
-        if (!s.ok()) {
-            item->kernel = nullptr;
-            s = AttachDef(s, n->def());
-            LOG(ERROR) << "Executor failed to create kernel. " << s;
-            return s;
-        }
-
-        CHECK(item->kernel);
-        item->kernel_is_expensive = item->kernel->IsExpensive();
-        item->kernel_is_async = (item->kernel->AsAsync() != nullptr);
+//         item->kernel_is_expensive = item->kernel->IsExpensive();
+        // TODO: Mark all kernel as expensive to put them in our threadpool.
+        item->kernel_is_expensive = true;
         item->is_merge = IsMerge(n);
         item->is_enter = IsEnter(n);
         item->is_exit = IsExit(n);
@@ -397,8 +389,6 @@ tf::Status ExecutorImpl::Initialize()
     // all nodes.
     InitializePending(graph_, cf_info);
 
-    // FIXME: infer alloc attrs after device assignment
-    //     return gview_.SetAllocAttrs(graph_, params_.device);
     return tf::Status::OK();
 }
 
@@ -581,10 +571,6 @@ private:
         // Device-specific information about how the Tensor was produced.
         tf::DeviceContext *device_context = nullptr;
     };
-
-    // Contains a value for [node->id()] for the device context assigned by the
-    // device at the beginning of a step.
-    tf::DeviceContextMap device_context_map_;
 
     struct TaggedNode;
     typedef gtl::InlinedVector<TaggedNode, 8> TaggedNodeSeq;
@@ -942,6 +928,9 @@ private:
     tf::Executor::Args::Runner runner_;
     bool sync_on_finish_;
 
+    // All devices this executor state has used, for sync in finish.
+    std::vector<tf::Device*> used_devices_;
+
     // Owned.
 
     // A flag that is set on error after the frame state has been
@@ -958,6 +947,11 @@ private:
 
     tf::mutex mu_;
     tf::Status status_ GUARDED_BY(mu_);
+
+    // Contains a value for [node->id()] for the device context assigned by the
+    // device at the beginning of a step, for each device
+    std::unordered_map<tf::Device*, tf::DeviceContextMap> m_deviceContextMaps GUARDED_BY(mu_);
+    std::unordered_map<tf::Device*, std::unique_ptr<tensorflow::FunctionLibraryRuntime>> m_fruntimes GUARDED_BY(mu_);
 
     // Mapping from frame name to outstanding frames. A new frame is created
     // at some iteration of an active frame. So the unique key for the new
@@ -986,6 +980,20 @@ private:
     // Process a ready node in current thread.
     void Process(TaggedNode node, int64_t scheduled_usec);
 
+    struct DeviceItem
+    {
+        tf::Device *device = nullptr;
+        tf::FunctionLibraryRuntime *function_library = nullptr;
+        bool device_record_tensor_access = false;
+    };
+    // Instantiate the op kernel for node.
+    tf::Status SetupKernel(TaggedNode node, const DeviceItem &ditem, tf::OpKernel **op_kernel);
+    // Find tf device based on spec.
+    tf::Status LookupDevice(const DeviceSpec &spec, DeviceItem &item);
+    // Find a device context, or return nullptr
+    tf::DeviceContext *FindDeviceContext(size_t id, tf::Device *dev);
+    tf::FunctionLibraryRuntime *FindFunctionLibrary(tf::Device *dev);
+
     // Before invoking item->kernel, fills in its "inputs".
     tf::Status PrepareInputs(const NodeItem &item, Entry *first_input, TensorValueVec *inputs,
                              DeviceContextVec *input_device_contexts,
@@ -1003,7 +1011,8 @@ private:
 
     // "node" just finishes. Takes ownership of "stats". Returns true if
     // execution has completed.
-    bool NodeDone(const tf::Status &s, const tf::Node *node, const TaggedNodeSeq &ready,
+    bool NodeDone(const tf::Status &s, const tf::Node *node, const tf::Device *device,
+                  const TaggedNodeSeq &ready,
                   tf::NodeExecStats *stats, TaggedNodeReadyQueue *inline_ready);
 
     // Schedule all the expensive nodes in 'ready', and put all the inexpensive
@@ -1074,8 +1083,10 @@ ExecutorState::~ExecutorState()
     for (auto name_frame : outstanding_frames_) {
         delete name_frame.second;
     }
-    for (auto it : device_context_map_) {
-        it->Unref();
+    for (auto it : m_deviceContextMaps) {
+        for (auto c : it.second) {
+            c->Unref();
+        }
     }
 }
 
@@ -1083,16 +1094,7 @@ void ExecutorState::RunAsync(tf::Executor::DoneCallback done)
 {
     VLOG(3) << "Executor::RunAsync";
 
-    auto graph = impl_->graph_;
     TaggedNodeSeq ready;
-
-    // Ask the device to fill in the device context map.
-    auto device = impl_->params_.device;
-    tf::Status fill_status = device->FillContextMap(graph, &device_context_map_);
-    if (!fill_status.ok()) {
-        done(fill_status);
-        return;
-    }
 
     // Initialize the ready queue.
     for (const auto *n : impl_->root_nodes_) {
@@ -1171,23 +1173,17 @@ void ExecutorState::Process(TaggedNode tagged_node, int64_t scheduled_usec)
 
     tf::OpKernelContext::Params params;
     params.step_id = step_id_;
-    auto device = impl_->params_.device;
-    params.device = device;
-    params.record_tensor_accesses = impl_->device_record_tensor_accesses_;
     params.rendezvous = rendezvous_;
     params.session_state = session_state_;
     params.tensor_store = tensor_store_;
     params.cancellation_manager = cancellation_manager_;
     params.call_frame = call_frame_;
-    params.function_library = impl_->params_.function_library;
-    params.resource_manager = device->resource_manager();
     params.step_container = step_container_;
     params.inputs = &inputs;
     params.input_device_contexts = &input_device_contexts;
     params.input_alloc_attrs = &input_alloc_attrs;
     params.runner = &runner_;
 
-    tf::Status s;
     tf::NodeExecStats *stats = nullptr;
     EntryVector outputs;
     bool completed = false;
@@ -1202,7 +1198,6 @@ void ExecutorState::Process(TaggedNode tagged_node, int64_t scheduled_usec)
         const NodeItem &item = *gview.node(id);
 
         VLOG(3) << "Get a new node from inline_ready queue";
-
         // TODO(misard) Replace with a finer-grain enabling flag once we
         // add better optional debugging support.
         if (vlog_ && VLOG_IS_ON(1)) {
@@ -1210,10 +1205,43 @@ void ExecutorState::Process(TaggedNode tagged_node, int64_t scheduled_usec)
             input_frame->GetIteration(input_iter)->mark_started(item.pending_id);
         }
 
-        // Set the device_context for this node id, if it exists.
-        if (id < device_context_map_.size()) {
-            params.op_device_context = device_context_map_[id];
+        DeviceItem ditem;
+        // FIXME: connect to execution engine
+        auto s = LookupDevice({}, ditem);
+        if (!s.ok()) {
+            MaybeMarkCompleted(input_frame, input_iter, id);
+            // Continue to process the nodes in 'inline_ready'.
+            completed = NodeDone(s, item.node, ditem.device, ready, stats, &inline_ready);
+            continue;
         }
+
+        // Instantiate kernel
+        tf::OpKernel *op_kernel = nullptr;
+        s = SetupKernel(tagged_node, ditem, &op_kernel);
+        if (!s.ok()) {
+            MaybeMarkCompleted(input_frame, input_iter, id);
+            // Continue to process the nodes in 'inline_ready'.
+            completed = NodeDone(s, item.node, ditem.device, ready, stats, &inline_ready);
+            continue;
+        }
+
+        CHECK(op_kernel);
+        bool kernel_is_async = (op_kernel->AsAsync() != nullptr);
+
+        s = gview.SetAllocAttrForNode(node, ditem.device, op_kernel);
+        if (!s.ok()) {
+            MaybeMarkCompleted(input_frame, input_iter, id);
+            // Continue to process the nodes in 'inline_ready'.
+            completed = NodeDone(s, item.node, ditem.device, ready, stats, &inline_ready);
+            continue;
+        }
+
+        params.device = ditem.device;
+        params.record_tensor_accesses = ditem.device_record_tensor_access;
+        params.function_library = ditem.function_library;
+        params.resource_manager = ditem.device->resource_manager();
+        // Set the device_context for this node id, if it exists.
+        params.op_device_context = FindDeviceContext(id, ditem.device);
 
         params.track_allocations = false;
         stats = nullptr;
@@ -1256,27 +1284,26 @@ void ExecutorState::Process(TaggedNode tagged_node, int64_t scheduled_usec)
                 }
                 MaybeMarkCompleted(input_frame, input_iter, id);
                 // Continue to process the nodes in 'inline_ready'.
-                completed = NodeDone(s, item.node, ready, stats, &inline_ready);
+                completed = NodeDone(s, item.node, ditem.device, ready, stats, &inline_ready);
                 continue;
             }
 
             // Set up compute params.
-            auto op_kernel = item.kernel;
             params.op_kernel = op_kernel;
             params.frame_iter = tf::FrameAndIter(input_frame->frame_id, input_iter);
             params.is_input_dead = is_input_dead;
             params.output_attr_array = item.output_attrs();
 
-            if (item.kernel_is_async) {
+            if (kernel_is_async) {
                 // Asynchronous computes.
                 VLOG(3) << "Launch Async kernel";
-                auto async = item.kernel->AsAsync();
+                auto async = op_kernel->AsAsync();
                 DCHECK(async != nullptr);
                 launched_asynchronously = true;
                 AsyncState *state = new AsyncState(params, tagged_node, &item, first_input, stats);
 
-                auto done = [this, state]() {
-                    auto device = impl_->params_.device;
+                auto done = [this, ditem, state]() {
+                    auto device = ditem.device;
                     auto stats = state->stats;     // Shorthand
                     auto first_input = state->first_input; // Shorthand
 
@@ -1313,21 +1340,21 @@ void ExecutorState::Process(TaggedNode tagged_node, int64_t scheduled_usec)
                         // callee takes ownership of the vector
                         device->ConsumeListOfAccessedTensors(state->ctx.op_device_context(), accessed);
                     }
-                    bool completed = NodeDone(s, state->item->node, ready, stats, nullptr);
+                    bool completed = NodeDone(s, state->item->node, ditem.device, ready, stats, nullptr);
                     delete state;
                     if (completed)
                         Finish();
                 };
                 if (stats)
                     nodestats::SetOpStart(stats);
-                device->ComputeAsync(async, &state->ctx, done);
+                ditem.device->ComputeAsync(async, &state->ctx, done);
             } else {
                 // Synchronous computes.
                 VLOG(3) << "Launch sync kernel";
                 tf::OpKernelContext ctx(&params, item.num_outputs);
                 if (stats)
                     nodestats::SetOpStart(stats);
-                device->Compute(CHECK_NOTNULL(op_kernel), &ctx);
+                ditem.device->Compute(CHECK_NOTNULL(op_kernel), &ctx);
                 if (stats)
                     nodestats::SetOpEnd(stats);
 
@@ -1360,13 +1387,13 @@ void ExecutorState::Process(TaggedNode tagged_node, int64_t scheduled_usec)
                 if (stats)
                     nodestats::SetReferencedTensors(stats, accessed_tensors);
                 // device_context is set above in synchronous computes
-                device->ConsumeListOfAccessedTensors(device_context, accessed_tensors);
+                ditem.device->ConsumeListOfAccessedTensors(device_context, accessed_tensors);
             }
             if (stats) {
                 scheduled_usec = nodestats::NowInUsec();
             }
             // Postprocess.
-            completed = NodeDone(s, item.node, ready, stats, &inline_ready);
+            completed = NodeDone(s, item.node, ditem.device, ready, stats, &inline_ready);
             VLOG(3) << "Postprocess completed: " << completed;
         }
     } // while !inline_ready.empty()
@@ -1375,6 +1402,111 @@ void ExecutorState::Process(TaggedNode tagged_node, int64_t scheduled_usec)
     // This thread of computation is done if completed = true.
     if (completed)
         Finish();
+}
+
+tf::Status ExecutorState::SetupKernel(TaggedNode node, const DeviceItem &ditem, tf::OpKernel **op_kernel)
+{
+    auto &ndef = node.node->def();
+
+    // First check if we already created the kernel on some device
+    tf::OpKernel *kernel = nullptr;
+    tf::Device *device = nullptr;
+    auto ok = impl_->params_.find_kernel(ndef, &device, &kernel);
+
+    if (ok.ok() && kernel) {
+        // we saw this kernel before, check if the device match
+        if (!device) {
+            ERR("We've created the kernel, but don't remember its device: {}", ndef);
+            auto s = tf::errors::Internal("We've created the kernel, but don't remember its device");
+            *op_kernel = nullptr;
+            return AttachDef(s, ndef);
+        }
+        if (device == ditem.device) {
+            // We are on the same device, good.
+            *op_kernel = kernel;
+            return tf::Status::OK();
+        }
+        ERR("Stateful kernel can not be moved: previously created on {}, now requested on {}",
+            device->name(), ditem.device->name());
+        return tf::errors::Internal("Stateful kernel can not be moved: previously created on ",
+                                    device->name(), ", now requested on ", ditem.device->name());
+    } else if (!ok.ok()) {
+        ERR("Failed to create kernel with status {} for NodeDef: {}", ok, ndef);
+        // continue to create the kernel
+    }
+
+    INFO("Creating a kernel for device: {}", ditem.device->name());
+    auto fruntime = FindFunctionLibrary(ditem.device);
+    ok = impl_->params_.create_kernel(ndef, fruntime, &kernel);
+    if (!ok.ok()) {
+        *op_kernel = nullptr;
+        ok = AttachDef(ok, ndef);
+        ERR("Executor failed to create kernel: {}", ok);
+        return ok;
+    }
+    CHECK(kernel);
+    *op_kernel = kernel;
+    return tf::Status::OK();
+}
+
+tf::Status ExecutorState::LookupDevice(const DeviceSpec &spec, DeviceItem &item)
+{
+    std::string name;
+    switch (spec.type) {
+    case DeviceType::CPU:
+        name = "CPU:";
+        break;
+    case DeviceType::GPU:
+        name = "GPU:";
+        break;
+    default:
+        name = "CPU:";
+        break;
+    }
+    name += std::to_string(spec.id);
+
+    tensorflow::Device *device = nullptr;
+    auto ok = impl_->params_.deviceMgr->LookupDevice(name, &item.device);
+    if (!ok.ok()) {
+        ERR("Cannot find device for {}: {}", spec, ok);
+        return ok;
+    }
+    item.function_library = FindFunctionLibrary(item.device);
+    item.device_record_tensor_access = item.device->RequiresRecordingAccessedTensors();
+    return tf::Status::OK();
+}
+
+tf::DeviceContext * ExecutorState::FindDeviceContext(size_t id, tf::Device* device)
+{
+    auto it = m_deviceContextMaps.end();
+    {
+        tensorflow::mutex_lock l(mu_);
+
+        it = m_deviceContextMaps.find(device);
+        if (it == m_deviceContextMaps.end()) {
+            tensorflow::DeviceContextMap contexts;
+            auto ok = device->FillContextMap(impl_->graph_, &contexts);
+            if (!ok.ok()) {
+                ERR("Filling contextmap failed: {}", ok);
+            }
+            std::tie(it, std::ignore) = m_deviceContextMaps.emplace(device, std::move(contexts));
+        }
+    }
+    if (it != m_deviceContextMaps.end() && id < it->second.size()) {
+        return it->second[id];
+    }
+    return nullptr;
+}
+
+tf::FunctionLibraryRuntime *ExecutorState::FindFunctionLibrary(tf::Device *dev)
+{
+    tf::mutex_lock l(mu_);
+
+    auto &ptr = m_fruntimes[dev];
+    if (!ptr) {
+        ptr.reset(impl_->params_.create_fruntime(dev));
+    }
+    return ptr.get();
 }
 
 tf::Status ExecutorState::PrepareInputs(const NodeItem &item, Entry *first_input, TensorValueVec *inputs,
@@ -1418,14 +1550,14 @@ tf::Status ExecutorState::PrepareInputs(const NodeItem &item, Entry *first_input
         if (entry->ref == nullptr) {
             if (expect_ref) {
                 return AttachDef(tf::errors::InvalidArgument(i, "-th input expects a ref type"),
-                                 item.kernel->def());
+                                 node->def());
             }
             inp->tensor = entry->val.get();
         } else {
             if (!entry->ref->IsInitialized() && !IsInitializationOp(item.node)) {
                 return AttachDef(tf::errors::FailedPrecondition("Attempting to use uninitialized value ",
-                                                            item.kernel->def().input(i)),
-                                 item.kernel->def());
+                                                            node->def().input(i)),
+                                 node->def());
             }
             if (expect_ref) {
                 inp->mutex_if_ref = entry->ref_mu;
@@ -1459,7 +1591,7 @@ tf::Status ExecutorState::ProcessOutputs(const NodeItem &item, tf::OpKernelConte
 
     auto s = ctx->status();
     if (!s.ok()) {
-        s = AttachDef(s, item.kernel->def());
+        s = AttachDef(s, node->def());
         // TODO(misard) Replace with a finer-grain enabling flag once we
         // add better optional debugging support.
         if (vlog_ && VLOG_IS_ON(1)) {
@@ -1470,10 +1602,7 @@ tf::Status ExecutorState::ProcessOutputs(const NodeItem &item, tf::OpKernelConte
     }
 
     // Get the device_context for this node id, if it exists.
-    tf::DeviceContext *device_context = nullptr;
-    if (static_cast<size_t>(node->id()) < device_context_map_.size()) {
-        device_context = device_context_map_[node->id()];
-    }
+    tf::DeviceContext *device_context = ctx->op_device_context();
 
     // Experimental: debugger (tfdb) access to intermediate node completion.
     if (item.num_outputs == 0 && impl_->params_.node_outputs_cb != nullptr) {
@@ -1656,14 +1785,15 @@ void ExecutorState::PropagateOutputs(const TaggedNode &tagged_node, const NodeIt
     }
 }
 
-bool ExecutorState::NodeDone(const tf::Status &s, const tf::Node *node, const TaggedNodeSeq &ready,
+bool ExecutorState::NodeDone(const tf::Status &s, const tf::Node *node, const tf::Device *device,
+                             const TaggedNodeSeq &ready,
                              tf::NodeExecStats *stats, TaggedNodeReadyQueue *inline_ready)
 {
     if (stats) {
         nodestats::SetAllEnd(stats);
         if (!nodestats::SetTimelineLabel(stats, node)) {
             // Only record non-transfer nodes.
-            stats_collector_->Save(impl_->params_.device->name(), stats);
+            stats_collector_->Save(device->name(), stats);
         } else {
             delete stats;
         }
@@ -1907,7 +2037,9 @@ void ExecutorState::Finish()
         // devices like GPUs that continue to execute Ops after their Compute
         // methods have completed, this ensures that control is not returned to
         // the user until the step (and its side-effects) has actually completed.
-        status = impl_->params_.device->Sync();
+        for (auto d : used_devices_) {
+            status.Update(d->Sync());
+        }
     }
     VLOG(3) << "ExecutorState about to delete this";
     delete this;
