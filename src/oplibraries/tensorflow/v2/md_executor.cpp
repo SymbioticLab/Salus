@@ -359,7 +359,8 @@ void ExecutorState::Process(TaggedNode tagged_node, int64_t scheduled_usec)
         auto nodeTask = std::make_unique<ExecTask>(this, &se,
                                                    tagged_node, ready, inline_ready, stats, params,
                                                    scheduled_usec, outputs,
-                                                   inputs, input_device_contexts, input_alloc_attrs);
+                                                   inputs, input_device_contexts, input_alloc_attrs,
+                                                   completed);
         ExecutionEngine::instance().enqueue<::google::protobuf::Message>(std::move(nodeTask))
         .fail([&](std::exception_ptr) -> ProtoPtr {
             se.notify();

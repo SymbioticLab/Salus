@@ -31,10 +31,8 @@ ExecTask::ExecTask(ExecutorState *state, utils::semaphore *se,
                    ExecutorState::TaggedNodeReadyQueue &inline_ready,
                    tf::NodeExecStats *stats, tf::OpKernelContext::Params &params,
                    int64_t &scheduled_usec, ExecutorState::EntryVector &outputs,
-             TensorValueVec &inputs,
-             DeviceContextVec &input_device_contexts,
-             AllocatorAttributeVec &input_alloc_attrs
-                  )
+                   TensorValueVec &inputs, DeviceContextVec &input_device_contexts,
+                   AllocatorAttributeVec &input_alloc_attrs, bool &completed)
     : tagged_node(node)
     , ready(ready)
     , inline_ready(inline_ready)
@@ -45,6 +43,7 @@ ExecTask::ExecTask(ExecutorState *state, utils::semaphore *se,
     , inputs(inputs)
     , input_device_contexts(input_device_contexts)
     , input_alloc_attrs(input_alloc_attrs)
+    , completed(completed)
     , m_se(se)
     , m_state(state)
 {

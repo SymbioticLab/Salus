@@ -54,7 +54,8 @@ public:
              ExecutorState::EntryVector &outputs,
              TensorValueVec &inputs,
              DeviceContextVec &input_device_contexts,
-             AllocatorAttributeVec &input_alloc_attrs);
+             AllocatorAttributeVec &input_alloc_attrs,
+             bool &completed);
 
     bool prepare(DeviceSpec &dev) override;
 
@@ -78,10 +79,10 @@ private:
     TensorValueVec &inputs;
     DeviceContextVec &input_device_contexts;
     AllocatorAttributeVec &input_alloc_attrs;
+    bool &completed;
 
     tf::OpKernel *op_kernel;
     bool kernel_is_async;
-    bool completed;
 
     utils::semaphore *m_se;
     ExecutorState *m_state;
