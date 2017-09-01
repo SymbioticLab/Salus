@@ -458,6 +458,9 @@ bool onSameDevice(tensorflow::Device *devA, const tensorflow::AllocatorAttribute
                   tensorflow::Device *devB, const tensorflow::AllocatorAttributes &attrB)
 {
     if (devA == devB) {
+        if (devA->device_type() == tf::DEVICE_CPU) {
+            return true;
+        }
         return attrA.on_host() == attrB.on_host();
     } else {
         return attrA.on_host() && attrB.on_host();
@@ -516,15 +519,15 @@ tf::Status ExecutorState::PrepareInputs(const NodeItem &item, tf::OpKernel *kern
         // 6   ref         noref         same         deref
         // 7  noref        noref         diff        devcopy
         // 8   ref         noref         diff        devcopy
-        TRACE("    Input {}: Entry {}\tOpInput {}\tDevice {} and {}", i,
-              (entry->ref ? "ref": "noref"), (expect_ref ? "ref": "noref"),
-              as_hex(entry->device), as_hex(device));
-
         tensorflow::AllocatorAttributes expected;
         if (kernel->input_memory_types()[i] == tensorflow::HOST_MEMORY) {
             expected.set_on_host(true);
         }
         bool on_same_device = onSameDevice(entry->device, entry->alloc_attr, device, expected);
+
+        TRACE("    Input {}: Entry {}\tOpInput {}\tDevice {}@{} and {}@{}, on_same_device {}", i,
+              (entry->ref ? "ref": "noref"), (expect_ref ? "ref": "noref"),
+              entry->alloc_attr, as_hex(entry->device), expected, as_hex(device), on_same_device);
 
         if (expect_ref) {
             if (entry->ref == nullptr) {
