@@ -457,14 +457,18 @@ namespace {
 bool onSameDevice(tensorflow::Device *devA, const tensorflow::AllocatorAttributes &attrA,
                   tensorflow::Device *devB, const tensorflow::AllocatorAttributes &attrB)
 {
-    if (devA == devB) {
-        if (devA->device_type() == tf::DEVICE_CPU) {
-            return true;
-        }
-        return attrA.on_host() == attrB.on_host();
-    } else {
-        return attrA.on_host() && attrB.on_host();
+    bool cpuA = devA->device_type() == tf::DEVICE_CPU || attrA.on_host();
+    bool cpuB = devB->device_type() == tf::DEVICE_CPU || attrB.on_host();
+
+    if (cpuA && cpuB) {
+        return true;
     }
+
+    if (cpuA || cpuB) {
+        return false;
+    }
+
+    return devA == devB;
 }
 } // namespace
 
