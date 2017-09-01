@@ -181,18 +181,18 @@ ProtoPtr ExecTask::run()
             launched_asynchronously = true;
             auto state = new ExecutorState::AsyncState(params, tagged_node, &item, first_input, stats);
 
-            auto done = [this, state, ditem]() {
+            // Don't capture this, as when the cb get called, the task may already be deleted
+            auto done = [state, ditem = ditem, execState = m_state]() {
                 auto device = ditem.device;
                 auto stats = state->stats;     // Shorthand
                 auto first_input = state->first_input; // Shorthand
 
-                VLOG(2) << this
-                        << " Async kernel done: " << SummarizeNodeDef(state->item->node->def());
+                VLOG(2) << " Async kernel done: " << SummarizeNodeDef(state->item->node->def());
                 if (stats)
                     nodestats::SetOpEnd(stats);
                 ExecutorState::EntryVector outputs;
-                tf::Status s = m_state->ProcessOutputs(*state->item, &state->ctx, ditem.device,
-                                                       &outputs, stats);
+                tf::Status s = execState->ProcessOutputs(*state->item, &state->ctx, device,
+                                                         &outputs, stats);
                 if (stats)
                     nodestats::SetMemory(stats, &state->ctx);
                 // Clears inputs.
@@ -203,10 +203,10 @@ ProtoPtr ExecTask::run()
                 auto input_frame = state->tagged_node.input_frame;
                 const int64_t input_iter = state->tagged_node.input_iter;
                 const int id = state->tagged_node.node->id();
-                m_state->MaybeMarkCompleted(input_frame, input_iter, id);
+                execState->MaybeMarkCompleted(input_frame, input_iter, id);
                 ExecutorState::TaggedNodeSeq ready;
                 if (s.ok()) {
-                    m_state->PropagateOutputs(state->tagged_node, state->item, &outputs, &ready);
+                    execState->PropagateOutputs(state->tagged_node, state->item, &outputs, &ready);
                 }
                 outputs.clear();
                 if (s.ok() && ditem.device_record_tensor_access) {
@@ -218,10 +218,10 @@ ProtoPtr ExecTask::run()
                     // callee takes ownership of the vector
                     device->ConsumeListOfAccessedTensors(state->ctx.op_device_context(), accessed);
                 }
-                bool completed = m_state->NodeDone(s, state->item->node, ditem.device, ready, stats, nullptr);
+                bool completed = execState->NodeDone(s, state->item->node, device, ready, stats, nullptr);
                 delete state;
                 if (completed)
-                    m_state->Finish();
+                    execState->Finish();
             };
             if (stats)
                 nodestats::SetOpStart(stats);
