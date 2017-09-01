@@ -620,8 +620,8 @@ tf::Status ExecutorState::PrepareInputs(const NodeItem &item, tf::OpKernel *kern
     return tf::Status::OK();
 }
 
-tf::Status ExecutorState::ProcessOutputs(const NodeItem &item, tf::OpKernelContext *ctx, EntryVector *outputs,
-                                         tf::NodeExecStats *stats)
+tf::Status ExecutorState::ProcessOutputs(const NodeItem &item, tf::OpKernelContext *ctx, tf::Device *device,
+                                         EntryVector *outputs, tf::NodeExecStats *stats)
 {
     auto node = item.node;
     DCHECK_EQ(0, outputs->size());
@@ -640,7 +640,7 @@ tf::Status ExecutorState::ProcessOutputs(const NodeItem &item, tf::OpKernelConte
     }
 
     // Get the device_context for this node id, if it exists.
-    tf::DeviceContext *device_context = ctx->op_device_context();
+    auto device_context = ctx->op_device_context();
 
     // Experimental: debugger (tfdb) access to intermediate node completion.
     if (item.num_outputs == 0 && impl_->params_.node_outputs_cb != nullptr) {
@@ -659,6 +659,9 @@ tf::Status ExecutorState::ProcessOutputs(const NodeItem &item, tf::OpKernelConte
             }
         } else {
             Entry *out = &((*outputs)[i]);
+
+            // Set the device of the output entry.
+            out->device = device;
 
             // Set the device context of the output entry.
             out->device_context = device_context;

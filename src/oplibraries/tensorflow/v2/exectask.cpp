@@ -181,7 +181,7 @@ ProtoPtr ExecTask::run()
             launched_asynchronously = true;
             auto state = new ExecutorState::AsyncState(params, tagged_node, &item, first_input, stats);
 
-            auto done = [this, state]() {
+            auto done = [this, state, ditem]() {
                 auto device = ditem.device;
                 auto stats = state->stats;     // Shorthand
                 auto first_input = state->first_input; // Shorthand
@@ -191,7 +191,8 @@ ProtoPtr ExecTask::run()
                 if (stats)
                     nodestats::SetOpEnd(stats);
                 ExecutorState::EntryVector outputs;
-                tf::Status s = m_state->ProcessOutputs(*state->item, &state->ctx, &outputs, stats);
+                tf::Status s = m_state->ProcessOutputs(*state->item, &state->ctx, ditem.device,
+                                                       &outputs, stats);
                 if (stats)
                     nodestats::SetMemory(stats, &state->ctx);
                 // Clears inputs.
@@ -236,7 +237,7 @@ ProtoPtr ExecTask::run()
                 nodestats::SetOpEnd(stats);
 
             VLOG(3) << "Sync ProcessOutputs";
-            s = m_state->ProcessOutputs(item, &ctx, &outputs, stats);
+            s = m_state->ProcessOutputs(item, &ctx, ditem.device, &outputs, stats);
             if (s.ok() && ditem.device_record_tensor_access) {
                 // Get the list of all tensors accessed during the execution
                 ctx.retrieve_accessed_tensors(&accessed_tensors);

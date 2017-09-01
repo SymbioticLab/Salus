@@ -660,8 +660,8 @@ private:
                              AllocatorAttributeVec *input_alloc_attrs, bool *is_input_dead);
 
     // After item->kernel computation is done, processes its outputs.
-    tf::Status ProcessOutputs(const NodeItem &item, tf::OpKernelContext *ctx, EntryVector *outputs,
-                              tf::NodeExecStats *stats);
+    tf::Status ProcessOutputs(const NodeItem &item, tf::OpKernelContext *ctx, tf::Device *device,
+                              EntryVector *outputs, tf::NodeExecStats *stats);
 
     // After processing the outputs, propagates the outputs to their dsts.
     // Contents of *outputs are left in an indeterminate state after
