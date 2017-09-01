@@ -579,7 +579,7 @@ tf::Status ExecutorState::PrepareInputs(const NodeItem &item, tf::OpKernel *kern
                                 inp->tensor->shape());
 
                 INFO("Copying from device {} to device {} to prepare {}-th input for op {}. "
-                    " target tensor buffer addr: {:x}",
+                    " target tensor buffer addr: {}",
                     entry->device->name(), device->name(), i, kernel->name(),
                     as_hex(copy.tensor_data().data()));
 
