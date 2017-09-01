@@ -16,7 +16,7 @@ limitations under the License.
 #ifndef OPLIBRARIES_TENSORFLOW_MULTI_DEVICE_EXECUTOR_H_
 #define OPLIBRARIES_TENSORFLOW_MULTI_DEVICE_EXECUTOR_H_
 
-#include <tensorflow/core/common_runtime/executor.h>
+#include "oplibraries/tensorflow/tensorflow_headers.h"
 
 #include <functional>
 

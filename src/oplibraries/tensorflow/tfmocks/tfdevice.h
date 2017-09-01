@@ -20,7 +20,7 @@
 #ifndef TFDEVICE_H
 #define TFDEVICE_H
 
-#include <tensorflow/core/common_runtime/local_device.h>
+#include "oplibraries/tensorflow/tensorflow_headers.h"
 
 #include <memory>
 

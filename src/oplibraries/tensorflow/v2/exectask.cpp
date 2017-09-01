@@ -22,7 +22,7 @@
 #include "platform/logging.h"
 #include "utils/threadutils.h"
 
-#include <tensorflow/core/common_runtime/device_mgr.h>
+#include "oplibraries/tensorflow/tensorflow_headers.h"
 
 namespace tf = tensorflow;
 

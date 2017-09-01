@@ -20,8 +20,7 @@
 #ifndef TFRENDEZVOUS_H
 #define TFRENDEZVOUS_H
 
-#include <tensorflow/core/framework/rendezvous.h>
-#include <tensorflow/core/platform/mutex.h>
+#include "oplibraries/tensorflow/tensorflow_headers.h"
 
 #include <unordered_map>
 

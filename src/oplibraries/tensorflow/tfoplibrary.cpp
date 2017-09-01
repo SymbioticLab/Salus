@@ -17,19 +17,6 @@
  *
  */
 
-// Force to use non-debug version of protobuf map, which changes its hashing function
-// according to debug state, causing problems when two libraries both use protobuf, but
-// only one of them is built with debug. Then passing a map from one library to the other
-// becomes impossible because values inserted using one hashing function can't be found
-// using another hashing function.
-#ifdef NDEBUG
-#undef NDEBUG
-#include "google/protobuf/map.h"
-#define NDEBUG
-#else
-#include "google/protobuf/map.h"
-#endif
-
 #include "tfoplibrary.h"
 
 #include "tfmocks/tfallocator.h"
@@ -41,17 +28,9 @@
 #include "utils/pointerutils.h"
 #include "utils/protoutils.h"
 
-#include "executor.pb.h"
-#include "tfoplibrary.pb.h"
+#include "protos.h"
 
-#include <tensorflow/core/common_runtime/device.h>
-#include <tensorflow/core/framework/function.pb.h>
-#include <tensorflow/core/framework/node_def.pb.h>
-#include <tensorflow/core/framework/op_kernel.h>
-#include <tensorflow/core/framework/op_segment.h>
-#include <tensorflow/core/lib/strings/strcat.h>
-#include <tensorflow/core/platform/mutex.h>
-#include <tensorflow/core/protobuf/config.pb.h>
+#include "oplibraries/tensorflow/tensorflow_headers.h"
 
 #include <functional>
 #include <thread>

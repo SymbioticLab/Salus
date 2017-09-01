@@ -24,11 +24,9 @@
 #include "utils/zmqutils.h"
 #include "oplibraries/tensorflow/v2/md_executor.h"
 
-#include "executor.pb.h"
+#include "protos.h"
 
-#include <tensorflow/core/distributed_runtime/zrpc/exechelper/tfoplibraryproxy.h>
-#include <tensorflow/core/protobuf/master.pb.h>
-#include <tensorflow/core/protobuf/worker.pb.h>
+#include "oplibraries/tensorflow/tensorflow_headers.h"
 
 #include <functional>
 #include <unordered_map>

@@ -20,9 +20,7 @@
 #ifndef TFALLOCATOR_H
 #define TFALLOCATOR_H
 
-#include <tensorflow/core/framework/allocator.h>
-#include <tensorflow/core/platform/types.h>
-#include <third_party/eigen3/unsupported/Eigen/CXX11/Tensor>
+#include "oplibraries/tensorflow/tensorflow_headers.h"
 
 #include <memory>
 

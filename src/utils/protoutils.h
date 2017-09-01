@@ -22,7 +22,17 @@
 
 #include "utils/pointerutils.h"
 
+#ifndef NDEBUG
+#define NDEBUG
+#define NEED_UNDEF_NDEBUG
+#endif
+
 #include <google/protobuf/message.h>
+
+#ifdef NEED_UNDEF_NDEBUG
+#undef NDEBUG
+#undef NEED_UNDEF_NDEBUG
+#endif
 
 #include <memory>
 

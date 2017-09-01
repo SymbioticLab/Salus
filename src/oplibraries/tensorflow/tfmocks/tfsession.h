@@ -22,16 +22,9 @@
 
 #include "execution/devices.h"
 
-#include "executor.pb.h"
-#include "tfoplibrary.pb.h"
+#include "protos.h"
 
-#include <tensorflow/core/framework/op_segment.h>
-#include <tensorflow/core/framework/op_kernel.h>
-#include <tensorflow/core/framework/resource_mgr.h>
-#include <tensorflow/core/framework/allocator.h>
-#include <tensorflow/core/util/tensor_slice_reader_cache.h>
-#include <tensorflow/core/platform/mutex.h>
-#include <tensorflow/core/public/session_options.h>
+#include "oplibraries/tensorflow/tensorflow_headers.h"
 
 #include <memory>
 #include <string>

@@ -21,7 +21,17 @@
 
 #include "platform/logging.h"
 
+#ifndef NDEBUG
+#define NDEBUG
+#define NEED_UNDEF_NDEBUG
+#endif
+
 #include <google/protobuf/io/coded_stream.h>
+
+#ifdef NEED_UNDEF_NDEBUG
+#undef NDEBUG
+#undef NEED_UNDEF_NDEBUG
+#endif
 
 namespace protobuf = ::google::protobuf;
 

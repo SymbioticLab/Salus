@@ -22,10 +22,9 @@
 
 #include "oplibraries/ioplibrary.h"
 
-#include "executor.pb.h"
-#include "tfoplibrary.pb.h"
+#include "protos.h"
 
-#include <tensorflow/core/framework/op_segment.h>
+#include "oplibraries/tensorflow/tensorflow_headers.h"
 
 #include <memory>
 #include <atomic>

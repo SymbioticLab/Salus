@@ -25,7 +25,7 @@
 #include "utils/macros.h"
 #include "rpcserver/zmqserver.h"
 
-#include "executor.pb.h"
+#include "protos.h"
 
 #include <memory>
 #include <unordered_map>

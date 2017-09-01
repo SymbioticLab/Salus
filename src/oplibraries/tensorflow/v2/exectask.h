@@ -23,7 +23,7 @@
 
 #include "execution/itask.h"
 
-#include <tensorflow/core/lib/core/status.h>
+#include "oplibraries/tensorflow/tensorflow_headers.h"
 
 namespace tensorflow {
 class Device;

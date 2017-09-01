@@ -18,7 +18,7 @@
 
 #include "md_executor_impl.h"
 
-#include <tensorflow/core/lib/strings/stringprintf.h>
+#include "oplibraries/tensorflow/tensorflow_headers.h"
 
 namespace nodestats {
 void SetScheduled(tf::NodeExecStats *nt, int64_t t)

@@ -22,20 +22,7 @@ limitations under the License.
 #include "platform/logging.h"
 #include "utils/threadutils.h"
 
-#include <tensorflow/core/framework/op_kernel.h>
-#include <tensorflow/core/framework/function.h>
-#include <tensorflow/core/common_runtime/copy_tensor.h>
-#include <tensorflow/core/common_runtime/executor.h>
-#include <tensorflow/core/common_runtime/device.h>
-#include <tensorflow/core/common_runtime/device_mgr.h>
-#include <tensorflow/core/common_runtime/pending_counts.h>
-#include <tensorflow/core/common_runtime/step_stats_collector.h>
-#include <tensorflow/core/distributed_runtime/zrpc/exechelper/graphview.h>
-#include <tensorflow/core/distributed_runtime/zrpc/exechelper/mdgraphmgr.h>
-#include <tensorflow/core/lib/gtl/flatmap.h>
-#include <tensorflow/core/lib/gtl/flatset.h>
-#include <tensorflow/core/lib/gtl/manual_constructor.h>
-#include <tensorflow/core/lib/strings/stringprintf.h>
+#include "oplibraries/tensorflow/tensorflow_headers.h"
 
 #include <deque>
 #include <memory>

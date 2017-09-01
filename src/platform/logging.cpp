@@ -24,13 +24,7 @@
 #include "utils/envutils.h"
 #include "execution/devices.h"
 
-#include "executor.pb.h"
-
-#include <tensorflow/core/framework/allocator.h>
-#include <tensorflow/core/framework/op_kernel.h>
-#include <tensorflow/core/lib/core/status.h>
-
-#include <google/protobuf/message.h>
+#include "protos.h"
 
 #include <zmq.hpp>
 
@@ -124,42 +118,6 @@ std::ostream &operator<<(std::ostream &os, const zmq::error_t &c)
 {
     return os << "zmq::error_t(code=" << c.num()
               << ", msg='" << c.what() << "')";
-}
-
-std::ostream &operator<<(std::ostream &os, const tensorflow::AllocatorAttributes &c)
-{
-    return os << "tensorflow::AllocatorAttributes("
-    << "on_host=" << c.on_host()
-    << ", nic_compatible=" << c.nic_compatible()
-    << ", gpu_compatible=" << c.gpu_compatible()
-    << ", track_sizes=" << c.track_sizes()
-    << ")";
-}
-
-std::ostream &operator<<(std::ostream &os, const tensorflow::AllocationAttributes &c)
-{
-    return os << "tensorflow::AllocationAttributes("
-    << "allocation_will_be_logged=" << c.allocation_will_be_logged
-    << ", no_retry_on_failure=" << c.no_retry_on_failure
-    << ")";
-}
-
-std::ostream &operator<<(std::ostream &os, const tensorflow::TensorValue &c)
-{
-    os << "TensorValue(";
-    if (c.tensor) {
-        os << "shape: " << c->shape().DebugString()
-           << ", datatype: " << c->dtype()
-           << ", is ref: " << c.is_ref();
-        if (c.is_ref()) {
-            os << " (mutex: " << as_hex(c.mutex_if_ref) << ")";
-        }
-        os << ", buffer: " << as_hex(c->tensor_data().data());
-    } else {
-        os << "<empty>";
-    }
-    os << ")";
-    return os;
 }
 
 std::ostream &operator<<(std::ostream &os, const google::protobuf::Message &c)

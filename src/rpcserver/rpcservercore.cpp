@@ -25,7 +25,7 @@
 #include "execution/executionengine.h"
 #include "utils/macros.h"
 
-#include "executor.pb.h"
+#include "protos.h"
 
 #include <unordered_map>
 #include <functional>

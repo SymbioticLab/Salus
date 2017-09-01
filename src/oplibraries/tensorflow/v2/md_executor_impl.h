@@ -19,14 +19,7 @@
 #ifndef MULTIDEVICEEXECUTORSTATEIMPL_H
 #define MULTIDEVICEEXECUTORSTATEIMPL_H
 
-#include <tensorflow/core/common_runtime/executor.h>
-#include <tensorflow/core/common_runtime/pending_counts.h>
-#include <tensorflow/core/lib/gtl/inlined_vector.h>
-#include <tensorflow/core/lib/gtl/flatset.h>
-#include <tensorflow/core/lib/gtl/flatmap.h>
-#include <tensorflow/core/lib/gtl/manual_constructor.h>
-#include <tensorflow/core/distributed_runtime/zrpc/exechelper/mdgraphmgr.h>
-#include <tensorflow/core/distributed_runtime/zrpc/exechelper/graphview.h>
+#include "oplibraries/tensorflow/tensorflow_headers.h"
 
 namespace tf = tensorflow;
 namespace gtl = tf::gtl;

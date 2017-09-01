@@ -23,7 +23,7 @@
 #include "platform/logging.h"
 #include "utils/protoutils.h"
 
-#include "executor.pb.h"
+#include "protos.h"
 
 #include <functional>
 #include <chrono>

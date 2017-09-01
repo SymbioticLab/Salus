@@ -23,9 +23,7 @@
 #include "platform/logging.h"
 #include "utils/macros.h"
 
-#include <tensorflow/core/common_runtime/copy_tensor.h>
-#include <tensorflow/core/common_runtime/device.h>
-#include <tensorflow/core/util/device_name_utils.h>
+#include "oplibraries/tensorflow/tensorflow_headers.h"
 
 using tensorflow::Status;
 using tensorflow::Tensor;

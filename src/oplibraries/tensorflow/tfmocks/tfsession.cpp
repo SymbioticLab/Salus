@@ -27,20 +27,10 @@
 #include "platform/logging.h"
 #include "utils/macros.h"
 #include "utils/threadutils.h"
+#include "oplibraries/tensorflow/tensorflow_headers.h"
 
-#include "tfoplibrary.pb.h"
+#include "protos.h"
 
-#include <tensorflow/core/common_runtime/copy_tensor.h>
-#include <tensorflow/core/common_runtime/device_factory.h>
-#include <tensorflow/core/common_runtime/device_mgr.h>
-#include <tensorflow/core/common_runtime/function.h>
-#include <tensorflow/core/common_runtime/rpc_device/exec_helpers/devicefactories.h>
-#include <tensorflow/core/common_runtime/rpc_device/exec_helpers/exechelpers.h>
-#include <tensorflow/core/framework/node_def.pb.h>
-#include <tensorflow/core/graph/graph.h>
-#include <tensorflow/core/graph/graph_constructor.h>
-#include <tensorflow/core/lib/gtl/stl_util.h>
-#include <tensorflow/core/protobuf/config.pb.h>
 
 using namespace tensorflow::remote;
 
