@@ -132,7 +132,7 @@ ProtoPtr ExecTask::run()
         nodestats::SetAllStart(stats);
     }
 
-    DEBUG("Process node: {} step {} is dead: ",
+    DEBUG("Process node: {} step {} {} is dead: {}",
           id, params.step_id, SummarizeNodeDef(node->def()), tagged_node.is_dead);
 
     auto input_tensors = m_state->GetInputTensors(input_frame, input_iter);
