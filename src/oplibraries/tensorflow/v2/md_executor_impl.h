@@ -161,6 +161,7 @@ private:
             , val_field_is_set(other.val_field_is_set)
             , alloc_attr(other.alloc_attr)
             , device_context(other.device_context)
+            , device(other.device)
         {
             if (val_field_is_set) {
                 val.Init(*other.val);
@@ -183,6 +184,7 @@ private:
             val_field_is_set = other.val_field_is_set;
             alloc_attr = other.alloc_attr;
             device_context = other.device_context;
+            device = other.device;
             if (val_field_is_set) {
                 val.Init(*other.val);
             }
@@ -200,6 +202,7 @@ private:
             val_field_is_set = other.val_field_is_set;
             alloc_attr = other.alloc_attr;
             device_context = other.device_context;
+            device = other.device;
             if (val_field_is_set) {
                 val.Init(std::move(*other.val));
             }
