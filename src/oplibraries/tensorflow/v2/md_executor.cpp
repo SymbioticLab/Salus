@@ -472,6 +472,7 @@ tf::Status ExecutorState::PrepareInputs(const NodeItem &item, tf::OpKernel *kern
                                         AllocatorAttributeVec *input_alloc_attrs, bool *is_input_dead)
 {
     auto node = item.node;
+    TRACE("Preparing {} inputs for node {}", item.num_inputs, node->name());
 
     inputs->clear();
     inputs->resize(item.num_inputs);
@@ -511,11 +512,13 @@ tf::Status ExecutorState::PrepareInputs(const NodeItem &item, tf::OpKernel *kern
         // 2  noref         ref          diff        reject
         // 3   ref          ref          diff        reject
         // 4   ref          ref          same        get ref
-
         // 5  noref        noref         same        get val
         // 6   ref         noref         same         deref
         // 7  noref        noref         diff        devcopy
         // 8   ref         noref         diff        devcopy
+        TRACE("    Input {}: Entry {}\tOpInput {}\tDevice {} and {}", i,
+              (entry->ref ? "ref": "noref"), (expect_ref ? "ref": "noref"),
+              as_hex(entry->device), as_hex(device));
 
         tensorflow::AllocatorAttributes expected;
         if (kernel->input_memory_types()[i] == tensorflow::HOST_MEMORY) {
@@ -880,7 +883,7 @@ bool ExecutorState::NodeDone(const tf::Status &s, const tf::Node *node, const tf
     if (s.ok()) {
         ScheduleReady(ready, inline_ready);
     }
-    TRACE("NodeDone completed: ", completed);
+    TRACE("NodeDone completed: {}", completed);
     return completed;
 }
 
