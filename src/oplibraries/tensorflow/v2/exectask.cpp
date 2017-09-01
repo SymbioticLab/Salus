@@ -98,7 +98,6 @@ tf::Status ExecTask::LookupDevice(const DeviceSpec &spec, DeviceItem &item)
 
 ProtoPtr ExecTask::run()
 {
-    // FIXME: connect to execution engine
     const auto &gview = m_state->impl_->gview_;
     auto node = tagged_node.node;
     auto input_frame = tagged_node.input_frame;
@@ -133,8 +132,8 @@ ProtoPtr ExecTask::run()
         nodestats::SetAllStart(stats);
     }
 
-    VLOG(1) << "Process node: " << id << " step " << params.step_id << " "
-            << SummarizeNodeDef(node->def()) << " is dead: " << tagged_node.is_dead;
+    DEBUG("Process node: {} step {} is dead: ",
+          id, params.step_id, SummarizeNodeDef(node->def()), tagged_node.is_dead);
 
     auto input_tensors = m_state->GetInputTensors(input_frame, input_iter);
     auto first_input = input_tensors + item.input_start;
@@ -175,7 +174,7 @@ ProtoPtr ExecTask::run()
 
         if (kernel_is_async) {
             // Asynchronous computes.
-            VLOG(3) << "Launch Async kernel";
+            TRACE("Launch Async kernel");
             auto async = op_kernel->AsAsync();
             DCHECK(async != nullptr);
             launched_asynchronously = true;
@@ -187,7 +186,7 @@ ProtoPtr ExecTask::run()
                 auto stats = state->stats;     // Shorthand
                 auto first_input = state->first_input; // Shorthand
 
-                VLOG(2) << " Async kernel done: " << SummarizeNodeDef(state->item->node->def());
+                TRACE(" Async kernel done: {}", SummarizeNodeDef(state->item->node->def()));
                 if (stats)
                     nodestats::SetOpEnd(stats);
                 ExecutorState::EntryVector outputs;
@@ -228,7 +227,7 @@ ProtoPtr ExecTask::run()
             ditem.device->ComputeAsync(async, &state->ctx, done);
         } else {
             // Synchronous computes.
-            VLOG(3) << "Launch sync kernel";
+            TRACE("Launch sync kernel");
             tf::OpKernelContext ctx(&params, item.num_outputs);
             if (stats)
                 nodestats::SetOpStart(stats);
@@ -236,7 +235,7 @@ ProtoPtr ExecTask::run()
             if (stats)
                 nodestats::SetOpEnd(stats);
 
-            VLOG(3) << "Sync ProcessOutputs";
+            TRACE("Sync ProcessOutputs");
             s = m_state->ProcessOutputs(item, &ctx, ditem.device, &outputs, stats);
             if (s.ok() && ditem.device_record_tensor_access) {
                 // Get the list of all tensors accessed during the execution
@@ -257,7 +256,7 @@ ProtoPtr ExecTask::run()
         m_state->MaybeMarkCompleted(input_frame, input_iter, id);
         // Propagates outputs.
         if (s.ok()) {
-            VLOG(3) << "Propagates outputs";
+            TRACE("Propagates outputs");
             m_state->PropagateOutputs(tagged_node, &item, &outputs, &ready);
         }
         outputs.clear();
@@ -272,7 +271,7 @@ ProtoPtr ExecTask::run()
         }
         // Postprocess.
         completed = m_state->NodeDone(s, item.node, ditem.device, ready, stats, &inline_ready);
-        VLOG(3) << "Postprocess completed: " << completed;
+        TRACE("Postprocess completed: {}", completed);
     }
     m_se->notify();
     return {};

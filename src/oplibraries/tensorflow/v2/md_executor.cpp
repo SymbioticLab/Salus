@@ -290,7 +290,7 @@ ExecutorState::~ExecutorState()
 
 void ExecutorState::RunAsync(tf::Executor::DoneCallback done)
 {
-    VLOG(3) << "Executor::RunAsync";
+    TRACE("ExecutorState::RunAsync");
 
     TaggedNodeSeq ready;
 
@@ -347,7 +347,7 @@ void ExecutorState::Process(TaggedNode tagged_node, int64_t scheduled_usec)
         const size_t id = node->id();
         const NodeItem &item = *gview.node(id);
 
-        VLOG(3) << "Get a new node from inline_ready queue";
+        TRACE("Get a new node from inline_ready queue");
         // TODO(misard) Replace with a finer-grain enabling flag once we
         // add better optional debugging support.
         if (vlog_ && VLOG_IS_ON(1)) {
@@ -369,7 +369,7 @@ void ExecutorState::Process(TaggedNode tagged_node, int64_t scheduled_usec)
         se.wait();
     } // while !inline_ready.empty()
 
-    VLOG(3) << "inline ready queue empty";
+    TRACE("inline ready queue empty");
     // This thread of computation is done if completed = true.
     if (completed)
         Finish();
@@ -725,7 +725,7 @@ void ExecutorState::PropagateOutputs(const TaggedNode &tagged_node, const NodeIt
     int64_t input_iter = tagged_node.input_iter;
     const bool is_dead = tagged_node.is_dead;
 
-    VLOG(3) << "Propagate outputs for node: " << node->name();
+    TRACE("Propagate outputs for node: {}", node->name());
     // Propagates outputs along out edges, and puts newly ready nodes
     // into the ready queue.
     ready->clear();
@@ -803,25 +803,25 @@ void ExecutorState::PropagateOutputs(const TaggedNode &tagged_node, const NodeIt
         is_frame_done = input_frame->DecrementOutstandingOpsLocked(&impl_->gview_, input_iter, ready);
     }
 
-    VLOG(3) << "After propagate the ready queue has size: " << ready->size();
+    TRACE("After propagate the ready queue has size: {}", ready->size());
     for (auto &n : *ready) {
-        VLOG(3) << "    in ready queue: " << n.node->name();
+        TRACE("    in ready queue: {}", n.node->name());
     }
 
     // At this point, this node is completely done. We also know if the
     // completion of this node makes its frame completed.
     if (is_frame_done) {
-        VLOG(3) << "Deleting frames";
+        TRACE("Deleting frames");
         FrameState *parent_frame = input_frame->parent_frame;
         int64_t parent_iter = input_frame->parent_iter;
         DeleteFrame(input_frame, ready);
-        VLOG(3) << "Frame deleted";
+        TRACE("Frame deleted");
         if (parent_frame != nullptr) {
             // The completion of frame may cause completions in its parent frame.
             // So clean things up recursively.
-            VLOG(3) << "Cleanup frame iterations";
+            TRACE("Cleanup frame iterations");
             CleanupFramesIterations(parent_frame, parent_iter, ready);
-            VLOG(3) << "Cleanup frame iterations finished";
+            TRACE("Cleanup frame iterations finished");
         }
     }
 }
@@ -843,9 +843,9 @@ bool ExecutorState::NodeDone(const tf::Status &s, const tf::Node *node, const tf
     bool abort_run = false;
     if (!s.ok()) {
         // Some error happened. This thread of computation is done.
-        VLOG(3) << "Try get lock for error handle";
+        TRACE("Try get lock for error handle");
         tf::mutex_lock l(mu_);
-        VLOG(3) << "Error handle";
+        TRACE("Error handle");
         if (status_.ok()) {
             abort_run = true;
             status_ = s;
@@ -861,35 +861,35 @@ bool ExecutorState::NodeDone(const tf::Status &s, const tf::Node *node, const tf
         }
     }
 
-    VLOG(3) << "NodeDone ready size: " << ready.size();
-    VLOG(3) << "NodeDone s: " << s;
+    TRACE("NodeDone ready size: {}", ready.size());
+    TRACE("NodeDone s: {}", s);
 
     bool completed = false;
     int ready_size = ready.size();
     if (ready_size == 0 || !s.ok()) {
         auto ops = num_outstanding_ops_.fetch_sub(1);
-        VLOG(3) << "NodeDone num_outstanding_ops_: " << ops;
+        TRACE("NodeDone num_outstanding_ops_: {}", ops);
         completed = (ops == 1);
     } else if (ready_size > 1) {
         auto ops = num_outstanding_ops_.fetch_add(ready_size - 1, std::memory_order_relaxed);
-        VLOG(3) << "NodeDone num_outstanding_ops_: " << ops;
+        TRACE("NodeDone num_outstanding_ops_: {}", ops);
     }
 
     // Schedule the ready nodes in 'ready'.
     if (s.ok()) {
         ScheduleReady(ready, inline_ready);
     }
-    VLOG(3) << "NodeDone completed: " << completed;
+    TRACE("NodeDone completed: ", completed);
     return completed;
 }
 
 void ExecutorState::ScheduleReady(const TaggedNodeSeq &ready, TaggedNodeReadyQueue *inline_ready)
 {
     if (ready.empty()) {
-        VLOG(3) << "ScheduleReady on an empty ready queue";
+        TRACE("ScheduleReady on an empty ready queue");
         return;
     }
-    VLOG(3) << "ScheduleReady";
+    TRACE("ScheduleReady");
 
     int64_t scheduled_usec = 0;
     if (stats_collector_) {
@@ -897,19 +897,19 @@ void ExecutorState::ScheduleReady(const TaggedNodeSeq &ready, TaggedNodeReadyQue
     }
     if (inline_ready == nullptr) {
         // Schedule to run all the ready ops in thread pool.
-        VLOG(3) << "Schedule to run all the ready ops in thread pool.";
+        TRACE("Schedule to run all the ready ops in thread pool.");
         for (auto &tagged_node : ready) {
-            VLOG(3) << "Schedule to run the ready op: " << tagged_node.node->name();
+            TRACE("Schedule to run the ready op: {}", tagged_node.node->name());
             runner_([=]() { Process(tagged_node, scheduled_usec); });
         }
-        VLOG(3) << "All ops in ready queue sent to thread pool";
+        TRACE("All ops in ready queue sent to thread pool");
         return;
     }
     auto &gview = impl_->gview_;
     const TaggedNode *curr_expensive_node = nullptr;
     for (auto &tagged_node : ready) {
         const NodeItem &item = *gview.node(tagged_node.node->id());
-        VLOG(3) << "Visit node " << item.node->name();
+        TRACE("Visit node {}", item.node->name());
         if (tagged_node.is_dead || !item.kernel_is_expensive) {
             // Inline this inexpensive node.
             inline_ready->push_back(tagged_node);
@@ -965,16 +965,15 @@ void ExecutorState::DumpPendingNodeState(const int node_id, const Entry *input_v
             return;
         }
     }
-    LOG(WARNING) << "    Pending Node: " << node.DebugString();
+    WARN("    Pending Node: {}", node.DebugString());
     for (int i = 0; i < node.num_inputs(); ++i) {
         auto &input = input_vector[input_base + i];
         auto *tensor = GetTensorValueForDump(input);
         if (tensor->IsInitialized()) {
-            LOG(WARNING) << "      Input " << i << ": "
-                         << tf::strings::StrCat("Tensor<type: ", DataTypeString(tensor->dtype()),
-                                            " shape: ", tensor->shape().DebugString(), ">");
+            WARN("      Input {}: Tensor<type: {} shape: {}>",
+                 i, DataTypeString(tensor->dtype()), tensor->shape().DebugString());
         } else {
-            LOG(WARNING) << "      Input " << i << ": not present";
+            WARN("      Input {}: not present", i);
         }
     }
 }
@@ -983,17 +982,16 @@ void ExecutorState::DumpActiveNodeState(const int node_id, const Entry *input_ve
 {
     auto &node_item = *impl_->gview_.node(node_id);
     auto &node = *node_item.node;
-    LOG(WARNING) << "    Active Node: " << node.DebugString();
+    WARN("    Active Node: {}", node.DebugString());
     const int input_base = node_item.input_start;
     for (int i = 0; i < node.num_inputs(); ++i) {
         auto &input = input_vector[input_base + i];
         auto *tensor = GetTensorValueForDump(input);
         if (tensor->IsInitialized()) {
-            LOG(WARNING) << "      Input " << i << ": "
-                         << tf::strings::StrCat("Tensor<type: ", DataTypeString(tensor->dtype()),
-                                            " shape: ", tensor->shape().DebugString(), ">");
+            WARN("      Input {}: Tensor<type: {} shape: {}>",
+                 i, DataTypeString(tensor->dtype()), tensor->shape().DebugString());
         } else {
-            LOG(WARNING) << "      Input " << i << ": not present";
+            WARN("      Input {}: not present", i);
         }
     }
 }
@@ -1025,27 +1023,26 @@ void ExecutorState::DumpIterationState(const FrameState *frame, IterationState *
         auto &input = iteration->input_tensors[i];
         auto *tensor = GetTensorValueForDump(input);
         if (tensor->IsInitialized()) {
-            LOG(WARNING) << "    Input " << i << ": "
-                         << tf::strings::StrCat("Tensor<type: ", DataTypeString(tensor->dtype()),
-                                            " shape: ", tensor->shape().DebugString(),
-                                            ", bytes: ", tensor->TotalBytes(), ">");
+            WARN("    Input {}: Tensor<type: {} shape: {}, bytes: {}>",
+                 i, DataTypeString(tensor->dtype()), tensor->shape().DebugString(),
+                 tensor->TotalBytes());
             total_bytes += tensor->TotalBytes();
         }
     }
-    LOG(WARNING) << "    Total bytes " << total_bytes;
+    WARN("    Total bytes {}", total_bytes);
 }
 
 void ExecutorState::DumpState()
 {
     tf::mutex_lock l(mu_);
     if (!dumped_on_error_) {
-        LOG(WARNING) << "Dumping state";
+        WARN("Dumping state");
         for (auto &frame : outstanding_frames_) {
-            LOG(WARNING) << frame.first;
+            WARN(frame.first);
             FrameState *frame_state = frame.second;
             tf::mutex_lock frame_lock(frame_state->mu);
             for (IterationState *iteration : frame_state->iterations) {
-                LOG(WARNING) << "  Iteration:";
+                WARN("  Iteration:");
                 DumpIterationState(frame_state, iteration);
             }
         }
@@ -1055,13 +1052,13 @@ void ExecutorState::DumpState()
 
 void ExecutorState::Finish()
 {
-    VLOG(3) << "ExecutorState::Finish try lock in thread";
+    TRACE("ExecutorState::Finish try lock in thread");
     mu_.lock();
     auto status = status_;
     auto done_cb = std::move(done_cb_);
     auto runner = std::move(runner_);
     mu_.unlock();
-    VLOG(3) << "ExecutorState::Finish after lock";
+    TRACE("ExecutorState::Finish after lock");
     if (sync_on_finish_ && status.ok()) {
         // Block until the device has finished all queued operations. For
         // devices like GPUs that continue to execute Ops after their Compute
@@ -1071,7 +1068,7 @@ void ExecutorState::Finish()
             status.Update(d->Sync());
         }
     }
-    VLOG(3) << "ExecutorState about to delete this";
+    TRACE("ExecutorState about to delete this");
     delete this;
     CHECK(done_cb != nullptr);
     runner([=]() { done_cb(status); });
@@ -1097,8 +1094,7 @@ void ExecutorState::FindOrCreateChildFrame(FrameState *frame, int64_t iter, cons
 
     // Need to create a new frame instance.
     // Note that this new frame instance is created without any locks.
-    if (vlog_)
-        VLOG(2) << "Create frame: " << child_name;
+    TRACE("Create frame: {}", child_name);
 
     int parallel_iters;
     s = GetNodeAttr(node->def(), "parallel_iterations", &parallel_iters);
@@ -1183,8 +1179,7 @@ void ExecutorState::DeleteFrame(FrameState *frame, TaggedNodeSeq *ready)
 
     // Delete the frame.
     auto &frame_name = frame->frame_name;
-    if (vlog_)
-        VLOG(2) << "Delete frame " << frame_name;
+    TRACE("Delete frame {}", frame_name);
     {
         tf::mutex_lock executor_lock(mu_);
         outstanding_frames_.erase(frame_name);
