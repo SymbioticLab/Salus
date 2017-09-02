@@ -23,6 +23,7 @@
 #include "utils/protoutils.h"
 #include "utils/zmqutils.h"
 #include "oplibraries/tensorflow/v2/md_executor.h"
+#include "oplibraries/tensorflow/v2/tfallocator.h"
 
 #include "protos.h"
 
@@ -32,12 +33,17 @@
 #include <unordered_map>
 
 namespace zrpc = executor;
+using namespace tensorflow::remote;
 
 OpLibraryRegistary::Register tfoplibraryv2(executor::TENSORFLOW, std::make_unique<TFOpLibraryV2>(), 200);
 
 TFOpLibraryV2::TFOpLibraryV2()
     : m_maxOpenSessions(0)
 {
+    // use device with our own allocator
+    WrappedDeviceSettings::maybeRegisterWrappedDeviceFactories();
+    WrappedDeviceSettings::setWrapperFactory(
+        [](auto *alloc) { return std::make_unique<TFAllocator>(alloc); });
 }
 
 TFOpLibraryV2::~TFOpLibraryV2()
