@@ -675,7 +675,7 @@ private:
     // "node" just finishes. Takes ownership of "stats". Returns true if
     // execution has completed.
     bool NodeDone(const tf::Status &s, const tf::Node *node, const tf::Device *device,
-                  const TaggedNodeSeq &ready,
+                  tf::Rendezvous *rendezvous, const TaggedNodeSeq &ready,
                   tf::NodeExecStats *stats, TaggedNodeReadyQueue *inline_ready);
 
     // Schedule all the expensive nodes in 'ready', and put all the inexpensive

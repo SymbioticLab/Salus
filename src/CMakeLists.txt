@@ -28,6 +28,7 @@ if(USE_TENSORFLOW)
     list(APPEND SRC_LIST
         "oplibraries/tensorflow/tfoplibraryv2.cpp"
         "oplibraries/tensorflow/v2/md_executor.cpp"
+        "oplibraries/tensorflow/v2/md_rendezvous.cpp"
         "oplibraries/tensorflow/v2/exectask.cpp"
         "oplibraries/tensorflow/v2/md_executor_impl.cpp"
 #         "oplibraries/tensorflow/tfoplibrary.cpp"

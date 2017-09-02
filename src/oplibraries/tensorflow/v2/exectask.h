@@ -55,7 +55,7 @@ public:
              TensorValueVec &inputs,
              DeviceContextVec &input_device_contexts,
              AllocatorAttributeVec &input_alloc_attrs,
-             bool &completed);
+             bool &completed, tf::Rendezvous *rendez);
 
     bool prepare(DeviceSpec &dev) override;
 
@@ -80,6 +80,7 @@ private:
     DeviceContextVec &input_device_contexts;
     AllocatorAttributeVec &input_alloc_attrs;
     bool &completed;
+    tf::Rendezvous *rendez;
 
     tf::OpKernel *op_kernel;
     bool kernel_is_async;

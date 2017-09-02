@@ -21,6 +21,7 @@
 #include "execution/devices.h"
 #include "platform/logging.h"
 #include "utils/threadutils.h"
+#include "oplibraries/tensorflow/v2/md_rendezvous.h"
 
 #include "oplibraries/tensorflow/tensorflow_headers.h"
 
@@ -32,7 +33,7 @@ ExecTask::ExecTask(ExecutorState *state, utils::semaphore *se,
                    tf::NodeExecStats *stats, tf::OpKernelContext::Params &params,
                    int64_t &scheduled_usec, ExecutorState::EntryVector &outputs,
                    TensorValueVec &inputs, DeviceContextVec &input_device_contexts,
-                   AllocatorAttributeVec &input_alloc_attrs, bool &completed)
+                   AllocatorAttributeVec &input_alloc_attrs, bool &completed, tf::Rendezvous *rendez)
     : tagged_node(node)
     , ready(ready)
     , inline_ready(inline_ready)
@@ -44,6 +45,7 @@ ExecTask::ExecTask(ExecutorState *state, utils::semaphore *se,
     , input_device_contexts(input_device_contexts)
     , input_alloc_attrs(input_alloc_attrs)
     , completed(completed)
+    , rendez(rendez)
     , m_se(se)
     , m_state(state)
 {
@@ -108,12 +110,14 @@ ProtoPtr ExecTask::run()
     if (!s.ok()) {
         m_state->MaybeMarkCompleted(input_frame, input_iter, id);
         // Continue to process the nodes in 'inline_ready'.
-        completed = m_state->NodeDone(s, item.node, ditem.device, ready, stats, &inline_ready);
+        completed = m_state->NodeDone(s, item.node, ditem.device, nullptr, ready, stats, &inline_ready);
         m_se->notify();
         return {};
     }
 
     params.device = ditem.device;
+    auto localRendez = new MultiDeviceRendezvous(ditem.device, rendez);
+    params.rendezvous = localRendez;
     params.record_tensor_accesses = ditem.device_record_tensor_access;
     params.function_library = ditem.function_library;
     params.resource_manager = ditem.device->resource_manager();
@@ -160,7 +164,7 @@ ProtoPtr ExecTask::run()
             }
             m_state->MaybeMarkCompleted(input_frame, input_iter, id);
             // Continue to process the nodes in 'inline_ready'.
-            completed = m_state->NodeDone(s, item.node, ditem.device, ready, stats, &inline_ready);
+            completed = m_state->NodeDone(s, item.node, ditem.device, localRendez, ready, stats, &inline_ready);
             m_se->notify();
             return {};
         }
@@ -179,8 +183,8 @@ ProtoPtr ExecTask::run()
             launched_asynchronously = true;
             auto state = new ExecutorState::AsyncState(params, tagged_node, &item, first_input, stats);
 
-            // Don't capture this, as when the cb get called, the task may already be deleted
-            auto done = [state, ditem = ditem, execState = m_state]() {
+            // Don't capture `this`, as when the cb get called, the task may already be deleted
+            auto done = [state, localRendez, ditem = ditem, execState = m_state]() {
                 auto device = ditem.device;
                 auto stats = state->stats;     // Shorthand
                 auto first_input = state->first_input; // Shorthand
@@ -216,7 +220,7 @@ ProtoPtr ExecTask::run()
                     // callee takes ownership of the vector
                     device->ConsumeListOfAccessedTensors(state->ctx.op_device_context(), accessed);
                 }
-                bool completed = execState->NodeDone(s, state->item->node, device, ready, stats, nullptr);
+                bool completed = execState->NodeDone(s, state->item->node, device, localRendez, ready, stats, nullptr);
                 delete state;
                 if (completed)
                     execState->Finish();
@@ -269,7 +273,7 @@ ProtoPtr ExecTask::run()
             scheduled_usec = nodestats::NowInUsec();
         }
         // Postprocess.
-        completed = m_state->NodeDone(s, item.node, ditem.device, ready, stats, &inline_ready);
+        completed = m_state->NodeDone(s, item.node, ditem.device, localRendez, ready, stats, &inline_ready);
         TRACE("Postprocess completed: {}", completed);
     }
     m_se->notify();

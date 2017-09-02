@@ -323,7 +323,6 @@ void ExecutorState::Process(TaggedNode tagged_node, int64_t scheduled_usec)
 
     tf::OpKernelContext::Params params;
     params.step_id = step_id_;
-    params.rendezvous = rendezvous_;
     params.session_state = session_state_;
     params.tensor_store = tensor_store_;
     params.cancellation_manager = cancellation_manager_;
@@ -360,7 +359,7 @@ void ExecutorState::Process(TaggedNode tagged_node, int64_t scheduled_usec)
                                                    tagged_node, ready, inline_ready, stats, params,
                                                    scheduled_usec, outputs,
                                                    inputs, input_device_contexts, input_alloc_attrs,
-                                                   completed);
+                                                   completed, rendezvous_);
         ExecutionEngine::instance().enqueue<::google::protobuf::Message>(std::move(nodeTask))
         .fail([&](std::exception_ptr) -> ProtoPtr {
             se.notify();
@@ -844,7 +843,7 @@ void ExecutorState::PropagateOutputs(const TaggedNode &tagged_node, const NodeIt
 }
 
 bool ExecutorState::NodeDone(const tf::Status &s, const tf::Node *node, const tf::Device *device,
-                             const TaggedNodeSeq &ready,
+                             tf::Rendezvous *rendezvous, const TaggedNodeSeq &ready,
                              tf::NodeExecStats *stats, TaggedNodeReadyQueue *inline_ready)
 {
     if (stats) {
@@ -870,13 +869,18 @@ bool ExecutorState::NodeDone(const tf::Status &s, const tf::Node *node, const tf
     }
     if (abort_run) {
 //         TRACEPRINTF("StartAbort: %s", s.ToString().c_str());
-        if (rendezvous_) {
+        if (rendezvous) {
+            rendezvous->StartAbort(s);
+        } else if (rendezvous_) {
             rendezvous_->StartAbort(s);
         }
+
         if (cancellation_manager_) {
             cancellation_manager_->StartCancel();
         }
     }
+    if (rendezvous)
+        rendezvous->Unref();
 
     TRACE("NodeDone ready size: {}", ready.size());
     TRACE("NodeDone s: {}", s);
