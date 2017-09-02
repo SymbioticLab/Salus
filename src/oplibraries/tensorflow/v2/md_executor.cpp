@@ -412,7 +412,7 @@ tf::Status ExecutorState::SetupKernel(TaggedNode node, const DeviceItem &ditem, 
     if (!ok.ok()) {
         *op_kernel = nullptr;
         ok = AttachDef(ok, ndef);
-        ERR("Executor failed to create kernel: {}", ok);
+        WARN("Executor failed to create kernel: {}", ok);
         return ok;
     }
     CHECK(kernel);
@@ -586,9 +586,11 @@ tf::Status ExecutorState::PrepareInputs(const NodeItem &item, tf::OpKernel *kern
                                 inp->tensor->shape());
 
                 INFO("Copying from device {} to device {} to prepare {}-th input for op {}. "
-                    " target tensor buffer addr: {}",
-                    entry->device->name(), device->name(), i, kernel->name(),
-                    as_hex(copy.tensor_data().data()));
+                     "source tensor buffer addr: {}, "
+                     "target tensor buffer addr: {}",
+                     entry->device->name(), device->name(), i, kernel->name(),
+                     as_hex(inp->tensor->tensor_data().data()),
+                     as_hex(copy.tensor_data().data()));
 
                 tf::Status ok;
                 auto dstDevCtx = device_context;
