@@ -131,8 +131,8 @@ ProtoPtr ExecTask::run()
         nodestats::SetAllStart(stats);
     }
 
-    DEBUG("Process node: {} step {} {} is dead: {}",
-          id, params.step_id, SummarizeNodeDef(node->def()), tagged_node.is_dead);
+    DEBUG("Process node: {} step {} {} is dead {}: on device {}",
+          id, params.step_id, SummarizeNodeDef(node->def()), tagged_node.is_dead, ditem.device->name());
 
     auto input_tensors = m_state->GetInputTensors(input_frame, input_iter);
     auto first_input = input_tensors + item.input_start;

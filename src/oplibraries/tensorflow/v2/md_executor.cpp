@@ -640,6 +640,7 @@ tf::Status ExecutorState::ProcessOutputs(const NodeItem &item, tf::OpKernelConte
     DCHECK_EQ(0, outputs->size());
     outputs->resize(item.num_outputs);
 
+
     auto s = ctx->status();
     if (!s.ok()) {
         s = AttachDef(s, node->def());
@@ -662,6 +663,7 @@ tf::Status ExecutorState::ProcessOutputs(const NodeItem &item, tf::OpKernelConte
         s.Update(impl_->params_.node_outputs_cb(item.node->name(), -1, nullptr, false, ctx));
     }
 
+    TRACE("Process {} outputs for node {}", item.num_outputs, node->name());
     for (int i = 0; i < item.num_outputs; ++i) {
         auto val = ctx->release_output(i);
         if (*ctx->is_output_dead() || val.tensor == nullptr) {
@@ -672,6 +674,8 @@ tf::Status ExecutorState::ProcessOutputs(const NodeItem &item, tf::OpKernelConte
             }
         } else {
             Entry *out = &((*outputs)[i]);
+            TRACE("    Process {}-th output: device {}, alloc {}, data block {}",
+                  i, device->name(), ctx->output_alloc_attr(i), as_hex(val->tensor_data().data()));
 
             // Set the device of the output entry.
             out->device = device;
