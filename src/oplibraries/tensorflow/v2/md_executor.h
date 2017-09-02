@@ -26,7 +26,6 @@ class NodeDef;
 class OpKernel;
 class Device;
 class DeviceMgr;
-class MultiDeviceExecutorParams;
 }
 
 // Creates an Executor that computes the given "graph".

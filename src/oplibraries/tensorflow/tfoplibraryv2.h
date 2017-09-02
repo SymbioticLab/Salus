@@ -29,6 +29,7 @@ namespace tensorflow {
 namespace remote {
 
 class TFOpLibraryProxy;
+class TFSessionProxy;
 
 } // namespace remote
 } // namespace tensorflow
@@ -65,7 +66,7 @@ public:
                         const executor::RunRequest &req) override;
 
 private:
-    using Proxy = tensorflow::remote::TFOpLibraryProxy;
+    using Proxy = tensorflow::remote::TFSessionProxy;
 
     Proxy *getOrCreateProxy(const std::string &recvId);
     void deregisterProxy(const std::string &recvId);
@@ -74,6 +75,8 @@ private:
 
     std::mutex m_mu;
     std::unordered_map<std::string, std::unique_ptr<Proxy>> m_proxies;
+
+    std::unique_ptr<tensorflow::remote::TFOpLibraryProxy> m_proxy;
 
     size_t m_maxOpenSessions;
 };

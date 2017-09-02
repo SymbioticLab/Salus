@@ -38,8 +38,14 @@ using namespace tensorflow::remote;
 OpLibraryRegistary::Register tfoplibraryv2(executor::TENSORFLOW, std::make_unique<TFOpLibraryV2>(), 200);
 
 TFOpLibraryV2::TFOpLibraryV2()
-    : m_maxOpenSessions(0)
+    : m_proxy(std::make_unique<TFOpLibraryProxy>(NewMultiDeviceExecutor))
+    , m_maxOpenSessions(0)
 {
+    auto s = m_proxy->globalInit();
+    if (!s.ok()) {
+        ERR("Failed to initialize proxy object: {}", s);
+    }
+
     // use device with our own allocator
     WrappedDeviceSettings::maybeRegisterWrappedDeviceFactories();
     WrappedDeviceSettings::setWrapperFactory(
@@ -167,17 +173,15 @@ PTask TFOpLibraryV2::createCustomTask(ZmqServer::Sender sender, const zrpc::Even
     });
 }
 
-tensorflow::remote::TFOpLibraryProxy * TFOpLibraryV2::getOrCreateProxy(const std::string& recvId)
+TFOpLibraryV2::Proxy *TFOpLibraryV2::getOrCreateProxy(const std::string& recvId)
 {
     std::lock_guard<std::mutex> g(m_mu);
     auto &p = m_proxies[recvId];
     if (!p) {
         INFO("Creating proxy object for recv id {}", recvId);
-        p = std::make_unique<tensorflow::remote::TFOpLibraryProxy>(NewMultiDeviceExecutor);
-        auto s = p->init();
+        auto s = m_proxy->newSession(p);
         if (!s.ok()) {
             ERR("Failed to create a proxy object for recv id {}: {}", recvId, s);
-            p.reset();
         }
     }
     if (m_proxies.size() > m_maxOpenSessions) {

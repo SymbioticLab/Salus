@@ -120,7 +120,6 @@ ProtoPtr ExecTask::run()
     params.rendezvous = localRendez;
     params.record_tensor_accesses = ditem.device_record_tensor_access;
     params.function_library = ditem.function_library;
-    params.resource_manager = ditem.device->resource_manager();
     // Set the device_context for this node id, if it exists.
     params.op_device_context = m_state->FindDeviceContext(id, ditem.device);
 

@@ -332,6 +332,7 @@ void ExecutorState::Process(TaggedNode tagged_node, int64_t scheduled_usec)
     params.input_device_contexts = &input_device_contexts;
     params.input_alloc_attrs = &input_alloc_attrs;
     params.runner = &runner_;
+    params.resource_manager = impl_->params_.resourceMgr;
 
     tf::NodeExecStats *stats = nullptr;
     EntryVector outputs;
