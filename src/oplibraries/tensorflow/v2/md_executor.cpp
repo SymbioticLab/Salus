@@ -619,12 +619,22 @@ tf::Status ExecutorState::PrepareInputs(const NodeItem &item, tf::OpKernel *kern
                     return ok;
                 }
 
-                *inp = {nullptr, &copy};
+                // move copy back into entry, remember to destroy previous one first.
+                // Note we cannot directly use copy's address because copy is stack allocated.
+                entry->ClearVal();
+                entry->ref = nullptr;
+                entry->ref_mu = nullptr;
+                entry->val.Init(std::move(copy));
+                entry->val_field_is_set = true;
+
+                inp->tensor = entry->val.get();
                 entry->alloc_attr = expected;
                 entry->device_context = dstDevCtx;
+                entry->device = device;
             }
         }
 
+        TRACE("    Input {} has data block at {}", i, as_hex(inp->tensor->tensor_data().data()));
         (*input_device_contexts)[i] = entry->device_context;
         (*input_alloc_attrs)[i] = entry->alloc_attr;
 
