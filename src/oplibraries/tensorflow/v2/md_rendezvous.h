@@ -24,9 +24,6 @@
 
 #include <unordered_map>
 
-/**
- * TODO: MultiDeviceRendezvous need not to be thread safe as it is only used per TFContext
- */
 class MultiDeviceRendezvous : public tensorflow::Rendezvous
 {
 public:
@@ -43,13 +40,6 @@ public:
     void StartAbort(const tensorflow::Status& status) override;
 
 private:
-    typedef std::function<void(const tensorflow::Status&)> StatusCallback;
-    void SameWorkerRecvDone(const ParsedKey &parsed,
-                            tensorflow::Device *send_dev, tensorflow::Device *recv_dev,
-                            const Args& send_args, const Args& recv_args,
-                            const tensorflow::Tensor& in, tensorflow::Tensor* out,
-                            StatusCallback done);
-
     tensorflow::Device *m_device;
     tensorflow::Rendezvous *m_local;
 };
