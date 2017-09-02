@@ -59,7 +59,7 @@ def run_on_rpc_and_cpu(func, **kwargs):
     return run_on_sessions(func, 'zrpc://tcp://localhost:5501', '', **kwargs)
 
 
-def assertAllClose(actual, expected):
+def assertAllClose(actual, expected, **kwargs):
     def _assertAllClose(actual, expected, path):
         if isinstance(actual, (list, tuple)):
             for i, (a, e) in enumerate(zip(actual, expected)):
@@ -68,6 +68,6 @@ def assertAllClose(actual, expected):
             msg = "At element actual"
             if len(path) > 0:
                 msg += '[{}]'.format(']['.join(str(i) for i in path))
-            npt.assert_allclose(actual, expected, err_msg=msg)
+            npt.assert_allclose(actual, expected, err_msg=msg, **kwargs)
 
     return _assertAllClose(actual, expected, [])

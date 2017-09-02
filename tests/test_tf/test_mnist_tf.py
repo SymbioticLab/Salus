@@ -120,7 +120,7 @@ class TestMnistConv(unittest.TestCase):
             return run_mnist_softmax(sess, mnist)
 
         actual, expected = run_on_rpc_and_cpu(func)
-        assertAllClose(actual, expected)
+        assertAllClose(actual, expected, rtol=1e-6)
 
     def test_conv(self):
         def func():
@@ -129,7 +129,7 @@ class TestMnistConv(unittest.TestCase):
             return run_mnist_conv(sess, mnist)
 
         actual, expected = run_on_rpc_and_cpu(func)
-        assertAllClose(actual, expected)
+        assertAllClose(actual, expected, rtol=1e-3)
 
 
 if __name__ == '__main__':

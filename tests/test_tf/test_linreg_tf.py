@@ -75,4 +75,4 @@ class TestLinreg(unittest.TestCase):
             return run_linear_reg(sess, training_epochs=epochs)
 
         actual, expected = run_on_rpc_and_cpu(func)
-        assertAllClose(actual, expected)
+        assertAllClose(actual, expected, rtol=1e-6)

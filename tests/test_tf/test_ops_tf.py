@@ -30,7 +30,7 @@ class TestBasicOps(unittest.TestCase):
             return r.eval()
 
         actual, expected = run_on_rpc_and_cpu(func)
-        assertAllClose(actual, expected)
+        assertAllClose(actual, expected, rtol=1e-6)
 
     def test_noop(self):
         def func():
