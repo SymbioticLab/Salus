@@ -35,6 +35,22 @@
 namespace zrpc = executor;
 using namespace tensorflow::remote;
 
+namespace {
+template<typename RESPONSE>
+std::unique_ptr<zrpc::CustomResponse> consumeResponse(RESPONSE *resp, tf::Status s)
+{
+    auto cresp = std::make_unique<zrpc::CustomResponse>();
+    cresp->mutable_result()->set_code(s.code());
+    cresp->mutable_result()->set_message(s.error_message());
+    if (resp && s.ok()) {
+        resp->SerializeToString(cresp->mutable_extra());
+    }
+    delete resp;
+
+    return cresp;
+}
+} // namespace
+
 OpLibraryRegistary::Register tfoplibraryv2(executor::TENSORFLOW, std::make_unique<TFOpLibraryV2>(), 200);
 
 TFOpLibraryV2::TFOpLibraryV2()
@@ -109,14 +125,7 @@ PTask TFOpLibraryV2::createCustomTask(ZmqServer::Sender sender, const zrpc::Even
          auto preq = req.release();                                                                          \
          proxy->Handle##name(preq, [cb, preq](auto resp, auto status) {                                      \
              delete preq;                                                                                    \
-             auto cresp = std::make_unique<zrpc::CustomResponse>();                                          \
-             cresp->mutable_result()->set_code(status.code());                                               \
-             cresp->mutable_result()->set_message(status.error_message());                                   \
-             if (resp && status.ok()) {                                                                      \
-                 resp->SerializeToString(cresp->mutable_extra());                                            \
-             }                                                                                               \
-             delete resp;                                                                                    \
-             cb(std::move(cresp));                                                                           \
+             cb(consumeResponse(resp, status));                                                              \
          });                                                                                                 \
      }},
 
@@ -176,8 +185,9 @@ PTask TFOpLibraryV2::createCustomTask(ZmqServer::Sender sender, const zrpc::Even
     }
 
     DEBUG("Dispatching custom task {} of seq {}", it->first, evenlop.seq());
-    return make_async_lambda_task([this, recvId, sender = std::move(sender), req, fn = it->second](
-        auto cb) mutable { fn(std::move(sender), recvId, req, cb); });
+    return make_async_lambda_task([sender = std::move(sender), recvId, req, it](auto cb) mutable {
+        it->second(std::move(sender), recvId, req, cb);
+    });
 }
 
 std::unique_ptr<TFOpLibraryV2::Proxy> TFOpLibraryV2::createProxy()
@@ -261,24 +271,18 @@ void TFOpLibraryV2::handleCreateSession(const std::string &recvId, const executo
                                [this, preq, recvId, cb, pproxy = proxy.release()](auto resp, auto status) {
                                    std::unique_ptr<Proxy> proxy(pproxy);
                                    delete preq;
-                                   auto cresp = std::make_unique<zrpc::CustomResponse>();
-                                   cresp->mutable_result()->set_code(status.code());
-                                   cresp->mutable_result()->set_message(status.error_message());
-                                   if (resp && status.ok()) {
-                                       this->registerProxy(recvId, resp->session_handle(), std::move(proxy));
-                                       resp->SerializeToString(cresp->mutable_extra());
+                                   if (status.ok()) {
+                                       registerProxy(recvId, resp->session_handle(), std::move(proxy));
                                    }
-                                   delete resp;
-                                   cb(std::move(cresp));
+                                   cb(consumeResponse(resp, status));
                                });
 }
 
 void TFOpLibraryV2::handleCloseSession(const std::string &recvId, const executor::CustomRequest &creq,
                                        ITask::DoneCallback cb)
 {
-    auto req =
-        utils::createMessage<tensorflow::CloseSessionRequest>("tensorflow.CloseSessionRequest",
-                                                              creq.extra().data(), creq.extra().size());
+    auto req = utils::createMessage<tf::CloseSessionRequest>("tensorflow.CloseSessionRequest",
+                                                             creq.extra().data(), creq.extra().size());
     if (!req) {
         ERR("Failed to parse message");
         cb(nullptr);
@@ -286,16 +290,15 @@ void TFOpLibraryV2::handleCloseSession(const std::string &recvId, const executor
     }
 
     auto proxy = deregisterProxy(recvId, req->session_handle());
+    if (!proxy) {
+        cb(consumeResponse<tf::CloseSessionResponse>(nullptr, tf::errors::Internal(
+                                                                  "No session object found to close")));
+        return;
+    }
+
     auto preq = req.release();
     proxy->HandleCloseSession(preq, [this, cb, preq](auto resp, auto status) {
         delete preq;
-        auto cresp = std::make_unique<zrpc::CustomResponse>();
-        cresp->mutable_result()->set_code(status.code());
-        cresp->mutable_result()->set_message(status.error_message());
-        if (resp && status.ok()) {
-            resp->SerializeToString(cresp->mutable_extra());
-        }
-        delete resp;
-        cb(std::move(cresp));
+        cb(consumeResponse(resp, status));
     });
 }
