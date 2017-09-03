@@ -89,14 +89,14 @@ PTask TFOpLibraryV2::createCustomTask(ZmqServer::Sender sender, const zrpc::Even
 
     // NOTE: this-> is need to workaround a bug in GCC 6.x where member function lookup is broken
     // for generic lambda. See https://gcc.gnu.org/bugzilla/show_bug.cgi?id=61636
-    using Method = std::function<void(ZmqServer::Sender&&, Proxy *,
-                                      const zrpc::CustomRequest&, ITask::DoneCallback)>;
+    using Method = std::function<void(ZmqServer::Sender&&, const std::string&, const zrpc::CustomRequest&, ITask::DoneCallback)>;
 
     static std::unordered_map<std::string, Method> funcs{
-#define HANDLER(name) \
+#define HANDLER(name, sessHandle) \
     {"tensorflow." #name "Request", \
-        [this](auto sender, auto proxy, auto creq, auto cb) { \
+        [this](auto sender, auto recvId, auto creq, auto cb) { \
             UNUSED(sender); \
+            UNUSED(recvId); \
             auto req = utils::createMessage<tensorflow::name##Request>("tensorflow." #name "Request", \
                                                                        creq.extra().data(), \
                                                                        creq.extra().size()); \
@@ -105,6 +105,7 @@ PTask TFOpLibraryV2::createCustomTask(ZmqServer::Sender sender, const zrpc::Even
                 cb(nullptr); \
                 return; \
             } \
+            auto proxy = getProxy(sessHandle); \
             auto preq = req.release(); \
             proxy->Handle##name(preq, [cb, preq](auto resp, auto status){ \
                 delete preq; \
@@ -120,19 +121,27 @@ PTask TFOpLibraryV2::createCustomTask(ZmqServer::Sender sender, const zrpc::Even
         } \
     },
 
-        HANDLER(CreateSession)
-        HANDLER(ExtendSession)
-        HANDLER(PartialRunSetup)
-        HANDLER(RunStep)
+        // Master handlers
+//         HANDLER(CreateSession)
+        HANDLER(ExtendSession, req->session_handle())
+        HANDLER(PartialRunSetup, req->session_handle())
+        HANDLER(RunStep, req->session_handle())
 //         HANDLER(CloseSession)
-        HANDLER(ListDevices)
-        HANDLER(Reset)
+        HANDLER(ListDevices, sessionFromRecvId(recvId))
+        HANDLER(Reset, sessionFromRecvId(recvId))
 
-        CallWithWorkerMethodName(HANDLER)
-        HANDLER(RunGraph)
+        // Worker handlers
+        HANDLER(RegisterGraph, req->session_handle())
+        HANDLER(RunGraph, sessionFromRecvId(recvId))
+        HANDLER(GetStatus, sessionFromRecvId(recvId))
+        HANDLER(DeregisterGraph, sessionFromRecvId(recvId))
+        HANDLER(CleanupGraph, sessionFromRecvId(recvId))
+        HANDLER(CleanupAll, sessionFromRecvId(recvId))
+        HANDLER(Logging, sessionFromRecvId(recvId))
+        HANDLER(Tracing, sessionFromRecvId(recvId))
 #undef HANDLER
 
-        {"tensorflow.RecvTensorRequest", [this](auto sender, auto proxy, auto creq, auto cb) {
+        {"tensorflow.RecvTensorRequest", [this](auto sender, auto recvId, auto creq, auto cb) {
             auto req = utils::createMessage<tensorflow::RecvTensorRequest>("tensorflow.RecvTensorRequest",
                                                                            creq.extra().data(),
                                                                            creq.extra().size());
@@ -141,6 +150,7 @@ PTask TFOpLibraryV2::createCustomTask(ZmqServer::Sender sender, const zrpc::Even
                 cb(nullptr);
                 return;
             }
+            auto proxy = getProxy(sessionFromRecvId(recvId));
             auto preq = req.release();
             proxy->HandleRecvTensorRaw(preq, [sender, cb, preq](auto resp, auto status) {
                 UNUSED(status);
@@ -150,9 +160,13 @@ PTask TFOpLibraryV2::createCustomTask(ZmqServer::Sender sender, const zrpc::Even
                 cb(nullptr);
             });
         }},
-        {"tensorflow.CloseSessionRequest", [this, recvId](auto sender, auto proxy, auto creq, auto cb) {
+        {"tensorflow.CreateSessionRequest", [this](auto sender, auto recvId, auto creq, auto cb) {
             UNUSED(sender);
-            this->handleCloseSession(recvId, proxy, creq, cb);
+            this->handleCreateSession(recvId, creq, cb);
+        }},
+        {"tensorflow.CloseSessionRequest", [this](auto sender, auto recvId, auto creq, auto cb) {
+            UNUSED(sender);
+            this->handleCloseSession(recvId, creq, cb);
         }},
     };
 
@@ -168,38 +182,99 @@ PTask TFOpLibraryV2::createCustomTask(ZmqServer::Sender sender, const zrpc::Even
                                   sender = std::move(sender),
                                   req,
                                   fn = it->second](auto cb) mutable {
-        auto proxy = getOrCreateProxy(recvId);
-        fn(std::move(sender), proxy, req, cb);
+        fn(std::move(sender), recvId, req, cb);
     });
 }
 
-TFOpLibraryV2::Proxy *TFOpLibraryV2::getOrCreateProxy(const std::string& recvId)
+std::unique_ptr<TFOpLibraryV2::Proxy> TFOpLibraryV2::createProxy()
+{
+    std::unique_ptr<TFOpLibraryV2::Proxy> p;
+    auto s = m_proxy->newSession(p);
+    if (!s.ok()) {
+        ERR("Failed to create a proxy object: {}", s);
+    }
+    return p;
+}
+
+TFOpLibraryV2::Proxy *TFOpLibraryV2::getProxy(const std::string& sessHandle)
 {
     std::lock_guard<std::mutex> g(m_mu);
-    auto &p = m_proxies[recvId];
+    auto &p = m_proxies[sessHandle];
     if (!p) {
-        INFO("Creating proxy object for recv id {}", recvId);
-        auto s = m_proxy->newSession(p);
-        if (!s.ok()) {
-            ERR("Failed to create a proxy object for recv id {}: {}", recvId, s);
+        if (sessHandle.empty()) {
+            // special case for a default session proxy to handle requests without session_handle
+            p = createProxy();
+        } else {
+            ERR("Failed to find a proxy object for session {}", sessHandle);
         }
-    }
-    if (m_proxies.size() > m_maxOpenSessions) {
-        m_maxOpenSessions = m_proxies.size();
     }
     return p.get();
 }
 
-void TFOpLibraryV2::deregisterProxy(const std::string &recvId)
+const std::string &TFOpLibraryV2::sessionFromRecvId(const std::string &recvId)
 {
     std::lock_guard<std::mutex> g(m_mu);
-    auto c = m_proxies.erase(recvId);
-    if (c == 0) {
-        WARN("No proxy object found to deregister for recvId {}", recvId);
+    return m_lastSession[recvId];
+}
+
+std::unique_ptr<TFOpLibraryV2::Proxy> TFOpLibraryV2::deregisterProxy(const std::string &recvId, const std::string &sessHandle)
+{
+    std::lock_guard<std::mutex> g(m_mu);
+    m_lastSession.erase(recvId);
+    auto it = m_proxies.find(sessHandle);
+    if (it == m_proxies.end()) {
+        WARN("No proxy object found to deregister for session {}", sessHandle);
+        return nullptr;
+    }
+    auto p = std::move(it->second);
+    m_proxies.erase(it);
+    return p;
+}
+
+void TFOpLibraryV2::registerProxy(const std::string &recvId, const std::string &sessHandle, std::unique_ptr<TFOpLibraryV2::Proxy> &&proxy)
+{
+    std::lock_guard<std::mutex> g(m_mu);
+    m_lastSession[recvId] = recvId;
+    auto &p = m_proxies[sessHandle];
+    if (p) {
+        WARN("Overwriting an existing proxy registered for session {}: {}", sessHandle, as_hex(p));
+        p.reset();
+    }
+    p = std::move(proxy);
+    if (m_proxies.size() > m_maxOpenSessions) {
+        m_maxOpenSessions = m_proxies.size();
     }
 }
 
-void TFOpLibraryV2::handleCloseSession(const std::string &recvId, Proxy *proxy, const executor::CustomRequest &creq, ITask::DoneCallback cb)
+void TFOpLibraryV2::handleCreateSession(const std::string &recvId, const executor::CustomRequest &creq, ITask::DoneCallback cb)
+{
+    auto req = utils::createMessage<tensorflow::CreateSessionRequest>("tensorflow.CreateSessionRequest",
+                                                                      creq.extra().data(), creq.extra().size());
+    if (!req) {
+        ERR("Failed to parse message");
+        cb(nullptr);
+        return;
+    }
+
+    INFO("Creating proxy object for recv id {}", recvId);
+    auto proxy = createProxy();
+    auto preq = req.release();
+    proxy->HandleCreateSession(preq, [this, preq, recvId, cb, pproxy = proxy.release()] (auto resp, auto status) {
+        std::unique_ptr<Proxy> proxy(pproxy);
+        delete preq;
+        auto cresp = std::make_unique<zrpc::CustomResponse>();
+        cresp->mutable_result()->set_code(status.code());
+        cresp->mutable_result()->set_message(status.error_message());
+        if (resp && status.ok()) {
+            this->registerProxy(recvId, resp->session_handle(), std::move(proxy));
+            resp->SerializeToString(cresp->mutable_extra());
+        }
+        delete resp;
+        cb(std::move(cresp));
+    });
+}
+
+void TFOpLibraryV2::handleCloseSession(const std::string &recvId, const executor::CustomRequest &creq, ITask::DoneCallback cb)
 {
     auto req = utils::createMessage<tensorflow::CloseSessionRequest>("tensorflow.CloseSessionRequest", creq.extra().data(), creq.extra().size());
     if (!req) {
@@ -208,11 +283,10 @@ void TFOpLibraryV2::handleCloseSession(const std::string &recvId, Proxy *proxy, 
         return;
     }
 
+    auto proxy = deregisterProxy(recvId, req->session_handle());
     auto preq = req.release();
-    proxy->HandleCloseSession(preq, [this, recvId, cb, preq](auto resp, auto status) {
-        this->deregisterProxy(recvId);
+    proxy->HandleCloseSession(preq, [this, cb, preq](auto resp, auto status) {
         delete preq;
-
         auto cresp = std::make_unique<zrpc::CustomResponse>();
         cresp->mutable_result()->set_code(status.code());
         cresp->mutable_result()->set_message(status.error_message());

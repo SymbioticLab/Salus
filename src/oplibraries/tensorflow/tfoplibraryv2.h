@@ -68,15 +68,24 @@ public:
 private:
     using Proxy = tensorflow::remote::TFSessionProxy;
 
-    Proxy *getOrCreateProxy(const std::string &recvId);
-    void deregisterProxy(const std::string &recvId);
+    std::unique_ptr<Proxy> createProxy();
+    Proxy *getProxy(const std::string &sessHandle);
+    std::unique_ptr<Proxy> deregisterProxy(const std::string &recvId, const std::string &sessHandle);
+    void registerProxy(const std::string &recvId, const std::string &sessHandle, std::unique_ptr<Proxy> &&proxy);
 
-    void handleCloseSession(const std::string &recvId, Proxy *proxy, const executor::CustomRequest&, ITask::DoneCallback);
+    const std::string &sessionFromRecvId(const std::string &recvId);
+
+    void handleCreateSession(const std::string &recvId, const executor::CustomRequest&, ITask::DoneCallback);
+    void handleCloseSession(const std::string &recvId, const executor::CustomRequest&, ITask::DoneCallback);
 
     std::mutex m_mu;
     std::unordered_map<std::string, std::unique_ptr<Proxy>> m_proxies;
 
     std::unique_ptr<tensorflow::remote::TFOpLibraryProxy> m_proxy;
+
+    // A map for last seen session per client process
+    // recvId -> sessHandle
+    std::unordered_map<std::string, std::string> m_lastSession;
 
     size_t m_maxOpenSessions;
 };
