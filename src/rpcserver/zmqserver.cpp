@@ -152,7 +152,7 @@ void ZmqServer::proxyRecvLoop()
         if (needSendOut && canSendOut) {
             TRACE("Forwarding message out");
             zmq::message_t msg;
-            bool more;
+            bool more = false;
             while (true) {
                 try {
                     m_backend_sock.recv(&msg);

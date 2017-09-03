@@ -21,10 +21,13 @@
 
 #include "memorymgr/memorymgr.h"
 #include "platform/logging.h"
+#include "utils/macros.h"
 
 namespace {
 void checkMemory(void *ptr, size_t num_bytes)
 {
+    UNUSED(ptr);
+    UNUSED(num_bytes);
     return;
 #ifndef NDEBUG
     DEBUG("Checking memory at {:x} of size {}", reinterpret_cast<uint64_t>(ptr), num_bytes);
@@ -37,8 +40,8 @@ void checkMemory(void *ptr, size_t num_bytes)
                 reinterpret_cast<uint64_t>(p), reinterpret_cast<uint64_t>(pbegin));
         }
     }
-}
 #endif
+}
 
 } // namespace
 
