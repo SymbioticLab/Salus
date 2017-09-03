@@ -297,8 +297,10 @@ void TFOpLibraryV2::handleCloseSession(const std::string &recvId, const executor
     }
 
     auto preq = req.release();
-    proxy->HandleCloseSession(preq, [this, cb, preq](auto resp, auto status) {
+    auto pproxy = proxy.release();
+    pproxy->HandleCloseSession(preq, [this, cb, preq, pproxy](auto resp, auto status) {
         delete preq;
+        delete pproxy;
         cb(consumeResponse(resp, status));
     });
 }
