@@ -57,15 +57,16 @@ TFOpLibraryV2::TFOpLibraryV2()
     : m_proxy(std::make_unique<TFOpLibraryProxy>(NewMultiDeviceExecutor))
     , m_maxOpenSessions(0)
 {
-    auto s = m_proxy->globalInit();
-    if (!s.ok()) {
-        ERR("Failed to initialize proxy object: {}", s);
-    }
-
     // use device with our own allocator
     WrappedDeviceSettings::maybeRegisterWrappedDeviceFactories();
     WrappedDeviceSettings::setWrapperFactory(
         [](auto *alloc) { return std::make_unique<TFAllocator>(alloc); });
+
+    // Initialize proxy after set wrapper, as devices are created now.
+    auto s = m_proxy->globalInit();
+    if (!s.ok()) {
+        ERR("Failed to initialize proxy object: {}", s);
+    }
 }
 
 TFOpLibraryV2::~TFOpLibraryV2()
