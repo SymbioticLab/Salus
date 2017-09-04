@@ -6,7 +6,7 @@ from timeit import default_timer
 
 import tensorflow as tf
 
-from . import run_on_rpc_and_cpu, run_onrpc_and_gpu, run_on_sessions, run_on_devices
+from . import run_on_rpc_and_cpu, run_on_rpc_and_gpu, run_on_sessions, run_on_devices
 from . import networks, datasets
 from .lib import tfhelper
 
