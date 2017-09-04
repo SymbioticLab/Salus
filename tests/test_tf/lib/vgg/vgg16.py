@@ -1,9 +1,9 @@
-import inspect
 import os
+import tensorflow as tf
 
 import numpy as np
-import tensorflow as tf
 import time
+import inspect
 
 VGG_MEAN = [103.939, 116.779, 123.68]
 
@@ -15,7 +15,7 @@ class Vgg16:
             path = os.path.abspath(os.path.join(path, os.pardir))
             path = os.path.join(path, "vgg16.npy")
             vgg16_npy_path = path
-            print(path)
+            print(vgg16_npy_path)
 
         self.data_dict = np.load(vgg16_npy_path, encoding='latin1').item()
         print("npy file loaded")

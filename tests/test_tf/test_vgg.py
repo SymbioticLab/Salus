@@ -6,17 +6,19 @@ from timeit import default_timer
 
 import tensorflow as tf
 
-from . import run_on_rpc_and_cpu, run_on_sessions, run_on_devices
+from . import run_on_rpc_and_cpu, run_onrpc_and_gpu, run_on_sessions, run_on_devices
 from . import networks, datasets
 from .lib import tfhelper
 
 
-def run_vgg19(sess, input_data):
+def run_vgg(vgg, sess, input_data):
+    if vgg is None:
+        raise ValueError('VGG is None!!')
+
     batch_size = 100
     images, labels, num_classes = input_data(batch_size=batch_size, batch_num=100)
     train_mode = tf.placeholder(tf.bool)
 
-    vgg = networks.Vgg19Trainable()
     vgg.build(images, train_mode)
 
     # print number of variables used: 143667240 variables, i.e. ideal size = 548MB
@@ -61,27 +63,16 @@ def run_vgg19(sess, input_data):
     return final_acc
 
 
-def simple_fake(batch_size, batch_num):
-    image = tf.Variable(tf.random_normal([batch_size, 224, 224, 3], dtype=tf.float32),
-                        name='sample_image', trainable=False)
-    label = tf.Variable(tf.random_uniform([batch_size], minval=0, maxval=1000, dtype=tf.int32),
-                        name='ground_truth', trainable=False)
-    return image, label, 1000
-
-
-class TestVGG19(unittest.TestCase):
-    def test_simple(self):
-        def func():
-            sess = tf.get_default_session()
-            return run_vgg19(sess, simple_fake)
-        run_on_devices(func, '/device:CPU:0')
+class VGGCaseBase(unittest.TestCase):
+    def _vgg(self):
+        return None
 
     def test_gpu(self):
         def func():
             def input_data(*a, **kw):
                 return datasets.fake_data(*a, height=224, width=224, num_classes=1000, **kw)
             sess = tf.get_default_session()
-            return run_vgg19(sess, input_data)
+            return run_vgg(self._vgg(), sess, input_data)
 
         run_on_devices(func, '/device:GPU:0', config=tf.ConfigProto(allow_soft_placement=True))
 
@@ -90,7 +81,7 @@ class TestVGG19(unittest.TestCase):
             def input_data(*a, **kw):
                 return datasets.fake_data(*a, height=224, width=224, num_classes=1000, **kw)
             sess = tf.get_default_session()
-            return run_vgg19(sess, input_data)
+            return run_vgg(self._vgg(), sess, input_data)
 
         run_on_devices(func, '/device:CPU:0')
 
@@ -99,9 +90,20 @@ class TestVGG19(unittest.TestCase):
             def input_data(*a, **kw):
                 return datasets.fake_data(*a, height=224, width=224, num_classes=1000, **kw)
             sess = tf.get_default_session()
-            return run_vgg19(sess, input_data)
+            return run_vgg(self._vgg(), sess, input_data)
 
         actual, expected = run_on_rpc_and_cpu(func, config=tf.ConfigProto(allow_soft_placement=True))
+        self.assertEquals(actual, expected)
+
+    @unittest.Skip("Not yet implemented")
+    def test_fake_data_gpu(self):
+        def func():
+            def input_data(*a, **kw):
+                return datasets.fake_data(*a, height=224, width=224, num_classes=1000, **kw)
+            sess = tf.get_default_session()
+            return run_vgg(self._vgg(), sess, input_data)
+
+        actual, expected = run_on_rpc_and_gpu(func)
         self.assertEquals(actual, expected)
 
     def test_flowers(self):
@@ -109,7 +111,7 @@ class TestVGG19(unittest.TestCase):
             def input_data(*a, **kw):
                 return datasets.flowers_data(*a, height=224, width=224, **kw)
             sess = tf.get_default_session()
-            return run_vgg19(sess, input_data)
+            return run_vgg(self._vgg(), sess, input_data)
 
         actual, expected = run_on_rpc_and_cpu(func)
         self.assertEquals(actual, expected)
@@ -120,7 +122,8 @@ class TestVGG19(unittest.TestCase):
             def input_data(*a, **kw):
                 return datasets.fake_data(*a, height=224, width=224, num_classes=1000, **kw)
             sess = tf.get_default_session()
-            return run_vgg19(sess, input_data)
+            return run_vgg(self._vgg(), sess, input_data)
+
         run_on_sessions(func, 'grpc://localhost:2222')
 
     @unittest.skip("Skip distributed runtime")
@@ -129,10 +132,18 @@ class TestVGG19(unittest.TestCase):
             def input_data(*a, **kw):
                 return datasets.fake_data(*a, height=224, width=224, num_classes=1000, **kw)
             sess = tf.get_default_session()
-            return run_vgg19(sess, input_data)
+            return run_vgg(self._vgg(), sess, input_data)
         run_on_devices(func, '/job:local/task:0/device:GPU:0', target='grpc://localhost:2222',
                        config=tf.ConfigProto(allow_soft_placement=True))
 
+
+class TestVgg16(VGGCaseBase):
+    def _vgg(self):
+        return networks.Vgg16Trainable()
+
+class TestVgg19(VGGCaseBase):
+    def _vgg(self):
+        return networks.Vgg19Trainable()
 
 if __name__ == '__main__':
     unittest.main()

@@ -9,6 +9,13 @@ from .lib import networks  # NOQA: F401
 from .lib import datasets  # NOQA: F401
 
 
+def _add_config_to_kwargs(kwargs, nconfig):
+    if 'config' not in kwargs:
+        kwargs['config'] = tf.ConfigProto()
+    kwargs['config'].MergeFrom(nconfig)
+    return kwargs
+
+
 # TODO: implement the device selection as a session option.
 # So we can test both CPU and GPU using the same code.
 @contextmanager
@@ -56,6 +63,17 @@ def run_on_sessions(func, targets, *args, **kwargs):
 
 
 def run_on_rpc_and_cpu(func, **kwargs):
+    config = tf.ConfigProto()
+    config.zmq_options.sched_cpu_only = True
+    kwargs = _add_config_to_kwargs(kwargs, config)
+    return run_on_sessions(func, 'zrpc://tcp://localhost:5501', '', **kwargs)
+
+
+def run_on_rpc_and_gpu(func, **kwargs):
+    config = tf.ConfigProto()
+    config.zmq_options.sched_cpu_only = False
+    config.allow_soft_placement = True
+    kwargs = _add_config_to_kwargs(kwargs, config)
     return run_on_sessions(func, 'zrpc://tcp://localhost:5501', '', **kwargs)
 
 
