@@ -143,7 +143,7 @@ def run_mnist_large(sess, mnist):
 
     h_pool_flat = tf.reshape(h_pool4, [-1, 25600])
 
-    W_fc1 = weight_variable([7 * 7 * 128, 1024])
+    W_fc1 = weight_variable([25600, 1024])
     b_fc1 = bias_variable([1024])
     h_fc1 = tf.nn.relu(tf.matmul(h_pool_flat, W_fc1) + b_fc1)
     h_fc1_drop = tf.nn.dropout(h_fc1, keep_prob)
