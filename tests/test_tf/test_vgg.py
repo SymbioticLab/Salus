@@ -85,6 +85,15 @@ class VGGCaseBase(unittest.TestCase):
 
         run_on_devices(func, '/device:CPU:0')
 
+    def test_rpc_only(self):
+        def func():
+            def input_data(*a, **kw):
+                return datasets.fake_data(*a, height=224, width=224, num_classes=1000, **kw)
+            sess = tf.get_default_session()
+            return run_vgg(self._vgg(), sess, input_data)
+
+        run_on_sessions(func, 'zrpc://tcp://127.0.0.1:5501')
+
     def test_fake_data(self):
         def func():
             def input_data(*a, **kw):
