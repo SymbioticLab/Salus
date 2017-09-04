@@ -141,7 +141,7 @@ def run_mnist_large(sess, mnist):
     h_conv4 = tf.nn.relu(conv2d(h_pool3, W_conv4) + b_conv4)
     h_pool4 = max_pool_2x2(h_conv4)
 
-    h_pool_flat = tf.reshape(h_pool4, [-1, 7 * 7 * 128])
+    h_pool_flat = tf.reshape(h_pool4, [-1, 25600])
 
     W_fc1 = weight_variable([7 * 7 * 128, 1024])
     b_fc1 = bias_variable([1024])
