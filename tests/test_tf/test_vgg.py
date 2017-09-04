@@ -104,7 +104,7 @@ class VGGCaseBase(unittest.TestCase):
         actual, expected = run_on_rpc_and_cpu(func, config=tf.ConfigProto(allow_soft_placement=True))
         self.assertEquals(actual, expected)
 
-    @unittest.Skip("Not yet implemented")
+    @unittest.skip("Not yet implemented")
     def test_fake_data_gpu(self):
         def func():
             def input_data(*a, **kw):
