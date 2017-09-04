@@ -146,9 +146,15 @@ class VGGCaseBase(unittest.TestCase):
                        config=tf.ConfigProto(allow_soft_placement=True))
 
 
+class TestVgg11(VGGCaseBase):
+    def _vgg(self):
+        return networks.Vgg11Trainable()
+
+
 class TestVgg16(VGGCaseBase):
     def _vgg(self):
         return networks.Vgg16Trainable()
+
 
 class TestVgg19(VGGCaseBase):
     def _vgg(self):
