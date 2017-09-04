@@ -60,10 +60,19 @@ TFOpLibraryV2::TFOpLibraryV2()
     // use device with our own allocator
     WrappedDeviceSettings::maybeRegisterWrappedDeviceFactories();
     WrappedDeviceSettings::setWrapperFactory(
-        [](auto *alloc) { return std::make_unique<TFAllocator>(alloc); });
+        [](auto *alloc, auto *) {
+            if (alloc->Name() == "GPU_0_bfc") {
+                // FIXME: there is memory leak
+                alloc = new TrivialGPUAllocator(0);
+            }
+            return std::make_unique<TFAllocator>(alloc);
+        });
 
     // Initialize proxy after set wrapper, as devices are created now.
-    auto s = m_proxy->globalInit();
+    tf::ConfigProto config;
+    config.mutable_gpu_options()->set_allow_growth(true);
+    config.mutable_device_count()->set_per_process_gpu_memory_fraction(0.00001);
+    auto s = m_proxy->globalInit(config);
     if (!s.ok()) {
         ERR("Failed to initialize proxy object: {}", s);
     }

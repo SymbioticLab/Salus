@@ -37,6 +37,7 @@
 #include <tensorflow/core/distributed_runtime/zrpc/exechelper/mdgraphmgr.h>
 #include <tensorflow/core/distributed_runtime/zrpc/exechelper/tfoplibraryproxy.h>
 #include <tensorflow/core/distributed_runtime/zrpc/exechelper/devicefactories.h>
+#include <tensorflow/core/distributed_runtime/zrpc/exechelper/allocators.h>
 #include <tensorflow/core/distributed_runtime/zrpc/zrpc_wrapped_devicecontext.h>
 #include <tensorflow/core/framework/allocator.h>
 #include <tensorflow/core/framework/function.h>
