@@ -1,0 +1,10 @@
+Generate events/metrics with kernel timeline in sqlite format:
+
+nvprof --export-profile <filename> --metrics <metrics> --events <events> [--aggregate-mode off]
+
+Without aggregate mode, events shows up in CUPTI_ACTIVITY_KIND_EVENT table, otherwise in CUPTI_ACTIVITY_KIND_EVENT_INSTANCE
+The value field of these table is string
+
+Without aggregate mode, metrics shows up in CUPTI_ACTIVITY_KIND_METRIC table, otherwise in CUPTI_ACTIVITY_KIND_METRIC_INSTANCE
+The value field of these table is blob, which can be parsed as double
+

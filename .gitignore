@@ -22,7 +22,10 @@ spack_packages
 MNIST_data
 
 # Scripts
-scripts
+scripts/**
+!scripts/Note
+!scripts/nvvpreader
+!scripts/**/*.py
 
 # python
 .cache
