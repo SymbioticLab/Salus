@@ -3,6 +3,7 @@ from __future__ import absolute_import, print_function, division
 import sqlite3 as sql
 import struct
 import pandas as pd
+from datetime import datetime
 from tqdm import tqdm
 
 metric_name = {
@@ -21,6 +22,10 @@ def parseMetricValue(binstr):
 
 def parseEventValue(s):
     return int(s)
+
+
+def parseNanoTime(nanotime):
+    return datetime.utcfromtimestamp(nanotime / 1e9)
 
 
 class Metric(object):
@@ -58,6 +63,7 @@ class NvvpReader(object):
         # get timeline reference point (start time of the first overhead event is 0ns)
         cursor.execute("""select start from CUPTI_ACTIVITY_KIND_OVERHEAD order by start""")
         (self.refpoint, ) = cursor.fetchone()
+        self.refpoint = parseNanoTime(self.refpoint)
         # get all kernels
         total_amount = 0
         if progress:
@@ -73,8 +79,8 @@ class NvvpReader(object):
             correlationId = row['correlationId']
             kernel = {
                 'id': correlationId,
-                'start': row['start'] - self.refpoint,
-                'end': row['end'] - self.refpoint,
+                'start': parseNanoTime(row['start']),
+                'end': parseNanoTime(row['end']),
                 'duration': row['end'] - row['start'],
                 'name': row['strname'],
             }
