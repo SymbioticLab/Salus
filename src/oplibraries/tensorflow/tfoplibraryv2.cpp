@@ -73,8 +73,8 @@ TFOpLibraryV2::TFOpLibraryV2()
 
     // Initialize proxy after set wrapper, as devices are created now.
     tf::ConfigProto config;
-    config.mutable_gpu_options()->set_allow_growth(true);
-    config.mutable_gpu_options()->set_per_process_gpu_memory_fraction(0.00001);
+//     config.mutable_gpu_options()->set_allow_growth(true);
+//     config.mutable_gpu_options()->set_per_process_gpu_memory_fraction(0.00001);
     auto s = m_proxy->globalInit(config);
     if (!s.ok()) {
         ERR("Failed to initialize proxy object: {}", s);
