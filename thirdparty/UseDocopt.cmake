@@ -14,7 +14,7 @@ if(NOT EXISTS ${third_party_dir}/${library_name}/CMakeLists.txt)
     if(NOT "${retcode}" STREQUAL "0")
         message(FATAL_ERROR "Failed to checkout ${library_name} as submodule")
     endif(NOT "${retcode}" STREQUAL "0")
-endif(NOT EXISTS ${third_party_dir}/docopt.cpp/CMakeLists.txt)
+endif(NOT EXISTS ${third_party_dir}/${library_name}/CMakeLists.txt)
 
 # Set any options
 #set(SPDLOG_BUILD_TESTING OFF CACHE BOOL "Build spdlog tests" FORCE)
