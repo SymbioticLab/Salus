@@ -106,9 +106,7 @@ bool ExecutionEngine::trySchedule(ITask *t, const DeviceSpec &dev)
 
 ExecutionEngine::Inserter ExecutionEngine::registerSession(const std::string &sessHandle)
 {
-    auto item = new SessionItem;
-    item->sessHandle = sessHandle;
-    item->queue.reserve_unsafe(128);
+    auto item = new SessionItem(sessHandle);
 
     insertSession(item);
 
