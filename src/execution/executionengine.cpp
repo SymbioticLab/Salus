@@ -74,20 +74,7 @@ bool useGPU()
 
 bool ExecutionEngine::schedule(ITask *t)
 {
-    // TODO: implement device selection
-
-    if (useGPU()) {
-        if (trySchedule(t, DeviceType::GPU)) {
-            INFO("Task scheduled on GPU");
-            return true;
-        }
-    }
-
-    if (trySchedule(t, DeviceType::CPU)) {
-        INFO("Task scheduled on CPU");
-        return true;
-    }
-    return false;
+    return trySchedule(t, DeviceType::CPU);
 }
 
 bool ExecutionEngine::trySchedule(ITask *t, const DeviceSpec &dev)
@@ -193,8 +180,9 @@ void ExecutionEngine::scheduleLoop()
                         item->bgQueue.push(opItem);
                     }
                 }
+                count += item->bgQueue.size();
 
-                count += maybeScheduleFrom(resMon, item);
+                maybeScheduleFrom(resMon, item);
                 ++it;
             }
         }
