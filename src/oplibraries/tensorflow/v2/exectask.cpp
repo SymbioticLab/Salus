@@ -81,6 +81,8 @@ ResourceMap ExecTask::estimatedUsage(const DeviceSpec& dev)
     auto ctx = m_state->shapeForNode(node);
     if (!ctx) {
         WARN("Shape information not available for node: {}", node->name());
+        // TODO: implement special case for special nodes
+        return {};
     }
 
     DeviceItem ditem;

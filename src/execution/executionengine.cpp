@@ -115,14 +115,20 @@ ExecutionEngine::Inserter ExecutionEngine::registerSession(const std::string &se
 
 void ExecutionEngine::insertSession(SessionItem *item)
 {
-    std::lock_guard<std::mutex> g(m_newMu);
-    m_newSessions.push_back(item);
+    {
+        std::lock_guard<std::mutex> g(m_newMu);
+        m_newSessions.push_back(item);
+    }
+    m_cond_has_work.notify_one();
 }
 
 void ExecutionEngine::deleteSession(SessionItem *item)
 {
-    std::lock_guard<std::mutex> g(m_delMu);
-    m_deletedSessions.insert(item);
+    {
+        std::lock_guard<std::mutex> g(m_delMu);
+        m_deletedSessions.insert(item);
+    }
+    m_cond_has_work.notify_one();
 }
 
 std::future<void> ExecutionEngine::InserterImpl::enqueueOperation(std::unique_ptr<OperationTask> &&task)
@@ -133,7 +139,7 @@ std::future<void> ExecutionEngine::InserterImpl::enqueueOperation(std::unique_pt
     auto ok = m_item->queue.push(opItem);
     assert(ok);
 
-    m_engine->m_not_empty.notify_one();
+    m_engine->m_cond_has_work.notify_one();
 
     return opItem->task.get_future();
 }
@@ -167,6 +173,7 @@ void ExecutionEngine::scheduleLoop()
         }
 
         // Loop through sessions
+        size_t count = 0;
         auto it = sessions.begin();
         auto end = sessions.end();
         while (it != end) {
@@ -187,9 +194,14 @@ void ExecutionEngine::scheduleLoop()
                     }
                 }
 
-                maybeScheduleFrom(resMon, item);
+                count += maybeScheduleFrom(resMon, item);
                 ++it;
             }
+        }
+
+        if (!count) {
+            std::unique_lock<std::mutex> ul(m_condMu);
+            m_cond_has_work.wait(ul);
         }
     }
 
@@ -234,12 +246,12 @@ bool tryScheduleOn(ResourceMonitor &resMon, OperationTask *t, const std::string 
     return false;
 }
 
-bool ExecutionEngine::maybeScheduleFrom(ResourceMonitor &resMon, ExecutionEngine::SessionItem* item)
+size_t ExecutionEngine::maybeScheduleFrom(ResourceMonitor &resMon, ExecutionEngine::SessionItem* item)
 {
     auto &queue = item->bgQueue;
 
     if (queue.empty()) {
-        return false;
+        return 0;
     }
 
     auto opItem = queue.front();
@@ -267,5 +279,5 @@ bool ExecutionEngine::maybeScheduleFrom(ResourceMonitor &resMon, ExecutionEngine
         });
     }
 
-    return scheduled;
+    return scheduled ? 1 : 0;
 }

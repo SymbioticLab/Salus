@@ -134,7 +134,7 @@ private:
 
     std::atomic<bool> m_shouldExit = {false};
     void scheduleLoop();
-    bool maybeScheduleFrom(ResourceMonitor &resMon, SessionItem *item);
+    size_t maybeScheduleFrom(ResourceMonitor &resMon, SessionItem *item);
     std::unique_ptr<std::thread> m_schedThread;
 
     // Incoming kernels
@@ -167,7 +167,8 @@ private:
     SessionSet m_deletedSessions;
     std::mutex m_delMu;
 
-    std::condition_variable m_not_empty;
+    std::condition_variable m_cond_has_work;
+    std::mutex m_condMu;
 
     void insertSession(SessionItem *item);
     void deleteSession(SessionItem *item);
