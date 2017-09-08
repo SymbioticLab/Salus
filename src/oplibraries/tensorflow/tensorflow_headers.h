@@ -32,9 +32,11 @@
 #include <tensorflow/core/common_runtime/function.h>
 #include <tensorflow/core/common_runtime/local_device.h>
 #include <tensorflow/core/common_runtime/pending_counts.h>
+#include <tensorflow/core/common_runtime/shape_refiner.h>
 #include <tensorflow/core/common_runtime/step_stats_collector.h>
 #include <tensorflow/core/distributed_runtime/zrpc/exechelper/graphview.h>
 #include <tensorflow/core/distributed_runtime/zrpc/exechelper/mdgraphmgr.h>
+#include <tensorflow/core/distributed_runtime/zrpc/exechelper/memorytypes.h>
 #include <tensorflow/core/distributed_runtime/zrpc/exechelper/tfoplibraryproxy.h>
 #include <tensorflow/core/distributed_runtime/zrpc/exechelper/devicefactories.h>
 #include <tensorflow/core/distributed_runtime/zrpc/exechelper/allocators.h>
@@ -47,6 +49,7 @@
 #include <tensorflow/core/framework/op_segment.h>
 #include <tensorflow/core/framework/rendezvous.h>
 #include <tensorflow/core/framework/resource_mgr.h>
+#include <tensorflow/core/framework/types.h>
 #include <tensorflow/core/graph/graph.h>
 #include <tensorflow/core/graph/graph_constructor.h>
 #include <tensorflow/core/lib/core/status.h>

@@ -42,10 +42,11 @@ bool IsInitializationOp(const tf::Node* node) {
 }
 } // namespace
 
-tf::Status NewMultiDeviceExecutor(const tf::MultiDeviceExecutorParams &params, const tf::Graph *graph,
-                                  tf::Executor **executor)
+tensorflow::Status NewMultiDeviceExecutor(const tensorflow::MultiDeviceExecutorParams& params,
+                                          const tensorflow::Graph* graph, ExecutionEngine::Inserter ins,
+                                          tensorflow::Executor **executor)
 {
-    auto impl = new ExecutorImpl(params, graph);
+    auto impl = new ExecutorImpl(params, graph, ins);
     auto s = impl->Initialize();
     if (s.ok()) {
         *executor = impl;
@@ -55,10 +56,11 @@ tf::Status NewMultiDeviceExecutor(const tf::MultiDeviceExecutorParams &params, c
     return s;
 }
 
-ExecutorImpl::ExecutorImpl(const tf::MultiDeviceExecutorParams &p, const tf::Graph *g)
+ExecutorImpl::ExecutorImpl(const tf::MultiDeviceExecutorParams &p, const tf::Graph *g, ExecutionEngine::Inserter ins)
     : params_(p)
     , graph_(g)
     , gview_()
+    , inserter_(ins)
 {
     CHECK(p.find_kernel != nullptr);
     CHECK(p.create_kernel != nullptr);
@@ -248,6 +250,7 @@ void ExecutorImpl::InitializePending(const tf::Graph *graph, const ControlFlowIn
 
 ExecutorState::ExecutorState(const tf::Executor::Args &args, ExecutorImpl *impl)
     : vlog_(VLOG_IS_ON(1))
+    , refiner_(impl->graph_->versions().producer(), impl->graph_->op_registry())
     , step_id_(args.step_id)
     , rendezvous_(args.rendezvous)
     , session_state_(args.session_state)
@@ -355,19 +358,21 @@ void ExecutorState::Process(TaggedNode tagged_node, int64_t scheduled_usec)
             input_frame->GetIteration(input_iter)->mark_started(item.pending_id);
         }
 
-        utils::semaphore se;
-        auto nodeTask = std::make_unique<ExecTask>(this, &se,
+        tf::Device **rd = nullptr;
+        {
+            tf::mutex_lock l(mu_);
+            used_devices_.push_back(nullptr);
+            rd = &used_devices_.back();
+        }
+
+        auto nodeTask = std::make_unique<ExecTask>(this, *rd,
                                                    tagged_node, ready, inline_ready, stats, params,
                                                    scheduled_usec, outputs,
                                                    inputs, input_device_contexts, input_alloc_attrs,
                                                    completed, rendezvous_);
-        ExecutionEngine::instance().enqueue<::google::protobuf::Message>(std::move(nodeTask))
-        .fail([&](std::exception_ptr) -> ProtoPtr {
-            se.notify();
-            return {};
-        });
+        auto fu = impl_->inserter_->enqueueOperation(std::move(nodeTask));
 
-        se.wait();
+        fu.get();
     } // while !inline_ready.empty()
 
     TRACE("inline ready queue empty");
@@ -927,6 +932,12 @@ void ExecutorState::ScheduleReady(const TaggedNodeSeq &ready, TaggedNodeReadyQue
     if (stats_collector_) {
         scheduled_usec = nodestats::NowInUsec();
     }
+
+    // Infer shape
+    for (auto &tn : ready) {
+        addNodeToRefiner(tn.node);
+    }
+
     if (inline_ready == nullptr) {
         // Schedule to run all the ready ops in thread pool.
         TRACE("Schedule to run all the ready ops in thread pool.");

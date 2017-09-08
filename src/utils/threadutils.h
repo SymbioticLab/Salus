@@ -22,6 +22,7 @@
 
 #include <condition_variable>
 #include <mutex>
+#include <memory>
 
 /**
  * @todo write docs
@@ -41,6 +42,9 @@ public:
     void wait(uint32_t c = 1);
 };
 
+using Guard = std::lock_guard<std::mutex>;
+
 } // end of namespace utils
+
 
 #endif // THREADUTILS_H

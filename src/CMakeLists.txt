@@ -8,6 +8,8 @@ set(SRC_LIST
     "execution/executionengine.cpp"
     "execution/devices.cpp"
     "execution/itask.cpp"
+    "execution/operationtask.cpp"
+    "execution/resources.cpp"
 
     "rpcserver/rpcservercore.cpp"
     "rpcserver/zmqserver.cpp"

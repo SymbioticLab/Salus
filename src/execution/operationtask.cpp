@@ -14,28 +14,8 @@
  * 
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
- * 
  */
 
-#include "threadutils.h"
+#include "operationtask.h"
 
-namespace utils {
-
-void semaphore::notify(uint32_t c)
-{
-    {
-        std::unique_lock<decltype(mutex_)> lock(mutex_);
-        count_ += c;
-    }
-    // Don't notify under the lock.
-    condition_.notify_all();
-}
-
-void semaphore::wait(uint32_t c)
-{
-    std::unique_lock<decltype(mutex_)> lock(mutex_);
-    condition_.wait(lock, [&](){ return count_ >= c; });
-    count_ -= c;
-}
-
-} // end of namespace utils
+OperationTask::~OperationTask() = default;

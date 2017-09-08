@@ -21,13 +21,14 @@
 #include "execution/devices.h"
 #include "platform/logging.h"
 #include "utils/threadutils.h"
+#include "utils/macros.h"
 #include "oplibraries/tensorflow/v2/md_rendezvous.h"
 
 #include "oplibraries/tensorflow/tensorflow_headers.h"
 
 namespace tf = tensorflow;
 
-ExecTask::ExecTask(ExecutorState *state, utils::semaphore *se,
+ExecTask::ExecTask(ExecutorState *state, tf::Device *&device,
                    ExecutorState::TaggedNode &node, ExecutorState::TaggedNodeSeq &ready,
                    ExecutorState::TaggedNodeReadyQueue &inline_ready,
                    tf::NodeExecStats *stats, tf::OpKernelContext::Params &params,
@@ -46,7 +47,7 @@ ExecTask::ExecTask(ExecutorState *state, utils::semaphore *se,
     , input_alloc_attrs(input_alloc_attrs)
     , completed(completed)
     , rendez(rendez)
-    , m_se(se)
+    , used_device(device)
     , m_state(state)
 {
 }
@@ -68,7 +69,69 @@ bool ExecTask::prepare(DeviceSpec &dev)
     CHECK(op_kernel);
     kernel_is_async = (op_kernel->AsAsync() != nullptr);
 
+    // Record device
+    used_device = ditem.device;
+
     return true;
+}
+
+ResourceMap ExecTask::estimatedUsage(const DeviceSpec& dev)
+{
+    const auto *node = tagged_node.node;
+    auto ctx = m_state->shapeForNode(node);
+    if (!ctx) {
+        WARN("Shape information not available for node: {}", node->name());
+    }
+
+    DeviceItem ditem;
+    tf::MemoryTypeVector input_mtypes;
+    tf::MemoryTypeVector output_mtypes;
+    auto mtypeStatus = LookupDevice(dev, ditem);
+    if (mtypeStatus.ok()) {
+        mtypeStatus.Update(tf::remote::MemoryTypesForNode(m_state->impl_->graph_->op_registry(),
+                                                          tf::DeviceType(ditem.device->device_type()),
+                                                          node->def(), &input_mtypes, &output_mtypes));
+    }
+    if (!mtypeStatus.ok()) {
+        WARN("Kernel not found on device {}, resource estimation may be inaccurate.", dev);
+    }
+
+    ResourceMap res;
+    ResourceTag devTag{ResourceType::MEMORY, dev};
+    ResourceTag cpuTag{ResourceType::MEMORY, dev};
+
+    if (node->IsOp() && node->op_def().name() == "VariableV2") {
+        // special handle persistant ops
+        devTag.persistant = true;
+        cpuTag.persistant = true;
+    }
+
+    for (int i = 0; i != ctx->num_outputs(); ++i) {
+        auto shp = ctx->output(i);
+        if (!ctx->RankKnown(shp)) {
+            WARN("{}-th output of node {} has unknown rank", i, node->name());
+            continue;
+        }
+        size_t count = 1;
+        for (int j = 0; j != ctx->Rank(shp); ++j) {
+            auto dim = ctx->Dim(shp, j);
+            count *= ctx->Value(dim);
+        }
+        auto dtype = node->output_type(i);
+        double subtotal = count * tf::DataTypeSize(dtype);
+
+        if (mtypeStatus.ok()) {
+            if (output_mtypes[i] == tf::HOST_MEMORY) {
+                res[cpuTag] += subtotal;
+            } else {
+                res[devTag] += subtotal;
+            }
+        } else {
+            res[devTag] += subtotal;
+        }
+    }
+
+    return res;
 }
 
 tf::Status ExecTask::LookupDevice(const DeviceSpec &spec, DeviceItem &item)
@@ -97,7 +160,7 @@ tf::Status ExecTask::LookupDevice(const DeviceSpec &spec, DeviceItem &item)
     return tf::Status::OK();
 }
 
-ProtoPtr ExecTask::run()
+void ExecTask::run()
 {
     const auto &gview = m_state->impl_->gview_;
     auto node = tagged_node.node;
@@ -111,8 +174,7 @@ ProtoPtr ExecTask::run()
         m_state->MaybeMarkCompleted(input_frame, input_iter, id);
         // Continue to process the nodes in 'inline_ready'.
         completed = m_state->NodeDone(s, item.node, ditem.device, nullptr, ready, stats, &inline_ready);
-        m_se->notify();
-        return {};
+        return;
     }
 
     params.device = ditem.device;
@@ -164,8 +226,7 @@ ProtoPtr ExecTask::run()
             m_state->MaybeMarkCompleted(input_frame, input_iter, id);
             // Continue to process the nodes in 'inline_ready'.
             completed = m_state->NodeDone(s, item.node, ditem.device, localRendez, ready, stats, &inline_ready);
-            m_se->notify();
-            return {};
+            return;
         }
 
         // Set up compute params.
@@ -275,8 +336,7 @@ ProtoPtr ExecTask::run()
         completed = m_state->NodeDone(s, item.node, ditem.device, localRendez, ready, stats, &inline_ready);
         TRACE("Postprocess completed: {}", completed);
     }
-    m_se->notify();
-    return {};
+    return;
 }
 
 ExecTask::~ExecTask() = default;

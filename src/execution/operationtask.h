@@ -14,28 +14,22 @@
  * 
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
- * 
  */
 
-#include "threadutils.h"
+#ifndef OPEARTIONTASK_H
+#define OPEARTIONTASK_H
 
-namespace utils {
+#include "execution/devices.h"
+#include "execution/resources.h"
 
-void semaphore::notify(uint32_t c)
+class OperationTask
 {
-    {
-        std::unique_lock<decltype(mutex_)> lock(mutex_);
-        count_ += c;
-    }
-    // Don't notify under the lock.
-    condition_.notify_all();
-}
+public:
+    virtual ~OperationTask();
 
-void semaphore::wait(uint32_t c)
-{
-    std::unique_lock<decltype(mutex_)> lock(mutex_);
-    condition_.wait(lock, [&](){ return count_ >= c; });
-    count_ -= c;
-}
+    virtual bool prepare(DeviceSpec &dev) = 0;
+    virtual void run() = 0;
+    virtual ResourceMap estimatedUsage(const DeviceSpec &dev) = 0;
+};
 
-} // end of namespace utils
+#endif // OPEARTIONTASK_H

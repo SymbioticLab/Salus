@@ -21,6 +21,7 @@
 #include "oplibraries/tensorflow/v2/md_executor.h"
 #include "oplibraries/tensorflow/v2/tfallocator.h"
 #include "platform/logging.h"
+#include "execution/executionengine.h"
 #include "utils/macros.h"
 #include "utils/protoutils.h"
 #include "utils/zmqutils.h"
@@ -54,17 +55,19 @@ std::unique_ptr<zrpc::CustomResponse> consumeResponse(RESPONSE *resp, tf::Status
 OpLibraryRegistary::Register tfoplibraryv2(executor::TENSORFLOW, std::make_unique<TFOpLibraryV2>(), 200);
 
 TFOpLibraryV2::TFOpLibraryV2()
-    : m_proxy(std::make_unique<TFOpLibraryProxy>(NewMultiDeviceExecutor))
+    : m_proxy(std::make_unique<TFOpLibraryProxy>())
     , m_maxOpenSessions(0)
 {
     // use device with our own allocator
     WrappedDeviceSettings::maybeRegisterWrappedDeviceFactories();
     WrappedDeviceSettings::setWrapperFactory(
         [](auto *alloc, auto *) {
+            /*
+            // there is memory leak
             if (alloc->Name() == "GPU_0_bfc") {
-                // FIXME: there is memory leak
                 alloc = new TrivialGPUAllocator(0);
             }
+            */
             return std::make_unique<TFAllocator>(alloc);
         });
 
@@ -282,6 +285,10 @@ void TFOpLibraryV2::handleCreateSession(const std::string &recvId, const executo
                                    std::unique_ptr<Proxy> proxy(pproxy);
                                    delete preq;
                                    if (status.ok()) {
+                                       auto ins = ExecutionEngine::instance().registerSession(resp->session_handle());
+                                       proxy->setExecFactory([ins](auto params, auto graph, auto executor){
+                                           return NewMultiDeviceExecutor(params, graph, ins, executor);
+                                       });
                                        registerProxy(recvId, resp->session_handle(), std::move(proxy));
                                    }
                                    cb(consumeResponse(resp, status));

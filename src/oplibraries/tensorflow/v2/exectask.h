@@ -21,7 +21,7 @@
 
 #include "md_executor_impl.h"
 
-#include "execution/itask.h"
+#include "execution/operationtask.h"
 
 #include "oplibraries/tensorflow/tensorflow_headers.h"
 
@@ -40,13 +40,10 @@ struct DeviceItem
 /**
  * @todo write docs
  */
-namespace utils {
-class semaphore;
-}
-class ExecTask : public ITask
+class ExecTask : public OperationTask
 {
 public:
-    ExecTask(ExecutorState *state, utils::semaphore *se,
+    ExecTask(ExecutorState *state, tf::Device *&device,
              ExecutorState::TaggedNode &node, ExecutorState::TaggedNodeSeq &ready,
              ExecutorState::TaggedNodeReadyQueue &inline_ready,
              tf::NodeExecStats *stats, tf::OpKernelContext::Params &params,
@@ -59,7 +56,9 @@ public:
 
     bool prepare(DeviceSpec &dev) override;
 
-    ProtoPtr run() override;
+    void run() override;
+
+    ResourceMap estimatedUsage(const DeviceSpec &dev) override;
 
     ~ExecTask() override;
 
@@ -81,11 +80,11 @@ private:
     AllocatorAttributeVec &input_alloc_attrs;
     bool &completed;
     tf::Rendezvous *rendez;
+    tf::Device *&used_device;
 
     tf::OpKernel *op_kernel;
     bool kernel_is_async;
 
-    utils::semaphore *m_se;
     ExecutorState *m_state;
 };
 

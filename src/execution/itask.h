@@ -72,27 +72,6 @@ public:
 };
 
 template<typename Fn>
-class LambdaTask : public ITask
-{
-public:
-    explicit LambdaTask(Fn &&fn) : m_fn(std::move(fn)) {}
-
-    ProtoPtr run() override
-    {
-        return m_fn();
-    }
-
-private:
-    Fn m_fn;
-};
-
-template<typename Fn>
-PTask make_lambda_task(Fn&& fn)
-{
-    return std::make_unique<LambdaTask<Fn>>(std::move(fn));
-}
-
-template<typename Fn>
 class AsyncLambdaTask : public AsyncTask
 {
 public:

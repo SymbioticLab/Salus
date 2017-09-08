@@ -21,6 +21,10 @@
 
 #include "oplibraries/tensorflow/tensorflow_headers.h"
 
+#include "execution/executionengine.h"
+
+#include <list>
+
 namespace tf = tensorflow;
 namespace gtl = tf::gtl;
 using namespace tf::remote;
@@ -57,7 +61,7 @@ bool SetTimelineLabel(tf::NodeExecStats *node_stats, const tf::Node* node);
 class ExecutorImpl : public tf::Executor
 {
 public:
-    ExecutorImpl(const tf::MultiDeviceExecutorParams &p, const tf::Graph *g);
+    ExecutorImpl(const tf::MultiDeviceExecutorParams &p, const tf::Graph *g, ExecutionEngine::Inserter ins);
 
     ~ExecutorImpl() override;
 
@@ -118,8 +122,10 @@ private:
     tf::MultiDeviceExecutorParams params_;
     const tf::Graph *graph_;
     GraphView gview_;
+    ExecutionEngine::Inserter inserter_;
 
     // A cached value of params_
+    // TODO: remove this
     bool device_record_tensor_accesses_ = false;
 
     // Root nodes (with no in edges) that should form the initial ready queue
@@ -581,6 +587,24 @@ private:
 
     const bool vlog_; // true if VLOG_IS_ON(1). Used to check vlog cheaply.
 
+    tf::ShapeRefiner refiner_;
+    tf::mutex refinerMu_;
+
+    inline void addNodeToRefiner(const tf::Node *n)
+    {
+        tf::mutex_lock l(refinerMu_);
+        auto ok = refiner_.AddNode(n);
+        if (!ok.ok()) {
+            ERR("Error when adding node to shape refiner: {}", ok);
+        }
+    }
+
+    inline auto shapeForNode(const tf::Node *n)
+    {
+        tf::mutex_lock l(refinerMu_);
+        return refiner_.GetContext(n);
+    }
+
     int64_t step_id_;
     // Not owned.
     tf::Rendezvous *rendezvous_;
@@ -596,7 +620,7 @@ private:
     bool sync_on_finish_;
 
     // All devices this executor state has used, for sync in finish.
-    std::vector<tf::Device*> used_devices_;
+    std::list<tf::Device*> used_devices_;
 
     // Owned.
 

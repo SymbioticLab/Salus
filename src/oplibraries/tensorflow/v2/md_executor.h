@@ -17,6 +17,7 @@ limitations under the License.
 #define OPLIBRARIES_TENSORFLOW_MULTI_DEVICE_EXECUTOR_H_
 
 #include "oplibraries/tensorflow/tensorflow_headers.h"
+#include "execution/executionengine.h"
 
 #include <functional>
 
@@ -36,6 +37,7 @@ class DeviceMgr;
 // Otherwise, returns an error status.
 tensorflow::Status NewMultiDeviceExecutor(const tensorflow::MultiDeviceExecutorParams& params,
                                           const tensorflow::Graph* graph,
+                                          ExecutionEngine::Inserter ins,
                                           tensorflow::Executor** executor);
 
 #endif  // OPLIBRARIES_TENSORFLOW_MULTI_DEVICE_EXECUTOR_H_

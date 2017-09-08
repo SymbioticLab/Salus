@@ -19,8 +19,13 @@
 
 #include "executionengine.h"
 
+#include "execution/resources.h"
+#include "execution/operationtask.h"
 #include "utils/macros.h"
 #include "utils/envutils.h"
+#include "utils/threadutils.h"
+
+#include <functional>
 
 ExecutionEngine &ExecutionEngine::instance()
 {
@@ -37,10 +42,25 @@ ExecutionEngine::ExecutionEngine()
                                                            // is not connected to any event dispatcher
                                                            q::make_shared<q::queue>(0)))
 {
-
+    // Start scheduling thread
+    m_schedThread = std::make_unique<std::thread>(std::bind(&ExecutionEngine::scheduleLoop, this));
 }
 
-ExecutionEngine::~ExecutionEngine() = default;
+ExecutionEngine::~ExecutionEngine()
+{
+    // stop scheduling thread
+    m_shouldExit = true;
+    m_schedThread->join();
+
+    // remove any pending new or delete session
+    // NOTE: has to be done *after* the scheduling thread exits.
+    for (auto item : m_newSessions) {
+        delete item;
+    }
+    for (auto item : m_deletedSessions) {
+        delete item;
+    }
+}
 
 namespace {
 bool useGPU()
@@ -82,4 +102,172 @@ bool ExecutionEngine::trySchedule(ITask *t, const DeviceSpec &dev)
         return t->prepare(expectedDev);
     }
     return false;
+}
+
+ExecutionEngine::Inserter ExecutionEngine::registerSession(const std::string &sessHandle)
+{
+    auto item = new SessionItem;
+    item->sessHandle = sessHandle;
+    item->queue.reserve_unsafe(128);
+
+    insertSession(item);
+
+    return std::make_shared<InserterImpl>(item, this);
+}
+
+void ExecutionEngine::insertSession(SessionItem *item)
+{
+    std::lock_guard<std::mutex> g(m_newMu);
+    m_newSessions.push_back(item);
+}
+
+void ExecutionEngine::deleteSession(SessionItem *item)
+{
+    std::lock_guard<std::mutex> g(m_delMu);
+    m_deletedSessions.insert(item);
+}
+
+std::future<void> ExecutionEngine::InserterImpl::enqueueOperation(std::unique_ptr<OperationTask> &&task)
+{
+    std::packaged_task<void()> package(std::bind(&OperationTask::run, task.get()));
+
+    auto opItem = new OperationItem {std::move(task), std::move(package)};
+    auto ok = m_item->queue.push(opItem);
+    assert(ok);
+
+    m_engine->m_not_empty.notify_one();
+
+    return opItem->task.get_future();
+}
+
+ExecutionEngine::InserterImpl::~InserterImpl()
+{
+    if (m_engine && m_item)
+    m_engine->deleteSession(m_item);
+}
+
+void ExecutionEngine::scheduleLoop()
+{
+    ResourceMonitor resMon;
+    resMon.initializeLimits();
+
+    SessionList sessions;
+
+    while (!m_shouldExit) {
+        // Fisrt check if there's any pending deletions
+        SessionSet del;
+        {
+            utils::Guard g(m_delMu);
+            using std::swap;
+            swap(del, m_deletedSessions);
+        }
+
+        // Append any new sessions
+        {
+            utils::Guard g(m_newMu);
+            sessions.splice(sessions.end(), m_newSessions);
+        }
+
+        // Loop through sessions
+        auto it = sessions.begin();
+        auto end = sessions.end();
+        while (it != end) {
+            auto item = *it;
+            if (del.count(item)) {
+                resMon.clear(item->sessHandle);
+                delete item;
+                it = sessions.erase(it);
+            } else {
+                {
+                    // Move from lock free queue to backing storage
+                    // Use an extra block level to limit the life time
+                    // of opItem, so we don't accidentially access it
+                    // after the loop.
+                    OperationItem *opItem;
+                    while (item->queue.pop(opItem)) {
+                        item->bgQueue.push(opItem);
+                    }
+                }
+
+                maybeScheduleFrom(resMon, item);
+                ++it;
+            }
+        }
+    }
+
+    // Cleanup
+    for (auto item : sessions) {
+        while (!item->bgQueue.empty()) {
+            delete item->bgQueue.front();
+            item->bgQueue.pop();
+        }
+        item->queue.consume_all([](auto t){
+            delete t;
+        });
+        delete item;
+    }
+}
+
+bool tryScheduleOn(ResourceMonitor &resMon, OperationTask *t, const std::string &sessHandle,
+                   const DeviceSpec &dev)
+{
+    auto expectedDev = dev;
+
+    auto usage = t->estimatedUsage(expectedDev);
+    if (!resMon.tryAllocate(usage, sessHandle)) {
+        return false;
+    }
+    if (t->prepare(expectedDev)) {
+        return true;
+    }
+    resMon.free(usage);
+
+    if (expectedDev != dev) {
+        // the task wants to run on a different device
+        usage = t->estimatedUsage(expectedDev);
+        if (!resMon.tryAllocate(usage, sessHandle)) {
+            return false;
+        }
+        if (t->prepare(expectedDev)) {
+            return true;
+        }
+        resMon.free(usage);
+    }
+    return false;
+}
+
+bool ExecutionEngine::maybeScheduleFrom(ResourceMonitor &resMon, ExecutionEngine::SessionItem* item)
+{
+    auto &queue = item->bgQueue;
+
+    if (queue.empty()) {
+        return false;
+    }
+
+    auto opItem = queue.front();
+
+    // Try schedule the operation
+    bool scheduled = false;
+    if (useGPU()) {
+        if (tryScheduleOn(resMon, opItem->op.get(), item->sessHandle, DeviceType::GPU)) {
+            INFO("Task scheduled on GPU");
+            scheduled = true;
+        }
+    }
+
+    if (!scheduled && tryScheduleOn(resMon, opItem->op.get(), item->sessHandle, DeviceType::CPU)) {
+        INFO("Task scheduled on CPU");
+        scheduled = true;
+    }
+
+    // Send to thread pool
+    if (scheduled) {
+        queue.pop();
+        q::with(m_qec->queue(), opItem).then([](OperationItem *opItem){
+            opItem->task();
+            delete opItem;
+        });
+    }
+
+    return scheduled;
 }

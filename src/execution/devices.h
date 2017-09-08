@@ -23,6 +23,8 @@
 #include <string>
 #include <tuple>
 
+#include "utils/macros.h"
+
 enum class DeviceType
 {
     CPU,
@@ -54,5 +56,21 @@ inline bool operator!=(const DeviceSpec &lhs, const DeviceSpec &rhs)
 {
     return lhs.tie() != rhs.tie();
 }
+
+namespace std {
+template<>
+class hash<DeviceSpec>
+{
+public:
+    inline size_t operator()(const DeviceSpec &spec) const
+    {
+        size_t res = 0;
+        utils::hash_combine(res, spec.type);
+        utils::hash_combine(res, spec.id);
+        return res;
+    }
+};
+} // namespace std
+
 
 #endif // DEVICES_H

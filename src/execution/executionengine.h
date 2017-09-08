@@ -30,17 +30,54 @@
 #include <q/execution_context.hpp>
 #include <q/threadpool.hpp>
 
+#include <boost/lockfree/queue.hpp>
+
+#include <list>
+#include <queue>
 #include <memory>
+#include <atomic>
+#include <unordered_set>
+#include <future>
+
+class OperationTask;
+class ResourceMonitor;
 
 /**
  * @todo write docs
  */
 class ExecutionEngine
 {
+    struct SessionItem;
+    struct OperationItem;
+
+    using KernelQueue = boost::lockfree::queue<OperationItem*>;
+    using UnsafeQueue = std::queue<OperationItem*>;
+
 public:
     static ExecutionEngine &instance();
 
     ~ExecutionEngine();
+
+    class InserterImpl
+    {
+    public:
+        InserterImpl(InserterImpl &&other) : InserterImpl(other.m_item, other.m_engine) {
+            other.m_item = nullptr;
+            other.m_engine = nullptr;
+        }
+        InserterImpl(SessionItem *item, ExecutionEngine *engine) : m_item(item), m_engine(engine) {}
+
+        ~InserterImpl();
+
+        std::future<void> enqueueOperation(std::unique_ptr<OperationTask> &&task);
+
+    private:
+        SessionItem *m_item;
+        ExecutionEngine *m_engine;
+    };
+    using Inserter = std::shared_ptr<InserterImpl>;
+
+    Inserter registerSession(const std::string &sessHandle);
 
     template<typename ResponseType>
     q::promise<std::unique_ptr<ResponseType>> enqueue(PTask &&task)
@@ -95,8 +132,47 @@ protected:
 private:
     ExecutionEngine();
 
-    using qExecutionContext = q::specific_execution_context_ptr<q::threadpool>;
+    std::atomic<bool> m_shouldExit = {false};
+    void scheduleLoop();
+    bool maybeScheduleFrom(ResourceMonitor &resMon, SessionItem *item);
+    std::unique_ptr<std::thread> m_schedThread;
 
+    // Incoming kernels
+    // Use a minimal linked list because the only operation we need is
+    // iterate through the whole list, insert at end, and delete.
+    // Insert and delete rarely happens, and delete is handled in the same thread
+    // as iteration.
+    struct SessionItem
+    {
+        std::string sessHandle;
+        KernelQueue queue;
+
+        // Only be accessed by scheduling thread
+        UnsafeQueue bgQueue;
+    };
+
+    struct OperationItem
+    {
+        std::unique_ptr<OperationTask> op;
+        std::packaged_task<void(void)> task;
+    };
+
+    using SessionList = std::list<SessionItem*>;
+    using SessionSet = std::unordered_set<SessionItem*>;
+
+    SessionList m_newSessions;
+    std::mutex m_newMu;
+
+    SessionSet m_deletedSessions;
+    std::mutex m_delMu;
+
+    std::condition_variable m_not_empty;
+
+    void insertSession(SessionItem *item);
+    void deleteSession(SessionItem *item);
+
+    // Backend thread pool
+    using qExecutionContext = q::specific_execution_context_ptr<q::threadpool>;
     q::scope m_qscope;
     qExecutionContext m_qec;
 };
