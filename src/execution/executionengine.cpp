@@ -122,7 +122,7 @@ void ExecutionEngine::insertSession(SessionItem *item)
         std::lock_guard<std::mutex> g(m_newMu);
         m_newSessions.push_back(item);
     }
-    m_cond_has_work.notify_one();
+    m_note_has_work.notify();
 }
 
 void ExecutionEngine::deleteSession(SessionItem *item)
@@ -131,7 +131,7 @@ void ExecutionEngine::deleteSession(SessionItem *item)
         std::lock_guard<std::mutex> g(m_delMu);
         m_deletedSessions.insert(item);
     }
-    m_cond_has_work.notify_one();
+    m_note_has_work.notify();
 }
 
 std::future<void> ExecutionEngine::InserterImpl::enqueueOperation(std::unique_ptr<OperationTask> &&task)
@@ -142,7 +142,7 @@ std::future<void> ExecutionEngine::InserterImpl::enqueueOperation(std::unique_pt
     auto ok = m_item->queue.push(opItem);
     assert(ok);
 
-    m_engine->m_cond_has_work.notify_one();
+    m_engine->m_note_has_work.notify();
 
     return opItem->task.get_future();
 }
@@ -235,9 +235,8 @@ void ExecutionEngine::scheduleLoop()
         }
 
         if (!count) {
-            INFO("Wait on m_cond_has_work");
-            std::unique_lock<std::mutex> ul(m_condMu);
-            m_cond_has_work.wait_for(ul, 1us);
+            INFO("Wait on m_note_has_work");
+            m_note_has_work.wait();
         }
     }
 

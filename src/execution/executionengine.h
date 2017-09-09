@@ -24,6 +24,7 @@
 
 #include "execution/itask.h"
 #include "platform/logging.h"
+#include "utils/threadutils.h"
 
 #include <q/lib.hpp>
 #include <q/promise.hpp>
@@ -168,8 +169,7 @@ private:
     SessionSet m_deletedSessions;
     std::mutex m_delMu;
 
-    std::condition_variable m_cond_has_work;
-    std::mutex m_condMu;
+    utils::notification m_note_has_work;
 
     void insertSession(SessionItem *item);
     void deleteSession(SessionItem *item);

@@ -24,17 +24,19 @@
 #include <mutex>
 #include <memory>
 
-/**
- * @todo write docs
- */
 namespace utils {
 
+using Guard = std::lock_guard<std::mutex>;
+using UGuard = std::unique_lock<std::mutex>;
+
+/**
+ * Semaphore that can wait on count.
+ */
 class semaphore
 {
-private:
-    std::mutex mutex_;
-    std::condition_variable condition_;
-    uint32_t count_ = 0; // Initialized as locked.
+    std::mutex m_mu;
+    std::condition_variable m_cv;
+    uint32_t m_count = 0; // Initialized as locked.
 
 public:
     void notify(uint32_t c = 1);
@@ -42,7 +44,19 @@ public:
     void wait(uint32_t c = 1);
 };
 
-using Guard = std::lock_guard<std::mutex>;
+/**
+ * Notification that is sticky.
+ */
+class notification {
+    std::mutex m_mu;
+    std::condition_variable m_cv;
+    bool m_notified = false;
+
+public:
+    void notify();
+    bool notified();
+    void wait();
+};
 
 } // end of namespace utils
 

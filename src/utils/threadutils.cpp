@@ -24,18 +24,37 @@ namespace utils {
 void semaphore::notify(uint32_t c)
 {
     {
-        std::unique_lock<decltype(mutex_)> lock(mutex_);
-        count_ += c;
+        Guard lock(m_mu);
+        m_count += c;
     }
     // Don't notify under the lock.
-    condition_.notify_all();
+    m_cv.notify_all();
 }
 
 void semaphore::wait(uint32_t c)
 {
-    std::unique_lock<decltype(mutex_)> lock(mutex_);
-    condition_.wait(lock, [&](){ return count_ >= c; });
-    count_ -= c;
+    UGuard lock(m_mu);
+    m_cv.wait(lock, [&](){ return m_count >= c; });
+    m_count -= c;
+}
+
+void notification::notify() {
+    Guard g(m_mu);
+    m_notified = true;
+    m_cv.notify_all();
+}
+
+bool notification::notified() {
+    Guard g(m_mu);
+    return m_notified;
+}
+
+void notification::wait() {
+    UGuard g(m_mu);
+    while (!m_notified) {
+        m_cv.wait(g);
+    }
+    m_notified = false;
 }
 
 } // end of namespace utils
