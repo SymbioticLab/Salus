@@ -98,14 +98,15 @@ ResourceMap ExecTask::estimatedUsage(const DeviceSpec& dev)
         WARN("Kernel not found on device {}, resource estimation may be inaccurate.", dev);
     }
 
-    ResourceMap res;
+    ResourceMap cap;
     ResourceTag devTag{ResourceType::MEMORY, dev};
     ResourceTag cpuTag{ResourceType::MEMORY, dev};
 
+    auto res = &cap.temporary;
     if (node->IsOp() && node->op_def().name() == "VariableV2") {
-        // special handle persistant ops
-        devTag.persistant = true;
-        cpuTag.persistant = true;
+        // special handle for persistant ops
+        cap.persistantHandle = node->name();
+        res = &cap.persistant;
     }
 
     for (int i = 0; i != ctx->num_outputs(); ++i) {
@@ -131,18 +132,14 @@ ResourceMap ExecTask::estimatedUsage(const DeviceSpec& dev)
         TRACE("    dtype {}, {} bytes", tf::DataType_Name(dtype), tf::DataTypeSize(dtype));
         double subtotal = count * tf::DataTypeSize(dtype);
 
-        if (mtypeStatus.ok()) {
-            if (output_mtypes[i] == tf::HOST_MEMORY) {
-                res[cpuTag] += subtotal;
-            } else {
-                res[devTag] += subtotal;
-            }
+        if (mtypeStatus.ok() && output_mtypes[i] == tf::HOST_MEMORY) {
+            (*res)[cpuTag] += subtotal;
         } else {
-            res[devTag] += subtotal;
+            (*res)[devTag] += subtotal;
         }
     }
 
-    return res;
+    return cap;
 }
 
 tf::Status ExecTask::LookupDevice(const DeviceSpec &spec, DeviceItem &item)

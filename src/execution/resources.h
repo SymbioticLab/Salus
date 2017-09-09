@@ -36,7 +36,6 @@ struct ResourceTag
 {
     ResourceType type;
     DeviceSpec device;
-    bool persistant = false;
 
     std::string DebugString() const;
 
@@ -44,7 +43,7 @@ private:
     friend bool operator==(const ResourceTag &lhs, const ResourceTag &rhs);
     friend bool operator!=(const ResourceTag &lhs, const ResourceTag &rhs);
 
-    auto tie() const { return std::tie(type, device, persistant); }
+    auto tie() const { return std::tie(type, device); }
 };
 
 inline bool operator==(const ResourceTag &lhs, const ResourceTag &rhs)
@@ -67,13 +66,21 @@ public:
         size_t res = 0;
         utils::hash_combine(res, tag.type);
         utils::hash_combine(res, tag.device);
-        utils::hash_combine(res, tag.persistant);
         return res;
     }
 };
 } // namespace std
 
-using ResourceMap = std::unordered_map<ResourceTag, double>;
+using Resources = std::unordered_map<ResourceTag, double>;
+
+struct ResourceMap
+{
+    Resources temporary;
+    Resources persistant;
+    std::string persistantHandle;
+
+    std::string DebugString() const;
+};
 
 /**
  * A monitor of resources. This class is not thread-safe.
@@ -85,10 +92,8 @@ public:
 
     // Read limits from hardware, and capped by cap
     void initializeLimits();
-    void initializeLimits(const ResourceMap &cap);
+    void initializeLimits(const Resources &cap);
 
-    // If the resource described by cap is available
-    bool available(const ResourceMap &cap);
 
     // Try aquare resources in as specified cap, including persistant resources.
     // Persistant resources will be allocated under handle
@@ -104,45 +109,19 @@ public:
     std::string DebugString() const;
 
 private:
-    struct Tag
-    {
-    private:
-        auto tie() const { return std::tie(type, device); }
+    Resources m_limits;
 
-    public:
-        ResourceType type;
-        DeviceSpec device;
+    // Map from persistantHandle -> InnerMap
+    using PerSessInnerMap = std::unordered_map<std::string, Resources>;
 
-        static Tag fromRTag(const ResourceTag &rtag)
-        {
-            return {rtag.type, rtag.device};
-        }
+    // Map from session -> PerSessInnerMap
+    std::unordered_map<std::string, PerSessInnerMap> m_persis;
 
-        std::string DebugString() const;
-
-        bool operator==(const Tag &rhs) const { return tie() == rhs.tie(); }
-        bool operator!=(const Tag &rhs) const { return tie() != rhs.tie(); }
-    };
-
-    struct hasher
-    {
-    public:
-        inline size_t operator()(const Tag &tag) const
-        {
-            size_t res = 0;
-            utils::hash_combine(res, tag.type);
-            utils::hash_combine(res, tag.device);
-            return res;
-        }
-    };
-
-    using InnerMap = std::unordered_map<Tag, double, hasher>;
-
+private:
     // Return true iff avail contains req
-    bool contains(const InnerMap &avail, const ResourceMap &req);
+    bool contains(const Resources &avail, const Resources &req) const;
 
-    InnerMap m_limits;
-    std::unordered_map<std::string, InnerMap> m_persis;
+    Resources &merge(Resources &lhs, const Resources &rhs) const;
 };
 
 #endif // EXECUTION_RESOURCES_H

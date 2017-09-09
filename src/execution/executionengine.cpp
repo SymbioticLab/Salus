@@ -33,10 +33,7 @@ using namespace std::chrono_literals;
 namespace {
 void logScheduleFailure(const ResourceMap &usage, const ResourceMonitor &resMon)
 {
-    DEBUG("Try to allocate resource failed. Requested:");
-    for (auto p : usage) {
-        DEBUG("    {} -> {}", p.first.DebugString(), p.second);
-    }
+    DEBUG("Try to allocate resource failed. Requested: {}", usage.DebugString());
     DEBUG("Available: {}", resMon.DebugString());
 }
 

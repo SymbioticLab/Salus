@@ -34,16 +34,42 @@ std::string enumToString(const ResourceType &rt)
     }
 }
 
+void ResourceMonitor::initializeLimits()
+{
+    // 100 G for CPU
+    m_limits[{ResourceType::MEMORY, DeviceType::CPU}] = 100.0 * 1024 * 1024 * 1024;
+
+    // 14 G for GPU 0
+    m_limits[{ResourceType::MEMORY, DeviceType::GPU}] = 14.0 * 1024 * 1024 * 1024;
+}
+
+void ResourceMonitor::initializeLimits(const Resources &cap)
+{
+    initializeLimits();
+
+    auto lend = m_limits.end();
+
+    ResourceTag tag;
+    double val;
+    for (auto p : cap) {
+        std::tie(tag, val) = p;
+        auto it = m_limits.find(tag);
+        if (it != lend) {
+            it->second = std::min(it->second, val);
+        }
+    }
+}
+
 // Return true iff avail contains req
-bool ResourceMonitor::contains(const InnerMap &avail, const ResourceMap &req)
+bool ResourceMonitor::contains(const Resources &avail, const Resources &req) const
 {
     auto aend = avail.end();
 
-    ResourceTag rtag;
+    ResourceTag tag;
     double val;
     for (auto p : req) {
-        std::tie(rtag, val) = p;
-        auto it = avail.find(Tag::fromRTag(rtag));
+        std::tie(tag, val) = p;
+        auto it = avail.find(tag);
         if (it == aend) {
             return false;
         }
@@ -54,36 +80,12 @@ bool ResourceMonitor::contains(const InnerMap &avail, const ResourceMap &req)
     return true;
 }
 
-void ResourceMonitor::initializeLimits()
+Resources &ResourceMonitor::merge(Resources &lhs, const Resources &rhs) const
 {
-    // 100 G for CPU
-    m_limits[{ResourceType::MEMORY, DeviceType::CPU}] = 100.0 * 1024 * 1024 * 1024;
-
-    // 14 G for GPU 0
-    m_limits[{ResourceType::MEMORY, DeviceType::GPU}] = 14.0 * 1024 * 1024 * 1024;
-}
-
-void ResourceMonitor::initializeLimits(const ResourceMap &cap)
-{
-    initializeLimits();
-
-    auto lend = m_limits.end();
-
-    ResourceTag rtag;
-    double val;
-    for (auto p : cap) {
-        std::tie(rtag, val) = p;
-        auto it = m_limits.find(Tag::fromRTag(rtag));
-        if (it != lend) {
-            it->second = std::min(it->second, val);
-        }
+    for (auto p : rhs) {
+        lhs[p.first] += p.second;
     }
-}
-
-// If the resource described by cap is available
-bool ResourceMonitor::available(const ResourceMap &cap)
-{
-    return contains(m_limits, cap);
+    return lhs;
 }
 
 // Try aquare resources in as specified cap, including persistant resources.
@@ -91,64 +93,69 @@ bool ResourceMonitor::available(const ResourceMap &cap)
 // return false if failed, no resource will be allocated
 bool ResourceMonitor::tryAllocate(const ResourceMap &cap, const std::string &handle)
 {
-    if (!available(cap)) {
+    auto &persist = m_persis[handle];
+
+    auto toAlloc = cap.temporary;
+
+    // Check if persistant resources has been allocated.
+    if (persist.count(cap.persistantHandle) == 0) {
+        merge(toAlloc, cap.persistant);
+    }
+
+    // Check if we have enough resource
+    if (!contains(m_limits, toAlloc)) {
         return false;
     }
 
-    ResourceTag rtag;
-    double val;
-    for (auto p : cap) {
-        std::tie(rtag, val) = p;
-
-        auto tag = Tag::fromRTag(rtag);
-        m_limits[tag] -= val;
-        if (rtag.persistant) {
-            m_persis[handle][tag] += val;
-        }
+    // Allocate
+    for (auto p : toAlloc) {
+        m_limits[p.first] -= p.second;
     }
+
+    // Record persistant
+    persist[cap.persistantHandle] = cap.persistant;
+
     return true;
 }
 
 // Free non persistant resources
 void ResourceMonitor::free(const ResourceMap &cap)
 {
-    ResourceTag rtag;
-    double val;
-    for (auto p : cap) {
-        std::tie(rtag, val) = p;
-        if (!rtag.persistant) {
-            auto tag = Tag::fromRTag(rtag);
-            m_limits[tag] += val;
-        }
+    for (auto p : cap.temporary) {
+        m_limits[p.first] += p.second;
     }
 }
 
 // Free persistant resources under handle
 void ResourceMonitor::clear(const std::string &handle)
 {
-    auto it = m_persis.find(handle);
-    if (it == m_persis.end()) {
-        return;
-    }
+    auto &persist = m_persis[handle];
 
-    for (auto p : it->second) {
-        m_limits[p.first] += p.second;
+    for (auto p : persist) {
+        merge(m_limits, p.second);
     }
-
-    m_persis.erase(it);
+    persist.clear();
 }
 
-std::string ResourceMonitor::Tag::DebugString() const
+std::string ResourceTag::DebugString() const
 {
     std::ostringstream oss;
     oss << enumToString(type) << "@" << device.DebugString();
     return oss.str();
 }
 
-std::string ResourceTag::DebugString() const
+std::string ResourceMap::DebugString() const
 {
     std::ostringstream oss;
-    oss << enumToString(type) << "@" << device.DebugString() << "(persistant=" << persistant << ")";
+    oss << "ResourceMap" << std::endl;
+    oss << "    Temporary" << std::endl;
+    for (auto p : temporary) {
+        oss << "        " << p.first.DebugString() << " -> " << p.second << std::endl;
+    }
+    oss << "    Persistant (handle='" << persistantHandle << "')" << std::endl;
+    for (auto p : persistant) {
+        oss << "        " << p.first.DebugString() << " -> " << p.second << std::endl;
+    }
     return oss.str();
 }
 
