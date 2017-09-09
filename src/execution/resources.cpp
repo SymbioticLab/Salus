@@ -148,7 +148,7 @@ std::string ResourceMonitor::Tag::DebugString() const
 std::string ResourceTag::DebugString() const
 {
     std::ostringstream oss;
-    oss << enumToString(type) << "@" << device.DebugString() << "(persistant=" << persistant ")";
+    oss << enumToString(type) << "@" << device.DebugString() << "(persistant=" << persistant << ")";
     return oss.str();
 }
 

@@ -163,9 +163,9 @@ bool ExecutionEngine::shouldWaitForAWhile(bool scheduled)
     }
 
     using namespace std::chrono_literals;
-    auto idle = now - last;
+    std::chrono::nanoseconds idle = now - last;
     if (idle > 20ms) {
-        INFO("Yielding out due to no progress for {}.", idle);
+        INFO("Yielding out due to no progress for {}ns.", idle.count());
         return true;
     }
     return false;
