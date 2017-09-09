@@ -588,16 +588,10 @@ private:
     const bool vlog_; // true if VLOG_IS_ON(1). Used to check vlog cheaply.
 
     tf::ShapeRefiner refiner_;
+    std::unordered_map<std::string, tf::PartialTensorShape> sendShapes_;
     tf::mutex refinerMu_;
 
-    inline void addNodeToRefiner(const tf::Node *n)
-    {
-        tf::mutex_lock l(refinerMu_);
-        auto ok = refiner_.AddNode(n);
-        if (!ok.ok()) {
-            ERR("Error when adding node to shape refiner: {}", ok);
-        }
-    }
+    void addNodeToRefiner(const TaggedNode &tn);
 
     inline auto shapeForNode(const tf::Node *n)
     {

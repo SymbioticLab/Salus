@@ -148,3 +148,99 @@ bool SetTimelineLabel(tf::NodeExecStats *node_stats, const tf::Node* node)
     return is_transfer_node;
 }
 } // namespace nodestats
+
+namespace {
+tf::PartialTensorShape fromShapeHandle(tf::shape_inference::InferenceContext *ctx,
+                                       tf::shape_inference::ShapeHandle sph)
+{
+    if (!ctx->RankKnown(sph)) {
+        return {};
+    }
+    auto rank = ctx->Rank(sph);
+    std::vector<tf::int64> vec(rank);
+    for (int i = 0; i != rank; ++i) {
+        vec[i] = ctx->Value(ctx->Dim(sph, i));
+    }
+    return tf::PartialTensorShape(vec);
+}
+
+/**
+ * Only accepts _Send or _Recv nodes
+ */
+std::string rendezKey(const tf::Node *n, uint64_t frame_id, int64_t iter)
+{
+    std::string send_device, recv_device, tensor_name;
+    tf::int64 send_device_incarnation;
+    auto ok = tf::GetNodeAttr(n->def(), "send_device", &send_device);
+    if (!ok.ok()) {
+        ERR("Node {} doesn't have required attribute: send_device", n->name());
+    }
+    ok = tf::GetNodeAttr(n->def(), "recv_device", &recv_device);
+    if (!ok.ok()) {
+        ERR("Node {} doesn't have required attribute: recv_device", n->name());
+    }
+    ok = tf::GetNodeAttr(n->def(), "send_device_incarnation", &send_device_incarnation);
+    if (!ok.ok()) {
+        ERR("Node {} doesn't have required attribute: send_device_incarnation", n->name());
+    }
+    ok = tf::GetNodeAttr(n->def(), "tensor_name", &tensor_name);
+    if (!ok.ok()) {
+        ERR("Node {} doesn't have required attribute: tensor_name", n->name());
+    }
+
+    return tf::strings::StrCat(send_device, ";",
+                           tf::strings::FpToString(send_device_incarnation), ";",
+                           recv_device, ";",
+                           tensor_name, ";",
+                           frame_id, ":", iter);
+}
+
+} // namespace
+
+void ExecutorState::addNodeToRefiner(const TaggedNode &tn)
+{
+    tf::mutex_lock l(refinerMu_);
+    auto node = tn.node;
+
+    auto ok = refiner_.AddNode(node);
+    if (!ok.ok()) {
+        ERR("Error when adding node to shape refiner: {}", ok);
+    }
+
+    // Special handling for some nodes
+    if (node->type_string() == "_Send" || node->type_string() == "_HostSend") {
+        // There is only one input
+        auto e = *node->in_edges().begin();
+        auto ctx = refiner_.GetContext(e->src());
+        if (!ctx) {
+            ERR("Input '{}' for '{}' was not previously added to ShapeRefiner.",
+                e->src()->name(), node->name());
+            return;
+        }
+        auto key = rendezKey(tn.node, tn.input_frame->frame_id, tn.input_iter);
+        sendShapes_[key] = fromShapeHandle(ctx, ctx->output(e->src_output()));
+    } else if (node->type_string() == "_Recv" || node->type_string() == "_HostRecv") {
+        auto key = rendezKey(tn.node, tn.input_frame->frame_id, tn.input_iter);
+        auto it = sendShapes_.find(key);
+        if (it == sendShapes_.end()) {
+            ERR("Send op with key '{}' for '{}' was not previously added to ShapeRefiner.",
+                key, node->name());
+            return;
+        }
+        auto &shape = it->second;
+        auto ctx = refiner_.GetContext(node);
+        // ctx cannot be nullptr because ok.ok()
+        const int num_dims = shape.dims();
+        if (num_dims < 0) {
+            ctx->set_output(0, ctx->UnknownShape());
+        } else {
+            std::vector<tf::shape_inference::DimensionHandle> dims(num_dims);
+            for (int i = 0; i < num_dims; ++i) {
+                // -1 is unknown in PartialTensorShape and in InferenceContext, so this size
+                // can be passed directly to MakeDim.
+                dims[i] = ctx->MakeDim(shape.dim_size(i));
+            }
+            ctx->set_output(0, ctx->MakeShape(dims));
+        }
+    }
+}

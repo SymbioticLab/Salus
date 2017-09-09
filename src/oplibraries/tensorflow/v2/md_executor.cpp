@@ -935,7 +935,7 @@ void ExecutorState::ScheduleReady(const TaggedNodeSeq &ready, TaggedNodeReadyQue
 
     // Infer shape
     for (auto &tn : ready) {
-        addNodeToRefiner(tn.node);
+        addNodeToRefiner(tn);
     }
 
     if (inline_ready == nullptr) {

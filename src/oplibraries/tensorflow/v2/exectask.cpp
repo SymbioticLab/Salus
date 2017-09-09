@@ -118,6 +118,11 @@ ResourceMap ExecTask::estimatedUsage(const DeviceSpec& dev)
         size_t count = 1;
         for (int j = 0; j != ctx->Rank(shp); ++j) {
             auto dim = ctx->Dim(shp, j);
+            if (!ctx->ValueKnown(dim)) {
+                WARN("    Unknown");
+                continue;
+            }
+
             auto val = ctx->Value(dim);
             TRACE("    {}", val);
             count *= val;
