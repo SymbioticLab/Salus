@@ -75,6 +75,16 @@ bool ExecTask::prepare(DeviceSpec &dev)
     return true;
 }
 
+bool ExecTask::lastUsage(const DeviceSpec &dev, ResourceMap &res)
+{
+    auto it = cachedUsage.find(dev);
+    if (it != cachedUsage.end()) {
+        res = it->second;
+        return true;
+    }
+    return false;
+}
+
 ResourceMap ExecTask::estimatedUsage(const DeviceSpec& dev)
 {
     // Fast path from cache
@@ -84,12 +94,13 @@ ResourceMap ExecTask::estimatedUsage(const DeviceSpec& dev)
     }
 
     // Slow path to calculate the usage
+    auto &cap = cachedUsage[dev];
+
     const auto *node = tagged_node.node;
     auto ctx = m_state->shapeForNode(node);
     if (!ctx) {
         WARN("Shape information not available for node: {}", node->name());
-        // TODO: implement special case for special nodes
-        return {};
+        return cap;
     }
 
     DeviceItem ditem;
@@ -105,7 +116,6 @@ ResourceMap ExecTask::estimatedUsage(const DeviceSpec& dev)
         WARN("Kernel not found on device {}, resource estimation may be inaccurate.", dev);
     }
 
-    auto &cap = cachedUsage[dev];
     ResourceTag devTag{ResourceType::MEMORY, dev};
     ResourceTag cpuTag{ResourceType::MEMORY, dev};
 

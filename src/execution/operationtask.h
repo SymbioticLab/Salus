@@ -29,7 +29,12 @@ public:
 
     virtual bool prepare(DeviceSpec &dev) = 0;
     virtual void run() = 0;
+
+    // estimate usage and cache the result
     virtual ResourceMap estimatedUsage(const DeviceSpec &dev) = 0;
+
+    // Returns cached usage
+    virtual bool lastUsage(const DeviceSpec &dev, ResourceMap &res) = 0;
 };
 
 #endif // OPEARTIONTASK_H

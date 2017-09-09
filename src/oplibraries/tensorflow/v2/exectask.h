@@ -60,6 +60,8 @@ public:
 
     ResourceMap estimatedUsage(const DeviceSpec &dev) override;
 
+    bool lastUsage(const DeviceSpec &dev, ResourceMap &res) override;
+
     ~ExecTask() override;
 
 private:

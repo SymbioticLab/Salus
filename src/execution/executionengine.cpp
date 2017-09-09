@@ -318,7 +318,9 @@ size_t ExecutionEngine::maybeScheduleFrom(ResourceMonitor &resMon, ExecutionEngi
         queue.pop();
         q::with(m_qec->queue(), opItem).then([spec, &resMon](OperationItem *opItem){
             opItem->task();
-            resMon.free(opItem->op->estimatedUsage(spec));
+            ResourceMap res;
+            opItem->op->lastUsage(spec, res);
+            resMon.free(res);
             delete opItem;
         });
     }
