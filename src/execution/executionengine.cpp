@@ -307,6 +307,7 @@ size_t ExecutionEngine::maybeScheduleFrom(ResourceMonitor &resMon, ExecutionEngi
         }
     }
 
+    spec = DeviceSpec(DeviceType::CPU);
     if (!scheduled && tryScheduleOn(resMon, opItem->op.get(), item->sessHandle, spec)) {
         INFO("Task scheduled on CPU");
         scheduled = true;
