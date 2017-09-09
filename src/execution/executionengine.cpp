@@ -26,6 +26,21 @@
 #include "utils/threadutils.h"
 
 #include <functional>
+#include <chrono>
+
+using std::chrono::steady_clock;
+
+namespace {
+void logScheduleFailure(const ResourceMap &usage, const ResourceMonitor &resMon)
+{
+    DEBUG("Try to allocate resource failed. Requested:");
+    for (auto p : usage) {
+        DEBUG("    {} -> {}", p.first.DebugString(), p.second);
+    }
+    DEBUG("Available: {}", resMon.DebugString());
+}
+
+} // namespace
 
 ExecutionEngine &ExecutionEngine::instance()
 {
@@ -137,12 +152,32 @@ ExecutionEngine::InserterImpl::~InserterImpl()
     m_engine->deleteSession(m_item);
 }
 
+bool ExecutionEngine::shouldWaitForAWhile(bool scheduled)
+{
+    static auto last = steady_clock::now();
+
+    auto now = steady_clock::now();
+
+    if (scheduled) {
+        last = now;
+    }
+
+    using namespace std::chrono_literals;
+    auto idle = now - last;
+    if (idle > 20ms) {
+        INFO("Yielding out due to no progress for {}.", idle);
+        return true;
+    }
+    return false;
+}
+
 void ExecutionEngine::scheduleLoop()
 {
     ResourceMonitor resMon;
     resMon.initializeLimits();
 
     SessionList sessions;
+
 
     while (!m_shouldExit) {
         // Fisrt check if there's any pending deletions
@@ -160,6 +195,7 @@ void ExecutionEngine::scheduleLoop()
         }
 
         // Loop through sessions
+        bool scheduled = false;
         size_t count = 0;
         auto it = sessions.begin();
         auto end = sessions.end();
@@ -182,9 +218,18 @@ void ExecutionEngine::scheduleLoop()
                 }
                 count += item->bgQueue.size();
 
-                maybeScheduleFrom(resMon, item);
+                // NOTE: don't use scheduled || maybeScheduleFrom(...)
+                // we don't want short-cut eval here and maybeScheduleFrom
+                // should always be called.
+                scheduled |= maybeScheduleFrom(resMon, item);
                 ++it;
             }
+        }
+
+        if (shouldWaitForAWhile(scheduled)) {
+            // no progress for a long time.
+            // gie out our time slice to avoid using too much cycles
+            std::this_thread::yield();
         }
 
         if (!count) {
@@ -213,6 +258,7 @@ bool tryScheduleOn(ResourceMonitor &resMon, OperationTask *t, const std::string 
 
     auto usage = t->estimatedUsage(expectedDev);
     if (!resMon.tryAllocate(usage, sessHandle)) {
+        logScheduleFailure(usage, resMon);
         return false;
     }
     if (t->prepare(expectedDev)) {
@@ -224,6 +270,7 @@ bool tryScheduleOn(ResourceMonitor &resMon, OperationTask *t, const std::string 
         // the task wants to run on a different device
         usage = t->estimatedUsage(expectedDev);
         if (!resMon.tryAllocate(usage, sessHandle)) {
+            logScheduleFailure(usage, resMon);
             return false;
         }
         if (t->prepare(expectedDev)) {

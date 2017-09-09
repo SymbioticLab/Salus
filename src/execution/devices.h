@@ -31,6 +31,8 @@ enum class DeviceType
     GPU
 };
 
+std::string enumToString(const DeviceType &dt);
+
 struct DeviceSpec
 {
     DeviceType type;
@@ -39,6 +41,8 @@ struct DeviceSpec
     DeviceSpec() = default;
 
     DeviceSpec(DeviceType t, int id = 0) : type(t), id(id) {}
+
+    std::string DebugString() const;
 
 private:
     friend bool operator==(const DeviceSpec &lhs, const DeviceSpec &rhs);

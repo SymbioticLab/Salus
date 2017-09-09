@@ -135,6 +135,7 @@ private:
     std::atomic<bool> m_shouldExit = {false};
     void scheduleLoop();
     size_t maybeScheduleFrom(ResourceMonitor &resMon, SessionItem *item);
+    bool shouldWaitForAWhile(bool scheduled);
     std::unique_ptr<std::thread> m_schedThread;
 
     // Incoming kernels

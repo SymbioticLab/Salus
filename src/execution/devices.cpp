@@ -18,3 +18,24 @@
  */
 
 #include "devices.h"
+
+#include <sstream>
+
+std::string enumToString(const DeviceType &dt)
+{
+    switch(dt) {
+    case DeviceType::CPU:
+        return "DeviceType::CPU";
+    case DeviceType::GPU:
+        return "DeviceType::GPU";
+    default:
+        return "Unknown DeviceType";
+    }
+}
+
+std::string DeviceSpec::DebugString() const
+{
+    std::ostringstream oss;
+    oss << enumToString(type) << ":" << id;
+    return oss.str();
+}

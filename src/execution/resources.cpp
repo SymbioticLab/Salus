@@ -18,8 +18,21 @@
 
 #include "resources.h"
 
+#include <sstream>
 #include <tuple>
 #include <algorithm>
+
+std::string enumToString(const ResourceType &rt)
+{
+    switch(rt) {
+    case ResourceType::COMPUTE:
+        return "ResourceType::COMPUTE";
+    case ResourceType::MEMORY:
+        return "ResourceType::COMPUTE";
+    default:
+        return "Unknown ResourceType";
+    }
+}
 
 // Return true iff avail contains req
 bool ResourceMonitor::contains(const InnerMap &avail, const ResourceMap &req)
@@ -123,4 +136,30 @@ void ResourceMonitor::clear(const std::string &handle)
     }
 
     m_persis.erase(it);
+}
+
+std::string ResourceMonitor::Tag::DebugString() const
+{
+    std::ostringstream oss;
+    oss << enumToString(type) << "@" << device.DebugString();
+    return oss.str();
+}
+
+std::string ResourceTag::DebugString() const
+{
+    std::ostringstream oss;
+    oss << enumToString(type) << "@" << device.DebugString() << "(persistant=" << persistant ")";
+    return oss.str();
+}
+
+std::string ResourceMonitor::DebugString() const
+{
+    std::ostringstream oss;
+    oss << "ResourceMonitor: dumping available resources" << std::endl;
+
+    for (auto p : m_limits) {
+        oss << "    ";
+        oss << p.first.DebugString() << " -> " << p.second << std::endl;
+    }
+    return oss.str();
 }

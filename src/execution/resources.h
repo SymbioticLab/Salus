@@ -30,15 +30,15 @@ enum class ResourceType
     MEMORY,
 };
 
+std::string enumToString(const ResourceType &rt);
+
 struct ResourceTag
 {
     ResourceType type;
     DeviceSpec device;
     bool persistant = false;
 
-    bool operator==(const ResourceTag &rtag) {
-        return type == rtag.type && device == rtag.device && persistant == rtag.persistant;
-    }
+    std::string DebugString() const;
 
 private:
     friend bool operator==(const ResourceTag &lhs, const ResourceTag &rhs);
@@ -101,6 +101,8 @@ public:
     // Free persistant resources under handle
     void clear(const std::string &handle);
 
+    std::string DebugString() const;
+
 private:
     struct Tag
     {
@@ -116,9 +118,12 @@ private:
             return {rtag.type, rtag.device};
         }
 
+        std::string DebugString() const;
+
         bool operator==(const Tag &rhs) const { return tie() == rhs.tie(); }
         bool operator!=(const Tag &rhs) const { return tie() != rhs.tie(); }
     };
+
     struct hasher
     {
     public:
