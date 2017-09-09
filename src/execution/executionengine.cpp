@@ -237,7 +237,7 @@ void ExecutionEngine::scheduleLoop()
         if (!count) {
             INFO("Wait on m_cond_has_work");
             std::unique_lock<std::mutex> ul(m_condMu);
-            m_cond_has_work.wait(ul);
+            m_cond_has_work.wait_for(ul, 1us);
         }
     }
 
