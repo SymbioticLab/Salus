@@ -25,9 +25,9 @@ std::string enumToString(const DeviceType &dt)
 {
     switch(dt) {
     case DeviceType::CPU:
-        return "DeviceType::CPU";
+        return "CPU";
     case DeviceType::GPU:
-        return "DeviceType::GPU";
+        return "GPU";
     default:
         return "Unknown DeviceType";
     }

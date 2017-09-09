@@ -114,12 +114,16 @@ ResourceMap ExecTask::estimatedUsage(const DeviceSpec& dev)
             WARN("{}-th output of node {} has unknown rank", i, node->name());
             continue;
         }
+        TRACE("Shape of {}-th output of node {}:", i, node->name());
         size_t count = 1;
         for (int j = 0; j != ctx->Rank(shp); ++j) {
             auto dim = ctx->Dim(shp, j);
-            count *= ctx->Value(dim);
+            auto val = ctx->Value(dim);
+            TRACE("    {}", val);
+            count *= val;
         }
         auto dtype = node->output_type(i);
+        TRACE("    dtype {}, {} bytes", tf::DataType_Name(dtype), tf::DataTypeSize(dtype));
         double subtotal = count * tf::DataTypeSize(dtype);
 
         if (mtypeStatus.ok()) {

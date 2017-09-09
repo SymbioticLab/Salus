@@ -26,9 +26,9 @@ std::string enumToString(const ResourceType &rt)
 {
     switch(rt) {
     case ResourceType::COMPUTE:
-        return "ResourceType::COMPUTE";
+        return "COMPUTE";
     case ResourceType::MEMORY:
-        return "ResourceType::COMPUTE";
+        return "MEMORY";
     default:
         return "Unknown ResourceType";
     }

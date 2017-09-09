@@ -29,6 +29,7 @@
 #include <chrono>
 
 using std::chrono::steady_clock;
+using namespace std::chrono_literals;
 
 namespace {
 void logScheduleFailure(const ResourceMap &usage, const ResourceMonitor &resMon)
@@ -162,10 +163,10 @@ bool ExecutionEngine::shouldWaitForAWhile(bool scheduled)
         last = now;
     }
 
-    using namespace std::chrono_literals;
     std::chrono::nanoseconds idle = now - last;
     if (idle > 20ms) {
-        INFO("Yielding out due to no progress for {}ns.", idle.count());
+        INFO("Yielding out due to no progress for {}ms.",
+             std::chrono::duration_cast<std::chrono::milliseconds>(idle).count());
         return true;
     }
     return false;
@@ -229,10 +230,12 @@ void ExecutionEngine::scheduleLoop()
         if (shouldWaitForAWhile(scheduled)) {
             // no progress for a long time.
             // gie out our time slice to avoid using too much cycles
-            std::this_thread::yield();
+//             std::this_thread::yield();
+            std::this_thread::sleep_for(10ms);
         }
 
         if (!count) {
+            INFO("Wait on m_cond_has_work");
             std::unique_lock<std::mutex> ul(m_condMu);
             m_cond_has_work.wait(ul);
         }
