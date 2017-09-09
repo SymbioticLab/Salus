@@ -26,7 +26,6 @@
 #include "utils/threadutils.h"
 
 #include <functional>
-#include <chrono>
 
 using std::chrono::steady_clock;
 using namespace std::chrono_literals;
@@ -153,20 +152,24 @@ ExecutionEngine::InserterImpl::~InserterImpl()
     m_engine->deleteSession(m_item);
 }
 
-bool ExecutionEngine::shouldWaitForAWhile(bool scheduled)
+bool ExecutionEngine::shouldWaitForAWhile(bool scheduled, std::chrono::nanoseconds &ns)
 {
     static auto last = steady_clock::now();
+    static auto sleep = 10ms;
 
     auto now = steady_clock::now();
 
     if (scheduled) {
         last = now;
+        sleep = 10ms;
     }
 
     std::chrono::nanoseconds idle = now - last;
     if (idle > 20ms) {
         INFO("Yielding out due to no progress for {}ms.",
              std::chrono::duration_cast<std::chrono::milliseconds>(idle).count());
+        ns = sleep;
+        sleep *= 2;
         return true;
     }
     return false;
@@ -227,11 +230,12 @@ void ExecutionEngine::scheduleLoop()
             }
         }
 
-        if (shouldWaitForAWhile(scheduled)) {
+        std::chrono::nanoseconds ns;
+        if (shouldWaitForAWhile(scheduled, ns)) {
             // no progress for a long time.
             // gie out our time slice to avoid using too much cycles
 //             std::this_thread::yield();
-            std::this_thread::sleep_for(10ms);
+            std::this_thread::sleep_for(ns);
         }
 
         if (!count) {

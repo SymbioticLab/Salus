@@ -39,6 +39,7 @@
 #include <atomic>
 #include <unordered_set>
 #include <future>
+#include <chrono>
 
 class OperationTask;
 class ResourceMonitor;
@@ -136,7 +137,7 @@ private:
     std::atomic<bool> m_shouldExit = {false};
     void scheduleLoop();
     size_t maybeScheduleFrom(ResourceMonitor &resMon, SessionItem *item);
-    bool shouldWaitForAWhile(bool scheduled);
+    bool shouldWaitForAWhile(bool scheduled, std::chrono::nanoseconds &ns);
     std::unique_ptr<std::thread> m_schedThread;
 
     // Incoming kernels

@@ -204,7 +204,7 @@ void ExecutorState::addNodeToRefiner(const TaggedNode &tn)
 
     auto ok = refiner_.AddNode(node);
     if (!ok.ok()) {
-        ERR("Error when adding node to shape refiner: {}", ok);
+        ERR("Error when adding node {} to shape refiner: {}", node->name(), ok);
     }
 
     // Special handling for some nodes
