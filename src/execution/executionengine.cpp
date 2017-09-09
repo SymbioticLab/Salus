@@ -296,14 +296,18 @@ size_t ExecutionEngine::maybeScheduleFrom(ResourceMonitor &resMon, ExecutionEngi
 
     // Try schedule the operation
     bool scheduled = false;
+    DeviceSpec spec(DeviceType::CPU);
+
     if (useGPU()) {
-        if (tryScheduleOn(resMon, opItem->op.get(), item->sessHandle, DeviceType::GPU)) {
+        spec = DeviceSpec(DeviceType::GPU);
+
+        if (tryScheduleOn(resMon, opItem->op.get(), item->sessHandle, spec)) {
             INFO("Task scheduled on GPU");
             scheduled = true;
         }
     }
 
-    if (!scheduled && tryScheduleOn(resMon, opItem->op.get(), item->sessHandle, DeviceType::CPU)) {
+    if (!scheduled && tryScheduleOn(resMon, opItem->op.get(), item->sessHandle, spec)) {
         INFO("Task scheduled on CPU");
         scheduled = true;
     }
@@ -311,8 +315,9 @@ size_t ExecutionEngine::maybeScheduleFrom(ResourceMonitor &resMon, ExecutionEngi
     // Send to thread pool
     if (scheduled) {
         queue.pop();
-        q::with(m_qec->queue(), opItem).then([](OperationItem *opItem){
+        q::with(m_qec->queue(), opItem).then([spec, &resMon](OperationItem *opItem){
             opItem->task();
+            resMon.free(opItem->op->estimatedUsage(spec));
             delete opItem;
         });
     }

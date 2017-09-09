@@ -67,6 +67,7 @@ private:
 
 private:
     DeviceItem ditem;
+    std::unordered_map<DeviceSpec, ResourceMap> cachedUsage;
 
     ExecutorState::TaggedNode &tagged_node;
     ExecutorState::TaggedNodeSeq &ready;

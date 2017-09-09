@@ -77,6 +77,13 @@ bool ExecTask::prepare(DeviceSpec &dev)
 
 ResourceMap ExecTask::estimatedUsage(const DeviceSpec& dev)
 {
+    // Fast path from cache
+    auto it = cachedUsage.find(dev);
+    if (it != cachedUsage.end()) {
+        return it->second;
+    }
+
+    // Slow path to calculate the usage
     const auto *node = tagged_node.node;
     auto ctx = m_state->shapeForNode(node);
     if (!ctx) {
@@ -98,12 +105,12 @@ ResourceMap ExecTask::estimatedUsage(const DeviceSpec& dev)
         WARN("Kernel not found on device {}, resource estimation may be inaccurate.", dev);
     }
 
-    ResourceMap cap;
+    auto &cap = cachedUsage[dev];
     ResourceTag devTag{ResourceType::MEMORY, dev};
     ResourceTag cpuTag{ResourceType::MEMORY, dev};
 
     auto res = &cap.temporary;
-    if (node->IsOp() && node->op_def().name() == "VariableV2") {
+    if (node->IsOp() && node->op_def().is_stateful()) {
         // special handle for persistant ops
         cap.persistantHandle = node->name();
         res = &cap.persistant;
