@@ -35,7 +35,8 @@ ExecTask::ExecTask(ExecutorState *state, tf::Device *&device,
                    int64_t &scheduled_usec, ExecutorState::EntryVector &outputs,
                    TensorValueVec &inputs, DeviceContextVec &input_device_contexts,
                    AllocatorAttributeVec &input_alloc_attrs, bool &completed, tf::Rendezvous *rendez)
-    : tagged_node(node)
+    : deleteKernel(state->impl_->params_.delete_kernel)
+    , tagged_node(node)
     , ready(ready)
     , inline_ready(inline_ready)
     , stats(stats)
@@ -427,7 +428,8 @@ void ExecTask::run()
 
 ExecTask::~ExecTask()
 {
+    // At this time m_state may already be deleted.
     if (op_kernel) {
-        m_state->impl_->params_.delete_kernel(op_kernel, ditem.function_library.get());
+        deleteKernel(op_kernel, ditem.function_library.get());
     }
 }

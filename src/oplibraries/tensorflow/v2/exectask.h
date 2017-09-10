@@ -73,6 +73,7 @@ private:
     DeviceItem ditem;
     std::unordered_map<DeviceSpec, ResourceMap> cachedUsage;
     std::vector<DeviceType> supportedTypes;
+    std::function<void(tf::OpKernel*, tf::FunctionLibraryRuntime*)> deleteKernel;
 
     tf::OpKernel *op_kernel = nullptr;
     bool kernel_is_async;
