@@ -425,4 +425,9 @@ void ExecTask::run()
     return;
 }
 
-ExecTask::~ExecTask() = default;
+ExecTask::~ExecTask()
+{
+    if (op_kernel) {
+        m_state->impl_->params_.delete_kernel(op_kernel, ditem.function_library);
+    }
+}
