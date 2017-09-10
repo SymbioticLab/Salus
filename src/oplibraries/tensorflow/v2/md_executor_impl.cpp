@@ -197,6 +197,26 @@ std::string rendezKey(const tf::Node *n, uint64_t frame_id, int64_t iter)
 
 } // namespace
 
+void ExecutorState::fetchRecvShape(const tf::Node *n)
+{
+    if (!IsRecv(n)) {
+        return;
+    }
+
+    auto zr = static_cast<tf::ZrpcRemoteRendezvous*>(rendezvous_);
+    assert(zr);
+
+    auto key = rendezKey(n, 0, 0);
+
+    tf::Tensor t;
+    if (zr->FindTensor(key, t)) {
+        tf::mutex_lock l(refinerMu_);
+        sendShapes_[key] = tf::PartialTensorShape(t.shape().dim_sizes());
+    } else {
+        WARN("Client terminated recv key not found: {}", key);
+    }
+}
+
 void ExecutorState::addNodeToRefiner(const TaggedNode &tn)
 {
     tf::mutex_lock l(refinerMu_);

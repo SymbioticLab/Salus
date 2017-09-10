@@ -24,6 +24,7 @@
 #include "execution/executionengine.h"
 
 #include <list>
+#include <unordered_set>
 
 namespace tf = tensorflow;
 namespace gtl = tf::gtl;
@@ -130,6 +131,9 @@ private:
 
     // Root nodes (with no in edges) that should form the initial ready queue
     std::vector<const tf::Node *> root_nodes_;
+
+    // Client terminated recv nodes for inputs, this should also in root nodes.
+    std::unordered_set<const tf::Node *> client_recv_nodes_;
 
     // Mapping from frame name to static information about the frame.
     // TODO(yuanbyu): We could cache it along with the graph so to avoid
@@ -592,6 +596,8 @@ private:
     tf::mutex refinerMu_;
 
     void addNodeToRefiner(const TaggedNode &tn);
+
+    void fetchRecvShape(const tf::Node *n);
 
     inline auto shapeForNode(const tf::Node *n)
     {

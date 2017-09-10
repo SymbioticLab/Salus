@@ -120,8 +120,24 @@ tf::Status ExecutorImpl::Initialize()
         const auto &frame_name = cf_info.frame_names[id];
         auto frame_info = EnsureFrameInfo(frame_name);
 
-        // See if this node is a root node, and if so, add to root_nodes_.
         const int num_in_edges = n->in_edges().size();
+        bool client_terminated = false;
+        // See if this node is a client terminated recv node
+        if (IsRecv(n)) {
+            auto ok = GetNodeAttr(n->def(), "client_terminated", &client_terminated);
+            if (!ok.ok()) {
+                ERR("Error when initializing node {}: {}", n->name(), ok);
+            } else {
+                if (client_terminated) {
+                    client_recv_nodes_.insert(n);
+                    if (num_in_edges != 0) {
+                        WARN("Client recv node {} has inputs: {}", n->name(), n->def());
+                    }
+                }
+            }
+        }
+
+        // See if this node is a root node, and if so, add to root_nodes_.
         if (num_in_edges == 0) {
             root_nodes_.push_back(n);
         }
@@ -296,6 +312,11 @@ void ExecutorState::RunAsync(tf::Executor::DoneCallback done)
     TRACE("ExecutorState::RunAsync");
 
     TaggedNodeSeq ready;
+
+    // Process all client_terminated recv first for shape inference
+    for (const auto *n : impl_->client_recv_nodes_) {
+        fetchRecvShape(n);
+    }
 
     // Initialize the ready queue.
     for (const auto *n : impl_->root_nodes_) {

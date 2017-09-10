@@ -41,6 +41,7 @@
 #include <tensorflow/core/distributed_runtime/zrpc/exechelper/devicefactories.h>
 #include <tensorflow/core/distributed_runtime/zrpc/exechelper/allocators.h>
 #include <tensorflow/core/distributed_runtime/zrpc/zrpc_wrapped_devicecontext.h>
+#include <tensorflow/core/distributed_runtime/zrpc/zrpc_rendezvous_mgr.h>
 #include <tensorflow/core/framework/allocator.h>
 #include <tensorflow/core/framework/function.h>
 #include <tensorflow/core/framework/function.pb.h>
@@ -51,6 +52,7 @@
 #include <tensorflow/core/framework/resource_mgr.h>
 #include <tensorflow/core/framework/types.h>
 #include <tensorflow/core/graph/graph.h>
+#include <tensorflow/core/graph/algorithm.h>
 #include <tensorflow/core/graph/graph_constructor.h>
 #include <tensorflow/core/lib/core/status.h>
 #include <tensorflow/core/lib/gtl/flatmap.h>
