@@ -32,8 +32,8 @@ class FunctionLibraryRuntime;
 
 struct DeviceItem
 {
-    tensorflow::Device *device = nullptr;
-    tensorflow::FunctionLibraryRuntime *function_library = nullptr;
+    tf::Device *device = nullptr;
+    std::shared_ptr<tf::FunctionLibraryRuntime> function_library = nullptr;
     bool device_record_tensor_access = false;
 };
 

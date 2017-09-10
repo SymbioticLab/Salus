@@ -305,10 +305,6 @@ ExecutorState::~ExecutorState()
             c->Unref();
         }
     }
-
-    for (auto p : m_fruntimes) {
-        impl_->params_.delete_fruntime(p.second);
-    }
 }
 
 void ExecutorState::RunAsync(tf::Executor::DoneCallback done)
@@ -412,7 +408,7 @@ tf::Status ExecutorState::SetupKernel(TaggedNode node, const DeviceItem &ditem, 
 
     tf::OpKernel *kernel = nullptr;
     INFO("Creating a kernel for device: {}", ditem.device->name());
-    auto ok = impl_->params_.create_kernel(ndef, ditem.device, ditem.function_library, &kernel);
+    auto ok = impl_->params_.create_kernel(ndef, ditem.device, ditem.function_library.get(), &kernel);
     if (!ok.ok()) {
         *op_kernel = nullptr;
         ok = AttachDef(ok, ndef);
@@ -446,13 +442,16 @@ tf::DeviceContext * ExecutorState::FindDeviceContext(size_t id, tf::Device* devi
     return nullptr;
 }
 
-tf::FunctionLibraryRuntime *ExecutorState::FindFunctionLibrary(tf::Device *dev)
+std::shared_ptr<tf::FunctionLibraryRuntime> ExecutorState::FindFunctionLibrary(tf::Device *dev)
 {
     tf::mutex_lock l(mu_);
 
     auto &ptr = m_fruntimes[dev];
     if (!ptr) {
-        ptr = impl_->params_.create_fruntime(dev);
+        std::shared_ptr<tf::FunctionLibraryRuntime> pf(impl_->params_.create_fruntime(dev),
+                                                       impl_->params_.delete_fruntime);
+        using std::swap;
+        swap(ptr, pf);
     }
     return ptr;
 }

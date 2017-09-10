@@ -267,7 +267,7 @@ void ExecTask::run()
     auto localRendez = new MultiDeviceRendezvous(ditem.device, rendez);
     params.rendezvous = localRendez;
     params.record_tensor_accesses = ditem.device_record_tensor_access;
-    params.function_library = ditem.function_library;
+    params.function_library = ditem.function_library.get();
     // Set the device_context for this node id, if it exists.
     params.op_device_context = m_state->FindDeviceContext(id, ditem.device);
 
@@ -428,6 +428,6 @@ void ExecTask::run()
 ExecTask::~ExecTask()
 {
     if (op_kernel) {
-        m_state->impl_->params_.delete_kernel(op_kernel, ditem.function_library);
+        m_state->impl_->params_.delete_kernel(op_kernel, ditem.function_library.get());
     }
 }

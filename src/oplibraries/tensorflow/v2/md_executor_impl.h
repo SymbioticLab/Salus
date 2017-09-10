@@ -642,7 +642,7 @@ private:
     // Contains a value for [node->id()] for the device context assigned by the
     // device at the beginning of a step, for each device
     std::unordered_map<tf::Device*, tf::DeviceContextMap> m_deviceContextMaps GUARDED_BY(mu_);
-    std::unordered_map<tf::Device*, tensorflow::FunctionLibraryRuntime*> m_fruntimes GUARDED_BY(mu_);
+    std::unordered_map<tf::Device*, std::shared_ptr<tensorflow::FunctionLibraryRuntime>> m_fruntimes GUARDED_BY(mu_);
 
     // Mapping from frame name to outstanding frames. A new frame is created
     // at some iteration of an active frame. So the unique key for the new
@@ -677,7 +677,7 @@ private:
     tf::Status LookupDevice(const DeviceSpec &spec, DeviceItem &item);
     // Find a device context, or return nullptr
     tf::DeviceContext *FindDeviceContext(size_t id, tf::Device *dev);
-    tf::FunctionLibraryRuntime *FindFunctionLibrary(tf::Device *dev);
+    std::shared_ptr<tf::FunctionLibraryRuntime> FindFunctionLibrary(tf::Device *dev);
 
     // Before invoking item->kernel, fills in its "inputs".
     tf::Status PrepareInputs(const NodeItem &item, tf::OpKernel *kernel, tf::Device *device,
