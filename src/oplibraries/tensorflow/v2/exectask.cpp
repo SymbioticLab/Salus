@@ -50,27 +50,72 @@ ExecTask::ExecTask(ExecutorState *state, tf::Device *&device,
     , used_device(device)
     , m_state(state)
 {
+    tf::DeviceTypeVector tftypes;
+    auto ok = tf::SupportedDeviceTypesForNode({tf::DEVICE_GPU, tf::DEVICE_CPU},
+                                              tagged_node.node->def(), &tftypes);
+    if (!ok.ok()) {
+        WARN("Error while querying supported device for node {}: {}", tagged_node.node->name(), ok);
+    }
+
+    supportedTypes.reserve(tftypes.size());
+    for (auto tft : tftypes) {
+        if (tft == tf::DEVICE_CPU) {
+            supportedTypes.push_back(DeviceType::CPU);
+        } else if (tft == tf::DEVICE_GPU) {
+            supportedTypes.push_back(DeviceType::GPU);
+        } else {
+            WARN("Unknown tf device type: {}", tft.type());
+        }
+    }
+
+    // pre compute estimated usage
+    for (auto t : supportedTypes) {
+        estimatedUsage(t);
+    }
 }
 
-bool ExecTask::prepare(DeviceSpec &dev)
+const std::vector<DeviceType> &ExecTask::supportedDeviceTypes() const
 {
+    return supportedTypes;
+}
+
+bool ExecTask::prepare(const DeviceSpec &dev)
+{
+    auto match = [&dev](auto type) { return type == dev.type; };
+    if (std::none_of(supportedTypes.begin(), supportedTypes.end(), match)) {
+        return false;
+    }
+
     auto s = LookupDevice(dev, ditem);
     if (!s.ok()) {
         return false;
     }
 
-    // Instantiate kernel
+    // First check if we already created the kernel on some device
     op_kernel = nullptr;
-    s = m_state->SetupKernel(tagged_node, ditem, &op_kernel);
-    if (!s.ok()) {
+    const tf::Device *device;
+    auto ok = m_state->impl_->params_.find_kernel(tagged_node.node->def(), &device, &op_kernel);
+
+    if (ok.ok() && device) {
+        // we saw this kernel before, check if the device match
+        if (!device) {
+            WARN("We've created the kernel, but don't remember its device: {}", tagged_node.node->name());
+            auto s = tf::errors::Internal("We've created the kernel, but don't remember its device");
+            op_kernel = nullptr;
+            return false;
+        }
+        if (device == ditem.device) {
+            // We are on the same device, good.
+            return true;
+        }
+        TRACE("Stateful kernel can not be moved: previously created on {}, now requested on {}",
+              device->name(), ditem.device->name());
+        op_kernel = nullptr;
         return false;
+    } else if (!ok.ok()) {
+        ERR("Failed to find kernel with status {} for Node: {}", ok, tagged_node.node->name());
+        // it is okay, just continue to create the kernel
     }
-
-    CHECK(op_kernel);
-    kernel_is_async = (op_kernel->AsAsync() != nullptr);
-
-    // Record device
-    used_device = ditem.device;
 
     return true;
 }
@@ -194,6 +239,22 @@ void ExecTask::run()
     const size_t id = node->id();
     const auto &item = *gview.node(id);
 
+    // Instantiate kernel if not ready done
+    if (!op_kernel) {
+        auto s = m_state->SetupKernel(tagged_node, ditem, &op_kernel);
+        if (!s.ok()) {
+            ERR("Error when creating kernel for node {}: {}", node->name(), s);
+            return;
+        }
+    }
+
+    CHECK(op_kernel);
+    kernel_is_async = (op_kernel->AsAsync() != nullptr);
+
+    // Record device
+    used_device = ditem.device;
+
+    // Start run
     auto s = gview.SetAllocAttrForNode(node, ditem.device, op_kernel);
     if (!s.ok()) {
         m_state->MaybeMarkCompleted(input_frame, input_iter, id);

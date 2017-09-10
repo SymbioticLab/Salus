@@ -40,6 +40,7 @@
 #include <unordered_set>
 #include <future>
 #include <chrono>
+#include <deque>
 
 class OperationTask;
 class ResourceMonitor;
@@ -53,7 +54,7 @@ class ExecutionEngine
     struct OperationItem;
 
     using KernelQueue = boost::lockfree::queue<OperationItem*>;
-    using UnsafeQueue = std::queue<OperationItem*>;
+    using UnsafeQueue = std::deque<OperationItem*>;
 
 public:
     static ExecutionEngine &instance();

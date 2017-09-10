@@ -18,9 +18,13 @@
 
 #include "resources.h"
 
+#include "utils/threadutils.h"
+
 #include <sstream>
 #include <tuple>
 #include <algorithm>
+
+using utils::Guard;
 
 std::string enumToString(const ResourceType &rt)
 {
@@ -36,6 +40,8 @@ std::string enumToString(const ResourceType &rt)
 
 void ResourceMonitor::initializeLimits()
 {
+    Guard g(m_mu);
+
     // 100 G for CPU
     m_limits[{ResourceType::MEMORY, DeviceType::CPU}] = 100.0 * 1024 * 1024 * 1024;
 
@@ -46,6 +52,8 @@ void ResourceMonitor::initializeLimits()
 void ResourceMonitor::initializeLimits(const Resources &cap)
 {
     initializeLimits();
+
+    Guard g(m_mu);
 
     auto lend = m_limits.end();
 
@@ -93,6 +101,8 @@ Resources &ResourceMonitor::merge(Resources &lhs, const Resources &rhs) const
 // return false if failed, no resource will be allocated
 bool ResourceMonitor::tryAllocate(const ResourceMap &cap, const std::string &handle)
 {
+    Guard g(m_mu);
+
     auto &persist = m_persis[handle];
 
     auto toAlloc = cap.temporary;
@@ -121,6 +131,8 @@ bool ResourceMonitor::tryAllocate(const ResourceMap &cap, const std::string &han
 // Free non persistant resources
 void ResourceMonitor::free(const ResourceMap &cap)
 {
+    Guard g(m_mu);
+
     for (auto p : cap.temporary) {
         m_limits[p.first] += p.second;
     }
@@ -129,6 +141,8 @@ void ResourceMonitor::free(const ResourceMap &cap)
 // Free persistant resources under handle
 void ResourceMonitor::clear(const std::string &handle)
 {
+    Guard g(m_mu);
+
     auto &persist = m_persis[handle];
 
     for (auto p : persist) {
@@ -163,6 +177,8 @@ std::string ResourceMonitor::DebugString() const
 {
     std::ostringstream oss;
     oss << "ResourceMonitor: dumping available resources" << std::endl;
+
+    Guard g(m_mu);
 
     for (auto p : m_limits) {
         oss << "    ";

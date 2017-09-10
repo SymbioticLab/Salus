@@ -54,13 +54,15 @@ public:
              AllocatorAttributeVec &input_alloc_attrs,
              bool &completed, tf::Rendezvous *rendez);
 
-    bool prepare(DeviceSpec &dev) override;
+    bool prepare(const DeviceSpec &dev) override;
 
     void run() override;
 
     ResourceMap estimatedUsage(const DeviceSpec &dev) override;
 
     bool lastUsage(const DeviceSpec &dev, ResourceMap &res) override;
+
+    const std::vector<DeviceType> &supportedDeviceTypes() const override;
 
     ~ExecTask() override;
 
@@ -70,6 +72,7 @@ private:
 private:
     DeviceItem ditem;
     std::unordered_map<DeviceSpec, ResourceMap> cachedUsage;
+    std::vector<DeviceType> supportedTypes;
 
     ExecutorState::TaggedNode &tagged_node;
     ExecutorState::TaggedNodeSeq &ready;

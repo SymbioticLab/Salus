@@ -385,35 +385,9 @@ tf::Status ExecutorState::SetupKernel(TaggedNode node, const DeviceItem &ditem, 
 {
     auto &ndef = node.node->def();
 
-    // First check if we already created the kernel on some device
     tf::OpKernel *kernel = nullptr;
-    const tf::Device *device = nullptr;
-    auto ok = impl_->params_.find_kernel(ndef, &device, &kernel);
-
-    if (ok.ok() && kernel) {
-        // we saw this kernel before, check if the device match
-        if (!device) {
-            ERR("We've created the kernel, but don't remember its device: {}", ndef);
-            auto s = tf::errors::Internal("We've created the kernel, but don't remember its device");
-            *op_kernel = nullptr;
-            return AttachDef(s, ndef);
-        }
-        if (device == ditem.device) {
-            // We are on the same device, good.
-            *op_kernel = kernel;
-            return tf::Status::OK();
-        }
-        ERR("Stateful kernel can not be moved: previously created on {}, now requested on {}",
-            device->name(), ditem.device->name());
-        return tf::errors::Internal("Stateful kernel can not be moved: previously created on ",
-                                    device->name(), ", now requested on ", ditem.device->name());
-    } else if (!ok.ok()) {
-        ERR("Failed to create kernel with status {} for NodeDef: {}", ok, ndef);
-        // continue to create the kernel
-    }
-
     INFO("Creating a kernel for device: {}", ditem.device->name());
-    ok = impl_->params_.create_kernel(ndef, ditem.device, ditem.function_library, &kernel);
+    auto ok = impl_->params_.create_kernel(ndef, ditem.device, ditem.function_library, &kernel);
     if (!ok.ok()) {
         *op_kernel = nullptr;
         ok = AttachDef(ok, ndef);

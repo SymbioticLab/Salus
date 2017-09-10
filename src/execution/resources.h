@@ -23,6 +23,7 @@
 #include "utils/macros.h"
 
 #include <unordered_map>
+#include <mutex>
 
 enum class ResourceType
 {
@@ -109,6 +110,8 @@ public:
     std::string DebugString() const;
 
 private:
+    mutable std::mutex m_mu;
+
     Resources m_limits;
 
     // Map from persistantHandle -> InnerMap

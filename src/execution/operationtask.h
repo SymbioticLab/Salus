@@ -22,16 +22,21 @@
 #include "execution/devices.h"
 #include "execution/resources.h"
 
+#include <vector>
+
 class OperationTask
 {
 public:
     virtual ~OperationTask();
 
-    virtual bool prepare(DeviceSpec &dev) = 0;
-    virtual void run() = 0;
-
-    // estimate usage and cache the result
+    // Estimate usage and cache the result
     virtual ResourceMap estimatedUsage(const DeviceSpec &dev) = 0;
+
+    // All supported device types for this task
+    virtual const std::vector<DeviceType> &supportedDeviceTypes() const = 0;
+
+    virtual bool prepare(const DeviceSpec &dev) = 0;
+    virtual void run() = 0;
 
     // Returns cached usage
     virtual bool lastUsage(const DeviceSpec &dev, ResourceMap &res) = 0;

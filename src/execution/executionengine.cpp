@@ -212,9 +212,10 @@ void ExecutionEngine::scheduleLoop()
                     // Use an extra block level to limit the life time
                     // of opItem, so we don't accidentially access it
                     // after the loop.
+                    // TODO: if one session adds op too quickly, it may block here.
                     OperationItem *opItem;
                     while (item->queue.pop(opItem)) {
-                        item->bgQueue.push(opItem);
+                        item->bgQueue.push_back(opItem);
                     }
                 }
                 count += item->bgQueue.size();
@@ -222,7 +223,7 @@ void ExecutionEngine::scheduleLoop()
                 // NOTE: don't use scheduled || maybeScheduleFrom(...)
                 // we don't want short-cut eval here and maybeScheduleFrom
                 // should always be called.
-                scheduled |= maybeScheduleFrom(resMon, item);
+                scheduled |= maybeScheduleFrom(resMon, item) > 0;
                 ++it;
             }
         }
@@ -245,7 +246,7 @@ void ExecutionEngine::scheduleLoop()
     for (auto item : sessions) {
         while (!item->bgQueue.empty()) {
             delete item->bgQueue.front();
-            item->bgQueue.pop();
+            item->bgQueue.pop_front();
         }
         item->queue.consume_all([](auto t){
             delete t;
@@ -267,20 +268,8 @@ bool tryScheduleOn(ResourceMonitor &resMon, OperationTask *t, const std::string 
     if (t->prepare(expectedDev)) {
         return true;
     }
-    resMon.free(usage);
 
-    if (expectedDev != dev) {
-        // the task wants to run on a different device
-        usage = t->estimatedUsage(expectedDev);
-        if (!resMon.tryAllocate(usage, sessHandle)) {
-            logScheduleFailure(usage, resMon);
-            return false;
-        }
-        if (t->prepare(expectedDev)) {
-            return true;
-        }
-        resMon.free(usage);
-    }
+    resMon.free(usage);
     return false;
 }
 
@@ -288,42 +277,62 @@ size_t ExecutionEngine::maybeScheduleFrom(ResourceMonitor &resMon, ExecutionEngi
 {
     auto &queue = item->bgQueue;
 
-    if (queue.empty()) {
+    auto size = queue.size();
+
+    if (size == 0) {
         return 0;
     }
 
-    auto opItem = queue.front();
-
     // Try schedule the operation
-    bool scheduled = false;
-    DeviceSpec spec(DeviceType::CPU);
-
-    if (useGPU()) {
-        spec = DeviceSpec(DeviceType::GPU);
-
-        if (tryScheduleOn(resMon, opItem->op.get(), item->sessHandle, spec)) {
-            INFO("Task scheduled on GPU");
-            scheduled = true;
+    auto doSchedule = [&resMon, &item, this](OperationItem *opItem) -> OperationItem* {
+        bool scheduled = false;
+        DeviceSpec spec;
+        for (auto dt : opItem->op->supportedDeviceTypes()) {
+            if (dt == DeviceType::GPU && !useGPU()) {
+                continue;
+            }
+            spec = DeviceSpec(dt, 0);
+            if (tryScheduleOn(resMon, opItem->op.get(), item->sessHandle, spec)) {
+                INFO("Task scheduled on {}", spec.DebugString());
+                scheduled = true;
+                break;
+            }
         }
+
+        // Send to thread pool
+        if (!scheduled) {
+            return opItem;
+        } else {
+            q::with(m_qec->queue(), opItem).then([spec, &resMon](OperationItem *opItem){
+                opItem->task();
+                ResourceMap res;
+                opItem->op->lastUsage(spec, res);
+                resMon.free(res);
+                delete opItem;
+            });
+            return nullptr;
+        }
+    };
+
+    // Do all schedule in queue in parallel
+    UnsafeQueue stage;
+    stage.swap(queue);
+    std::vector<q::promise<OperationItem*>> promises;
+    for (auto opItem : stage) {
+        auto p = q::with(m_qec->queue(), opItem).then(doSchedule);
+        promises.emplace_back(std::move(p));
     }
 
-    spec = DeviceSpec(DeviceType::CPU);
-    if (!scheduled && tryScheduleOn(resMon, opItem->op.get(), item->sessHandle, spec)) {
-        INFO("Task scheduled on CPU");
-        scheduled = true;
-    }
+    assert(queue.empty());
 
-    // Send to thread pool
-    if (scheduled) {
-        queue.pop();
-        q::with(m_qec->queue(), opItem).then([spec, &resMon](OperationItem *opItem){
-            opItem->task();
-            ResourceMap res;
-            opItem->op->lastUsage(spec, res);
-            resMon.free(res);
-            delete opItem;
-        });
-    }
+    auto it = queue.begin();
+    utils::notification n;
+    q::all(std::move(promises), m_qec->queue())
+    .then([it, &n](std::vector<OperationItem*> remain) {
+        std::remove_copy(remain.begin(), remain.end(), it, nullptr);
+        n.notify();
+    });
+    n.wait();
 
-    return scheduled ? 1 : 0;
+    return size - queue.size();
 }
