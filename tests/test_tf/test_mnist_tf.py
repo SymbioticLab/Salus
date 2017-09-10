@@ -237,5 +237,8 @@ class TestMnistLarge(MnistConvBase):
         return run_mnist_large
 
 
+del MnistConvBase
+
+
 if __name__ == '__main__':
     unittest.main()

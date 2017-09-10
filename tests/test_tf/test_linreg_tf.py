@@ -76,3 +76,7 @@ class TestLinreg(unittest.TestCase):
 
         actual, expected = run_on_rpc_and_cpu(func)
         assertAllClose(actual, expected, rtol=1e-6)
+
+
+if __name__ == '__main__':
+    unittest.main()

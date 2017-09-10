@@ -46,13 +46,12 @@ def run_vgg(vgg, sess, input_data):
             break
         print("Start running step {}".format(i))
         start_time = default_timer()
-        sess.run(train_step, feed_dict={train_mode: True})
+        _, loss_value = sess.run([train_step, cross_entropy], feed_dict={train_mode: True})
         duration = default_timer() - start_time
 
         examples_per_sec = batch_size / duration
         sec_per_batch = float(duration)
         speeds.append(examples_per_sec)
-        loss_value = sess.run(cross_entropy, feed_dict={train_mode: True})
         fmt_str = '{}: step {}, loss = {:.2f} ({:.1f} examples/sec; {:.3f} sec/batch'
         print(fmt_str.format(datetime.now(), i, loss_value, examples_per_sec, sec_per_batch))
 
@@ -159,6 +158,10 @@ class TestVgg16(VGGCaseBase):
 class TestVgg19(VGGCaseBase):
     def _vgg(self):
         return networks.Vgg19Trainable()
+
+
+del VGGCaseBase
+
 
 if __name__ == '__main__':
     unittest.main()
