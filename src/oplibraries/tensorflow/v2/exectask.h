@@ -74,6 +74,9 @@ private:
     std::unordered_map<DeviceSpec, ResourceMap> cachedUsage;
     std::vector<DeviceType> supportedTypes;
 
+    tf::OpKernel *op_kernel = nullptr;
+    bool kernel_is_async;
+
     ExecutorState::TaggedNode &tagged_node;
     ExecutorState::TaggedNodeSeq &ready;
     ExecutorState::TaggedNodeReadyQueue &inline_ready;
@@ -87,9 +90,6 @@ private:
     bool &completed;
     tf::Rendezvous *rendez;
     tf::Device *&used_device;
-
-    tf::OpKernel *op_kernel;
-    bool kernel_is_async;
 
     ExecutorState *m_state;
 };

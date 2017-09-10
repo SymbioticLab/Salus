@@ -642,7 +642,7 @@ private:
     // Contains a value for [node->id()] for the device context assigned by the
     // device at the beginning of a step, for each device
     std::unordered_map<tf::Device*, tf::DeviceContextMap> m_deviceContextMaps GUARDED_BY(mu_);
-    std::unordered_map<tf::Device*, std::unique_ptr<tensorflow::FunctionLibraryRuntime>> m_fruntimes GUARDED_BY(mu_);
+    std::unordered_map<tf::Device*, tensorflow::FunctionLibraryRuntime*> m_fruntimes GUARDED_BY(mu_);
 
     // Mapping from frame name to outstanding frames. A new frame is created
     // at some iteration of an active frame. So the unique key for the new

@@ -305,6 +305,10 @@ ExecutorState::~ExecutorState()
             c->Unref();
         }
     }
+
+    for (auto p : m_fruntimes) {
+        impl_->params_.delete_fruntime(p.second);
+    }
 }
 
 void ExecutorState::RunAsync(tf::Executor::DoneCallback done)
@@ -448,9 +452,9 @@ tf::FunctionLibraryRuntime *ExecutorState::FindFunctionLibrary(tf::Device *dev)
 
     auto &ptr = m_fruntimes[dev];
     if (!ptr) {
-        ptr.reset(impl_->params_.create_fruntime(dev));
+        ptr = impl_->params_.create_fruntime(dev);
     }
-    return ptr.get();
+    return ptr;
 }
 
 namespace {
