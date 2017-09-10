@@ -244,15 +244,19 @@ void ExecutionEngine::scheduleLoop()
 
     // Cleanup
     for (auto item : sessions) {
-        while (!item->bgQueue.empty()) {
-            delete item->bgQueue.front();
-            item->bgQueue.pop_front();
-        }
-        item->queue.consume_all([](auto t){
-            delete t;
-        });
         delete item;
     }
+}
+
+ExecutionEngine::SessionItem::~SessionItem()
+{
+    while (!bgQueue.empty()) {
+        delete bgQueue.front();
+        bgQueue.pop_front();
+    }
+    queue.consume_all([](auto t){
+        delete t;
+    });
 }
 
 bool tryScheduleOn(ResourceMonitor &resMon, OperationTask *t, const std::string &sessHandle,

@@ -154,6 +154,8 @@ private:
         // Only be accessed by scheduling thread
         UnsafeQueue bgQueue;
         explicit SessionItem(const std::string &handle) : sessHandle(handle), queue(128) {}
+
+        ~SessionItem();
     };
 
     struct OperationItem
