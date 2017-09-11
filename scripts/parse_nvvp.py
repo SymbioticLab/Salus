@@ -72,7 +72,7 @@ def parse_iterations(path):
     return iterations
 
 
-def active_wrap_trend(reader, iter_times):
+def active_warp_trend(reader, iter_times):
     data = []
     df = reader.kernels
     df = df[df['event'] == 'active_warps']
