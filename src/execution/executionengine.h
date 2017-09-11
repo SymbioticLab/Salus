@@ -161,7 +161,7 @@ private:
     struct OperationItem
     {
         std::unique_ptr<OperationTask> op;
-        std::packaged_task<void(void)> task;
+        std::packaged_task<void(std::function<void(void)>, std::function<void(void)>)> task;
     };
 
     using SessionList = std::list<SessionItem*>;

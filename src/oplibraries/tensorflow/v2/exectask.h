@@ -52,11 +52,13 @@ public:
              TensorValueVec &inputs,
              DeviceContextVec &input_device_contexts,
              AllocatorAttributeVec &input_alloc_attrs,
-             bool &completed, tf::Rendezvous *rendez);
+             bool &completed, tf::Rendezvous *rendez, int maxFailures = 2);
 
     bool prepare(const DeviceSpec &dev) override;
 
-    void run() override;
+    void run(DoneCallback done, DoneCallback memFailure) override;
+
+    int failedTimes() const override { return failureTimes; }
 
     ResourceMap estimatedUsage(const DeviceSpec &dev) override;
 
@@ -66,8 +68,12 @@ public:
 
     ~ExecTask() override;
 
+    std::string DebugString() override;
+
 private:
     tensorflow::Status LookupDevice(const DeviceSpec &spec, DeviceItem &item);
+
+    bool maybeMemoryFailure(const tf::Status &s, DoneCallback memFailure);
 
 private:
     DeviceItem ditem;
@@ -75,9 +81,14 @@ private:
     std::vector<DeviceType> supportedTypes;
     std::function<void(tf::OpKernel*, tf::FunctionLibraryRuntime*)> deleteKernel;
 
+    int failureTimes = 0;
+    int maxFailures;
+
     tf::OpKernel *op_kernel = nullptr;
     bool kernel_is_async;
+    bool has_ref_input;
 
+    // Borrowed from ExecutorState
     ExecutorState::TaggedNode &tagged_node;
     ExecutorState::TaggedNodeSeq &ready;
     ExecutorState::TaggedNodeReadyQueue &inline_ready;

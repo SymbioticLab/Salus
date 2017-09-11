@@ -132,7 +132,11 @@ void ExecutionEngine::deleteSession(SessionItem *item)
 
 std::future<void> ExecutionEngine::InserterImpl::enqueueOperation(std::unique_ptr<OperationTask> &&task)
 {
-    std::packaged_task<void()> package(std::bind(&OperationTask::run, task.get()));
+    using namespace std::placeholders;
+    using DoneCallback = OperationTask::DoneCallback;
+    std::packaged_task<void(DoneCallback, DoneCallback)> package(std::bind(&OperationTask::run,
+                                                                           task.get(),
+                                                                           _1, _2));
 
     auto opItem = new OperationItem {std::move(task), std::move(package)};
     auto ok = m_item->queue.push(opItem);
@@ -307,12 +311,18 @@ size_t ExecutionEngine::maybeScheduleFrom(ResourceMonitor &resMon, ExecutionEngi
         if (!scheduled) {
             return opItem;
         } else {
-            q::with(m_qec->queue(), opItem).then([spec, &resMon](OperationItem *opItem){
-                opItem->task();
-                ResourceMap res;
-                opItem->op->lastUsage(spec, res);
-                resMon.free(res);
-                delete opItem;
+            q::with(m_qec->queue(), opItem).then([spec, item, &resMon](OperationItem *opItem){
+                opItem->task([&resMon, opItem, spec](){
+                    // succeed
+                    ResourceMap res;
+                    opItem->op->lastUsage(spec, res);
+                    resMon.free(res);
+                    delete opItem;
+                }, [item, opItem](){
+                    // failed due to OOM. Push back to queue
+                    item->queue.push(opItem);
+                    WARN("Opkernel {} failed due to OOM", opItem->op->DebugString());
+                });
             });
             return nullptr;
         }

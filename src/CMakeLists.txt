@@ -20,6 +20,7 @@ set(SRC_LIST
     "utils/threadutils.cpp"
     "utils/envutils.cpp"
     "utils/zmqutils.cpp"
+    "utils/cpp17.cpp"
 
     "executor.cpp"
 )

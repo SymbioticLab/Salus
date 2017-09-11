@@ -26,6 +26,8 @@
 
 #include "oplibraries/tensorflow/tensorflow_headers.h"
 
+#include <sstream>
+
 namespace tf = tensorflow;
 
 ExecTask::ExecTask(ExecutorState *state, tf::Device *&device,
@@ -34,8 +36,11 @@ ExecTask::ExecTask(ExecutorState *state, tf::Device *&device,
                    tf::NodeExecStats *stats, tf::OpKernelContext::Params &params,
                    int64_t &scheduled_usec, ExecutorState::EntryVector &outputs,
                    TensorValueVec &inputs, DeviceContextVec &input_device_contexts,
-                   AllocatorAttributeVec &input_alloc_attrs, bool &completed, tf::Rendezvous *rendez)
+                   AllocatorAttributeVec &input_alloc_attrs, bool &completed, tf::Rendezvous *rendez,
+                   int maxFailures)
     : deleteKernel(state->impl_->params_.delete_kernel)
+    , maxFailures(maxFailures)
+    , has_ref_input(false)
     , tagged_node(node)
     , ready(ready)
     , inline_ready(inline_ready)
@@ -133,6 +138,23 @@ bool ExecTask::lastUsage(const DeviceSpec &dev, ResourceMap &res)
 
 ResourceMap ExecTask::estimatedUsage(const DeviceSpec& dev)
 {
+    // Short-cut if this task has failed before
+    if (failureTimes > 0) {
+        const auto &sessHandle = m_state->impl_->params_.session;
+        auto rm = SessionResourceTracker::instance().usage(sessHandle);
+        if (rm) {
+            int scale = 1 << (maxFailures + 1 - failureTimes);
+            resources::scale(rm->persistant, scale);
+            resources::scale(rm->temporary, scale);
+
+            // Update cache
+            cachedUsage[dev] = *rm;
+        } else {
+            ERR("No session usage found for exec task: {}", tagged_node.node->name());
+            // fallback to normal estimation
+        }
+    }
+
     // Fast path from cache
     auto it = cachedUsage.find(dev);
     if (it != cachedUsage.end()) {
@@ -205,6 +227,15 @@ ResourceMap ExecTask::estimatedUsage(const DeviceSpec& dev)
     return cap;
 }
 
+std::string ExecTask::DebugString()
+{
+    std::ostringstream oss;
+    oss << "ExecTask(name=" << tagged_node.node->name()
+        << ", session=" << m_state->impl_->params_.session
+        << ", failures=" << failureTimes << ")";
+    return oss.str();
+}
+
 tf::Status ExecTask::LookupDevice(const DeviceSpec &spec, DeviceItem &item)
 {
     std::string name;
@@ -231,7 +262,7 @@ tf::Status ExecTask::LookupDevice(const DeviceSpec &spec, DeviceItem &item)
     return tf::Status::OK();
 }
 
-void ExecTask::run()
+void ExecTask::run(std::function<void(void)> done, std::function<void(void)> memFailure)
 {
     const auto &gview = m_state->impl_->gview_;
     auto node = tagged_node.node;
@@ -251,6 +282,14 @@ void ExecTask::run()
 
     CHECK(op_kernel);
     kernel_is_async = (op_kernel->AsAsync() != nullptr);
+
+    // Go through inputs to see if there's ref type input
+    for (int i = 0; i != item.num_inputs; ++i) {
+        if (IsRefType(item.input_type(i))) {
+            has_ref_input = true;
+            break;
+        }
+    }
 
     // Record device
     used_device = ditem.device;
@@ -328,20 +367,26 @@ void ExecTask::run()
             auto async = op_kernel->AsAsync();
             DCHECK(async != nullptr);
             launched_asynchronously = true;
-            auto state = new ExecutorState::AsyncState(params, tagged_node, &item, first_input, stats);
+            auto pstate = new ExecutorState::AsyncState(params, tagged_node, &item, first_input, stats);
 
-            // Don't capture `this`, as when the cb get called, the task may already be deleted
-            auto done = [state, localRendez, ditem = ditem, execState = m_state]() {
+            // `done` should be called last as `this` would be deleted in it.
+            auto asyncDone = [this, pstate, localRendez, done, memFailure,
+                              ditem = ditem, execState = m_state]() {
+                auto state = std::unique_ptr<ExecutorState::AsyncState>(pstate);
                 auto device = ditem.device;
-                auto stats = state->stats;     // Shorthand
-                auto first_input = state->first_input; // Shorthand
+                auto stats = state->stats;
+                auto first_input = state->first_input;
+
+                // Inspect return state for retrying on memory failure
+                if (maybeMemoryFailure(state->ctx.status(), memFailure)) {
+                    return;
+                }
 
                 TRACE(" Async kernel done: {}", SummarizeNodeDef(state->item->node->def()));
                 if (stats)
                     nodestats::SetOpEnd(stats);
                 ExecutorState::EntryVector outputs;
-                tf::Status s = execState->ProcessOutputs(*state->item, &state->ctx, device,
-                                                         &outputs, stats);
+                auto s = execState->ProcessOutputs(*state->item, &state->ctx, device, &outputs, stats);
                 if (stats)
                     nodestats::SetMemory(stats, &state->ctx);
                 // Clears inputs.
@@ -368,13 +413,13 @@ void ExecTask::run()
                     device->ConsumeListOfAccessedTensors(state->ctx.op_device_context(), accessed);
                 }
                 bool completed = execState->NodeDone(s, state->item->node, device, localRendez, ready, stats, nullptr);
-                delete state;
                 if (completed)
                     execState->Finish();
+                done();
             };
             if (stats)
                 nodestats::SetOpStart(stats);
-            ditem.device->ComputeAsync(async, &state->ctx, done);
+            ditem.device->ComputeAsync(async, &pstate->ctx, asyncDone);
         } else {
             // Synchronous computes.
             TRACE("Launch sync kernel");
@@ -384,6 +429,11 @@ void ExecTask::run()
             ditem.device->Compute(CHECK_NOTNULL(op_kernel), &ctx);
             if (stats)
                 nodestats::SetOpEnd(stats);
+
+            // Inspect return state for retrying on memory failure
+            if (maybeMemoryFailure(ctx.status(), memFailure)) {
+                return;
+            }
 
             TRACE("Sync ProcessOutputs");
             s = m_state->ProcessOutputs(item, &ctx, ditem.device, &outputs, stats);
@@ -422,8 +472,25 @@ void ExecTask::run()
         // Postprocess.
         completed = m_state->NodeDone(s, item.node, ditem.device, localRendez, ready, stats, &inline_ready);
         TRACE("Postprocess completed: {}", completed);
+        done();
     }
     return;
+}
+
+bool ExecTask::maybeMemoryFailure(const tf::Status &s, DoneCallback memFailure)
+{
+    if (s.code() == tf::error::RESOURCE_EXHAUSTED) {
+        // we didn't implement rollback. So this can only happen for non ref input ops
+        assert(!has_ref_input);
+
+        ++failureTimes;
+        if (memFailure) {
+            memFailure();
+        }
+
+        return true;
+    }
+    return false;
 }
 
 ExecTask::~ExecTask()

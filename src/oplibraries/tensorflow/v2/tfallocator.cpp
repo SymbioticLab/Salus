@@ -93,13 +93,18 @@ void *TFAllocator::AllocateRaw(size_t alignment, size_t num_bytes)
 void *TFAllocator::AllocateRaw(size_t alignment, size_t num_bytes,
                                const tensorflow::AllocationAttributes &allocation_attr)
 {
+    auto attr(allocation_attr);
+
+    // We should not retry on failure due to the restarting feature
+    attr.no_retry_on_failure = true;
+
     TRACE("TFAllocator allocating attributes {} of {} bytes of memory with alignment {}"
          " using allocator {}@{}",
-         allocation_attr, num_bytes, alignment, nameOrNull(m_actualAlloc), as_hex(m_actualAlloc));
+         attr, num_bytes, alignment, nameOrNull(m_actualAlloc), as_hex(m_actualAlloc));
 
     void *ptr = nullptr;
     if (m_actualAlloc) {
-        ptr = m_actualAlloc->AllocateRaw(alignment, num_bytes, allocation_attr);
+        ptr = m_actualAlloc->AllocateRaw(alignment, num_bytes, attr);
         checkMemory(ptr, num_bytes);
     } else {
         ptr = MemoryMgr::instance().allocate(alignment, num_bytes);
@@ -107,7 +112,7 @@ void *TFAllocator::AllocateRaw(size_t alignment, size_t num_bytes,
 
     DEBUG("TFAllocator called for attributes {} of {} bytes of memory at {} with alignment {}"
          " using allocator {}@{}",
-         allocation_attr, num_bytes, as_hex(ptr), alignment, nameOrNull(m_actualAlloc),
+         attr, num_bytes, as_hex(ptr), alignment, nameOrNull(m_actualAlloc),
          as_hex(m_actualAlloc));
     return ptr;
 }

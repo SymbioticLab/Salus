@@ -21,6 +21,7 @@
 
 #include "execution/devices.h"
 #include "utils/macros.h"
+#include "utils/cpp17.h"
 
 #include <unordered_map>
 #include <mutex>
@@ -78,10 +79,14 @@ public:
 
 using Resources = std::unordered_map<ResourceTag, double>;
 
+namespace resources {
 // Return true iff avail contains req
 bool contains(const Resources &avail, const Resources &req);
 
 Resources &merge(Resources &lhs, const Resources &rhs);
+Resources &subtract(Resources &lhs, const Resources &rhs);
+Resources &scale(Resources &lhs, double scale);
+} // namespace resources
 
 struct ResourceMap
 {
@@ -114,6 +119,9 @@ public:
     // Associate ticket with handle
     void acceptAdmission(uint64_t ticket, const std::string &sessHandle);
 
+    // Query the usage of session.
+    utils::optional<ResourceMap> usage(const std::string &sessHandle) const;
+
     // Free the session
     void free(const std::string &sessHandle);
     void free(uint64_t ticket);
@@ -125,8 +133,8 @@ private:
 
     Resources m_limits;
 
-    std::unordered_map<std::string, uint64_t> m_sessions;
-    std::unordered_map<uint64_t, ResourceMap> m_persist;
+    std::unordered_map<std::string, uint64_t> m_sessToTicket;
+    std::unordered_map<uint64_t, ResourceMap> m_sessions;
 
     std::list<ResourceMap*> m_peak;
 };

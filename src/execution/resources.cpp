@@ -28,6 +28,7 @@
 #include <functional>
 
 using utils::Guard;
+using boost::optional;
 
 std::string enumToString(const ResourceType &rt)
 {
@@ -55,6 +56,7 @@ ResourceType enumFromString(const std::string &rt)
     return ResourceType::UNKNOWN;
 }
 
+namespace resources {
 // Return true iff avail contains req
 bool contains(const Resources &avail, const Resources &req)
 {
@@ -90,6 +92,18 @@ Resources &subtract(Resources &lhs, const Resources &rhs)
     }
     return lhs;
 }
+
+Resources &scale(Resources &lhs, double scale)
+{
+    for (auto &p : lhs) {
+        p.second *= scale;
+    }
+    return lhs;
+}
+
+} // namespace resources;
+
+using namespace resources;
 
 /* static */ SessionResourceTracker &SessionResourceTracker::instance()
 {
@@ -154,14 +168,14 @@ bool SessionResourceTracker::admit(const ResourceMap &cap, uint64_t &ticket)
 
     subtract(m_limits, cap.persistant);
 
-    m_persist[ticket] = cap;
+    m_sessions[ticket] = cap;
 
     auto it = m_peak.begin();
     auto itend = m_peak.end();
     while (it != itend && contains((*it)->temporary, cap.temporary)) {
         it++;
     }
-    m_peak.insert(it, &m_persist[ticket]);
+    m_peak.insert(it, &m_sessions[ticket]);
 
     return true;
 }
@@ -169,14 +183,31 @@ bool SessionResourceTracker::admit(const ResourceMap &cap, uint64_t &ticket)
 void SessionResourceTracker::acceptAdmission(uint64_t ticket, const std::string &sessHandle)
 {
     Guard g(m_mu);
-    m_sessions[sessHandle] = ticket;
-    m_persist[ticket].persistantHandle = sessHandle;
+    m_sessToTicket[sessHandle] = ticket;
+    m_sessions[ticket].persistantHandle = sessHandle;
+}
+
+utils::optional<ResourceMap> SessionResourceTracker::usage(const std::string &sessHandle) const
+{
+    utils::optional<ResourceMap> res;
+    auto it = m_sessToTicket.find(sessHandle);
+    if (it == m_sessToTicket.end()) {
+        return res;
+    }
+
+    auto it2 = m_sessions.find(it->second);
+    if (it2 == m_sessions.end()) {
+        return res;
+    }
+
+    res = it2->second;
+    return res;
 }
 
 void SessionResourceTracker::freeUnsafe(uint64_t ticket)
 {
-    auto it = m_persist.find(ticket);
-    if (it == m_persist.end()) {
+    auto it = m_sessions.find(ticket);
+    if (it == m_sessions.end()) {
         WARN("SessionResourceTracker: unknown ticket: {}", ticket);
         return;
     }
@@ -189,7 +220,7 @@ void SessionResourceTracker::freeUnsafe(uint64_t ticket)
         return pr == &(it->second);
     }));
 
-    m_persist.erase(it);
+    m_sessions.erase(it);
 }
 
 void SessionResourceTracker::free(uint64_t ticket)
@@ -202,8 +233,8 @@ void SessionResourceTracker::free(const std::string &sessHandle)
 {
     Guard g(m_mu);
 
-    auto it = m_sessions.find(sessHandle);
-    if (it == m_sessions.end()) {
+    auto it = m_sessToTicket.find(sessHandle);
+    if (it == m_sessToTicket.end()) {
         WARN("SessionResourceTracker: unknown sess handle: {}", sessHandle);
         return;
     }

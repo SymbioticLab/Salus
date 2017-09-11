@@ -23,11 +23,14 @@
 #include "execution/resources.h"
 
 #include <vector>
+#include <functional>
 
 class OperationTask
 {
 public:
     virtual ~OperationTask();
+
+    virtual std::string DebugString() = 0;
 
     // Estimate usage and cache the result
     virtual ResourceMap estimatedUsage(const DeviceSpec &dev) = 0;
@@ -35,8 +38,12 @@ public:
     // All supported device types for this task
     virtual const std::vector<DeviceType> &supportedDeviceTypes() const = 0;
 
+    virtual int failedTimes() const = 0;
+
     virtual bool prepare(const DeviceSpec &dev) = 0;
-    virtual void run() = 0;
+
+    using DoneCallback = std::function<void(void)>;
+    virtual void run(DoneCallback done, DoneCallback memFailure) = 0;
 
     // Returns cached usage
     virtual bool lastUsage(const DeviceSpec &dev, ResourceMap &res) = 0;
