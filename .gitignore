@@ -23,6 +23,7 @@ MNIST_data
 
 # Scripts
 scripts/**
+!scripts/*.sh
 !scripts/Note
 !scripts/nvvpreader
 !scripts/**/*.py
