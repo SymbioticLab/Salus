@@ -24,14 +24,18 @@
 
 #include <unordered_map>
 #include <mutex>
+#include <list>
 
 enum class ResourceType
 {
     COMPUTE,
     MEMORY,
+
+    UNKNOWN = 1000,
 };
 
 std::string enumToString(const ResourceType &rt);
+ResourceType enumFromString(const std::string &rt);
 
 struct ResourceTag
 {
@@ -74,6 +78,11 @@ public:
 
 using Resources = std::unordered_map<ResourceTag, double>;
 
+// Return true iff avail contains req
+bool contains(const Resources &avail, const Resources &req);
+
+Resources &merge(Resources &lhs, const Resources &rhs);
+
 struct ResourceMap
 {
     Resources temporary;
@@ -83,8 +92,47 @@ struct ResourceMap
     std::string DebugString() const;
 };
 
+class SessionResourceTracker
+{
+    SessionResourceTracker();
+    // Read limits from hardware, and capped by cap
+    SessionResourceTracker(const Resources &cap);
+
+    // If it is safe to admit this session, given its persistant and temporary memory usage.
+    bool canAdmitUnsafe(const ResourceMap &cap) const;
+
+    void freeUnsafe(uint64_t ticket);
+
+public:
+    static SessionResourceTracker &instance();
+
+    ~SessionResourceTracker() = default;
+
+    // Take the session
+    bool admit(const ResourceMap &cap, uint64_t &ticket);
+
+    // Associate ticket with handle
+    void acceptAdmission(uint64_t ticket, const std::string &sessHandle);
+
+    // Free the session
+    void free(const std::string &sessHandle);
+    void free(uint64_t ticket);
+
+private:
+    mutable std::mutex m_mu;
+
+    uint64_t m_tickets = 0;
+
+    Resources m_limits;
+
+    std::unordered_map<std::string, uint64_t> m_sessions;
+    std::unordered_map<uint64_t, ResourceMap> m_persist;
+
+    std::list<ResourceMap*> m_peak;
+};
+
 /**
- * A monitor of resources. This class is not thread-safe.
+ * A monitor of resources. This class is thread-safe.
  */
 class ResourceMonitor
 {
@@ -94,7 +142,6 @@ public:
     // Read limits from hardware, and capped by cap
     void initializeLimits();
     void initializeLimits(const Resources &cap);
-
 
     // Try aquare resources in as specified cap, including persistant resources.
     // Persistant resources will be allocated under handle
@@ -119,12 +166,6 @@ private:
 
     // Map from session -> PerSessInnerMap
     std::unordered_map<std::string, PerSessInnerMap> m_persis;
-
-private:
-    // Return true iff avail contains req
-    bool contains(const Resources &avail, const Resources &req) const;
-
-    Resources &merge(Resources &lhs, const Resources &rhs) const;
 };
 
 #endif // EXECUTION_RESOURCES_H

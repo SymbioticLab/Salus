@@ -22,6 +22,7 @@
 #include "oplibraries/tensorflow/v2/tfallocator.h"
 #include "platform/logging.h"
 #include "execution/executionengine.h"
+#include "execution/resources.h"
 #include "utils/macros.h"
 #include "utils/protoutils.h"
 #include "utils/zmqutils.h"
@@ -277,11 +278,41 @@ void TFOpLibraryV2::handleCreateSession(const std::string &recvId, const executo
         return;
     }
 
+    /*
+    req->config().zmq_options().resourceMap();
+    */
+    ResourceMap rm;
+
+    auto &m = req->config().zmq_options().resource_map();
+    for (auto p : m.persistant()) {
+        auto type = enumFromString(p.first);
+        if (type == ResourceType::UNKNOWN) {
+            continue;
+        }
+        ResourceTag tag{type, DeviceType::CPU};
+        rm.persistant[tag] = p.second;
+    }
+
+    for (auto p : m.temporary()) {
+        auto type = enumFromString(p.first);
+        if (type == ResourceType::UNKNOWN) {
+            continue;
+        }
+        ResourceTag tag{type, DeviceType::CPU};
+        rm.temporary[tag] = p.second;
+    }
+
+    uint64_t ticket;
+    if (!SessionResourceTracker::instance().admit(rm, ticket)) {
+        cb(consumeResponse<tf::CreateSessionResponse>(nullptr, tf::errors::Internal("")));
+        return;
+    }
+
     INFO("Creating proxy object for recv id {}", recvId);
     auto proxy = createProxy();
     auto preq = req.release();
     proxy->HandleCreateSession(preq,
-                               [this, preq, recvId, cb, pproxy = proxy.release()](auto resp, auto status) {
+                               [this, ticket, preq, recvId, cb, pproxy = proxy.release()](auto resp, auto status) {
                                    std::unique_ptr<Proxy> proxy(pproxy);
                                    delete preq;
                                    if (status.ok()) {
@@ -290,6 +321,8 @@ void TFOpLibraryV2::handleCreateSession(const std::string &recvId, const executo
                                            return NewMultiDeviceExecutor(params, graph, ins, executor);
                                        });
                                        registerProxy(recvId, resp->session_handle(), std::move(proxy));
+                                   } else {
+                                       SessionResourceTracker::instance().free(ticket);
                                    }
                                    cb(consumeResponse(resp, status));
                                });
@@ -316,8 +349,9 @@ void TFOpLibraryV2::handleCloseSession(const std::string &recvId, const executor
     auto preq = req.release();
     auto pproxy = proxy.release();
     pproxy->HandleCloseSession(preq, [this, cb, preq, pproxy](auto resp, auto status) {
-        delete preq;
-        delete pproxy;
+        std::unique_ptr<tf::CloseSessionRequest> req(preq);
+        std::unique_ptr<Proxy> proxy(pproxy);
+        SessionResourceTracker::instance().free(req->session_handle());
         cb(consumeResponse(resp, status));
     });
 }

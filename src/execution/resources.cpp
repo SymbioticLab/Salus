@@ -19,10 +19,13 @@
 #include "resources.h"
 
 #include "utils/threadutils.h"
+#include "platform/logging.h"
 
 #include <sstream>
 #include <tuple>
 #include <algorithm>
+#include <algorithm>
+#include <functional>
 
 using utils::Guard;
 
@@ -36,6 +39,170 @@ std::string enumToString(const ResourceType &rt)
     default:
         return "Unknown ResourceType";
     }
+}
+
+ResourceType enumFromString(const std::string &rt)
+{
+    static std::unordered_map<std::string, ResourceType> lookup{
+        {"COMPUTE", ResourceType::COMPUTE},
+        {"MEMORY", ResourceType::MEMORY},
+    };
+
+    auto it = lookup.find(rt);
+    if (it != lookup.end()) {
+        return it->second;
+    }
+    return ResourceType::UNKNOWN;
+}
+
+// Return true iff avail contains req
+bool contains(const Resources &avail, const Resources &req)
+{
+    auto aend = avail.end();
+
+    ResourceTag tag;
+    double val;
+    for (auto p : req) {
+        std::tie(tag, val) = p;
+        auto it = avail.find(tag);
+        if (it == aend) {
+            return false;
+        }
+        if (val > it->second) {
+            return false;
+        }
+    }
+    return true;
+}
+
+Resources &merge(Resources &lhs, const Resources &rhs)
+{
+    for (auto p : rhs) {
+        lhs[p.first] += p.second;
+    }
+    return lhs;
+}
+
+Resources &subtract(Resources &lhs, const Resources &rhs)
+{
+    for (auto p : rhs) {
+        lhs[p.first] -= p.second;
+    }
+    return lhs;
+}
+
+/* static */ SessionResourceTracker &SessionResourceTracker::instance()
+{
+    static SessionResourceTracker srt;
+
+    return srt;
+}
+
+// Read limits from hardware, and capped by cap
+SessionResourceTracker::SessionResourceTracker()
+{
+    // 100 G for CPU
+    m_limits[{ResourceType::MEMORY, DeviceType::CPU}] = 100.0 * 1024 * 1024 * 1024;
+
+    // 14 G for GPU 0
+    m_limits[{ResourceType::MEMORY, DeviceType::GPU}] = 14.0 * 1024 * 1024 * 1024;
+}
+
+SessionResourceTracker::SessionResourceTracker(const Resources &cap)
+    : SessionResourceTracker()
+{
+    auto lend = m_limits.end();
+
+    ResourceTag tag;
+    double val;
+    for (auto p : cap) {
+        std::tie(tag, val) = p;
+        auto it = m_limits.find(tag);
+        if (it != lend) {
+            it->second = std::min(it->second, val);
+        }
+    }
+}
+
+// If it is safe to admit this session, given its persistant and temporary memory usage.
+bool SessionResourceTracker::canAdmitUnsafe(const ResourceMap &cap) const
+{
+    if (!contains(m_limits, cap.persistant)) {
+        return false;
+    }
+
+    auto temp(m_limits);
+    subtract(temp, cap.persistant);
+    return contains(temp, m_peak.front()->temporary);
+}
+
+// Take the session
+bool SessionResourceTracker::admit(const ResourceMap &cap, uint64_t &ticket)
+{
+    Guard g(m_mu);
+
+    if (!canAdmitUnsafe(cap)) {
+        return false;
+    }
+
+    ticket = ++m_tickets;
+
+    subtract(m_limits, cap.persistant);
+
+    m_persist[ticket] = cap;
+
+    auto it = m_peak.begin();
+    while (contains((*it)->temporary, cap.temporary)) {
+        it++;
+    }
+    m_peak.insert(it, &m_persist[ticket]);
+
+    return true;
+}
+
+void SessionResourceTracker::acceptAdmission(uint64_t ticket, const std::string &sessHandle)
+{
+    Guard g(m_mu);
+    m_sessions[sessHandle] = ticket;
+    m_persist[ticket].persistantHandle = sessHandle;
+}
+
+void SessionResourceTracker::freeUnsafe(uint64_t ticket)
+{
+    auto it = m_persist.find(ticket);
+    if (it == m_persist.end()) {
+        WARN("SessionResourceTracker: unknown ticket: {}", ticket);
+        return;
+    }
+
+    merge(m_limits, it->second.persistant);
+
+    using namespace std::placeholders;
+
+    m_peak.erase(std::remove_if(m_peak.begin(), m_peak.end(), [&it](auto pr) {
+        return pr == &(it->second);
+    }));
+
+    m_persist.erase(it);
+}
+
+void SessionResourceTracker::free(uint64_t ticket)
+{
+    Guard g(m_mu);
+    freeUnsafe(ticket);
+}
+
+void SessionResourceTracker::free(const std::string &sessHandle)
+{
+    Guard g(m_mu);
+
+    auto it = m_sessions.find(sessHandle);
+    if (it == m_sessions.end()) {
+        WARN("SessionResourceTracker: unknown sess handle: {}", sessHandle);
+        return;
+    }
+
+    freeUnsafe(it->second);
 }
 
 void ResourceMonitor::initializeLimits()
@@ -66,34 +233,6 @@ void ResourceMonitor::initializeLimits(const Resources &cap)
             it->second = std::min(it->second, val);
         }
     }
-}
-
-// Return true iff avail contains req
-bool ResourceMonitor::contains(const Resources &avail, const Resources &req) const
-{
-    auto aend = avail.end();
-
-    ResourceTag tag;
-    double val;
-    for (auto p : req) {
-        std::tie(tag, val) = p;
-        auto it = avail.find(tag);
-        if (it == aend) {
-            return false;
-        }
-        if (val > it->second) {
-            return false;
-        }
-    }
-    return true;
-}
-
-Resources &ResourceMonitor::merge(Resources &lhs, const Resources &rhs) const
-{
-    for (auto p : rhs) {
-        lhs[p.first] += p.second;
-    }
-    return lhs;
 }
 
 // Try aquare resources in as specified cap, including persistant resources.
