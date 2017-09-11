@@ -132,19 +132,13 @@ void ExecutionEngine::deleteSession(SessionItem *item)
 
 std::future<void> ExecutionEngine::InserterImpl::enqueueOperation(std::unique_ptr<OperationTask> &&task)
 {
-    using namespace std::placeholders;
-    using DoneCallback = OperationTask::DoneCallback;
-    std::packaged_task<void(DoneCallback, DoneCallback)> package(std::bind(&OperationTask::run,
-                                                                           task.get(),
-                                                                           _1, _2));
-
-    auto opItem = new OperationItem {std::move(task), std::move(package)};
+    auto opItem = new OperationItem {std::move(task), {}};
     auto ok = m_item->queue.push(opItem);
     assert(ok);
 
     m_engine->m_note_has_work.notify();
 
-    return opItem->task.get_future();
+    return opItem->promise.get_future();
 }
 
 ExecutionEngine::InserterImpl::~InserterImpl()
@@ -312,8 +306,9 @@ size_t ExecutionEngine::maybeScheduleFrom(ResourceMonitor &resMon, ExecutionEngi
             return opItem;
         } else {
             q::with(m_qec->queue(), opItem).then([spec, item, &resMon](OperationItem *opItem){
-                opItem->task([&resMon, opItem, spec](){
+                opItem->op->run([&resMon, opItem, spec](){
                     // succeed
+                    opItem->promise.set_value();
                     ResourceMap res;
                     opItem->op->lastUsage(spec, res);
                     resMon.free(res);
