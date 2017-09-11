@@ -15,16 +15,16 @@ EXEC_DIR=$DIR/..
 
 function run_client() {
     pushd $EXEC_DIR/tests > /dev/null
-    python -m $CASE $METHOD > "$1"
+    env TF_CPP_MIN_LOG_LEVEL=3 CUDA_VISIBLE_DEVICES=0,1 python -m $CASE $METHOD > "$1"
     popd > /dev/null
 }
 
 function run_server() {
-    $EXEC_DIR/build/src/executor -vvv > "$1" 2>&1 &
+    env CUDA_VISIBLE_DEVICES=2,3 $EXEC_DIR/build/src/executor -vvv > "$1" 2>&1 &
 }
 
 function profile_server() {
-    nvprof --export-profile "$1" --events active_warps -- $EXEC_DIR/build/src/executor &
+    env CUDA_VISIBLE_DEVICES=2,3 nvprof --export-profile "$1" --events active_warps -- $EXEC_DIR/build/src/executor &
 }
 
 mkdir -p "$OUTPUT_DIR"
