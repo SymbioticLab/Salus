@@ -133,7 +133,12 @@ bool SessionResourceTracker::canAdmitUnsafe(const ResourceMap &cap) const
 
     auto temp(m_limits);
     subtract(temp, cap.persistant);
-    return contains(temp, m_peak.front()->temporary);
+
+    if (m_peak.empty()) {
+        return true;
+    } else {
+        return contains(temp, m_peak.front()->temporary);
+    }
 }
 
 // Take the session
@@ -152,7 +157,8 @@ bool SessionResourceTracker::admit(const ResourceMap &cap, uint64_t &ticket)
     m_persist[ticket] = cap;
 
     auto it = m_peak.begin();
-    while (contains((*it)->temporary, cap.temporary)) {
+    auto itend = m_peak.end();
+    while (it != itend && contains((*it)->temporary, cap.temporary)) {
         it++;
     }
     m_peak.insert(it, &m_persist[ticket]);
