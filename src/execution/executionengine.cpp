@@ -135,12 +135,14 @@ std::future<void> ExecutionEngine::InserterImpl::enqueueOperation(std::unique_pt
     auto opItem = std::make_shared<OperationItem>();
     opItem->op = std::move(task);
 
-    m_engine->pushToSessionQueue(m_item, std::move(opItem));
+    m_engine->pushToSessionQueue(m_item, opItem);
+
+    assert(opItem);
 
     return opItem->promise.get_future();
 }
 
-void ExecutionEngine::pushToSessionQueue(SessionItem *item, std::shared_ptr<OperationItem> &&opItem)
+void ExecutionEngine::pushToSessionQueue(SessionItem *item, std::shared_ptr<OperationItem> opItem)
 {
     {
         utils::Guard g(item->mu);
