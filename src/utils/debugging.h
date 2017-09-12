@@ -32,6 +32,13 @@ public:
     ~StackSentinel();
 };
 
+
 } // namespace utils
+
+#ifdef ENABLE_STACK_SENTINEL
+#define STACK_SENTINEL ::utils::StackSentinel ss
+#else
+#define STACK_SENTINEL ((void*)0)
+#endif
 
 #endif // UTILS_DEBUGGING_H

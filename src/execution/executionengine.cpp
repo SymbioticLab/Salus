@@ -31,10 +31,12 @@
 using std::chrono::steady_clock;
 using namespace std::chrono_literals;
 
+// #define ENABLE_STACK_SENTINEL
+
 namespace {
 void logScheduleFailure(const ResourceMap &usage, const ResourceMonitor &resMon)
 {
-    utils::StackSentinel ss;
+    STACK_SENTINEL;
 
     DEBUG("Try to allocate resource failed. Requested: {}", usage.DebugString());
     DEBUG("Available: {}", resMon.DebugString());
@@ -45,7 +47,7 @@ void logScheduleFailure(const ResourceMap &usage, const ResourceMonitor &resMon)
 ExecutionEngine &ExecutionEngine::instance()
 {
     static ExecutionEngine eng;
-    utils::StackSentinel ss;
+    STACK_SENTINEL;
     return eng;
 }
 
@@ -58,14 +60,14 @@ ExecutionEngine::ExecutionEngine()
                                                            // is not connected to any event dispatcher
                                                            q::make_shared<q::queue>(0)))
 {
-    utils::StackSentinel ss;
+    STACK_SENTINEL;
     // Start scheduling thread
     m_schedThread = std::make_unique<std::thread>(std::bind(&ExecutionEngine::scheduleLoop, this));
 }
 
 ExecutionEngine::~ExecutionEngine()
 {
-    utils::StackSentinel ss;
+    STACK_SENTINEL;
     // stop scheduling thread
     m_shouldExit = true;
     m_schedThread->join();
@@ -79,7 +81,7 @@ ExecutionEngine::~ExecutionEngine()
 namespace {
 bool useGPU()
 {
-    utils::StackSentinel ss;
+    STACK_SENTINEL;
     auto use = utils::fromEnvVar("EXEC_SCHED_USE_GPU", true);
     INFO("Scheduling using: {}", use ? "GPU,CPU" : "CPU");
     return use;
@@ -89,13 +91,13 @@ bool useGPU()
 
 bool ExecutionEngine::schedule(ITask *t)
 {
-    utils::StackSentinel ss;
+    STACK_SENTINEL;
     return trySchedule(t, DeviceType::CPU);
 }
 
 bool ExecutionEngine::trySchedule(ITask *t, const DeviceSpec &dev)
 {
-    utils::StackSentinel ss;
+    STACK_SENTINEL;
     auto expectedDev = dev;
     if (t->prepare(expectedDev)) {
         return true;
@@ -110,7 +112,7 @@ bool ExecutionEngine::trySchedule(ITask *t, const DeviceSpec &dev)
 
 ExecutionEngine::Inserter ExecutionEngine::registerSession(const std::string &sessHandle)
 {
-    utils::StackSentinel ss;
+    STACK_SENTINEL;
 
     auto item = std::make_shared<SessionItem>(sessHandle);
     insertSession(item);
@@ -120,7 +122,7 @@ ExecutionEngine::Inserter ExecutionEngine::registerSession(const std::string &se
 
 void ExecutionEngine::insertSession(std::shared_ptr<SessionItem> item)
 {
-    utils::StackSentinel ss;
+    STACK_SENTINEL;
     {
         std::lock_guard<std::mutex> g(m_newMu);
         m_newSessions.emplace_back(std::move(item));
@@ -130,7 +132,7 @@ void ExecutionEngine::insertSession(std::shared_ptr<SessionItem> item)
 
 void ExecutionEngine::deleteSession(std::shared_ptr<SessionItem> item)
 {
-    utils::StackSentinel ss;
+    STACK_SENTINEL;
     {
         std::lock_guard<std::mutex> g(m_delMu);
         m_deletedSessions.emplace(std::move(item));
@@ -140,7 +142,7 @@ void ExecutionEngine::deleteSession(std::shared_ptr<SessionItem> item)
 
 std::future<void> ExecutionEngine::InserterImpl::enqueueOperation(std::unique_ptr<OperationTask> &&task)
 {
-    utils::StackSentinel ss;
+    STACK_SENTINEL;
     auto opItem = std::make_shared<OperationItem>();
     opItem->op = std::move(task);
 
@@ -153,7 +155,7 @@ std::future<void> ExecutionEngine::InserterImpl::enqueueOperation(std::unique_pt
 
 void ExecutionEngine::pushToSessionQueue(std::shared_ptr<SessionItem> item, std::shared_ptr<OperationItem> opItem)
 {
-    utils::StackSentinel ss;
+    STACK_SENTINEL;
     {
         utils::Guard g(item->mu);
         item->queue.push_back(opItem);
@@ -163,14 +165,14 @@ void ExecutionEngine::pushToSessionQueue(std::shared_ptr<SessionItem> item, std:
 
 ExecutionEngine::InserterImpl::~InserterImpl()
 {
-    utils::StackSentinel ss;
+    STACK_SENTINEL;
     if (m_item)
         m_engine.deleteSession(m_item);
 }
 
 bool ExecutionEngine::shouldWaitForAWhile(size_t scheduled, std::chrono::nanoseconds &ns)
 {
-    utils::StackSentinel ss;
+    STACK_SENTINEL;
     static auto last = steady_clock::now();
     static auto sleep = 10ms;
 
@@ -195,7 +197,7 @@ bool ExecutionEngine::shouldWaitForAWhile(size_t scheduled, std::chrono::nanosec
 
 void ExecutionEngine::scheduleLoop()
 {
-    utils::StackSentinel ss;
+    STACK_SENTINEL;
     ResourceMonitor resMon;
     resMon.initializeLimits();
 
@@ -203,7 +205,7 @@ void ExecutionEngine::scheduleLoop()
 
 
     while (!m_shouldExit) {
-        utils::StackSentinel ss;
+        STACK_SENTINEL;
         TRACE("Scheduler loop");
         // Fisrt check if there's any pending deletions
         SessionSet del;
@@ -283,7 +285,7 @@ void ExecutionEngine::scheduleLoop()
 
 ExecutionEngine::SessionItem::~SessionItem()
 {
-    utils::StackSentinel ss;
+    STACK_SENTINEL;
     bgQueue.clear();
     queue.clear();
 }
@@ -291,7 +293,7 @@ ExecutionEngine::SessionItem::~SessionItem()
 bool tryScheduleOn(ResourceMonitor &resMon, OperationTask *t, const std::string &sessHandle,
                    const DeviceSpec &dev)
 {
-    utils::StackSentinel ss;
+    STACK_SENTINEL;
     auto expectedDev = dev;
 
     auto usage = t->estimatedUsage(expectedDev);
@@ -309,7 +311,7 @@ bool tryScheduleOn(ResourceMonitor &resMon, OperationTask *t, const std::string 
 
 size_t ExecutionEngine::maybeScheduleFrom(ResourceMonitor &resMon, std::shared_ptr<SessionItem> item)
 {
-    utils::StackSentinel ss;
+    STACK_SENTINEL;
     auto &queue = item->bgQueue;
 
     auto size = queue.size();
@@ -322,7 +324,7 @@ size_t ExecutionEngine::maybeScheduleFrom(ResourceMonitor &resMon, std::shared_p
 
     // Try schedule the operation
     auto doSchedule = [&resMon, this](std::shared_ptr<SessionItem> item, std::shared_ptr<OperationItem> &&opItem) -> std::shared_ptr<OperationItem>{
-        utils::StackSentinel ss;
+        STACK_SENTINEL;
         TRACE("Scheduling opItem in session {}: {}", item->sessHandle, opItem->op->DebugString());
 
         bool scheduled = false;
@@ -343,7 +345,7 @@ size_t ExecutionEngine::maybeScheduleFrom(ResourceMonitor &resMon, std::shared_p
         if (scheduled) {
             TRACE("Adding to thread pool: opItem in session {}: {}", item->sessHandle, opItem->op->DebugString());
             q::with(m_qec->queue(), std::move(opItem)).then([&resMon, spec, item, this](std::shared_ptr<OperationItem> &&opItem){
-                utils::StackSentinel ss;
+                STACK_SENTINEL;
                 OperationTask::Callbacks cbs;
 
                 assert(item);
