@@ -389,7 +389,11 @@ void ExecutorState::Process(TaggedNode tagged_node, int64_t scheduled_usec)
                                                    completed, rendezvous_);
         auto fu = impl_->inserter_->enqueueOperation(std::move(nodeTask));
 
-        fu.get();
+        try {
+            fu.get();
+        } catch (std::future_error err) {
+            ERR("Opkernel {} failed to run: {}", err.what());
+        }
     } // while !inline_ready.empty()
 
     TRACE("inline ready queue empty");

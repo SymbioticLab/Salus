@@ -315,9 +315,11 @@ size_t ExecutionEngine::maybeScheduleFrom(ResourceMonitor &resMon, ExecutionEngi
                     opItem->op->lastUsage(spec, res);
                     resMon.free(res);
                 };
-                cbs.memFailure = [opItem, item, this]() mutable {
+                cbs.memFailure = [&resMon, spec, opItem, item, this]() mutable {
                     // failed due to OOM. Push back to queue
                     WARN("Opkernel {} failed due to OOM", opItem->op->DebugString());
+                    ResourceMap res;
+                    opItem->op->lastUsage(spec, res);
                     pushToSessionQueue(item, std::move(opItem));
                 };
 
