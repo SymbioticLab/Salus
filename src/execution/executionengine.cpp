@@ -24,6 +24,7 @@
 #include "utils/macros.h"
 #include "utils/envutils.h"
 #include "utils/threadutils.h"
+#include "utils/debugging.h"
 
 #include <functional>
 
@@ -33,6 +34,8 @@ using namespace std::chrono_literals;
 namespace {
 void logScheduleFailure(const ResourceMap &usage, const ResourceMonitor &resMon)
 {
+    utils::StackSentinel ss;
+
     DEBUG("Try to allocate resource failed. Requested: {}", usage.DebugString());
     DEBUG("Available: {}", resMon.DebugString());
 }
@@ -42,6 +45,7 @@ void logScheduleFailure(const ResourceMap &usage, const ResourceMonitor &resMon)
 ExecutionEngine &ExecutionEngine::instance()
 {
     static ExecutionEngine eng;
+    utils::StackSentinel ss;
     return eng;
 }
 
@@ -54,12 +58,14 @@ ExecutionEngine::ExecutionEngine()
                                                            // is not connected to any event dispatcher
                                                            q::make_shared<q::queue>(0)))
 {
+    utils::StackSentinel ss;
     // Start scheduling thread
     m_schedThread = std::make_unique<std::thread>(std::bind(&ExecutionEngine::scheduleLoop, this));
 }
 
 ExecutionEngine::~ExecutionEngine()
 {
+    utils::StackSentinel ss;
     // stop scheduling thread
     m_shouldExit = true;
     m_schedThread->join();
@@ -77,6 +83,7 @@ ExecutionEngine::~ExecutionEngine()
 namespace {
 bool useGPU()
 {
+    utils::StackSentinel ss;
     auto use = utils::fromEnvVar("EXEC_SCHED_USE_GPU", true);
     INFO("Scheduling using: {}", use ? "GPU,CPU" : "CPU");
     return use;
@@ -86,11 +93,13 @@ bool useGPU()
 
 bool ExecutionEngine::schedule(ITask *t)
 {
+    utils::StackSentinel ss;
     return trySchedule(t, DeviceType::CPU);
 }
 
 bool ExecutionEngine::trySchedule(ITask *t, const DeviceSpec &dev)
 {
+    utils::StackSentinel ss;
     auto expectedDev = dev;
     if (t->prepare(expectedDev)) {
         return true;
@@ -105,6 +114,7 @@ bool ExecutionEngine::trySchedule(ITask *t, const DeviceSpec &dev)
 
 ExecutionEngine::Inserter ExecutionEngine::registerSession(const std::string &sessHandle)
 {
+    utils::StackSentinel ss;
     auto item = new SessionItem(sessHandle);
 
     insertSession(item);
@@ -114,6 +124,7 @@ ExecutionEngine::Inserter ExecutionEngine::registerSession(const std::string &se
 
 void ExecutionEngine::insertSession(SessionItem *item)
 {
+    utils::StackSentinel ss;
     {
         std::lock_guard<std::mutex> g(m_newMu);
         m_newSessions.push_back(item);
@@ -123,6 +134,7 @@ void ExecutionEngine::insertSession(SessionItem *item)
 
 void ExecutionEngine::deleteSession(SessionItem *item)
 {
+    utils::StackSentinel ss;
     {
         std::lock_guard<std::mutex> g(m_delMu);
         m_deletedSessions.insert(item);
@@ -132,6 +144,7 @@ void ExecutionEngine::deleteSession(SessionItem *item)
 
 std::future<void> ExecutionEngine::InserterImpl::enqueueOperation(std::unique_ptr<OperationTask> &&task)
 {
+    utils::StackSentinel ss;
     auto opItem = std::make_shared<OperationItem>();
     opItem->op = std::move(task);
 
@@ -144,6 +157,7 @@ std::future<void> ExecutionEngine::InserterImpl::enqueueOperation(std::unique_pt
 
 void ExecutionEngine::pushToSessionQueue(SessionItem *item, std::shared_ptr<OperationItem> opItem)
 {
+    utils::StackSentinel ss;
     {
         utils::Guard g(item->mu);
         item->queue.push_back(opItem);
@@ -153,12 +167,14 @@ void ExecutionEngine::pushToSessionQueue(SessionItem *item, std::shared_ptr<Oper
 
 ExecutionEngine::InserterImpl::~InserterImpl()
 {
+    utils::StackSentinel ss;
     if (m_engine && m_item)
     m_engine->deleteSession(m_item);
 }
 
 bool ExecutionEngine::shouldWaitForAWhile(bool scheduled, std::chrono::nanoseconds &ns)
 {
+    utils::StackSentinel ss;
     static auto last = steady_clock::now();
     static auto sleep = 10ms;
 
@@ -182,6 +198,7 @@ bool ExecutionEngine::shouldWaitForAWhile(bool scheduled, std::chrono::nanosecon
 
 void ExecutionEngine::scheduleLoop()
 {
+    utils::StackSentinel ss;
     ResourceMonitor resMon;
     resMon.initializeLimits();
 
@@ -252,6 +269,7 @@ void ExecutionEngine::scheduleLoop()
 
 ExecutionEngine::SessionItem::~SessionItem()
 {
+    utils::StackSentinel ss;
     bgQueue.clear();
     queue.clear();
 }
@@ -259,6 +277,7 @@ ExecutionEngine::SessionItem::~SessionItem()
 bool tryScheduleOn(ResourceMonitor &resMon, OperationTask *t, const std::string &sessHandle,
                    const DeviceSpec &dev)
 {
+    utils::StackSentinel ss;
     auto expectedDev = dev;
 
     auto usage = t->estimatedUsage(expectedDev);
@@ -276,6 +295,7 @@ bool tryScheduleOn(ResourceMonitor &resMon, OperationTask *t, const std::string 
 
 size_t ExecutionEngine::maybeScheduleFrom(ResourceMonitor &resMon, ExecutionEngine::SessionItem* item)
 {
+    utils::StackSentinel ss;
     auto &queue = item->bgQueue;
 
     auto size = queue.size();
@@ -286,6 +306,7 @@ size_t ExecutionEngine::maybeScheduleFrom(ResourceMonitor &resMon, ExecutionEngi
 
     // Try schedule the operation
     auto doSchedule = [&resMon, &item, this](std::shared_ptr<OperationItem> &&opItem) -> std::shared_ptr<OperationItem>{
+        utils::StackSentinel ss;
         bool scheduled = false;
         DeviceSpec spec;
         for (auto dt : opItem->op->supportedDeviceTypes()) {
@@ -305,6 +326,7 @@ size_t ExecutionEngine::maybeScheduleFrom(ResourceMonitor &resMon, ExecutionEngi
             return opItem;
         } else {
             q::with(m_qec->queue(), opItem).then([&](std::shared_ptr<OperationItem> &&opItem){
+                utils::StackSentinel ss;
                 OperationTask::Callbacks cbs;
                 cbs.launched = [opItem]() {
                     opItem->promise.set_value();

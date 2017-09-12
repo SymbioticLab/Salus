@@ -21,6 +21,7 @@ set(SRC_LIST
     "utils/envutils.cpp"
     "utils/zmqutils.cpp"
     "utils/cpp17.cpp"
+    "utils/debugging.cpp"
 
     "executor.cpp"
 )
