@@ -314,6 +314,8 @@ size_t ExecutionEngine::maybeScheduleFrom(ResourceMonitor &resMon, std::shared_p
 
     auto size = queue.size();
 
+    TRACE("Scheduling all opItem in session {}: queue size {}", item->sessHandle, size);
+
     if (size == 0) {
         return 0;
     }
@@ -321,6 +323,8 @@ size_t ExecutionEngine::maybeScheduleFrom(ResourceMonitor &resMon, std::shared_p
     // Try schedule the operation
     auto doSchedule = [&resMon, item, this](std::shared_ptr<OperationItem> &&opItem) -> std::shared_ptr<OperationItem>{
         utils::StackSentinel ss;
+        TRACE("Scheduling opItem in session {}: {}", item->sessHandle, opItem->op->DebugString());
+
         bool scheduled = false;
         DeviceSpec spec;
         for (auto dt : opItem->op->supportedDeviceTypes()) {
@@ -337,8 +341,10 @@ size_t ExecutionEngine::maybeScheduleFrom(ResourceMonitor &resMon, std::shared_p
 
         // Send to thread pool
         if (!scheduled) {
+            TRACE("Failed to schedule opItem in session {}: {}", item->sessHandle, opItem->op->DebugString());
             return opItem;
         } else {
+            TRACE("Adding to thread pool: opItem in session {}: {}", item->sessHandle, opItem->op->DebugString());
             q::with(m_qec->queue(), opItem).then([&](std::shared_ptr<OperationItem> &&opItem){
                 utils::StackSentinel ss;
                 OperationTask::Callbacks cbs;
@@ -360,6 +366,7 @@ size_t ExecutionEngine::maybeScheduleFrom(ResourceMonitor &resMon, std::shared_p
                     pushToSessionQueue(item, std::move(opItem));
                 };
 
+                TRACE("Running opItem in session {}: {}", item->sessHandle, opItem->op->DebugString());
                 opItem->op->run(cbs);
             });
             return nullptr;
@@ -376,6 +383,7 @@ size_t ExecutionEngine::maybeScheduleFrom(ResourceMonitor &resMon, std::shared_p
     }
 
     assert(queue.empty());
+    TRACE("All opItem in session {} exaimed", item->sessHandle);
 
     auto it = std::back_inserter(queue);
     utils::notification n;
@@ -389,6 +397,8 @@ size_t ExecutionEngine::maybeScheduleFrom(ResourceMonitor &resMon, std::shared_p
         n.notify();
     });
     n.wait();
+
+    TRACE("Adding back {} opItem in session {}", queue.size(), item->sessHandle);
 
     return size - queue.size();
 }
