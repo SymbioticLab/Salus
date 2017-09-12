@@ -208,7 +208,7 @@ void SessionResourceTracker::freeUnsafe(uint64_t ticket)
 {
     auto it = m_sessions.find(ticket);
     if (it == m_sessions.end()) {
-        WARN("SessionResourceTracker: unknown ticket: {}", ticket);
+        ERR("SessionResourceTracker: unknown ticket: {}", ticket);
         return;
     }
 
@@ -237,10 +237,9 @@ void SessionResourceTracker::free(const std::string &sessHandle)
 
     auto it = m_sessToTicket.find(sessHandle);
     if (it == m_sessToTicket.end()) {
-        WARN("SessionResourceTracker: unknown sess handle: {}", sessHandle);
+        ERR("SessionResourceTracker: unknown sess handle: {}", sessHandle);
         return;
     }
-
 
     freeUnsafe(it->second);
 }

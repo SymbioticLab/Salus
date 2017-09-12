@@ -320,6 +320,7 @@ size_t ExecutionEngine::maybeScheduleFrom(ResourceMonitor &resMon, ExecutionEngi
                     WARN("Opkernel {} failed due to OOM", opItem->op->DebugString());
                     ResourceMap res;
                     opItem->op->lastUsage(spec, res);
+                    resMon.free(res);
                     pushToSessionQueue(item, std::move(opItem));
                 };
 
