@@ -28,6 +28,14 @@
 class OperationTask
 {
 public:
+    using DoneCallback = std::function<void(void)>;
+    struct Callbacks
+    {
+        DoneCallback launched;
+        DoneCallback done;
+        DoneCallback memFailure;
+    };
+
     virtual ~OperationTask();
 
     virtual std::string DebugString() = 0;
@@ -42,8 +50,7 @@ public:
 
     virtual bool prepare(const DeviceSpec &dev) = 0;
 
-    using DoneCallback = std::function<void(void)>;
-    virtual void run(DoneCallback done, DoneCallback memFailure) = 0;
+    virtual void run(Callbacks cbs) = 0;
 
     // Returns cached usage
     virtual bool lastUsage(const DeviceSpec &dev, ResourceMap &res) = 0;

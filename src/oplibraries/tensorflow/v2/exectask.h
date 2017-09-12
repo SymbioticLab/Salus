@@ -56,7 +56,7 @@ public:
 
     bool prepare(const DeviceSpec &dev) override;
 
-    void run(DoneCallback done, DoneCallback memFailure) override;
+    void run(Callbacks cbs) override;
 
     int failedTimes() const override { return failureTimes; }
 

@@ -262,7 +262,7 @@ tf::Status ExecTask::LookupDevice(const DeviceSpec &spec, DeviceItem &item)
     return tf::Status::OK();
 }
 
-void ExecTask::run(std::function<void(void)> done, std::function<void(void)> memFailure)
+void ExecTask::run(Callbacks cbs)
 {
     const auto &gview = m_state->impl_->gview_;
     auto node = tagged_node.node;
@@ -276,6 +276,14 @@ void ExecTask::run(std::function<void(void)> done, std::function<void(void)> mem
         auto s = m_state->SetupKernel(tagged_node, ditem, &op_kernel);
         if (!s.ok()) {
             ERR("Error when creating kernel for node {}: {}", node->name(), s);
+
+            m_state->MaybeMarkCompleted(input_frame, input_iter, id);
+            // Continue to process the nodes in 'inline_ready'.
+            completed = m_state->NodeDone(s, item.node, ditem.device, nullptr, ready, stats, &inline_ready);
+
+            cbs.launched();
+            cbs.done();
+
             return;
         }
     }
@@ -300,6 +308,9 @@ void ExecTask::run(std::function<void(void)> done, std::function<void(void)> mem
         m_state->MaybeMarkCompleted(input_frame, input_iter, id);
         // Continue to process the nodes in 'inline_ready'.
         completed = m_state->NodeDone(s, item.node, ditem.device, nullptr, ready, stats, &inline_ready);
+
+        cbs.launched();
+        cbs.done();
         return;
     }
 
@@ -352,6 +363,9 @@ void ExecTask::run(std::function<void(void)> done, std::function<void(void)> mem
             m_state->MaybeMarkCompleted(input_frame, input_iter, id);
             // Continue to process the nodes in 'inline_ready'.
             completed = m_state->NodeDone(s, item.node, ditem.device, localRendez, ready, stats, &inline_ready);
+
+            cbs.launched();
+            cbs.done();
             return;
         }
 
@@ -370,15 +384,14 @@ void ExecTask::run(std::function<void(void)> done, std::function<void(void)> mem
             auto pstate = new ExecutorState::AsyncState(params, tagged_node, &item, first_input, stats);
 
             // `done` should be called last as `this` would be deleted in it.
-            auto asyncDone = [this, pstate, localRendez, done, memFailure,
-                              ditem = ditem, execState = m_state]() {
+            auto asyncDone = [this, pstate, localRendez, cbs, ditem = ditem, execState = m_state]() {
                 auto state = std::unique_ptr<ExecutorState::AsyncState>(pstate);
                 auto device = ditem.device;
                 auto stats = state->stats;
                 auto first_input = state->first_input;
 
                 // Inspect return state for retrying on memory failure
-                if (maybeMemoryFailure(state->ctx.status(), memFailure)) {
+                if (maybeMemoryFailure(state->ctx.status(), cbs.memFailure)) {
                     return;
                 }
 
@@ -415,7 +428,7 @@ void ExecTask::run(std::function<void(void)> done, std::function<void(void)> mem
                 bool completed = execState->NodeDone(s, state->item->node, device, localRendez, ready, stats, nullptr);
                 if (completed)
                     execState->Finish();
-                done();
+                cbs.done();
             };
             if (stats)
                 nodestats::SetOpStart(stats);
@@ -431,7 +444,7 @@ void ExecTask::run(std::function<void(void)> done, std::function<void(void)> mem
                 nodestats::SetOpEnd(stats);
 
             // Inspect return state for retrying on memory failure
-            if (maybeMemoryFailure(ctx.status(), memFailure)) {
+            if (maybeMemoryFailure(ctx.status(), cbs.memFailure)) {
                 return;
             }
 
@@ -472,9 +485,12 @@ void ExecTask::run(std::function<void(void)> done, std::function<void(void)> mem
         // Postprocess.
         completed = m_state->NodeDone(s, item.node, ditem.device, localRendez, ready, stats, &inline_ready);
         TRACE("Postprocess completed: {}", completed);
-        done();
+
+        cbs.launched();
+        cbs.done();
+    } else {
+        cbs.launched();
     }
-    return;
 }
 
 bool ExecTask::maybeMemoryFailure(const tf::Status &s, DoneCallback memFailure)

@@ -130,9 +130,6 @@ tf::Status ExecutorImpl::Initialize()
             } else {
                 if (client_terminated) {
                     client_recv_nodes_.insert(n);
-                    if (num_in_edges != 0) {
-                        WARN("Client recv node {} has inputs: {}", n->name(), n->def());
-                    }
                 }
             }
         }
@@ -148,8 +145,7 @@ tf::Status ExecutorImpl::Initialize()
         item->input_start = frame_info->total_inputs;
         frame_info->total_inputs += n->num_inputs();
 
-//         item->kernel_is_expensive = item->kernel->IsExpensive();
-        // TODO: Mark all kernel as expensive to put them in our threadpool.
+        // Mark all kernel as expensive to put them in our threadpool.
         item->kernel_is_expensive = true;
         item->is_merge = IsMerge(n);
         item->is_enter = IsEnter(n);

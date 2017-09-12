@@ -133,12 +133,17 @@ void ExecutionEngine::deleteSession(SessionItem *item)
 std::future<void> ExecutionEngine::InserterImpl::enqueueOperation(std::unique_ptr<OperationTask> &&task)
 {
     auto opItem = new OperationItem {std::move(task), {}};
-    auto ok = m_item->queue.push(opItem);
-    assert(ok);
 
-    m_engine->m_note_has_work.notify();
+    m_engine->pushToSessionQueue(m_item, opItem);
 
     return opItem->promise.get_future();
+}
+
+void ExecutionEngine::pushToSessionQueue(SessionItem *item, OperationItem *opItem)
+{
+    auto ok = item->queue.push(opItem);
+    assert(ok);
+    m_note_has_work.notify();
 }
 
 ExecutionEngine::InserterImpl::~InserterImpl()
@@ -305,19 +310,25 @@ size_t ExecutionEngine::maybeScheduleFrom(ResourceMonitor &resMon, ExecutionEngi
         if (!scheduled) {
             return opItem;
         } else {
-            q::with(m_qec->queue(), opItem).then([spec, item, &resMon](OperationItem *opItem){
-                opItem->op->run([&resMon, opItem, spec](){
-                    // succeed
+            q::with(m_qec->queue(), opItem).then([&](OperationItem *opItem){
+                OperationTask::Callbacks cbs;
+                cbs.launched = [opItem]() -> void {
                     opItem->promise.set_value();
+                };
+                cbs.done = [&resMon, spec, opItem]() {
+                    // succeed
                     ResourceMap res;
                     opItem->op->lastUsage(spec, res);
                     resMon.free(res);
                     delete opItem;
-                }, [item, opItem](){
+                };
+                cbs.memFailure = [opItem, item, this]() {
                     // failed due to OOM. Push back to queue
-                    item->queue.push(opItem);
                     WARN("Opkernel {} failed due to OOM", opItem->op->DebugString());
-                });
+                    pushToSessionQueue(item, opItem);
+                };
+
+                opItem->op->run(cbs);
             });
             return nullptr;
         }
