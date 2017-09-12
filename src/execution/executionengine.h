@@ -60,19 +60,18 @@ public:
     class InserterImpl
     {
     public:
-        InserterImpl(InserterImpl &&other) : InserterImpl(other.m_item, other.m_engine) {
-            other.m_item = nullptr;
-            other.m_engine = nullptr;
-        }
-        InserterImpl(SessionItem *item, ExecutionEngine *engine) : m_item(item), m_engine(engine) {}
+        InserterImpl(InserterImpl &&other)
+            : InserterImpl(std::move(other.m_item), other.m_engine)
+        { }
+        InserterImpl(std::shared_ptr<SessionItem> item, ExecutionEngine &engine) : m_item(item), m_engine(engine) {}
 
         ~InserterImpl();
 
         std::future<void> enqueueOperation(std::unique_ptr<OperationTask> &&task);
 
     private:
-        SessionItem *m_item;
-        ExecutionEngine *m_engine;
+        std::shared_ptr<SessionItem> m_item;
+        ExecutionEngine &m_engine;
     };
     using Inserter = std::shared_ptr<InserterImpl>;
 
@@ -133,8 +132,8 @@ private:
 
     std::atomic<bool> m_shouldExit = {false};
     void scheduleLoop();
-    size_t maybeScheduleFrom(ResourceMonitor &resMon, SessionItem *item);
-    bool shouldWaitForAWhile(bool scheduled, std::chrono::nanoseconds &ns);
+    size_t maybeScheduleFrom(ResourceMonitor &resMon, std::shared_ptr<SessionItem> item);
+    bool shouldWaitForAWhile(size_t scheduled, std::chrono::nanoseconds &ns);
     std::unique_ptr<std::thread> m_schedThread;
 
     // Incoming kernels
@@ -156,7 +155,7 @@ private:
         ~SessionItem();
 
     };
-    void pushToSessionQueue(SessionItem *item, std::shared_ptr<OperationItem> opItem);
+    void pushToSessionQueue(std::shared_ptr<SessionItem> item, std::shared_ptr<OperationItem> opItem);
 
     struct OperationItem
     {
@@ -164,8 +163,8 @@ private:
         std::promise<void> promise;
     };
 
-    using SessionList = std::list<SessionItem*>;
-    using SessionSet = std::unordered_set<SessionItem*>;
+    using SessionList = std::list<std::shared_ptr<SessionItem>>;
+    using SessionSet = std::unordered_set<std::shared_ptr<SessionItem>>;
 
     SessionList m_newSessions;
     std::mutex m_newMu;
@@ -175,8 +174,8 @@ private:
 
     utils::notification m_note_has_work;
 
-    void insertSession(SessionItem *item);
-    void deleteSession(SessionItem *item);
+    void insertSession(std::shared_ptr<SessionItem> item);
+    void deleteSession(std::shared_ptr<SessionItem> item);
 
     // Backend thread pool
     using qExecutionContext = q::specific_execution_context_ptr<q::threadpool>;

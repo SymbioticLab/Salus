@@ -72,12 +72,8 @@ ExecutionEngine::~ExecutionEngine()
 
     // remove any pending new or delete session
     // NOTE: has to be done *after* the scheduling thread exits.
-    for (auto item : m_newSessions) {
-        delete item;
-    }
-    for (auto item : m_deletedSessions) {
-        delete item;
-    }
+    m_newSessions.clear();
+    m_deletedSessions.clear();
 }
 
 namespace {
@@ -115,29 +111,29 @@ bool ExecutionEngine::trySchedule(ITask *t, const DeviceSpec &dev)
 ExecutionEngine::Inserter ExecutionEngine::registerSession(const std::string &sessHandle)
 {
     utils::StackSentinel ss;
-    auto item = new SessionItem(sessHandle);
 
+    auto item = std::make_shared<SessionItem>(sessHandle);
     insertSession(item);
 
-    return std::make_shared<InserterImpl>(item, this);
+    return std::make_shared<InserterImpl>(std::move(item), *this);
 }
 
-void ExecutionEngine::insertSession(SessionItem *item)
+void ExecutionEngine::insertSession(std::shared_ptr<SessionItem> item)
 {
     utils::StackSentinel ss;
     {
         std::lock_guard<std::mutex> g(m_newMu);
-        m_newSessions.push_back(item);
+        m_newSessions.emplace_back(std::move(item));
     }
     m_note_has_work.notify();
 }
 
-void ExecutionEngine::deleteSession(SessionItem *item)
+void ExecutionEngine::deleteSession(std::shared_ptr<SessionItem> item)
 {
     utils::StackSentinel ss;
     {
         std::lock_guard<std::mutex> g(m_delMu);
-        m_deletedSessions.insert(item);
+        m_deletedSessions.emplace(std::move(item));
     }
     m_note_has_work.notify();
 }
@@ -148,14 +144,14 @@ std::future<void> ExecutionEngine::InserterImpl::enqueueOperation(std::unique_pt
     auto opItem = std::make_shared<OperationItem>();
     opItem->op = std::move(task);
 
-    m_engine->pushToSessionQueue(m_item, opItem);
+    m_engine.pushToSessionQueue(m_item, opItem);
 
     assert(opItem);
 
     return opItem->promise.get_future();
 }
 
-void ExecutionEngine::pushToSessionQueue(SessionItem *item, std::shared_ptr<OperationItem> opItem)
+void ExecutionEngine::pushToSessionQueue(std::shared_ptr<SessionItem> item, std::shared_ptr<OperationItem> opItem)
 {
     utils::StackSentinel ss;
     {
@@ -168,11 +164,11 @@ void ExecutionEngine::pushToSessionQueue(SessionItem *item, std::shared_ptr<Oper
 ExecutionEngine::InserterImpl::~InserterImpl()
 {
     utils::StackSentinel ss;
-    if (m_engine && m_item)
-    m_engine->deleteSession(m_item);
+    if (m_item)
+        m_engine.deleteSession(m_item);
 }
 
-bool ExecutionEngine::shouldWaitForAWhile(bool scheduled, std::chrono::nanoseconds &ns)
+bool ExecutionEngine::shouldWaitForAWhile(size_t scheduled, std::chrono::nanoseconds &ns)
 {
     utils::StackSentinel ss;
     static auto last = steady_clock::now();
@@ -180,15 +176,16 @@ bool ExecutionEngine::shouldWaitForAWhile(bool scheduled, std::chrono::nanosecon
 
     auto now = steady_clock::now();
 
-    if (scheduled) {
+    if (scheduled > 0) {
         last = now;
         sleep = 10ms;
     }
 
     std::chrono::nanoseconds idle = now - last;
     if (idle > 20ms) {
-        INFO("Yielding out due to no progress for {}ms.",
-             std::chrono::duration_cast<std::chrono::milliseconds>(idle).count());
+        INFO("No progress for {}ms, sleep for {}ms",
+             std::chrono::duration_cast<std::chrono::milliseconds>(idle).count(),
+             std::chrono::duration_cast<std::chrono::milliseconds>(sleep).count());
         ns = sleep;
         sleep *= 2;
         return true;
@@ -206,45 +203,64 @@ void ExecutionEngine::scheduleLoop()
 
 
     while (!m_shouldExit) {
+        utils::StackSentinel ss;
+        TRACE("Scheduler loop");
         // Fisrt check if there's any pending deletions
         SessionSet del;
         {
             utils::Guard g(m_delMu);
             using std::swap;
             swap(del, m_deletedSessions);
+            assert(m_deletedSessions.size() == 0);
         }
+        TRACE("Got {} session to delete", del.size());
 
         // Append any new sessions
         {
             utils::Guard g(m_newMu);
+
+            TRACE("Got {} session to add", m_newSessions.size());
+
             sessions.splice(sessions.end(), m_newSessions);
+            assert(m_newSessions.size() == 0);
         }
 
+        TRACE("Handling {} sessions in this iteration", sessions.size());
         // Loop through sessions
-        bool scheduled = false;
-        size_t count = 0;
+        size_t scheduled = 0;
+        size_t remainingCount = 0;
         auto it = sessions.begin();
         auto end = sessions.end();
         while (it != end) {
-            auto item = *it;
+            auto &item = *it;
             if (del.count(item)) {
+                TRACE("Deleting session {}@{}", item->sessHandle, as_hex(item));
+
                 resMon.clear(item->sessHandle);
-                delete item;
                 it = sessions.erase(it);
             } else {
                 // Move from front end queue to backing storage
+                TRACE("Looking at session {}@{}", item->sessHandle, as_hex(item));
+                TRACE("bgQueue has {} opItems", item->bgQueue.size());
                 {
                     utils::Guard g(item->mu);
                     item->bgQueue.splice(item->bgQueue.end(), item->queue);
                 }
-                count += item->bgQueue.size();
+                remainingCount += item->bgQueue.size();
+                TRACE("bgQueue has {} opItems after collection", item->bgQueue.size());
 
                 // NOTE: don't use scheduled || maybeScheduleFrom(...)
                 // we don't want short-cut eval here and maybeScheduleFrom
                 // should always be called.
-                scheduled |= maybeScheduleFrom(resMon, item) > 0;
+                auto count = maybeScheduleFrom(resMon, item);
+                remainingCount -= count;
+                scheduled += count;
                 ++it;
             }
+        }
+
+        for (auto &d : del) {
+            ERR("Session {} requested for deletion but not found in queue", d->sessHandle);
         }
 
         std::chrono::nanoseconds ns;
@@ -255,16 +271,14 @@ void ExecutionEngine::scheduleLoop()
             std::this_thread::sleep_for(ns);
         }
 
-        if (!count) {
+        if (!remainingCount) {
             INFO("Wait on m_note_has_work");
             m_note_has_work.wait();
         }
     }
 
     // Cleanup
-    for (auto item : sessions) {
-        delete item;
-    }
+    sessions.clear();
 }
 
 ExecutionEngine::SessionItem::~SessionItem()
@@ -293,7 +307,7 @@ bool tryScheduleOn(ResourceMonitor &resMon, OperationTask *t, const std::string 
     return false;
 }
 
-size_t ExecutionEngine::maybeScheduleFrom(ResourceMonitor &resMon, ExecutionEngine::SessionItem* item)
+size_t ExecutionEngine::maybeScheduleFrom(ResourceMonitor &resMon, std::shared_ptr<SessionItem> item)
 {
     utils::StackSentinel ss;
     auto &queue = item->bgQueue;
@@ -305,7 +319,7 @@ size_t ExecutionEngine::maybeScheduleFrom(ResourceMonitor &resMon, ExecutionEngi
     }
 
     // Try schedule the operation
-    auto doSchedule = [&resMon, &item, this](std::shared_ptr<OperationItem> &&opItem) -> std::shared_ptr<OperationItem>{
+    auto doSchedule = [&resMon, item, this](std::shared_ptr<OperationItem> &&opItem) -> std::shared_ptr<OperationItem>{
         utils::StackSentinel ss;
         bool scheduled = false;
         DeviceSpec spec;

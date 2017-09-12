@@ -109,6 +109,12 @@ PtrPrintHelper as_hex(const std::unique_ptr<T> &p)
     return { reinterpret_cast<uint64_t>(p.get()) };
 }
 
+template<typename T>
+PtrPrintHelper as_hex(const std::shared_ptr<T> &p)
+{
+    return { reinterpret_cast<uint64_t>(p.get()) };
+}
+
 std::ostream &operator<<(std::ostream &os, const PtrPrintHelper &helper);
 
 #define TRACE(...) logging::logger()->trace(__VA_ARGS__)
