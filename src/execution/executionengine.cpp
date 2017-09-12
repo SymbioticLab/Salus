@@ -340,14 +340,15 @@ size_t ExecutionEngine::maybeScheduleFrom(ResourceMonitor &resMon, std::shared_p
         }
 
         // Send to thread pool
-        if (!scheduled) {
-            TRACE("Failed to schedule opItem in session {}: {}", item->sessHandle, opItem->op->DebugString());
-            return opItem;
-        } else {
+        if (scheduled) {
             TRACE("Adding to thread pool: opItem in session {}: {}", item->sessHandle, opItem->op->DebugString());
-            q::with(m_qec->queue(), opItem).then([&](std::shared_ptr<OperationItem> &&opItem){
+            q::with(m_qec->queue(), std::move(opItem)).then([&resMon, spec, item, this](std::shared_ptr<OperationItem> &&opItem){
                 utils::StackSentinel ss;
                 OperationTask::Callbacks cbs;
+
+                assert(item);
+                assert(opItem);
+
                 cbs.launched = [opItem]() {
                     opItem->promise.set_value();
                 };
@@ -369,8 +370,10 @@ size_t ExecutionEngine::maybeScheduleFrom(ResourceMonitor &resMon, std::shared_p
                 TRACE("Running opItem in session {}: {}", item->sessHandle, opItem->op->DebugString());
                 opItem->op->run(cbs);
             });
-            return nullptr;
+        } else {
+            TRACE("Failed to schedule opItem in session {}: {}", item->sessHandle, opItem->op->DebugString());
         }
+        return opItem;;
     };
 
     // Do all schedule in queue in parallel
