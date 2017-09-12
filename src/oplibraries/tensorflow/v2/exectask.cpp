@@ -150,7 +150,7 @@ ResourceMap ExecTask::estimatedUsage(const DeviceSpec& dev)
             // Update cache
             cachedUsage[dev] = *rm;
         } else {
-            ERR("No session usage found for exec task: {}", tagged_node.node->name());
+            ERR("No session usage found for exec task: {} under session {}", tagged_node.node->name(), sessHandle);
             // fallback to normal estimation
         }
     }

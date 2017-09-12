@@ -320,6 +320,7 @@ void TFOpLibraryV2::handleCreateSession(const std::string &recvId, const executo
                                        proxy->setExecFactory([ins](auto params, auto graph, auto executor){
                                            return NewMultiDeviceExecutor(params, graph, ins, executor);
                                        });
+                                       SessionResourceTracker::instance().acceptAdmission(ticket, resp->session_handle());
                                        registerProxy(recvId, resp->session_handle(), std::move(proxy));
                                    } else {
                                        SessionResourceTracker::instance().free(ticket);

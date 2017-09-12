@@ -225,12 +225,14 @@ void SessionResourceTracker::freeUnsafe(uint64_t ticket)
 
 void SessionResourceTracker::free(uint64_t ticket)
 {
+    DEBUG("Free session resource: ticket={}", ticket);
     Guard g(m_mu);
     freeUnsafe(ticket);
 }
 
 void SessionResourceTracker::free(const std::string &sessHandle)
 {
+    DEBUG("Free session resource: session={}", sessHandle);
     Guard g(m_mu);
 
     auto it = m_sessToTicket.find(sessHandle);
@@ -238,6 +240,7 @@ void SessionResourceTracker::free(const std::string &sessHandle)
         WARN("SessionResourceTracker: unknown sess handle: {}", sessHandle);
         return;
     }
+
 
     freeUnsafe(it->second);
 }
