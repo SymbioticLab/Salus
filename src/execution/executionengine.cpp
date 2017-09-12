@@ -321,7 +321,7 @@ size_t ExecutionEngine::maybeScheduleFrom(ResourceMonitor &resMon, std::shared_p
     }
 
     // Try schedule the operation
-    auto doSchedule = [&resMon, item, this](std::shared_ptr<OperationItem> &&opItem) -> std::shared_ptr<OperationItem>{
+    auto doSchedule = [&resMon, this](std::shared_ptr<SessionItem> item, std::shared_ptr<OperationItem> &&opItem) -> std::shared_ptr<OperationItem>{
         utils::StackSentinel ss;
         TRACE("Scheduling opItem in session {}: {}", item->sessHandle, opItem->op->DebugString());
 
@@ -378,7 +378,7 @@ size_t ExecutionEngine::maybeScheduleFrom(ResourceMonitor &resMon, std::shared_p
     stage.swap(queue);
     std::vector<q::promise<std::shared_ptr<OperationItem>>> promises;
     for (auto &opItem : stage) {
-        auto p = q::with(m_qec->queue(), std::move(opItem)).then(doSchedule);
+        auto p = q::with(m_qec->queue(), item, std::move(opItem)).then(doSchedule);
         promises.emplace_back(std::move(p));
     }
 
