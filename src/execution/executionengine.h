@@ -31,16 +31,12 @@
 #include <q/execution_context.hpp>
 #include <q/threadpool.hpp>
 
-#include <boost/lockfree/queue.hpp>
-
 #include <list>
-#include <queue>
 #include <memory>
 #include <atomic>
 #include <unordered_set>
 #include <future>
 #include <chrono>
-#include <deque>
 
 class OperationTask;
 class ResourceMonitor;
@@ -53,8 +49,8 @@ class ExecutionEngine
     struct SessionItem;
     struct OperationItem;
 
-    using KernelQueue = boost::lockfree::queue<OperationItem*>;
-    using UnsafeQueue = std::deque<OperationItem*>;
+    using KernelQueue = std::list<std::shared_ptr<OperationItem>>;
+    using UnsafeQueue = std::list<std::shared_ptr<OperationItem>>;
 
 public:
     static ExecutionEngine &instance();
@@ -150,6 +146,7 @@ private:
     {
         std::string sessHandle;
         KernelQueue queue;
+        std::mutex mu;
 
         // Only be accessed by scheduling thread
         UnsafeQueue bgQueue;
@@ -159,7 +156,7 @@ private:
         ~SessionItem();
 
     };
-    void pushToSessionQueue(SessionItem *item, OperationItem *opItem);
+    void pushToSessionQueue(SessionItem *item, std::shared_ptr<OperationItem> &&opItem);
 
     struct OperationItem
     {

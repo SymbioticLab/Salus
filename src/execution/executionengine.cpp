@@ -132,17 +132,20 @@ void ExecutionEngine::deleteSession(SessionItem *item)
 
 std::future<void> ExecutionEngine::InserterImpl::enqueueOperation(std::unique_ptr<OperationTask> &&task)
 {
-    auto opItem = new OperationItem {std::move(task), {}};
+    auto opItem = std::make_shared<OperationItem>();
+    opItem->op = std::move(task);
 
-    m_engine->pushToSessionQueue(m_item, opItem);
+    m_engine->pushToSessionQueue(m_item, std::move(opItem));
 
     return opItem->promise.get_future();
 }
 
-void ExecutionEngine::pushToSessionQueue(SessionItem *item, OperationItem *opItem)
+void ExecutionEngine::pushToSessionQueue(SessionItem *item, std::shared_ptr<OperationItem> &&opItem)
 {
-    auto ok = item->queue.push(opItem);
-    assert(ok);
+    {
+        utils::Guard g(item->mu);
+        item->queue.push_back(opItem);
+    }
     m_note_has_work.notify();
 }
 
@@ -210,16 +213,10 @@ void ExecutionEngine::scheduleLoop()
                 delete item;
                 it = sessions.erase(it);
             } else {
+                // Move from front end queue to backing storage
                 {
-                    // Move from lock free queue to backing storage
-                    // Use an extra block level to limit the life time
-                    // of opItem, so we don't accidentially access it
-                    // after the loop.
-                    // TODO: if one session adds op too quickly, it may block here.
-                    OperationItem *opItem;
-                    while (item->queue.pop(opItem)) {
-                        item->bgQueue.push_back(opItem);
-                    }
+                    utils::Guard g(item->mu);
+                    item->bgQueue.splice(item->bgQueue.end(), item->queue);
                 }
                 count += item->bgQueue.size();
 
@@ -253,13 +250,8 @@ void ExecutionEngine::scheduleLoop()
 
 ExecutionEngine::SessionItem::~SessionItem()
 {
-    while (!bgQueue.empty()) {
-        delete bgQueue.front();
-        bgQueue.pop_front();
-    }
-    queue.consume_all([](auto t){
-        delete t;
-    });
+    bgQueue.clear();
+    queue.clear();
 }
 
 bool tryScheduleOn(ResourceMonitor &resMon, OperationTask *t, const std::string &sessHandle,
@@ -291,7 +283,7 @@ size_t ExecutionEngine::maybeScheduleFrom(ResourceMonitor &resMon, ExecutionEngi
     }
 
     // Try schedule the operation
-    auto doSchedule = [&resMon, &item, this](OperationItem *opItem) -> OperationItem* {
+    auto doSchedule = [&resMon, &item, this](std::shared_ptr<OperationItem> &&opItem) -> std::shared_ptr<OperationItem>{
         bool scheduled = false;
         DeviceSpec spec;
         for (auto dt : opItem->op->supportedDeviceTypes()) {
@@ -310,9 +302,9 @@ size_t ExecutionEngine::maybeScheduleFrom(ResourceMonitor &resMon, ExecutionEngi
         if (!scheduled) {
             return opItem;
         } else {
-            q::with(m_qec->queue(), opItem).then([&](OperationItem *opItem){
+            q::with(m_qec->queue(), opItem).then([&](std::shared_ptr<OperationItem> &&opItem){
                 OperationTask::Callbacks cbs;
-                cbs.launched = [opItem]() -> void {
+                cbs.launched = [opItem]() {
                     opItem->promise.set_value();
                 };
                 cbs.done = [&resMon, spec, opItem]() {
@@ -320,12 +312,11 @@ size_t ExecutionEngine::maybeScheduleFrom(ResourceMonitor &resMon, ExecutionEngi
                     ResourceMap res;
                     opItem->op->lastUsage(spec, res);
                     resMon.free(res);
-                    delete opItem;
                 };
-                cbs.memFailure = [opItem, item, this]() {
+                cbs.memFailure = [opItem, item, this]() mutable {
                     // failed due to OOM. Push back to queue
                     WARN("Opkernel {} failed due to OOM", opItem->op->DebugString());
-                    pushToSessionQueue(item, opItem);
+                    pushToSessionQueue(item, std::move(opItem));
                 };
 
                 opItem->op->run(cbs);
@@ -337,19 +328,23 @@ size_t ExecutionEngine::maybeScheduleFrom(ResourceMonitor &resMon, ExecutionEngi
     // Do all schedule in queue in parallel
     UnsafeQueue stage;
     stage.swap(queue);
-    std::vector<q::promise<OperationItem*>> promises;
-    for (auto opItem : stage) {
-        auto p = q::with(m_qec->queue(), opItem).then(doSchedule);
+    std::vector<q::promise<std::shared_ptr<OperationItem>>> promises;
+    for (auto &opItem : stage) {
+        auto p = q::with(m_qec->queue(), std::move(opItem)).then(doSchedule);
         promises.emplace_back(std::move(p));
     }
 
     assert(queue.empty());
 
-    auto it = queue.begin();
+    auto it = std::back_inserter(queue);
     utils::notification n;
     q::all(std::move(promises), m_qec->queue())
-    .then([it, &n](std::vector<OperationItem*> remain) {
-        std::remove_copy(remain.begin(), remain.end(), it, nullptr);
+    .then([it, &n](std::vector<std::shared_ptr<OperationItem>> &&remain) mutable {
+        for (auto &poi : remain) {
+            if (poi) {
+                it = std::move(poi);
+            }
+        }
         n.notify();
     });
     n.wait();
