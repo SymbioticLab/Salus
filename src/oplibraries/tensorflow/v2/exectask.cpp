@@ -337,8 +337,8 @@ void ExecTask::run(Callbacks cbs)
         auto a = new PerOpAllocator(rctx.ticket, rctx.spec, *rctx.resMon, alloc);
         return a;
     };
-    auto localRendez = utils::make_scoped_unref<MultiDeviceRendezvous>(ditem.device, nocache_wrapper, rendez);
-    params.rendezvous = localRendez.get();
+    auto localRendez = new MultiDeviceRendezvous(ditem.device, nocache_wrapper, rendez);
+    params.rendezvous = localRendez;
     params.record_tensor_accesses = ditem.device_record_tensor_access;
     params.function_library = ditem.function_library.get();
     // Set the device_context for this node id, if it exists.
@@ -405,7 +405,6 @@ void ExecTask::run(Callbacks cbs)
             DCHECK(async != nullptr);
             launched_asynchronously = true;
 
-            // AsyncState add 1 count to localRendez
             auto pstate = new ExecutorState::AsyncState(params, tagged_node, &item, first_input, stats);
 
             // `done` should be called last as `this` would be deleted in it.

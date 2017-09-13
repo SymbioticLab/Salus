@@ -766,7 +766,6 @@ struct ExecutorState::AsyncState
         //   params.eigen_gpu_device = nullptr;
         ctx(ParamsButClearingEigenGPUDevice(&params), item->num_outputs)
         , stats(_stats)
-        , refRendezvous(p.rendezvous)
     {
         params.inputs = &saved_inputs;
         params.input_device_contexts = &saved_input_device_contexts;
@@ -784,8 +783,6 @@ struct ExecutorState::AsyncState
     tf::NodeExecStats *stats;
 
 private:
-    utils::ScopedUnref<tf::Rendezvous> refRendezvous;
-
     tf::OpKernelContext::Params *ParamsButClearingEigenGPUDevice(tf::OpKernelContext::Params *p)
     {
         // Ensure OpKernelContext constructor will make a new eigen GPU device if
