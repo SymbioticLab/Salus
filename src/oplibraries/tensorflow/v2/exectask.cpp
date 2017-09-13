@@ -144,7 +144,12 @@ ResourceMap ExecTask::estimatedUsage(const DeviceSpec& dev)
         const auto &sessHandle = m_state->impl_->params_.session;
         auto rm = SessionResourceTracker::instance().usage(sessHandle);
         if (rm) {
-            uint64_t scale = 1 << (maxFailures + 1 - failureTimes);
+            auto f = failureTimes;
+            if (f > maxFailures) {
+                WARN("Failure time exceeds maximum failures: {} (max {})", f, maxFailures);
+                f = maxFailures;
+            }
+            uint64_t scale = 1 << (maxFailures + 1 - f);
             resources::scale(rm->persistant, 1.0 / scale);
             resources::scale(rm->temporary, 1.0 / scale);
 
