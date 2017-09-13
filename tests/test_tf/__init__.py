@@ -1,5 +1,7 @@
 from contextlib import contextmanager
 
+from timeit import default_timer
+
 import numpy as np
 import numpy.testing as npt
 import tensorflow as tf
@@ -30,12 +32,15 @@ def sess_and_device(target='', dev='', config=None, seed=None):
     if seed is None:
         seed = 233
 
+    start_time = default_timer()
     with tf.Graph().as_default():
         tf.set_random_seed(seed)
         np.random.seed(seed)
         with tf.device(dev):
             with tf.Session(target, config=finalCfg) as sess:
                 yield sess
+    duration = default_timer() - start_time
+    print("JCT: {:.3f} s".format(duration))
 
 
 def run_on_devices(func, devices, *args, **kwargs):
@@ -56,9 +61,16 @@ def run_on_sessions(func, targets, *args, **kwargs):
 
     results = []
     for t in targets:
-        with sess_and_device(t, **kwargs):
-            res = func()
-            results.append(res)
+        retry = True
+        while retry:
+            try:
+                with sess_and_device(t, **kwargs):
+                    res = func()
+                    results.append(res)
+                    retry = False
+            except:
+                retry = True
+
     return tuple(results)
 
 
