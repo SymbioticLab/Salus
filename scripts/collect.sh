@@ -44,13 +44,13 @@ kill $(jobs -p)
 # Collect JCT
 for i in $(seq 3); do
     run_server /dev/null
-    run_client $RPC_ONLY_METHOD "$OUTPUT_DIR/$i.speed"
+    run_client $BOTH_METHOD "$OUTPUT_DIR/$i.speed"
     kill $(jobs -p)
 done
 
 # Collect Compute
 profile_server "$OUTPUT_DIR/profile.sqlite"
 
-run_client $BOTH_METHOD "$OUTPUT_DIR/com-iter.log"
+run_client $RPC_ONLY_METHOD "$OUTPUT_DIR/com-iter.log"
 
 kill $(jobs -p)
