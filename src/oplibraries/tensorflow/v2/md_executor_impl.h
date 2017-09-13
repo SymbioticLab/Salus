@@ -752,8 +752,8 @@ private:
 // sync kernels because these vectors are kept on the stack.
 struct ExecutorState::AsyncState
 {
-    AsyncState(const tf::OpKernelContext::Params &p, const TaggedNode &_tagged_node, const NodeItem *_item,
-               Entry *_first_input, tf::NodeExecStats *_stats)
+    AsyncState(const tf::OpKernelContext::Params &p, const TaggedNode &_tagged_node,
+               const NodeItem *_item, Entry *_first_input, tf::NodeExecStats *_stats)
         : saved_inputs(*p.inputs)
         , saved_input_device_contexts(*p.input_device_contexts)
         , saved_input_alloc_attrs(*p.input_alloc_attrs)
@@ -766,6 +766,7 @@ struct ExecutorState::AsyncState
         //   params.eigen_gpu_device = nullptr;
         ctx(ParamsButClearingEigenGPUDevice(&params), item->num_outputs)
         , stats(_stats)
+        , refRendezvous(p.rendezvous)
     {
         params.inputs = &saved_inputs;
         params.input_device_contexts = &saved_input_device_contexts;
@@ -783,6 +784,8 @@ struct ExecutorState::AsyncState
     tf::NodeExecStats *stats;
 
 private:
+    utils::ScopedUnref<tf::Rendezvous> refRendezvous;
+
     tf::OpKernelContext::Params *ParamsButClearingEigenGPUDevice(tf::OpKernelContext::Params *p)
     {
         // Ensure OpKernelContext constructor will make a new eigen GPU device if

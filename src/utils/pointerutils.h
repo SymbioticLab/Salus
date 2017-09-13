@@ -41,6 +41,41 @@ std::unique_ptr<Derived> dynamic_unique_ptr_cast(std::unique_ptr<Base> &&p)
     return std::unique_ptr<Derived>(nullptr);
 }
 
+template<typename T>
+struct ScopedUnref
+{
+    explicit ScopedUnref(T *o) : obj(o) {}
+    ~ScopedUnref() {
+        if (obj) obj->Unref();
+    }
+
+    ScopedUnref(ScopedUnref &&other) {
+        obj = other.obj;
+        other.obj = nullptr;
+    }
+
+    auto get() const {
+        auto a = std::make_unique<int>(1);
+        return obj;
+    }
+
+    operator bool() const {
+        return obj != nullptr;
+    }
+
+private:
+    T *obj;
+
+    ScopedUnref(const ScopedUnref&) = delete;
+    void operator=(const ScopedUnref&) = delete;
+};
+
+template<typename T, typename... Args>
+auto make_scoped_unref(Args && ...args)
+{
+    return ScopedUnref<T>(new T(std::forward<Args>(args)...));
+}
+
 } // namespace utils
 
 #endif // POINTERUTILS_H

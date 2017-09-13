@@ -324,11 +324,12 @@ void ExecTask::run(Callbacks cbs)
     auto allocator_wrapper = [this](auto alloc) {
         auto it = wrappedAllocators.find(alloc);
         if (it != wrappedAllocators.end()) {
-            return static_cast<PerOpAllocator*>(it->second.get());
+            return it->second.get();
         }
-        auto a = new PerOpAllocator(rctx.ticket, rctx.spec, *rctx.resMon, alloc);
-        wrappedAllocators.emplace(alloc, a);
-        return a;
+        auto a = utils::make_scoped_unref<PerOpAllocator>(rctx.ticket, rctx.spec, *rctx.resMon, alloc);
+        auto pa = a.get();
+        wrappedAllocators.emplace(alloc, std::move(a));
+        return pa;
     };
     params.allocator_wrapper = allocator_wrapper;
 
@@ -336,8 +337,8 @@ void ExecTask::run(Callbacks cbs)
         auto a = new PerOpAllocator(rctx.ticket, rctx.spec, *rctx.resMon, alloc);
         return a;
     };
-    auto localRendez = new MultiDeviceRendezvous(ditem.device, nocache_wrapper, rendez);
-    params.rendezvous = localRendez;
+    auto localRendez = utils::make_scoped_unref<MultiDeviceRendezvous>(ditem.device, nocache_wrapper, rendez);
+    params.rendezvous = localRendez.get();
     params.record_tensor_accesses = ditem.device_record_tensor_access;
     params.function_library = ditem.function_library.get();
     // Set the device_context for this node id, if it exists.
@@ -383,9 +384,9 @@ void ExecTask::run(Callbacks cbs)
             }
             m_state->MaybeMarkCompleted(input_frame, input_iter, id);
             // Continue to process the nodes in 'inline_ready'.
-            completed = m_state->NodeDone(s, item.node, ditem.device, localRendez, ready, stats, &inline_ready);
+            completed = m_state->NodeDone(s, item.node, ditem.device, params.rendezvous, ready,
+                                          stats, &inline_ready);
 
-            localRendez->Unref();
             cbs.launched();
             cbs.done();
             return;
@@ -403,10 +404,12 @@ void ExecTask::run(Callbacks cbs)
             auto async = op_kernel->AsAsync();
             DCHECK(async != nullptr);
             launched_asynchronously = true;
+
+            // AsyncState add 1 count to localRendez
             auto pstate = new ExecutorState::AsyncState(params, tagged_node, &item, first_input, stats);
 
             // `done` should be called last as `this` would be deleted in it.
-            auto asyncDone = [this, pstate, localRendez, cbs, ditem = ditem, execState = m_state]() {
+            auto asyncDone = [this, pstate, cbs, ditem = ditem, execState = m_state]() {
                 auto state = std::unique_ptr<ExecutorState::AsyncState>(pstate);
                 auto device = ditem.device;
                 auto stats = state->stats;
@@ -414,7 +417,6 @@ void ExecTask::run(Callbacks cbs)
 
                 // Inspect return state for retrying on memory failure
                 if (maybeMemoryFailure(state->ctx.status(), cbs.memFailure)) {
-                    localRendez->Unref();
                     return;
                 }
 
@@ -448,10 +450,10 @@ void ExecTask::run(Callbacks cbs)
                     // callee takes ownership of the vector
                     device->ConsumeListOfAccessedTensors(state->ctx.op_device_context(), accessed);
                 }
-                bool completed = execState->NodeDone(s, state->item->node, device, localRendez, ready, stats, nullptr);
+                bool completed = execState->NodeDone(s, state->item->node, device, state->params.rendezvous,
+                                                     ready, stats, nullptr);
                 if (completed)
                     execState->Finish();
-                localRendez->Unref();
                 cbs.done();
             };
             if (stats)
@@ -469,7 +471,6 @@ void ExecTask::run(Callbacks cbs)
 
             // Inspect return state for retrying on memory failure
             if (maybeMemoryFailure(ctx.status(), cbs.memFailure)) {
-                localRendez->Unref();
                 return;
             }
 
@@ -508,10 +509,10 @@ void ExecTask::run(Callbacks cbs)
             scheduled_usec = nodestats::NowInUsec();
         }
         // Postprocess.
-        completed = m_state->NodeDone(s, item.node, ditem.device, localRendez, ready, stats, &inline_ready);
+        completed = m_state->NodeDone(s, item.node, ditem.device, params.rendezvous,
+                                      ready, stats, &inline_ready);
         TRACE("Postprocess completed: {}", completed);
 
-        localRendez->Unref();
         cbs.launched();
         cbs.done();
     } else {

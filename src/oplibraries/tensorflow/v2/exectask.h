@@ -22,6 +22,7 @@
 #include "md_executor_impl.h"
 
 #include "execution/operationtask.h"
+#include "utils/pointerutils.h"
 
 #include "oplibraries/tensorflow/tensorflow_headers.h"
 
@@ -84,24 +85,7 @@ private:
     std::vector<DeviceType> supportedTypes;
     std::function<void(tf::OpKernel*, tf::FunctionLibraryRuntime*)> deleteKernel;
 
-    struct ScopedUnref
-    {
-        explicit ScopedUnref(tf::core::RefCounted *o) : obj(o) {}
-        ~ScopedUnref() {
-            if (obj) obj->Unref();
-        }
-
-        auto get() {
-            return obj;
-        }
-
-    private:
-        tf::core::RefCounted *obj;
-
-        ScopedUnref(const ScopedUnref&) = delete;
-        void operator=(const ScopedUnref&) = delete;
-    };
-    std::unordered_map<tf::Allocator*, ScopedUnref> wrappedAllocators;
+    std::unordered_map<tf::Allocator*, utils::ScopedUnref<PerOpAllocator>> wrappedAllocators;
 
     int failureTimes = 0;
     int maxFailures;
