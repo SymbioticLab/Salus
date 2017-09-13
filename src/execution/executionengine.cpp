@@ -235,7 +235,7 @@ void ExecutionEngine::scheduleLoop()
         auto end = sessions.end();
         while (it != end) {
             auto &item = *it;
-            if (del.count(item)) {
+            if (del.erase(item) > 0) {
                 TRACE("Deleting session {}@{}", item->sessHandle, as_hex(item));
 
                 resMon.clear(item->sessHandle);
