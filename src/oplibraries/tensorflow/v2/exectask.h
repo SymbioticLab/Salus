@@ -37,6 +37,8 @@ struct DeviceItem
     bool device_record_tensor_access = false;
 };
 
+class PerOpAllocator;
+
 /**
  * @todo write docs
  */
@@ -54,15 +56,15 @@ public:
              AllocatorAttributeVec &input_alloc_attrs,
              bool &completed, tf::Rendezvous *rendez, int maxFailures = 2);
 
-    bool prepare(const DeviceSpec &dev) override;
+    bool prepare(const ResourceContext &rctx) override;
 
     void run(Callbacks cbs) override;
 
     int failedTimes() const override { return failureTimes; }
 
-    ResourceMap estimatedUsage(const DeviceSpec &dev) override;
+    Resources estimatedUsage(const DeviceSpec &dev) override;
 
-    bool lastUsage(const DeviceSpec &dev, ResourceMap &res) override;
+    void releasePreAllocation() override;
 
     const std::vector<DeviceType> &supportedDeviceTypes() const override;
 
@@ -76,10 +78,30 @@ private:
     bool maybeMemoryFailure(const tf::Status &s, DoneCallback memFailure);
 
 private:
+    ResourceContext rctx;
     DeviceItem ditem;
-    std::unordered_map<DeviceSpec, ResourceMap> cachedUsage;
+    std::unordered_map<DeviceSpec, Resources> cachedUsage;
     std::vector<DeviceType> supportedTypes;
     std::function<void(tf::OpKernel*, tf::FunctionLibraryRuntime*)> deleteKernel;
+
+    struct ScopedUnref
+    {
+        explicit ScopedUnref(tf::core::RefCounted *o) : obj(o) {}
+        ~ScopedUnref() {
+            if (obj) obj->Unref();
+        }
+
+        auto get() {
+            return obj;
+        }
+
+    private:
+        tf::core::RefCounted *obj;
+
+        ScopedUnref(const ScopedUnref&) = delete;
+        void operator=(const ScopedUnref&) = delete;
+    };
+    std::unordered_map<tf::Allocator*, ScopedUnref> wrappedAllocators;
 
     int failureTimes = 0;
     int maxFailures;

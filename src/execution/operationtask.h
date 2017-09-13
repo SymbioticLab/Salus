@@ -36,24 +36,30 @@ public:
         DoneCallback memFailure;
     };
 
+    struct ResourceContext
+    {
+        ResourceMonitor *resMon = nullptr;
+        DeviceSpec spec;
+        uint64_t ticket;
+    };
+
     virtual ~OperationTask();
 
     virtual std::string DebugString() = 0;
 
     // Estimate usage and cache the result
-    virtual ResourceMap estimatedUsage(const DeviceSpec &dev) = 0;
+    virtual Resources estimatedUsage(const DeviceSpec &dev) = 0;
 
     // All supported device types for this task
     virtual const std::vector<DeviceType> &supportedDeviceTypes() const = 0;
 
     virtual int failedTimes() const = 0;
 
-    virtual bool prepare(const DeviceSpec &dev) = 0;
+    virtual bool prepare(const ResourceContext &rctx) = 0;
+
+    virtual void releasePreAllocation() = 0;
 
     virtual void run(Callbacks cbs) = 0;
-
-    // Returns cached usage
-    virtual bool lastUsage(const DeviceSpec &dev, ResourceMap &res) = 0;
 };
 
 #endif // OPEARTIONTASK_H

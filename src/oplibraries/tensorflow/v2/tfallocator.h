@@ -20,6 +20,8 @@
 #ifndef TFALLOCATOR_H
 #define TFALLOCATOR_H
 
+#include "execution/resources.h"
+
 #include "oplibraries/tensorflow/tensorflow_headers.h"
 
 #include <memory>
@@ -46,6 +48,38 @@ private:
     tensorflow::Allocator *m_actualAlloc;
 
     TF_DISALLOW_COPY_AND_ASSIGN(TFAllocator);
+};
+
+class PerOpAllocator : public tensorflow::Allocator, public tensorflow::core::RefCounted
+{
+public:
+    explicit PerOpAllocator(uint64_t ticket, const DeviceSpec &dev, ResourceMonitor &resMon, tensorflow::Allocator *other);
+
+    ~PerOpAllocator() override;
+
+    std::string Name() override;
+    void *AllocateRaw(size_t alignment, size_t num_bytes) override;
+    void* AllocateRaw(size_t alignment, size_t num_bytes,
+                      const tensorflow::AllocationAttributes& allocation_attr) override;
+
+    void DeallocateRaw(void *ptr) override;
+    bool ShouldAllocateEmptyTensors() override;
+
+    bool TracksAllocationSizes() override { return true; }
+
+    size_t RequestedSize(void* ptr) override;
+
+    tf::int64 AllocationId(void* ptr) override;
+
+private:
+    uint64_t m_ticket;
+    DeviceSpec m_spec;
+    ResourceMonitor &m_resMon;
+    tensorflow::Allocator *m_actualAlloc;
+
+    std::unordered_map<void*, size_t> m_allocated;
+
+    TF_DISALLOW_COPY_AND_ASSIGN(PerOpAllocator);
 };
 
 #endif // TFALLOCATOR_H

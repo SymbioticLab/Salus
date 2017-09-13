@@ -85,8 +85,14 @@ namespace resources {
 // Return true iff avail contains req
 bool contains(const Resources &avail, const Resources &req);
 
-Resources &merge(Resources &lhs, const Resources &rhs);
-Resources &subtract(Resources &lhs, const Resources &rhs);
+// Return true iff lhs's tags is superset of rhs's tags
+bool compatible(const Resources &lhs, const Resources &rhs);
+
+// Remove items whose value is 0
+Resources &removeZeros(Resources &lhs);
+
+Resources &merge(Resources &lhs, const Resources &rhs, bool skipNonExist=false);
+Resources &subtract(Resources &lhs, const Resources &rhs, bool skipNonExist=false);
 Resources &scale(Resources &lhs, double scale);
 } // namespace resources
 
@@ -153,29 +159,28 @@ public:
     void initializeLimits();
     void initializeLimits(const Resources &cap);
 
-    // Try aquare resources in as specified cap, including persistant resources.
-    // Persistant resources will be allocated under handle
-    // return false if failed, no resource will be allocated
-    bool tryAllocate(const ResourceMap &cap, const std::string &handle);
+    // Try pre-allocate resources
+    bool preAllocate(const Resources &cap, uint64_t *ticket);
 
-    // Free non persistant resources
-    void free(const ResourceMap &cap);
+    // Allocate resources from pre-allocated resources, if res < reserved, gauranteed to succeed
+    // otherwise may return false
+    bool allocate(uint64_t ticket, const Resources &res);
 
-    // Free persistant resources under handle
-    void clear(const std::string &handle);
+    // Release remaining pre-allocated resources
+    void free(uint64_t ticket);
+
+    // Free resources
+    void free(const Resources &res);
 
     std::string DebugString() const;
 
 private:
     mutable std::mutex m_mu;
 
+    uint64_t m_nextTicket = 0;
     Resources m_limits;
 
-    // Map from persistantHandle -> InnerMap
-    using PerSessInnerMap = std::unordered_map<std::string, Resources>;
-
-    // Map from session -> PerSessInnerMap
-    std::unordered_map<std::string, PerSessInnerMap> m_persis;
+    std::unordered_map<uint64_t, Resources> m_staging;
 };
 
 #endif // EXECUTION_RESOURCES_H

@@ -95,17 +95,33 @@ bool contains(const Resources &avail, const Resources &req)
     return true;
 }
 
-Resources &merge(Resources &lhs, const Resources &rhs)
+bool compatible(const Resources &lhs, const Resources &rhs)
 {
     for (auto p : rhs) {
+        if (lhs.count(p.first) == 0) {
+            return false;
+        }
+    }
+    return true;
+}
+
+Resources &merge(Resources &lhs, const Resources &rhs, bool skipNonExist)
+{
+    for (auto p : rhs) {
+        if (lhs.count(p.first) == 0 && skipNonExist) {
+            continue;
+        }
         lhs[p.first] += p.second;
     }
     return lhs;
 }
 
-Resources &subtract(Resources &lhs, const Resources &rhs)
+Resources &subtract(Resources &lhs, const Resources &rhs, bool skipNonExist)
 {
     for (auto p : rhs) {
+        if (lhs.count(p.first) == 0 && skipNonExist) {
+            continue;
+        }
         lhs[p.first] -= p.second;
     }
     return lhs;
@@ -115,6 +131,20 @@ Resources &scale(Resources &lhs, double scale)
 {
     for (auto &p : lhs) {
         p.second *= scale;
+    }
+    return lhs;
+}
+
+Resources &removeZeros(Resources &lhs)
+{
+    auto it = lhs.begin();
+    auto itend = lhs.end();
+    while(it != itend) {
+        if (it->second == 0) {
+            it = lhs.erase(it);
+        } else {
+            ++it;
+        }
     }
     return lhs;
 }
@@ -292,59 +322,71 @@ void ResourceMonitor::initializeLimits(const Resources &cap)
     }
 }
 
-// Try aquare resources in as specified cap, including persistant resources.
-// Persistant resources will be allocated under handle
-// return false if failed, no resource will be allocated
-bool ResourceMonitor::tryAllocate(const ResourceMap &cap, const std::string &handle)
+bool ResourceMonitor::preAllocate(const Resources &cap, uint64_t *ticket)
 {
     Guard g(m_mu);
-
-    auto &persist = m_persis[handle];
-
-    auto toAlloc = cap.temporary;
-
-    // Check if persistant resources has been allocated.
-    if (persist.count(cap.persistantHandle) == 0) {
-        merge(toAlloc, cap.persistant);
-    }
-
-    // Check if we have enough resource
-    if (!contains(m_limits, toAlloc)) {
+    if (!contains(m_limits, cap)) {
         return false;
     }
 
-    // Allocate
-    for (auto p : toAlloc) {
-        m_limits[p.first] -= p.second;
-    }
+    *ticket = ++m_nextTicket;
 
-    // Record persistant
-    persist[cap.persistantHandle] = cap.persistant;
+    // Allocate
+    subtract(m_limits, cap);
+    m_staging[*ticket] = cap;
 
     return true;
 }
 
-// Free non persistant resources
-void ResourceMonitor::free(const ResourceMap &cap)
+bool ResourceMonitor::allocate(uint64_t ticket, const Resources &res)
 {
+    auto remaining(res);
     Guard g(m_mu);
+    auto it = m_staging.find(ticket);
+    if (it != m_staging.end()) {
+        // first try allocate from reserve
+        if (contains(it->second, remaining)) {
+            subtract(it->second, remaining);
+            return true;
+        }
 
-    for (auto p : cap.temporary) {
-        m_limits[p.first] += p.second;
+        // pre-allocation is not enough, allocate all from it...
+        subtract(remaining, it->second, true /*skipNonExist*/);
+    } else {
+        ERR("Unknown ticket: {}", ticket);
     }
+
+    removeZeros(remaining);
+
+    // ... then try from global avail
+    if (!contains(m_limits, remaining)) {
+        return false;
+    }
+
+    subtract(m_limits, remaining);
+    return true;
 }
 
-// Free persistant resources under handle
-void ResourceMonitor::clear(const std::string &handle)
+// Release remaining pre-allocated resources
+void ResourceMonitor::free(uint64_t ticket)
 {
     Guard g(m_mu);
 
-    auto &persist = m_persis[handle];
-
-    for (auto p : persist) {
-        merge(m_limits, p.second);
+    auto it = m_staging.find(ticket);
+    if (it == m_staging.end()) {
+        ERR("Unknown ticket: {}", ticket);
+        return;
     }
-    persist.clear();
+
+    merge(m_limits, it->second);
+    m_staging.erase(it);
+}
+
+// Free resources
+void ResourceMonitor::free(const Resources &res)
+{
+    Guard g(m_mu);
+    merge(m_limits, res);
 }
 
 std::string ResourceTag::DebugString() const
@@ -376,9 +418,20 @@ std::string ResourceMonitor::DebugString() const
 
     Guard g(m_mu);
 
+    oss << "    Available" << std::endl;
     for (auto p : m_limits) {
-        oss << "    ";
+        oss << "        ";
         oss << p.first.DebugString() << " -> " << p.second << std::endl;
+    }
+    oss << "    Staging" << std::endl;
+    for (auto p : m_staging) {
+        oss << "        ";
+        oss << "Ticket: " <<  p.first << std::endl;
+
+        for (auto pp : p.second) {
+            oss << "            ";
+            oss << pp.first.DebugString() << " -> " << pp.second << std::endl;
+        }
     }
     return oss.str();
 }

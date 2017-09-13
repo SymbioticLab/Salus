@@ -27,8 +27,11 @@
 using tensorflow::Status;
 using tensorflow::Tensor;
 
-MultiDeviceRendezvous::MultiDeviceRendezvous(tensorflow::Device *device, tensorflow::Rendezvous *rendez)
+MultiDeviceRendezvous::MultiDeviceRendezvous(tensorflow::Device *device,
+                                             tf::WrapperDeviceContext::WrapperFunction allocWrapper,
+                                             tensorflow::Rendezvous *rendez)
     : m_device(device)
+    , m_allocWrapper(allocWrapper)
     , m_local(rendez)
 {
     m_local->Ref();
@@ -47,6 +50,7 @@ tensorflow::Status MultiDeviceRendezvous::Send(const ParsedKey &parsed, const Ar
     auto args = send_args;
     args.device_context =
         new tf::WrapperDeviceContext(static_cast<tensorflow::Device *>(m_device),
+                                     m_allocWrapper,
                                      send_args.device_context);
 
     return m_local->Send(parsed, args, val, is_dead);
@@ -59,6 +63,7 @@ void MultiDeviceRendezvous::RecvAsync(const ParsedKey &parsed, const Args &recv_
     auto args = recv_args;
     args.device_context =
         new tf::WrapperDeviceContext(static_cast<tensorflow::Device *>(m_device),
+                                     m_allocWrapper,
                                      recv_args.device_context);
 
     m_local->RecvAsync(parsed, args, std::move(done));

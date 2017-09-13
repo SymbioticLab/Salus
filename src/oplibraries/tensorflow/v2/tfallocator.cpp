@@ -127,3 +127,117 @@ void TFAllocator::DeallocateRaw(void *ptr)
         MemoryMgr::instance().deallocate(ptr);
     }
 }
+
+PerOpAllocator::PerOpAllocator(uint64_t ticket, const DeviceSpec &spec,
+                               ResourceMonitor &resMon, tensorflow::Allocator *other)
+    : m_ticket(ticket)
+    , m_spec(spec)
+    , m_resMon(resMon)
+    , m_actualAlloc(other)
+{
+    assert(m_actualAlloc);
+}
+
+PerOpAllocator::~PerOpAllocator() = default;
+
+std::string PerOpAllocator::Name()
+{
+    return tf::strings::StrCat("PerOp_", m_ticket, "_", nameOrNull(m_actualAlloc));
+}
+
+void *PerOpAllocator::AllocateRaw(size_t alignment, size_t num_bytes)
+{
+    TRACE("TFAllocator allocating {} bytes of memory with alignment {} using allocator {}@{}", num_bytes,
+         alignment, nameOrNull(m_actualAlloc), as_hex(m_actualAlloc));
+
+    Resources res {
+        {{ResourceType::MEMORY, m_spec}, num_bytes}
+    };
+    if (!m_resMon.allocate(m_ticket, res)) {
+        // No enough memory
+        TRACE("TFAllocator failed to allocate.");
+        return nullptr;
+    }
+
+    auto ptr = m_actualAlloc->AllocateRaw(alignment, num_bytes);
+    checkMemory(ptr, num_bytes);
+
+    if (ptr) {
+        m_allocated[ptr] = num_bytes;
+        Ref();
+    }
+
+    DEBUG("TFAllocator allocated {} bytes of memory at {} with alignment {} using allocator {}@{}", num_bytes,
+         as_hex(ptr), alignment, nameOrNull(m_actualAlloc), as_hex(m_actualAlloc));
+
+    return ptr;
+}
+
+void* PerOpAllocator::AllocateRaw(size_t alignment, size_t num_bytes, const tensorflow::AllocationAttributes& allocation_attr)
+{
+    auto attr(allocation_attr);
+    // We should not retry on failure due to the restarting feature
+    attr.no_retry_on_failure = true;
+
+    TRACE("TFAllocator allocating attributes {} of {} bytes of memory with alignment {}"
+         " using allocator {}@{}",
+         attr, num_bytes, alignment, nameOrNull(m_actualAlloc), as_hex(m_actualAlloc));
+
+    Resources res {
+        {{ResourceType::MEMORY, m_spec}, num_bytes}
+    };
+    if (!m_resMon.allocate(m_ticket, res)) {
+        // No enough memory
+        TRACE("TFAllocator failed to allocate.");
+        return nullptr;
+    }
+
+    auto ptr = m_actualAlloc->AllocateRaw(alignment, num_bytes, attr);
+    checkMemory(ptr, num_bytes);
+
+    if (ptr) {
+        m_allocated[ptr] = num_bytes;
+        Ref();
+    }
+
+    DEBUG("TFAllocator called for attributes {} of {} bytes of memory at {} with alignment {}"
+         " using allocator {}@{}",
+         attr, num_bytes, as_hex(ptr), alignment, nameOrNull(m_actualAlloc),
+         as_hex(m_actualAlloc));
+    return ptr;
+}
+
+size_t PerOpAllocator::RequestedSize(void* ptr)
+{
+    auto it = m_allocated.find(ptr);
+    if (it == m_allocated.end()) {
+        return 0;
+    }
+    return it->second;
+}
+
+tf::int64 PerOpAllocator::AllocationId(void* ptr)
+{
+    return reinterpret_cast<tf::int64>(ptr);
+}
+
+void PerOpAllocator::DeallocateRaw(void *ptr)
+{
+    auto num_bytes = RequestedSize(ptr);
+
+    DEBUG("TFAllocator deallocating memory at {} size {} using allocator {}@{}", as_hex(ptr),
+          num_bytes, nameOrNull(m_actualAlloc), as_hex(m_actualAlloc));
+
+    Resources res {
+        {{ResourceType::MEMORY, m_spec}, num_bytes}
+    };
+    m_resMon.free(res);
+
+    m_actualAlloc->DeallocateRaw(ptr);
+    Unref();
+}
+
+bool PerOpAllocator::ShouldAllocateEmptyTensors()
+{
+    return m_actualAlloc->ShouldAllocateEmptyTensors();
+}

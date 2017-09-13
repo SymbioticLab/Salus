@@ -23,6 +23,7 @@
 #include "utils/threadutils.h"
 #include "utils/macros.h"
 #include "oplibraries/tensorflow/v2/md_rendezvous.h"
+#include "oplibraries/tensorflow/v2/tfallocator.h"
 
 #include "oplibraries/tensorflow/tensorflow_headers.h"
 
@@ -86,8 +87,12 @@ const std::vector<DeviceType> &ExecTask::supportedDeviceTypes() const
     return supportedTypes;
 }
 
-bool ExecTask::prepare(const DeviceSpec &dev)
+bool ExecTask::prepare(const ResourceContext &ctx)
 {
+    rctx = ctx;
+
+    auto &dev = rctx.spec;
+
     auto match = [&dev](auto type) { return type == dev.type; };
     if (std::none_of(supportedTypes.begin(), supportedTypes.end(), match)) {
         return false;
@@ -127,34 +132,33 @@ bool ExecTask::prepare(const DeviceSpec &dev)
     return true;
 }
 
-bool ExecTask::lastUsage(const DeviceSpec &dev, ResourceMap &res)
+void ExecTask::releasePreAllocation()
 {
-    auto it = cachedUsage.find(dev);
-    if (it != cachedUsage.end()) {
-        res = it->second;
-        return true;
+    if (rctx.resMon) {
+        rctx.resMon->free(rctx.ticket);
     }
-    return false;
 }
 
-ResourceMap ExecTask::estimatedUsage(const DeviceSpec& dev)
+Resources ExecTask::estimatedUsage(const DeviceSpec& dev)
 {
     // Short-cut if this task has failed before
     if (failureTimes > 0) {
         const auto &sessHandle = m_state->impl_->params_.session;
         auto rm = SessionResourceTracker::instance().usage(sessHandle);
         if (rm) {
+            // Merge together
+            resources::merge(rm->temporary, rm->persistant);
+
             auto f = failureTimes;
             if (f > maxFailures) {
                 WARN("Failure time exceeds maximum failures: {} (max {})", f, maxFailures);
                 f = maxFailures;
             }
             uint64_t scale = 1 << (maxFailures + 1 - f);
-            resources::scale(rm->persistant, 1.0 / scale);
             resources::scale(rm->temporary, 1.0 / scale);
 
             // Update cache
-            cachedUsage[dev] = *rm;
+            cachedUsage[dev] = rm->temporary;
         } else {
             ERR("No session usage found for exec task: {} under session {}", tagged_node.node->name(), sessHandle);
             // fallback to normal estimation
@@ -168,13 +172,13 @@ ResourceMap ExecTask::estimatedUsage(const DeviceSpec& dev)
     }
 
     // Slow path to calculate the usage
-    auto &cap = cachedUsage[dev];
+    auto &res = cachedUsage[dev];
 
     const auto *node = tagged_node.node;
     auto ctx = m_state->shapeForNode(node);
     if (!ctx) {
         WARN("Shape information not available for node: {}", node->name());
-        return cap;
+        return res;
     }
 
     DeviceItem ditem;
@@ -192,13 +196,6 @@ ResourceMap ExecTask::estimatedUsage(const DeviceSpec& dev)
 
     ResourceTag devTag{ResourceType::MEMORY, dev};
     ResourceTag cpuTag{ResourceType::MEMORY, dev};
-
-    auto res = &cap.temporary;
-    if (node->IsOp() && node->op_def().is_stateful()) {
-        // special handle for persistant ops
-        cap.persistantHandle = node->name();
-        res = &cap.persistant;
-    }
 
     for (int i = 0; i != ctx->num_outputs(); ++i) {
         auto shp = ctx->output(i);
@@ -224,13 +221,13 @@ ResourceMap ExecTask::estimatedUsage(const DeviceSpec& dev)
         double subtotal = count * tf::DataTypeSize(dtype);
 
         if (mtypeStatus.ok() && output_mtypes[i] == tf::HOST_MEMORY) {
-            (*res)[cpuTag] += subtotal;
+            res[cpuTag] += subtotal;
         } else {
-            (*res)[devTag] += subtotal;
+            res[devTag] += subtotal;
         }
     }
 
-    return cap;
+    return res;
 }
 
 std::string ExecTask::DebugString()
@@ -321,7 +318,25 @@ void ExecTask::run(Callbacks cbs)
     }
 
     params.device = ditem.device;
-    auto localRendez = new MultiDeviceRendezvous(ditem.device, rendez);
+
+    wrappedAllocators.clear();
+    assert(rctx.resMon != nullptr);
+    auto allocator_wrapper = [this](auto alloc) {
+        auto it = wrappedAllocators.find(alloc);
+        if (it != wrappedAllocators.end()) {
+            return static_cast<PerOpAllocator*>(it->second.get());
+        }
+        auto a = new PerOpAllocator(rctx.ticket, rctx.spec, *rctx.resMon, alloc);
+        wrappedAllocators.emplace(alloc, a);
+        return a;
+    };
+    params.allocator_wrapper = allocator_wrapper;
+
+    auto nocache_wrapper = [rctx = this->rctx](auto alloc) {
+        auto a = new PerOpAllocator(rctx.ticket, rctx.spec, *rctx.resMon, alloc);
+        return a;
+    };
+    auto localRendez = new MultiDeviceRendezvous(ditem.device, nocache_wrapper, rendez);
     params.rendezvous = localRendez;
     params.record_tensor_accesses = ditem.device_record_tensor_access;
     params.function_library = ditem.function_library.get();
@@ -370,6 +385,7 @@ void ExecTask::run(Callbacks cbs)
             // Continue to process the nodes in 'inline_ready'.
             completed = m_state->NodeDone(s, item.node, ditem.device, localRendez, ready, stats, &inline_ready);
 
+            localRendez->Unref();
             cbs.launched();
             cbs.done();
             return;
@@ -398,6 +414,7 @@ void ExecTask::run(Callbacks cbs)
 
                 // Inspect return state for retrying on memory failure
                 if (maybeMemoryFailure(state->ctx.status(), cbs.memFailure)) {
+                    localRendez->Unref();
                     return;
                 }
 
@@ -434,6 +451,7 @@ void ExecTask::run(Callbacks cbs)
                 bool completed = execState->NodeDone(s, state->item->node, device, localRendez, ready, stats, nullptr);
                 if (completed)
                     execState->Finish();
+                localRendez->Unref();
                 cbs.done();
             };
             if (stats)
@@ -451,6 +469,7 @@ void ExecTask::run(Callbacks cbs)
 
             // Inspect return state for retrying on memory failure
             if (maybeMemoryFailure(ctx.status(), cbs.memFailure)) {
+                localRendez->Unref();
                 return;
             }
 
@@ -492,6 +511,7 @@ void ExecTask::run(Callbacks cbs)
         completed = m_state->NodeDone(s, item.node, ditem.device, localRendez, ready, stats, &inline_ready);
         TRACE("Postprocess completed: {}", completed);
 
+        localRendez->Unref();
         cbs.launched();
         cbs.done();
     } else {

@@ -34,11 +34,14 @@ using namespace std::chrono_literals;
 // #define ENABLE_STACK_SENTINEL
 
 namespace {
-void logScheduleFailure(const ResourceMap &usage, const ResourceMonitor &resMon)
+void logScheduleFailure(const Resources &usage, const ResourceMonitor &resMon)
 {
     STACK_SENTINEL;
 
-    DEBUG("Try to allocate resource failed. Requested: {}", usage.DebugString());
+    DEBUG("Try to allocate resource failed. Requested:");
+    for (auto p : usage) {
+        DEBUG("    {} -> {}", p.first.DebugString(), p.second);
+    }
     DEBUG("Available: {}", resMon.DebugString());
 }
 
@@ -237,8 +240,6 @@ void ExecutionEngine::scheduleLoop()
             auto &item = *it;
             if (del.erase(item) > 0) {
                 TRACE("Deleting session {}@{}", item->sessHandle, as_hex(item));
-
-                resMon.clear(item->sessHandle);
                 it = sessions.erase(it);
             } else {
                 // Move from front end queue to backing storage
@@ -290,22 +291,24 @@ ExecutionEngine::SessionItem::~SessionItem()
     queue.clear();
 }
 
-bool tryScheduleOn(ResourceMonitor &resMon, OperationTask *t, const std::string &sessHandle,
+bool tryScheduleOn(ResourceMonitor &resMon, OperationTask *t, const std::string &,
                    const DeviceSpec &dev)
 {
     STACK_SENTINEL;
     auto expectedDev = dev;
 
     auto usage = t->estimatedUsage(expectedDev);
-    if (!resMon.tryAllocate(usage, sessHandle)) {
+
+    OperationTask::ResourceContext rctx {&resMon, dev, 0};
+    if (!resMon.preAllocate(usage, &rctx.ticket)) {
         logScheduleFailure(usage, resMon);
         return false;
     }
-    if (t->prepare(expectedDev)) {
+    if (t->prepare(rctx)) {
         return true;
     }
 
-    resMon.free(usage);
+    resMon.free(rctx.ticket);
     return false;
 }
 
@@ -344,7 +347,7 @@ size_t ExecutionEngine::maybeScheduleFrom(ResourceMonitor &resMon, std::shared_p
         // Send to thread pool
         if (scheduled) {
             TRACE("Adding to thread pool: opItem in session {}: {}", item->sessHandle, opItem->op->DebugString());
-            q::with(m_qec->queue(), std::move(opItem)).then([&resMon, spec, item, this](std::shared_ptr<OperationItem> &&opItem){
+            q::with(m_qec->queue(), std::move(opItem)).then([item, this](std::shared_ptr<OperationItem> &&opItem){
                 STACK_SENTINEL;
                 OperationTask::Callbacks cbs;
 
@@ -354,18 +357,14 @@ size_t ExecutionEngine::maybeScheduleFrom(ResourceMonitor &resMon, std::shared_p
                 cbs.launched = [opItem]() {
                     opItem->promise.set_value();
                 };
-                cbs.done = [&resMon, spec, opItem]() {
+                cbs.done = [opItem]() {
                     // succeed
-                    ResourceMap res;
-                    opItem->op->lastUsage(spec, res);
-                    resMon.free(res);
+                    opItem->op->releasePreAllocation();
                 };
-                cbs.memFailure = [&resMon, spec, opItem, item, this]() mutable {
+                cbs.memFailure = [opItem, item, this]() mutable {
                     // failed due to OOM. Push back to queue
                     WARN("Opkernel {} failed due to OOM", opItem->op->DebugString());
-                    ResourceMap res;
-                    opItem->op->lastUsage(spec, res);
-                    resMon.free(res);
+                    opItem->op->releasePreAllocation();
                     pushToSessionQueue(item, std::move(opItem));
                 };
 

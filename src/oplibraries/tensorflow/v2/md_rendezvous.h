@@ -27,7 +27,9 @@
 class MultiDeviceRendezvous : public tensorflow::Rendezvous
 {
 public:
-    explicit MultiDeviceRendezvous(tensorflow::Device *device, tensorflow::Rendezvous *localRendez);
+    explicit MultiDeviceRendezvous(tensorflow::Device *device,
+                                   tf::WrapperDeviceContext::WrapperFunction allocWrapper,
+                                   tensorflow::Rendezvous *localRendez);
     ~MultiDeviceRendezvous() override;
 
     tensorflow::Status Send(const ParsedKey& parsed,
@@ -41,6 +43,7 @@ public:
 
 private:
     tensorflow::Device *m_device;
+    tf::WrapperDeviceContext::WrapperFunction m_allocWrapper;
     tensorflow::Rendezvous *m_local;
 };
 
