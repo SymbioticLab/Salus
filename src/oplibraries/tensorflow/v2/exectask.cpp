@@ -39,8 +39,8 @@ ExecTask::ExecTask(ExecutorState *state, tf::Device *&device,
                    AllocatorAttributeVec &input_alloc_attrs, bool &completed, tf::Rendezvous *rendez,
                    int maxFailures)
     : deleteKernel(state->impl_->params_.delete_kernel)
-    , kernel_is_async(false)
     , maxFailures(maxFailures)
+    , kernel_is_async(false)
     , has_ref_input(false)
     , tagged_node(node)
     , ready(ready)
