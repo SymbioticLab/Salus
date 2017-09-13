@@ -30,7 +30,7 @@
 class TFAllocator : public tensorflow::Allocator
 {
 public:
-    TFAllocator(tensorflow::Allocator *other = nullptr);
+    explicit TFAllocator(tensorflow::Allocator *other = nullptr);
 
     ~TFAllocator() override;
 

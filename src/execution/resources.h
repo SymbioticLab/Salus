@@ -101,7 +101,7 @@ class SessionResourceTracker
 {
     SessionResourceTracker();
     // Read limits from hardware, and capped by cap
-    SessionResourceTracker(const Resources &cap);
+    explicit SessionResourceTracker(const Resources &cap);
 
     // If it is safe to admit this session, given its persistant and temporary memory usage.
     bool canAdmitUnsafe(const ResourceMap &cap) const;

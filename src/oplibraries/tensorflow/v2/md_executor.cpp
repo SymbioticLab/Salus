@@ -391,7 +391,7 @@ void ExecutorState::Process(TaggedNode tagged_node, int64_t scheduled_usec)
 
         try {
             fu.get();
-        } catch (std::future_error err) {
+        } catch (std::future_error &err) {
             ERR("Opkernel {} failed to run: {}", err.what());
         }
     } // while !inline_ready.empty()

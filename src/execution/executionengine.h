@@ -63,7 +63,7 @@ public:
         InserterImpl(InserterImpl &&other)
             : InserterImpl(std::move(other.m_item), other.m_engine)
         { }
-        InserterImpl(std::shared_ptr<SessionItem> item, ExecutionEngine &engine) : m_item(item), m_engine(engine) {}
+        InserterImpl(const std::shared_ptr<SessionItem> &item, ExecutionEngine &engine) : m_item(item), m_engine(engine) {}
 
         ~InserterImpl();
 

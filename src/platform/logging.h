@@ -33,7 +33,7 @@ namespace logging {
 class LoggerWrapper
 {
 public:
-    LoggerWrapper(std::shared_ptr<spdlog::logger> logger);
+    explicit LoggerWrapper(std::shared_ptr<spdlog::logger> logger);
     LoggerWrapper(LoggerWrapper &&wrapper);
 
     spdlog::logger *operator->();

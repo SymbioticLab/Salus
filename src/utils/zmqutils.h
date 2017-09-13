@@ -30,7 +30,7 @@ class MultiPartMessage
 public:
     MultiPartMessage();
     MultiPartMessage(MultiPartMessage &&other);
-    MultiPartMessage(std::vector<zmq::message_t> *ptr);
+    explicit MultiPartMessage(std::vector<zmq::message_t> *ptr);
     MultiPartMessage(const MultiPartMessage&) = delete;
 
     MultiPartMessage &operator=(MultiPartMessage &&other);
