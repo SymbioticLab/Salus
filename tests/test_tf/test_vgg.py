@@ -91,7 +91,10 @@ class VGGCaseBase(unittest.TestCase):
             sess = tf.get_default_session()
             return run_vgg(self._vgg(), sess, input_data)
 
-        run_on_sessions(func, 'zrpc://tcp://127.0.0.1:5501')
+        config=tf.ConfigProto()
+        config.zmq_options.resource_map.temporary['MEMORY'] = 11494955340
+        config.zmq_options.resource_map.persistant['MEMORY'] = 1.67e9
+        run_on_sessions(func, 'zrpc://tcp://127.0.0.1:5501', config=config)
 
     def test_fake_data(self):
         def func():
