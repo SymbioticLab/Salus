@@ -42,7 +42,7 @@ std::string enumToString(const ResourceType &rt)
     }
 }
 
-ResourceType enumFromString(const std::string &rt)
+ResourceType resourceTypeFromString(const std::string &rt)
 {
     static std::unordered_map<std::string, ResourceType> lookup{
         {"COMPUTE", ResourceType::COMPUTE},
@@ -54,6 +54,24 @@ ResourceType enumFromString(const std::string &rt)
         return it->second;
     }
     return ResourceType::UNKNOWN;
+}
+
+/*static*/ ResourceTag ResourceTag::fromString(const std::string &str)
+{
+    auto pos = str.find(':');
+    if (pos == std::string::npos) {
+        return {resourceTypeFromString(str), {DeviceType::CPU, 0}};
+    }
+
+    ResourceTag tag;
+    tag.type = resourceTypeFromString(str.substr(0, pos));
+
+    pos = pos + 1;
+    if (pos < str.size()) {
+        tag.device = DeviceSpec::fromString(str.substr(pos));
+    }
+
+    return tag;
 }
 
 namespace resources {

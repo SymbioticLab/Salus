@@ -20,10 +20,41 @@
 #define UTILS_CPP17_H
 
 #include <boost/optional.hpp>
+#include <system_error>
+
+#include <string>
 
 namespace utils {
 
 using boost::optional;
+
+// TODO: use macro check
+
+struct from_chars_result {
+    const char* ptr;
+    std::error_code ec;
+};
+
+template<typename T>
+from_chars_result from_chars(const char* first, const char* last,
+                             T& value, int base = 10) noexcept
+{
+    size_t pos;
+    from_chars_result fcr {first, {}};
+    try {
+        auto val = std::stoll(std::string(first, last), &pos, base);
+        value = static_cast<T>(val);
+        fcr.ptr = first + pos;
+    } catch (std::invalid_argument &ex) {
+        fcr.ec = std::make_error_code(std::errc::invalid_argument);
+    } catch (std::out_of_range &ex) {
+        fcr.ec = std::make_error_code(std::errc::result_out_of_range);
+    } catch (...) {
+        // ignore
+    }
+
+    return fcr;
+}
 
 } // namespace utils
 

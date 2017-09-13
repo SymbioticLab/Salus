@@ -92,8 +92,8 @@ class VGGCaseBase(unittest.TestCase):
             return run_vgg(self._vgg(), sess, input_data)
 
         config=tf.ConfigProto()
-        config.zmq_options.resource_map.temporary['MEMORY'] = 11494955340
-        config.zmq_options.resource_map.persistant['MEMORY'] = 1.67e9
+        config.zmq_options.resource_map.temporary['MEMORY:GPU'] = 11494955340
+        config.zmq_options.resource_map.persistant['MEMORY:GPU'] = 1.67e9
         run_on_sessions(func, 'zrpc://tcp://127.0.0.1:5501', config=config)
 
     def test_fake_data(self):

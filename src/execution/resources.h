@@ -36,12 +36,14 @@ enum class ResourceType
 };
 
 std::string enumToString(const ResourceType &rt);
-ResourceType enumFromString(const std::string &rt);
+ResourceType resourceTypeFromString(const std::string &rt);
 
 struct ResourceTag
 {
     ResourceType type;
     DeviceSpec device;
+
+    static ResourceTag fromString(const std::string &str);
 
     std::string DebugString() const;
 

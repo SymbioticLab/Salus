@@ -144,9 +144,9 @@ ResourceMap ExecTask::estimatedUsage(const DeviceSpec& dev)
         const auto &sessHandle = m_state->impl_->params_.session;
         auto rm = SessionResourceTracker::instance().usage(sessHandle);
         if (rm) {
-            int scale = 1 << (maxFailures + 1 - failureTimes);
-            resources::scale(rm->persistant, scale);
-            resources::scale(rm->temporary, scale);
+            uint64_t scale = 1 << (maxFailures + 1 - failureTimes);
+            resources::scale(rm->persistant, 1.0 / scale);
+            resources::scale(rm->temporary, 1.0 / scale);
 
             // Update cache
             cachedUsage[dev] = *rm;

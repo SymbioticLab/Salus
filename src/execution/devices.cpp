@@ -19,7 +19,11 @@
 
 #include "devices.h"
 
+#include "utils/cpp17.h"
+#include "platform/logging.h"
+
 #include <sstream>
+#include <unordered_map>
 
 std::string enumToString(const DeviceType &dt)
 {
@@ -31,6 +35,38 @@ std::string enumToString(const DeviceType &dt)
     default:
         return "Unknown DeviceType";
     }
+}
+
+DeviceType deviceTypeFromString(const std::string &rt)
+{
+    static std::unordered_map<std::string, DeviceType> lookup{
+        {"CPU", DeviceType::CPU},
+        {"GPU", DeviceType::GPU},
+    };
+
+    auto it = lookup.find(rt);
+    if (it != lookup.end()) {
+        return it->second;
+    }
+    // TODO: add an unknown device type
+    return DeviceType::CPU;
+}
+
+/*static*/ DeviceSpec DeviceSpec::fromString(const std::string &str)
+{
+    auto pos = str.find(':');
+    if (pos == std::string::npos) {
+        return {deviceTypeFromString(str), 0};
+    }
+
+    DeviceSpec spec{deviceTypeFromString(str.substr(0, pos))};
+
+    auto fcr = utils::from_chars(str.c_str(), str.c_str() + str.size(), spec.id);
+    if (fcr.ec) {
+        ERR("Failed to convert {} to DeviceSpec", str);
+    }
+
+    return spec;
 }
 
 std::string DeviceSpec::DebugString() const

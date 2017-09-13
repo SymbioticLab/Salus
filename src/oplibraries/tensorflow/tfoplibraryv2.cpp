@@ -285,20 +285,18 @@ void TFOpLibraryV2::handleCreateSession(const std::string &recvId, const executo
 
     auto &m = req->config().zmq_options().resource_map();
     for (auto p : m.persistant()) {
-        auto type = enumFromString(p.first);
-        if (type == ResourceType::UNKNOWN) {
+        auto tag = ResourceTag::fromString(p.first);
+        if (tag.type == ResourceType::UNKNOWN) {
             continue;
         }
-        ResourceTag tag{type, DeviceType::CPU};
         rm.persistant[tag] = p.second;
     }
 
     for (auto p : m.temporary()) {
-        auto type = enumFromString(p.first);
-        if (type == ResourceType::UNKNOWN) {
+        auto tag = ResourceTag::fromString(p.first);
+        if (tag.type == ResourceType::UNKNOWN) {
             continue;
         }
-        ResourceTag tag{type, DeviceType::CPU};
         rm.temporary[tag] = p.second;
     }
 

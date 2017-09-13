@@ -32,6 +32,7 @@ enum class DeviceType
 };
 
 std::string enumToString(const DeviceType &dt);
+DeviceType deviceTypeFromString(const std::string &dt);
 
 struct DeviceSpec
 {
@@ -41,6 +42,8 @@ struct DeviceSpec
     DeviceSpec() = default;
 
     DeviceSpec(DeviceType t, int id = 0) : type(t), id(id) {}
+
+    static DeviceSpec fromString(const std::string &str);
 
     std::string DebugString() const;
 
