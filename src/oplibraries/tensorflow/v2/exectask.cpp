@@ -427,10 +427,10 @@ void ExecTask::run(Callbacks cbs)
                 auto completed = execState->NodeDone(s, state->tagged_node.node, ditem.device.get(),
                                                      state->params.rendezvous, ready, stats, nullptr);
 
+                num_finished_ops.notify();
                 if (completed) {
                     execState->Finish();
                 }
-                num_finished_ops.notify();
                 cbs.done();
             };
             if (stats)
