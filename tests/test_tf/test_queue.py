@@ -23,38 +23,14 @@ import numpy as np
 
 from parameterized import parameterized
 
-from . import run_on_rpc_and_cpu, assertAllClose
+from . import run_on_devices, run_on_rpc_and_cpu, assertAllClose
 from .lib import tfhelper
 
 def run_queue(sess):
-    def simple_shuffle_batch(source, capacity, batch_size=10):
-        # Create a random shuffle queue.
-        queue = tf.RandomShuffleQueue(capacity=capacity,
-                                      min_after_dequeue=int(0.9*capacity),
-                                      shapes=source.shape, dtypes=source.dtype)
+    # Create a slightly shuffled batch of integers in [0, 100)
+    queue = tf.train.range_input_producer(limit=100, num_epochs=1, shuffle=True)
 
-        # Create an op to enqueue one item.
-        enqueue = queue.enqueue(source)
-
-        # Create a queue runner that, when started, will launch threads applying
-        # that enqueue op.
-        num_threads = 1
-        qr = tf.train.QueueRunner(queue, [enqueue] * num_threads)
-
-        # Register the queue runner so it can be found and started by
-        # `tf.train.start_queue_runners` later (the threads are not launched yet).
-        tf.train.add_queue_runner(qr)
-
-        # Create an op to dequeue a batch
-        return queue.dequeue_many(batch_size)
-
-    # create a dataset that counts from 0 to 99
-    input = tf.constant(list(range(100)))
-    input = tf.contrib.data.Dataset.from_tensor_slices(input)
-    input = input.make_one_shot_iterator().get_next()
-
-    # Create a slightly shuffled batch from the sorted elements
-    get_batch = simple_shuffle_batch(input, capacity=20)
+    get_batch = queue.dequeue_many(10)
 
     sess.run(tfhelper.initialize_op())
     coord = tf.train.Coordinator()
@@ -79,6 +55,13 @@ class TestQueue(unittest.TestCase):
     def tearDown(self):
         # Called after each test method
         pass
+
+    def test_cpu(self):
+        def func():
+            sess = tf.get_default_session()
+            return run_queue(sess)
+
+        run_on_devices(func, '/device:CPU:0')
 
     def test_random_shuffle(self):
         def func():
