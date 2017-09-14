@@ -416,8 +416,20 @@ void ExecTask::run(Callbacks cbs)
                     // callee takes ownership of the vector
                     device->ConsumeListOfAccessedTensors(state->ctx.op_device_context(), accessed);
                 }
-                // cbs.done is called in finish
-                finish(s, cbs, state->params.rendezvous, true);
+
+                // TODO: merge to finish
+                auto &input_frame = state->tagged_node.input_frame;
+                auto &input_iter = state->tagged_node.input_iter;
+                auto id = state->tagged_node.node->id();
+                execState->MaybeMarkCompleted(input_frame, input_iter, id);
+                auto completed = execState->NodeDone(s, state->tagged_node.node, ditem.device.get(),
+                                                     state->params.rendezvous, ready, stats, nullptr);
+
+                if (completed) {
+                    execState->Finish();
+                }
+                num_finished_ops.notify();
+                cbs.done();
             };
             if (stats)
                 nodestats::SetOpStart(stats);
