@@ -22,6 +22,7 @@
 #include "memorymgr/memorymgr.h"
 #include "platform/logging.h"
 #include "utils/macros.h"
+#include "utils/threadutils.h"
 
 namespace {
 void checkMemory(void *ptr, size_t num_bytes)
@@ -163,7 +164,7 @@ void *PerOpAllocator::AllocateRaw(size_t alignment, size_t num_bytes)
     checkMemory(ptr, num_bytes);
 
     if (ptr) {
-        m_allocated[ptr] = num_bytes;
+        recordSize(ptr, num_bytes);
         Ref();
     }
 
@@ -196,7 +197,7 @@ void* PerOpAllocator::AllocateRaw(size_t alignment, size_t num_bytes, const tens
     checkMemory(ptr, num_bytes);
 
     if (ptr) {
-        m_allocated[ptr] = num_bytes;
+        recordSize(ptr, num_bytes);
         Ref();
     }
 
@@ -209,11 +210,7 @@ void* PerOpAllocator::AllocateRaw(size_t alignment, size_t num_bytes, const tens
 
 size_t PerOpAllocator::RequestedSize(void* ptr)
 {
-    auto it = m_allocated.find(ptr);
-    if (it == m_allocated.end()) {
-        return 0;
-    }
-    return it->second;
+    return findSize(ptr);
 }
 
 tf::int64 PerOpAllocator::AllocationId(void* ptr)
@@ -240,4 +237,20 @@ void PerOpAllocator::DeallocateRaw(void *ptr)
 bool PerOpAllocator::ShouldAllocateEmptyTensors()
 {
     return m_actualAlloc->ShouldAllocateEmptyTensors();
+}
+
+void PerOpAllocator::recordSize(void *ptr, size_t size)
+{
+    utils::Guard g(m_mu);
+    m_allocated[ptr] = size;
+}
+
+size_t PerOpAllocator::findSize(void *ptr)
+{
+    utils::Guard g(m_mu);
+    auto it = m_allocated.find(ptr);
+    if (it == m_allocated.end()) {
+        return 0;
+    }
+    return it->second;
 }

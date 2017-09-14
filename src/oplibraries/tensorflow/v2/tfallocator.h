@@ -72,11 +72,16 @@ public:
     tf::int64 AllocationId(void* ptr) override;
 
 private:
-    uint64_t m_ticket;
-    DeviceSpec m_spec;
+    void recordSize(void *ptr, size_t size);
+    size_t findSize(void *ptr);
+
+    const uint64_t m_ticket;
+    const DeviceSpec m_spec;
+
     ResourceMonitor &m_resMon;
     tensorflow::Allocator *m_actualAlloc;
 
+    std::mutex m_mu;
     std::unordered_map<void*, size_t> m_allocated;
 
     TF_DISALLOW_COPY_AND_ASSIGN(PerOpAllocator);
