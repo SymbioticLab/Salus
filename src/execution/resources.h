@@ -183,4 +183,11 @@ private:
     std::unordered_map<uint64_t, Resources> m_staging;
 };
 
+struct ResourceContext
+{
+    ResourceMonitor *resMon = nullptr;
+    DeviceSpec spec;
+    uint64_t ticket;
+};
+
 #endif // EXECUTION_RESOURCES_H

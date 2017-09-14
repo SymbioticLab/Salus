@@ -299,7 +299,7 @@ bool tryScheduleOn(ResourceMonitor &resMon, OperationTask *t, const std::string 
 
     auto usage = t->estimatedUsage(expectedDev);
 
-    OperationTask::ResourceContext rctx {&resMon, dev, 0};
+    ResourceContext rctx {&resMon, dev, 0};
     if (!resMon.preAllocate(usage, &rctx.ticket)) {
         logScheduleFailure(usage, resMon);
         return false;

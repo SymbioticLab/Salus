@@ -149,6 +149,7 @@ private:
 struct DeviceItem;
 class ExecTask;
 struct DeviceSpec;
+class PerOpAllocDevice;
 class ExecutorState
 {
 public:
@@ -642,7 +643,6 @@ private:
     // Contains a value for [node->id()] for the device context assigned by the
     // device at the beginning of a step, for each device
     std::unordered_map<tf::Device*, tf::DeviceContextMap> m_deviceContextMaps GUARDED_BY(mu_);
-    std::unordered_map<tf::Device*, std::shared_ptr<tensorflow::FunctionLibraryRuntime>> m_fruntimes GUARDED_BY(mu_);
 
     // Mapping from frame name to outstanding frames. A new frame is created
     // at some iteration of an active frame. So the unique key for the new
@@ -673,11 +673,10 @@ private:
 
     // Instantiate the op kernel for node.
     tf::Status SetupKernel(TaggedNode node, const DeviceItem &ditem, tf::OpKernel **op_kernel);
-    // Find tf device based on spec.
-    tf::Status LookupDevice(const DeviceSpec &spec, DeviceItem &item);
+
+    std::unique_ptr<PerOpAllocDevice, std::function<void(PerOpAllocDevice*)>> CreatePerOpAllocDevice(tf::Device *dev);
     // Find a device context, or return nullptr
     tf::DeviceContext *FindDeviceContext(size_t id, tf::Device *dev);
-    std::shared_ptr<tf::FunctionLibraryRuntime> FindFunctionLibrary(tf::Device *dev);
 
     // Before invoking item->kernel, fills in its "inputs".
     tf::Status PrepareInputs(const NodeItem &item, tf::OpKernel *kernel, tf::Device *device,

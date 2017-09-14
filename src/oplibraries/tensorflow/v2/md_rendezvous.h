@@ -28,7 +28,6 @@ class MultiDeviceRendezvous : public tensorflow::Rendezvous
 {
 public:
     explicit MultiDeviceRendezvous(tensorflow::Device *device,
-                                   tf::WrapperDeviceContext::WrapperFunction allocWrapper,
                                    tensorflow::Rendezvous *localRendez);
     ~MultiDeviceRendezvous() override;
 
@@ -43,7 +42,6 @@ public:
 
 private:
     tensorflow::Device *m_device;
-    tf::WrapperDeviceContext::WrapperFunction m_allocWrapper;
     tensorflow::Rendezvous *m_local;
 };
 

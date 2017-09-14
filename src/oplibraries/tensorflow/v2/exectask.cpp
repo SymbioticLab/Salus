@@ -24,6 +24,7 @@
 #include "utils/macros.h"
 #include "oplibraries/tensorflow/v2/md_rendezvous.h"
 #include "oplibraries/tensorflow/v2/tfallocator.h"
+#include "oplibraries/tensorflow/v2/peropallocdevice.h"
 
 #include "oplibraries/tensorflow/tensorflow_headers.h"
 
@@ -103,31 +104,37 @@ bool ExecTask::prepare(const ResourceContext &ctx)
         return false;
     }
 
+    assert(rctx.resMon != nullptr);
+    ditem.device->setResourceContext(rctx);
+
     // First check if we already created the kernel on some device
     op_kernel = nullptr;
-    const tf::Device *device;
-    auto ok = m_state->impl_->params_.find_kernel(tagged_node.node->def(), &device, &op_kernel);
+    std::string devName;
+    auto ok = m_state->impl_->params_.find_kernel(tagged_node.node->def(), &devName, &op_kernel);
 
-    if (ok.ok() && device) {
+    if (ok.ok()) {
         // we saw this kernel before, check if the device match
-        if (!device) {
+        if (devName.empty()) {
             WARN("We've created the kernel, but don't remember its device: {}", tagged_node.node->name());
             auto s = tf::errors::Internal("We've created the kernel, but don't remember its device");
             op_kernel = nullptr;
             return false;
         }
-        if (device == ditem.device) {
+        if (devName == ditem.device->name()) {
             // We are on the same device, good.
             return true;
         }
         TRACE("Stateful kernel can not be moved: previously created on {}, now requested on {}",
-              device->name(), ditem.device->name());
+              devName, ditem.device->name());
         op_kernel = nullptr;
         return false;
     } else if (!ok.ok()) {
         ERR("Failed to find kernel with status {} for Node: {}", ok, tagged_node.node->name());
         // it is okay, just continue to create the kernel
     }
+
+    // Record device
+    used_device = ditem.device.get();
 
     return true;
 }
@@ -255,12 +262,18 @@ tf::Status ExecTask::LookupDevice(const DeviceSpec &spec, DeviceItem &item)
     }
     name += std::to_string(spec.id);
 
-    auto ok = m_state->impl_->params_.deviceMgr->LookupDevice(name, &item.device);
+    tf::Device *tfdev;
+    auto ok = m_state->impl_->params_.deviceMgr->LookupDevice(name, &tfdev);
     if (!ok.ok()) {
         ERR("Cannot find device for {}: {}", spec, ok);
         return ok;
     }
-    item.function_library = m_state->FindFunctionLibrary(item.device);
+    item.device = m_state->CreatePerOpAllocDevice(tfdev);
+
+    auto fruntime = m_state->impl_->params_.create_fruntime(item.device.get());
+    item.function_library = std::shared_ptr<tf::FunctionLibraryRuntime>(fruntime,
+                                                                        m_state->impl_->params_.delete_fruntime);
+
     item.device_record_tensor_access = item.device->RequiresRecordingAccessedTensors();
     return tf::Status::OK();
 }
@@ -282,7 +295,7 @@ void ExecTask::run(Callbacks cbs)
 
             m_state->MaybeMarkCompleted(input_frame, input_iter, id);
             // Continue to process the nodes in 'inline_ready'.
-            completed = m_state->NodeDone(s, item.node, ditem.device, nullptr, ready, stats, &inline_ready);
+            completed = m_state->NodeDone(s, item.node, ditem.device.get(), nullptr, ready, stats, &inline_ready);
 
             cbs.launched();
             cbs.done();
@@ -302,47 +315,26 @@ void ExecTask::run(Callbacks cbs)
         }
     }
 
-    // Record device
-    used_device = ditem.device;
-
     // Start run
-    auto s = gview.SetAllocAttrForNode(node, ditem.device, op_kernel);
+    auto s = gview.SetAllocAttrForNode(node, ditem.device.get(), op_kernel);
     if (!s.ok()) {
         m_state->MaybeMarkCompleted(input_frame, input_iter, id);
         // Continue to process the nodes in 'inline_ready'.
-        completed = m_state->NodeDone(s, item.node, ditem.device, nullptr, ready, stats, &inline_ready);
+        completed = m_state->NodeDone(s, item.node, ditem.device.get(), nullptr, ready, stats, &inline_ready);
 
         cbs.launched();
         cbs.done();
         return;
     }
 
-    params.device = ditem.device;
+    params.device = ditem.device.get();
 
-    wrappedAllocators.clear();
-    assert(rctx.resMon != nullptr);
-    auto allocator_wrapper = [this](auto alloc) {
-        auto it = wrappedAllocators.find(alloc);
-        if (it != wrappedAllocators.end()) {
-            return it->second.get();
-        }
-        auto a = utils::make_scoped_unref<PerOpAllocator>(rctx.ticket, rctx.spec, *rctx.resMon, alloc);
-        auto pa = a.get();
-        wrappedAllocators.emplace(alloc, std::move(a));
-        return pa;
-    };
-    params.allocator_wrapper = allocator_wrapper;
-
-    auto nocache_wrapper = [rctx = this->rctx](auto alloc) {
-        auto a = new PerOpAllocator(rctx.ticket, rctx.spec, *rctx.resMon, alloc);
-        return a;
-    };
-    auto localRendez = new MultiDeviceRendezvous(ditem.device, nocache_wrapper, rendez);
+    auto localRendez = new MultiDeviceRendezvous(ditem.device.get(), rendez);
     params.rendezvous = localRendez;
     params.record_tensor_accesses = ditem.device_record_tensor_access;
     params.function_library = ditem.function_library.get();
     // Set the device_context for this node id, if it exists.
-    params.op_device_context = m_state->FindDeviceContext(id, ditem.device);
+    params.op_device_context = m_state->FindDeviceContext(id, ditem.device.get());
 
     params.track_allocations = false;
     stats = nullptr;
@@ -373,7 +365,7 @@ void ExecTask::run(Callbacks cbs)
     } else {
         // Prepares inputs.
         bool is_input_dead = false;
-        s = m_state->PrepareInputs(item, op_kernel, ditem.device, params.op_device_context,
+        s = m_state->PrepareInputs(item, op_kernel, ditem.device.get(), params.op_device_context,
                         first_input, &inputs, &input_device_contexts, &input_alloc_attrs,
                         &is_input_dead);
         if (!s.ok()) {
@@ -384,7 +376,7 @@ void ExecTask::run(Callbacks cbs)
             }
             m_state->MaybeMarkCompleted(input_frame, input_iter, id);
             // Continue to process the nodes in 'inline_ready'.
-            completed = m_state->NodeDone(s, item.node, ditem.device, params.rendezvous, ready,
+            completed = m_state->NodeDone(s, item.node, ditem.device.get(), params.rendezvous, ready,
                                           stats, &inline_ready);
 
             cbs.launched();
@@ -423,7 +415,7 @@ void ExecTask::run(Callbacks cbs)
                 if (stats)
                     nodestats::SetOpEnd(stats);
                 ExecutorState::EntryVector outputs;
-                auto s = execState->ProcessOutputs(*state->item, &state->ctx, device, &outputs, stats);
+                auto s = execState->ProcessOutputs(*state->item, &state->ctx, device.get(), &outputs, stats);
                 if (stats)
                     nodestats::SetMemory(stats, &state->ctx);
                 // Clears inputs.
@@ -449,7 +441,7 @@ void ExecTask::run(Callbacks cbs)
                     // callee takes ownership of the vector
                     device->ConsumeListOfAccessedTensors(state->ctx.op_device_context(), accessed);
                 }
-                bool completed = execState->NodeDone(s, state->item->node, device, state->params.rendezvous,
+                bool completed = execState->NodeDone(s, state->item->node, device.get(), state->params.rendezvous,
                                                      ready, stats, nullptr);
                 if (completed)
                     execState->Finish();
@@ -457,7 +449,7 @@ void ExecTask::run(Callbacks cbs)
             };
             if (stats)
                 nodestats::SetOpStart(stats);
-            ditem.device->ComputeAsync(async, &pstate->ctx, asyncDone);
+            ditem.device->ComputeAsync(async, &pstate->ctx, std::move(asyncDone));
         } else {
             // Synchronous computes.
             TRACE("Launch sync kernel");
@@ -474,7 +466,7 @@ void ExecTask::run(Callbacks cbs)
             }
 
             TRACE("Sync ProcessOutputs");
-            s = m_state->ProcessOutputs(item, &ctx, ditem.device, &outputs, stats);
+            s = m_state->ProcessOutputs(item, &ctx, ditem.device.get(), &outputs, stats);
             if (s.ok() && ditem.device_record_tensor_access) {
                 // Get the list of all tensors accessed during the execution
                 ctx.retrieve_accessed_tensors(&accessed_tensors);
@@ -508,7 +500,7 @@ void ExecTask::run(Callbacks cbs)
             scheduled_usec = nodestats::NowInUsec();
         }
         // Postprocess.
-        completed = m_state->NodeDone(s, item.node, ditem.device, params.rendezvous,
+        completed = m_state->NodeDone(s, item.node, ditem.device.get(), params.rendezvous,
                                       ready, stats, &inline_ready);
         TRACE("Postprocess completed: {}", completed);
 

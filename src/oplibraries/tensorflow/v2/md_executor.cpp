@@ -17,6 +17,7 @@ limitations under the License.
 #include "md_executor_impl.h"
 
 #include "oplibraries/tensorflow/v2/exectask.h"
+#include "oplibraries/tensorflow/v2/peropallocdevice.h"
 #include "execution/devices.h"
 #include "execution/executionengine.h"
 #include "platform/logging.h"
@@ -402,13 +403,21 @@ void ExecutorState::Process(TaggedNode tagged_node, int64_t scheduled_usec)
         Finish();
 }
 
+std::unique_ptr<PerOpAllocDevice, std::function<void(PerOpAllocDevice*)>> ExecutorState::CreatePerOpAllocDevice(tf::Device *dev)
+{
+    // TODO: impliment a free list
+    return {new PerOpAllocDevice(dev), [this](auto perop) {
+        delete perop;
+    }};
+}
+
 tf::Status ExecutorState::SetupKernel(TaggedNode node, const DeviceItem &ditem, tf::OpKernel **op_kernel)
 {
     auto &ndef = node.node->def();
 
     tf::OpKernel *kernel = nullptr;
     INFO("Creating a kernel for device: {}", ditem.device->name());
-    auto ok = impl_->params_.create_kernel(ndef, ditem.device, ditem.function_library.get(), &kernel);
+    auto ok = impl_->params_.create_kernel(ndef, ditem.function_library.get(), &kernel);
     if (!ok.ok()) {
         *op_kernel = nullptr;
         ok = AttachDef(ok, ndef);
@@ -440,20 +449,6 @@ tf::DeviceContext * ExecutorState::FindDeviceContext(size_t id, tf::Device* devi
         return it->second[id];
     }
     return nullptr;
-}
-
-std::shared_ptr<tf::FunctionLibraryRuntime> ExecutorState::FindFunctionLibrary(tf::Device *dev)
-{
-    tf::mutex_lock l(mu_);
-
-    auto &ptr = m_fruntimes[dev];
-    if (!ptr) {
-        std::shared_ptr<tf::FunctionLibraryRuntime> pf(impl_->params_.create_fruntime(dev),
-                                                       impl_->params_.delete_fruntime);
-        using std::swap;
-        swap(ptr, pf);
-    }
-    return ptr;
 }
 
 namespace {

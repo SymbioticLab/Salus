@@ -36,13 +36,6 @@ public:
         DoneCallback memFailure;
     };
 
-    struct ResourceContext
-    {
-        ResourceMonitor *resMon = nullptr;
-        DeviceSpec spec;
-        uint64_t ticket;
-    };
-
     virtual ~OperationTask();
 
     virtual std::string DebugString() = 0;

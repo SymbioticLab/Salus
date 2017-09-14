@@ -31,9 +31,10 @@ class Device;
 class FunctionLibraryRuntime;
 }
 
+class PerOpAllocDevice;
 struct DeviceItem
 {
-    tf::Device *device = nullptr;
+    std::shared_ptr<PerOpAllocDevice> device = nullptr;
     std::shared_ptr<tf::FunctionLibraryRuntime> function_library = nullptr;
     bool device_record_tensor_access = false;
 };
@@ -85,7 +86,7 @@ private:
     std::vector<DeviceType> supportedTypes;
     std::function<void(tf::OpKernel*, tf::FunctionLibraryRuntime*)> deleteKernel;
 
-    std::unordered_map<tf::Allocator*, utils::ScopedUnref<PerOpAllocator>> wrappedAllocators;
+    std::unique_ptr<PerOpAllocDevice, std::function<void(PerOpAllocDevice*)>> wrappedDevice;
 
     int failureTimes = 0;
     int maxFailures;
