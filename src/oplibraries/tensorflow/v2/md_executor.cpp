@@ -1095,7 +1095,9 @@ void ExecutorState::Finish()
         // devices like GPUs that continue to execute Ops after their Compute
         // methods have completed, this ensures that control is not returned to
         // the user until the step (and its side-effects) has actually completed.
-        num_finished_ops_.wait(num_emitted_ops_);
+        int n = num_emitted_ops_;
+        TRACE("Waiting for {} ops to complete", n);
+        num_finished_ops_.wait(n);
     }
     TRACE("ExecutorState about to delete this");
     delete this;

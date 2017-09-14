@@ -289,7 +289,7 @@ void ExecTask::run(Callbacks cbs)
         auto s = m_state->SetupKernel(tagged_node, ditem, &op_kernel);
         if (!s.ok()) {
             ERR("Error when creating kernel for node {}: {}", node->name(), s);
-            finish(s, cbs, nullptr, false);
+            finishEarly(s, cbs, nullptr, false);
             return;
         }
     }
@@ -308,7 +308,7 @@ void ExecTask::run(Callbacks cbs)
     // Start run
     auto s = gview.SetAllocAttrForNode(node, ditem.device.get(), op_kernel);
     if (!s.ok()) {
-        finish(s, cbs, nullptr, false);
+        finishEarly(s, cbs, nullptr, false);
         return;
     }
 
@@ -359,7 +359,7 @@ void ExecTask::run(Callbacks cbs)
             for (int i = 0; i < num_inputs; ++i) {
                 (first_input + i)->ClearVal();
             }
-            finish(s, cbs, params.rendezvous, false);
+            finishEarly(s, cbs, params.rendezvous, false);
             return;
         }
 
@@ -402,11 +402,18 @@ void ExecTask::run(Callbacks cbs)
                 for (int i = 0; i < num_inputs; ++i) {
                     (first_input + i)->ClearVal();
                 }
+                // mark completed
+                auto &input_frame = state->tagged_node.input_frame;
+                auto &input_iter = state->tagged_node.input_iter;
+                auto id = state->tagged_node.node->id();
+                execState->MaybeMarkCompleted(input_frame, input_iter, id);
+                // propagate outputs
                 ExecutorState::TaggedNodeSeq ready;
                 if (s.ok()) {
                     execState->PropagateOutputs(state->tagged_node, state->item, &outputs, &ready);
                 }
                 outputs.clear();
+                // record tensor access
                 if (s.ok() && ditem.device_record_tensor_access) {
                     // Get the list of all tensors accessed during the execution
                     tf::TensorReferenceVector accessed;
@@ -417,11 +424,6 @@ void ExecTask::run(Callbacks cbs)
                     device->ConsumeListOfAccessedTensors(state->ctx.op_device_context(), accessed);
                 }
 
-                // TODO: merge to finish
-                auto &input_frame = state->tagged_node.input_frame;
-                auto &input_iter = state->tagged_node.input_iter;
-                auto id = state->tagged_node.node->id();
-                execState->MaybeMarkCompleted(input_frame, input_iter, id);
                 auto completed = execState->NodeDone(s, state->tagged_node.node, ditem.device.get(),
                                                      state->params.rendezvous, ready, stats, nullptr);
 
@@ -467,6 +469,7 @@ void ExecTask::run(Callbacks cbs)
         for (int i = 0; i < num_inputs; ++i) {
             (first_input + i)->ClearVal();
         }
+        m_state->MaybeMarkCompleted(input_frame, input_iter, id);
         // Propagates outputs.
         if (s.ok()) {
             TRACE("Propagates outputs");
@@ -483,7 +486,10 @@ void ExecTask::run(Callbacks cbs)
             scheduled_usec = nodestats::NowInUsec();
         }
         // Postprocess.
-        finish(s, cbs, params.rendezvous, false);
+        completed = m_state->NodeDone(s, node, ditem.device.get(), params.rendezvous, ready, stats, &inline_ready);
+        num_finished_ops.notify();
+        cbs.launched();
+        cbs.done();
         TRACE("Postprocess completed: {}", completed);
     } else {
         cbs.launched();
@@ -506,7 +512,7 @@ bool ExecTask::maybeMemoryFailure(const tf::Status &s, DoneCallback memFailure)
     return false;
 }
 
-void ExecTask::finish(const tf::Status &s, const Callbacks &cbs, tf::Rendezvous *rendez, bool isAsync)
+void ExecTask::finishEarly(const tf::Status &s, const Callbacks &cbs, tf::Rendezvous *rendez, bool isAsync)
 {
     m_state->MaybeMarkCompleted(tagged_node.input_frame, tagged_node.input_iter, tagged_node.node->id());
 
