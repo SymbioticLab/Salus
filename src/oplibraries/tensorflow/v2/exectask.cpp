@@ -112,7 +112,7 @@ bool ExecTask::prepare(const ResourceContext &ctx)
     std::string devName;
     auto ok = m_state->impl_->params_.find_kernel(tagged_node.node->def(), &devName, &op_kernel);
 
-    if (ok.ok()) {
+    if (ok.ok() && op_kernel) {
         // we saw this kernel before, check if the device match
         if (devName.empty()) {
             WARN("We've created the kernel, but don't remember its device: {}", tagged_node.node->name());
