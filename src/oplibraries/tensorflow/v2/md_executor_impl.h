@@ -213,7 +213,7 @@ private:
             val_field_is_set = other.val_field_is_set;
             alloc_attr = other.alloc_attr;
             device_context = other.device_context;
-            device = other.device;
+            device = std::move(other.device);
             if (val_field_is_set) {
                 val.Init(std::move(*other.val));
             }
@@ -228,6 +228,7 @@ private:
                 val_field_is_set = false;
                 has_value = false;
             }
+            device = nullptr;
         }
 
         // A tensor value, if val_field_is_set.
@@ -247,7 +248,7 @@ private:
         // Every entry carries an optional DeviceContext containing
         // Device-specific information about how the Tensor was produced.
         tf::DeviceContext *device_context = nullptr;
-        tf::Device *device = nullptr;
+        std::shared_ptr<tf::Device> device = nullptr;
     };
 
     struct TaggedNode;
@@ -674,19 +675,21 @@ private:
     // Instantiate the op kernel for node.
     tf::Status SetupKernel(TaggedNode node, const DeviceItem &ditem, tf::OpKernel **op_kernel);
 
-    std::unique_ptr<PerOpAllocDevice, std::function<void(PerOpAllocDevice*)>> CreatePerOpAllocDevice(tf::Device *dev);
+    std::unique_ptr<PerOpAllocDevice> CreatePerOpAllocDevice(tf::Device *dev);
     // Find a device context, or return nullptr
     tf::DeviceContext *FindDeviceContext(size_t id, tf::Device *dev);
 
     // Before invoking item->kernel, fills in its "inputs".
-    tf::Status PrepareInputs(const NodeItem &item, tf::OpKernel *kernel, tf::Device *device,
+    tf::Status PrepareInputs(const NodeItem &item, tf::OpKernel *kernel,
+                             std::shared_ptr<tf::Device> device,
                              tf::DeviceContext *device_context,
                              Entry *first_input, TensorValueVec *inputs,
                              DeviceContextVec *input_device_contexts,
                              AllocatorAttributeVec *input_alloc_attrs, bool *is_input_dead);
 
     // After item->kernel computation is done, processes its outputs.
-    tf::Status ProcessOutputs(const NodeItem &item, tf::OpKernelContext *ctx, tf::Device *device,
+    tf::Status ProcessOutputs(const NodeItem &item, tf::OpKernelContext *ctx,
+                              const std::shared_ptr<tf::Device> &device,
                               EntryVector *outputs, tf::NodeExecStats *stats);
 
     // After processing the outputs, propagates the outputs to their dsts.

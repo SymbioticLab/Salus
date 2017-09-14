@@ -403,12 +403,10 @@ void ExecutorState::Process(TaggedNode tagged_node, int64_t scheduled_usec)
         Finish();
 }
 
-std::unique_ptr<PerOpAllocDevice, std::function<void(PerOpAllocDevice*)>> ExecutorState::CreatePerOpAllocDevice(tf::Device *dev)
+std::unique_ptr<PerOpAllocDevice> ExecutorState::CreatePerOpAllocDevice(tf::Device *dev)
 {
     // TODO: impliment a free list
-    return {new PerOpAllocDevice(dev), [this](auto perop) {
-        delete perop;
-    }};
+    return std::make_unique<PerOpAllocDevice>(dev);
 }
 
 tf::Status ExecutorState::SetupKernel(TaggedNode node, const DeviceItem &ditem, tf::OpKernel **op_kernel)
@@ -470,7 +468,8 @@ bool onSameDevice(tensorflow::Device *devA, const tensorflow::AllocatorAttribute
 }
 } // namespace
 
-tf::Status ExecutorState::PrepareInputs(const NodeItem &item, tf::OpKernel *kernel, tf::Device *device,
+tf::Status ExecutorState::PrepareInputs(const NodeItem &item, tf::OpKernel *kernel,
+                                        const std::shared_ptr<tf::Device> device,
                                         tf::DeviceContext *device_context,
                                         Entry *first_input, TensorValueVec *inputs,
                                         DeviceContextVec *input_device_contexts,
@@ -525,7 +524,8 @@ tf::Status ExecutorState::PrepareInputs(const NodeItem &item, tf::OpKernel *kern
         if (kernel->input_memory_types()[i] == tensorflow::HOST_MEMORY) {
             expected.set_on_host(true);
         }
-        bool on_same_device = onSameDevice(entry->device, entry->alloc_attr, device, expected);
+        bool on_same_device = onSameDevice(entry->device.get(), entry->alloc_attr,
+                                           device.get(), expected);
 
         TRACE("    Input {}: Entry {}\tOpInput {}\tDevice {}@{} and {}@{}, on_same_device {}", i,
               (entry->ref ? "ref": "noref"), (expect_ref ? "ref": "noref"),
@@ -603,7 +603,7 @@ tf::Status ExecutorState::PrepareInputs(const NodeItem &item, tf::OpKernel *kern
                 tf::Notification n;
                 tf::CopyTensor::ViaDMA(tf::strings::StrCat(i, "-th input of ", kernel->name()),
                                        entry->device_context, dstDevCtx,
-                                       entry->device, device, entry->alloc_attr,
+                                       entry->device.get(), device.get(), entry->alloc_attr,
                                        expected, inp->tensor, &copy,
                                        [&n, &ok](auto status) {
                                             ok = status;
@@ -641,13 +641,13 @@ tf::Status ExecutorState::PrepareInputs(const NodeItem &item, tf::OpKernel *kern
     return tf::Status::OK();
 }
 
-tf::Status ExecutorState::ProcessOutputs(const NodeItem &item, tf::OpKernelContext *ctx, tf::Device *device,
+tf::Status ExecutorState::ProcessOutputs(const NodeItem &item, tf::OpKernelContext *ctx,
+                                         const std::shared_ptr<tf::Device> &device,
                                          EntryVector *outputs, tf::NodeExecStats *stats)
 {
     auto node = item.node;
     DCHECK_EQ(0, outputs->size());
     outputs->resize(item.num_outputs);
-
 
     auto s = ctx->status();
     if (!s.ok()) {

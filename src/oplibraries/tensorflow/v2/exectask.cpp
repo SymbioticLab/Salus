@@ -365,7 +365,7 @@ void ExecTask::run(Callbacks cbs)
     } else {
         // Prepares inputs.
         bool is_input_dead = false;
-        s = m_state->PrepareInputs(item, op_kernel, ditem.device.get(), params.op_device_context,
+        s = m_state->PrepareInputs(item, op_kernel, ditem.device, params.op_device_context,
                         first_input, &inputs, &input_device_contexts, &input_alloc_attrs,
                         &is_input_dead);
         if (!s.ok()) {
@@ -415,7 +415,7 @@ void ExecTask::run(Callbacks cbs)
                 if (stats)
                     nodestats::SetOpEnd(stats);
                 ExecutorState::EntryVector outputs;
-                auto s = execState->ProcessOutputs(*state->item, &state->ctx, device.get(), &outputs, stats);
+                auto s = execState->ProcessOutputs(*state->item, &state->ctx, device, &outputs, stats);
                 if (stats)
                     nodestats::SetMemory(stats, &state->ctx);
                 // Clears inputs.
@@ -466,7 +466,7 @@ void ExecTask::run(Callbacks cbs)
             }
 
             TRACE("Sync ProcessOutputs");
-            s = m_state->ProcessOutputs(item, &ctx, ditem.device.get(), &outputs, stats);
+            s = m_state->ProcessOutputs(item, &ctx, ditem.device, &outputs, stats);
             if (s.ok() && ditem.device_record_tensor_access) {
                 // Get the list of all tensors accessed during the execution
                 ctx.retrieve_accessed_tensors(&accessed_tensors);
