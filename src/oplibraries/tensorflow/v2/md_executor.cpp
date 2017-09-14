@@ -464,7 +464,7 @@ bool onSameDevice(tensorflow::Device *devA, const tensorflow::AllocatorAttribute
         return false;
     }
 
-    return devA == devB;
+    return devA->parsed_name() == devB->parsed_name();
 }
 } // namespace
 

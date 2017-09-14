@@ -27,7 +27,7 @@
 using tensorflow::Status;
 using tensorflow::Tensor;
 
-MultiDeviceRendezvous::MultiDeviceRendezvous(tensorflow::Device *device,
+MultiDeviceRendezvous::MultiDeviceRendezvous(const std::shared_ptr<tensorflow::Device> &device,
                                              tensorflow::Rendezvous *rendez)
     : m_device(device)
     , m_local(rendez)
@@ -46,9 +46,7 @@ tensorflow::Status MultiDeviceRendezvous::Send(const ParsedKey &parsed, const Ar
     INFO("MultiDeviceRendezvous::Send {}", parsed.FullKey().ToString());
 
     auto args = send_args;
-    args.device_context =
-        new tf::WrapperDeviceContext(static_cast<tensorflow::Device *>(m_device),
-                                     send_args.device_context);
+    args.device_context = new tf::WrapperDeviceContext(m_device, send_args.device_context);
 
     return m_local->Send(parsed, args, val, is_dead);
 }
@@ -58,9 +56,7 @@ void MultiDeviceRendezvous::RecvAsync(const ParsedKey &parsed, const Args &recv_
     INFO("MultiDeviceRendezvous::RecvAsync {}", parsed.FullKey().ToString());
 
     auto args = recv_args;
-    args.device_context =
-        new tf::WrapperDeviceContext(static_cast<tensorflow::Device *>(m_device),
-                                     recv_args.device_context);
+    args.device_context = new tf::WrapperDeviceContext(m_device, recv_args.device_context);
 
     m_local->RecvAsync(parsed, args, std::move(done));
 }

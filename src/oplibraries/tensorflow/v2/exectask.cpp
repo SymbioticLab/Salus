@@ -133,8 +133,8 @@ bool ExecTask::prepare(const ResourceContext &ctx)
         // it is okay, just continue to create the kernel
     }
 
-    // Record device
-    used_device = ditem.device.get();
+    // Record device, only for sync, saft to pass underlaying device
+    used_device = ditem.device->underlayingDevice();
 
     return true;
 }
@@ -329,7 +329,7 @@ void ExecTask::run(Callbacks cbs)
 
     params.device = ditem.device.get();
 
-    auto localRendez = new MultiDeviceRendezvous(ditem.device.get(), rendez);
+    auto localRendez = new MultiDeviceRendezvous(ditem.device, rendez);
     params.rendezvous = localRendez;
     params.record_tensor_accesses = ditem.device_record_tensor_access;
     params.function_library = ditem.function_library.get();
@@ -402,7 +402,7 @@ void ExecTask::run(Callbacks cbs)
             // `done` should be called last as `this` would be deleted in it.
             auto asyncDone = [this, pstate, cbs, ditem = ditem, execState = m_state]() {
                 auto state = std::unique_ptr<ExecutorState::AsyncState>(pstate);
-                auto device = ditem.device;
+                auto &device = ditem.device;
                 auto stats = state->stats;
                 auto first_input = state->first_input;
 

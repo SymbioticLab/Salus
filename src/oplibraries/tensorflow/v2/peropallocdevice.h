@@ -35,6 +35,10 @@ public:
 
     void setResourceContext(const ResourceContext &rctx);
 
+    tf::Device *underlayingDevice() const {
+        return m_wrapped;
+    }
+
     tf::Allocator* GetAllocator(tf::AllocatorAttributes attr) override;
 
     tf::Allocator* GetStepAllocator(tf::AllocatorAttributes attr,

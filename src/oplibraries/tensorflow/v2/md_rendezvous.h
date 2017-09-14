@@ -27,7 +27,7 @@
 class MultiDeviceRendezvous : public tensorflow::Rendezvous
 {
 public:
-    explicit MultiDeviceRendezvous(tensorflow::Device *device,
+    explicit MultiDeviceRendezvous(const std::shared_ptr<tensorflow::Device> &device,
                                    tensorflow::Rendezvous *localRendez);
     ~MultiDeviceRendezvous() override;
 
@@ -41,7 +41,7 @@ public:
     void StartAbort(const tensorflow::Status& status) override;
 
 private:
-    tensorflow::Device *m_device;
+    std::shared_ptr<tensorflow::Device> m_device;
     tensorflow::Rendezvous *m_local;
 };
 
