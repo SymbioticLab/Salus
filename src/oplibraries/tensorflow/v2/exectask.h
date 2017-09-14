@@ -59,6 +59,8 @@ public:
 
     void run(Callbacks cbs) override;
 
+    void afterRun(const tf::Status &s, const Callbacks &cbs);
+
     int failedTimes() const override { return failureTimes; }
 
     Resources estimatedUsage(const DeviceSpec &dev) override;

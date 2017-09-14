@@ -284,16 +284,16 @@ void ExecTask::run(Callbacks cbs)
     const size_t id = node->id();
     const auto &item = *gview.node(id);
 
+    // clear early
+    params.rendezvous = nullptr;
+
     // Instantiate kernel if not ready done
     if (!op_kernel) {
         auto s = m_state->SetupKernel(tagged_node, ditem, &op_kernel);
         if (!s.ok()) {
             ERR("Error when creating kernel for node {}: {}", node->name(), s);
             m_state->MaybeMarkCompleted(input_frame, input_iter, id);
-            // Continue to process the nodes in 'inline_ready'.
-            completed = m_state->NodeDone(s, item.node, ditem.device.get(), nullptr, ready, stats, &inline_ready);
-            cbs.launched();
-            cbs.done();
+            afterRun(s, cbs);
             return;
         }
     }
@@ -313,10 +313,7 @@ void ExecTask::run(Callbacks cbs)
     auto s = gview.SetAllocAttrForNode(node, ditem.device.get(), op_kernel);
     if (!s.ok()) {
         m_state->MaybeMarkCompleted(input_frame, input_iter, id);
-        // Continue to process the nodes in 'inline_ready'.
-        completed = m_state->NodeDone(s, item.node, ditem.device.get(), nullptr, ready, stats, &inline_ready);
-        cbs.launched();
-        cbs.done();
+        afterRun(s, cbs);
         return;
     }
 
@@ -368,11 +365,7 @@ void ExecTask::run(Callbacks cbs)
                 (first_input + i)->ClearVal();
             }
             m_state->MaybeMarkCompleted(input_frame, input_iter, id);
-            // Continue to process the nodes in 'inline_ready'.
-            completed = m_state->NodeDone(s, item.node, ditem.device.get(), params.rendezvous, ready,
-                                          stats, &inline_ready);
-            cbs.launched();
-            cbs.done();
+            afterRun(s, cbs);
             return;
         }
 
@@ -499,15 +492,20 @@ void ExecTask::run(Callbacks cbs)
             scheduled_usec = nodestats::NowInUsec();
         }
         // Postprocess.
-        completed = m_state->NodeDone(s, item.node, ditem.device.get(), params.rendezvous,
-                                      ready, stats, &inline_ready);
-        num_finished_ops.notify();
-        cbs.launched();
-        cbs.done();
+        afterRun(s, cbs);
         TRACE("Postprocess completed: {}", completed);
     } else {
         cbs.launched();
     }
+}
+
+void ExecTask::afterRun(const tf::Status &s, const Callbacks &cbs)
+{
+    completed = m_state->NodeDone(s, tagged_node.node, ditem.device.get(), params.rendezvous,
+                                  ready, stats, &inline_ready);
+    num_finished_ops.notify();
+    cbs.launched();
+    cbs.done();
 }
 
 bool ExecTask::maybeMemoryFailure(const tf::Status &s, DoneCallback memFailure)
