@@ -76,8 +76,6 @@ private:
 
     bool maybeMemoryFailure(const tf::Status &s, DoneCallback memFailure);
 
-    void finishEarly(const tf::Status &s, const Callbacks &cbs, tf::Rendezvous *rendez, bool isAsync);
-
 private:
     ResourceContext rctx;
     DeviceItem ditem;
