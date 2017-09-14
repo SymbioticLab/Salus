@@ -402,9 +402,6 @@ void ExecTask::run(Callbacks cbs)
                 for (int i = 0; i < num_inputs; ++i) {
                     (first_input + i)->ClearVal();
                 }
-                auto input_frame = state->tagged_node.input_frame;
-                const int64_t input_iter = state->tagged_node.input_iter;
-                const int id = state->tagged_node.node->id();
                 ExecutorState::TaggedNodeSeq ready;
                 if (s.ok()) {
                     execState->PropagateOutputs(state->tagged_node, state->item, &outputs, &ready);
