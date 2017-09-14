@@ -32,7 +32,7 @@
 
 namespace tf = tensorflow;
 
-ExecTask::ExecTask(ExecutorState *state, tf::Device *&device,
+ExecTask::ExecTask(ExecutorState *state, utils::semaphore &num_finished_ops,
                    ExecutorState::TaggedNode &node, ExecutorState::TaggedNodeSeq &ready,
                    ExecutorState::TaggedNodeReadyQueue &inline_ready,
                    tf::NodeExecStats *stats, tf::OpKernelContext::Params &params,
@@ -56,7 +56,7 @@ ExecTask::ExecTask(ExecutorState *state, tf::Device *&device,
     , input_alloc_attrs(input_alloc_attrs)
     , completed(completed)
     , rendez(rendez)
-    , used_device(device)
+    , num_finished_ops(num_finished_ops)
     , m_state(state)
 {
     tf::DeviceTypeVector tftypes;
@@ -132,9 +132,6 @@ bool ExecTask::prepare(const ResourceContext &ctx)
         ERR("Failed to find kernel with status {} for Node: {}", ok, tagged_node.node->name());
         // it is okay, just continue to create the kernel
     }
-
-    // Record device, only for sync, saft to pass underlaying device
-    used_device = ditem.device->underlayingDevice();
 
     return true;
 }
@@ -292,14 +289,7 @@ void ExecTask::run(Callbacks cbs)
         auto s = m_state->SetupKernel(tagged_node, ditem, &op_kernel);
         if (!s.ok()) {
             ERR("Error when creating kernel for node {}: {}", node->name(), s);
-
-            m_state->MaybeMarkCompleted(input_frame, input_iter, id);
-            // Continue to process the nodes in 'inline_ready'.
-            completed = m_state->NodeDone(s, item.node, ditem.device.get(), nullptr, ready, stats, &inline_ready);
-
-            cbs.launched();
-            cbs.done();
-
+            finish(s, cbs, nullptr);
             return;
         }
     }
@@ -318,12 +308,7 @@ void ExecTask::run(Callbacks cbs)
     // Start run
     auto s = gview.SetAllocAttrForNode(node, ditem.device.get(), op_kernel);
     if (!s.ok()) {
-        m_state->MaybeMarkCompleted(input_frame, input_iter, id);
-        // Continue to process the nodes in 'inline_ready'.
-        completed = m_state->NodeDone(s, item.node, ditem.device.get(), nullptr, ready, stats, &inline_ready);
-
-        cbs.launched();
-        cbs.done();
+        finish(s, cbs, nullptr);
         return;
     }
 
@@ -374,13 +359,7 @@ void ExecTask::run(Callbacks cbs)
             for (int i = 0; i < num_inputs; ++i) {
                 (first_input + i)->ClearVal();
             }
-            m_state->MaybeMarkCompleted(input_frame, input_iter, id);
-            // Continue to process the nodes in 'inline_ready'.
-            completed = m_state->NodeDone(s, item.node, ditem.device.get(), params.rendezvous, ready,
-                                          stats, &inline_ready);
-
-            cbs.launched();
-            cbs.done();
+            finish(s, cbs, params.rendezvous);
             return;
         }
 
@@ -426,7 +405,6 @@ void ExecTask::run(Callbacks cbs)
                 auto input_frame = state->tagged_node.input_frame;
                 const int64_t input_iter = state->tagged_node.input_iter;
                 const int id = state->tagged_node.node->id();
-                execState->MaybeMarkCompleted(input_frame, input_iter, id);
                 ExecutorState::TaggedNodeSeq ready;
                 if (s.ok()) {
                     execState->PropagateOutputs(state->tagged_node, state->item, &outputs, &ready);
@@ -441,6 +419,7 @@ void ExecTask::run(Callbacks cbs)
                     // callee takes ownership of the vector
                     device->ConsumeListOfAccessedTensors(state->ctx.op_device_context(), accessed);
                 }
+                execState->MaybeMarkCompleted(input_frame, input_iter, id);
                 bool completed = execState->NodeDone(s, state->item->node, device.get(), state->params.rendezvous,
                                                      ready, stats, nullptr);
                 if (completed)
@@ -483,7 +462,6 @@ void ExecTask::run(Callbacks cbs)
         for (int i = 0; i < num_inputs; ++i) {
             (first_input + i)->ClearVal();
         }
-        m_state->MaybeMarkCompleted(input_frame, input_iter, id);
         // Propagates outputs.
         if (s.ok()) {
             TRACE("Propagates outputs");
@@ -500,12 +478,8 @@ void ExecTask::run(Callbacks cbs)
             scheduled_usec = nodestats::NowInUsec();
         }
         // Postprocess.
-        completed = m_state->NodeDone(s, item.node, ditem.device.get(), params.rendezvous,
-                                      ready, stats, &inline_ready);
+        finish(s, cbs, params.rendezvous);
         TRACE("Postprocess completed: {}", completed);
-
-        cbs.launched();
-        cbs.done();
     } else {
         cbs.launched();
     }
@@ -525,6 +499,16 @@ bool ExecTask::maybeMemoryFailure(const tf::Status &s, DoneCallback memFailure)
         return true;
     }
     return false;
+}
+
+void ExecTask::finish(const tf::Status &s, const Callbacks &cbs, tf::Rendezvous *rendez)
+{
+    m_state->MaybeMarkCompleted(tagged_node.input_frame, tagged_node.input_iter, tagged_node.node->id());
+    // Continue to process the nodes in 'inline_ready'.
+    completed = m_state->NodeDone(s, tagged_node.node, ditem.device.get(), rendez, ready, stats, &inline_ready);
+
+    cbs.launched();
+    cbs.done();
 }
 
 ExecTask::~ExecTask()

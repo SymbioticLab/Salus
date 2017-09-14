@@ -276,6 +276,7 @@ ExecutorState::ExecutorState(const tf::Executor::Args &args, ExecutorImpl *impl)
     , runner_(args.runner)
     , sync_on_finish_(args.sync_on_finish)
     , num_outstanding_ops_(0)
+    , num_emitted_ops_(0)
 {
     // We start the entire execution in iteration 0 of the root frame
     // so let us create the root frame and the state for iteration 0.
@@ -376,18 +377,14 @@ void ExecutorState::Process(TaggedNode tagged_node, int64_t scheduled_usec)
             input_frame->GetIteration(input_iter)->mark_started(item.pending_id);
         }
 
-        tf::Device **rd = nullptr;
-        {
-            tf::mutex_lock l(mu_);
-            used_devices_.push_back(nullptr);
-            rd = &used_devices_.back();
-        }
-
-        auto nodeTask = std::make_unique<ExecTask>(this, *rd,
+        auto nodeTask = std::make_unique<ExecTask>(this, num_finished_ops_,
                                                    tagged_node, ready, inline_ready, stats, params,
                                                    scheduled_usec, outputs,
                                                    inputs, input_device_contexts, input_alloc_attrs,
                                                    completed, rendezvous_);
+
+        num_emitted_ops_ += 1;
+
         auto fu = impl_->inserter_->enqueueOperation(std::move(nodeTask));
 
         try {
@@ -1088,21 +1085,17 @@ void ExecutorState::DumpState()
 
 void ExecutorState::Finish()
 {
-    TRACE("ExecutorState::Finish try lock in thread");
     mu_.lock();
     auto status = status_;
     auto done_cb = std::move(done_cb_);
     auto runner = std::move(runner_);
     mu_.unlock();
-    TRACE("ExecutorState::Finish after lock");
     if (sync_on_finish_ && status.ok()) {
         // Block until the device has finished all queued operations. For
         // devices like GPUs that continue to execute Ops after their Compute
         // methods have completed, this ensures that control is not returned to
         // the user until the step (and its side-effects) has actually completed.
-        for (auto d : used_devices_) {
-            status.Update(d->Sync());
-        }
+        num_finished_ops_.wait(num_emitted_ops_);
     }
     TRACE("ExecutorState about to delete this");
     delete this;

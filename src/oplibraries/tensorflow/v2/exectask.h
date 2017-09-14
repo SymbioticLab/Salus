@@ -26,11 +26,6 @@
 
 #include "oplibraries/tensorflow/tensorflow_headers.h"
 
-namespace tensorflow {
-class Device;
-class FunctionLibraryRuntime;
-}
-
 class PerOpAllocDevice;
 struct DeviceItem
 {
@@ -39,7 +34,9 @@ struct DeviceItem
     bool device_record_tensor_access = false;
 };
 
-class PerOpAllocator;
+namespace utils {
+class semaphore;
+} // namespace
 
 /**
  * @todo write docs
@@ -47,7 +44,7 @@ class PerOpAllocator;
 class ExecTask : public OperationTask
 {
 public:
-    ExecTask(ExecutorState *state, tf::Device *&device,
+    ExecTask(ExecutorState *state, utils::semaphore &num_finished_ops,
              ExecutorState::TaggedNode &node, ExecutorState::TaggedNodeSeq &ready,
              ExecutorState::TaggedNodeReadyQueue &inline_ready,
              tf::NodeExecStats *stats, tf::OpKernelContext::Params &params,
@@ -79,6 +76,8 @@ private:
 
     bool maybeMemoryFailure(const tf::Status &s, DoneCallback memFailure);
 
+    void finish(const tf::Status &s, const Callbacks &cbs, tf::Rendezvous *rendez);
+
 private:
     ResourceContext rctx;
     DeviceItem ditem;
@@ -108,7 +107,7 @@ private:
     AllocatorAttributeVec &input_alloc_attrs;
     bool &completed;
     tf::Rendezvous *rendez;
-    tf::Device *&used_device;
+    utils::semaphore &num_finished_ops;
 
     ExecutorState *m_state;
 };

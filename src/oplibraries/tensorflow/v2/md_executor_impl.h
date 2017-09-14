@@ -22,6 +22,7 @@
 #include "oplibraries/tensorflow/tensorflow_headers.h"
 
 #include "execution/executionengine.h"
+#include "utils/threadutils.h"
 
 #include <list>
 #include <unordered_set>
@@ -619,10 +620,8 @@ private:
     const ExecutorImpl *impl_;
     tf::CancellationManager *cancellation_manager_;
     tf::Executor::Args::Runner runner_;
-    bool sync_on_finish_;
 
-    // All devices this executor state has used, for sync in finish.
-    std::list<tf::Device*> used_devices_;
+    bool sync_on_finish_;
 
     // Owned.
 
@@ -637,6 +636,8 @@ private:
     tf::Executor::DoneCallback done_cb_;
 
     std::atomic_int_fast32_t num_outstanding_ops_;
+    std::atomic_int_fast32_t num_emitted_ops_;
+    utils::semaphore num_finished_ops_;
 
     tf::mutex mu_;
     tf::Status status_ GUARDED_BY(mu_);
