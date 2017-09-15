@@ -85,7 +85,7 @@ bool contains(const Resources &avail, const Resources &req)
     for (auto p : req) {
         std::tie(tag, val) = p;
         auto it = avail.find(tag);
-        if (it == aend) {
+        if (it == aend && val != 0) {
             return false;
         }
         if (val > it->second) {
@@ -371,7 +371,7 @@ bool ResourceMonitor::allocate(uint64_t ticket, const Resources &res)
         // actual subtract from staging
         auto fromStaging(res);
         subtract(fromStaging, remaining);
-
+        removeZeros(fromStaging);
         assert(contains(it->second, fromStaging));
         subtract(it->second, fromStaging);
     }
