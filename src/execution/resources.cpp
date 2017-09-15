@@ -462,5 +462,15 @@ std::string ResourceMonitor::DebugString() const
             oss << pp.first.DebugString() << " -> " << pp.second << std::endl;
         }
     }
+    oss << "    In use" << std::endl;
+    for (auto p : m_using) {
+        oss << "        ";
+        oss << "Ticket: " <<  p.first << std::endl;
+
+        for (auto pp : p.second) {
+            oss << "            ";
+            oss << pp.first.DebugString() << " -> " << pp.second << std::endl;
+        }
+    }
     return oss.str();
 }
