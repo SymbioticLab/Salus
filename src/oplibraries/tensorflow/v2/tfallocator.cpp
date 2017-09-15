@@ -228,7 +228,7 @@ void PerOpAllocator::DeallocateRaw(void *ptr)
     Resources res {
         {{ResourceType::MEMORY, m_spec}, num_bytes}
     };
-    m_resMon.free(res);
+    m_resMon.free(m_ticket, res);
 
     m_actualAlloc->DeallocateRaw(ptr);
     Unref();

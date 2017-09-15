@@ -347,14 +347,18 @@ bool ResourceMonitor::allocate(uint64_t ticket, const Resources &res)
         // first try allocate from reserve
         if (contains(it->second, remaining)) {
             subtract(it->second, remaining);
+            merge(m_using[ticket], remaining);
             return true;
         }
 
-        // pre-allocation is not enough, allocate all from it...
+        // pre-allocation is not enough, see how much we need
+        // to request from global avail...
         subtract(remaining, it->second, true /*skipNonExist*/);
     } else {
         ERR("Unknown ticket: {}", ticket);
     }
+
+    WARN("Try allocating from global avail for ticket: {}", ticket);
 
     removeZeros(remaining);
 
@@ -363,7 +367,21 @@ bool ResourceMonitor::allocate(uint64_t ticket, const Resources &res)
         return false;
     }
 
+    if (it != m_staging.end()) {
+        // actual subtract from staging
+        auto fromStaging(res);
+        subtract(fromStaging, remaining);
+
+        assert(contains(it->second, fromStaging));
+        subtract(it->second, fromStaging);
+    }
+
+    // actual subtract from global
     subtract(m_limits, remaining);
+
+    // add to used
+    merge(m_using[ticket], res);
+
     return true;
 }
 
@@ -383,10 +401,21 @@ void ResourceMonitor::free(uint64_t ticket)
 }
 
 // Free resources
-void ResourceMonitor::free(const Resources &res)
+void ResourceMonitor::free(uint64_t ticket, const Resources &res)
 {
     Guard g(m_mu);
     merge(m_limits, res);
+
+    auto it = m_using.find(ticket);
+    assert(it != m_using.end());
+
+    assert(contains(it->second, res));
+
+    subtract(it->second, res);
+    removeZeros(it->second);
+    if (it->second.empty()) {
+        m_using.erase(it);
+    }
 }
 
 std::string ResourceTag::DebugString() const

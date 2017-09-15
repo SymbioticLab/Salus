@@ -170,7 +170,7 @@ public:
     void free(uint64_t ticket);
 
     // Free resources
-    void free(const Resources &res);
+    void free(uint64_t ticket, const Resources &res);
 
     std::string DebugString() const;
 
@@ -181,6 +181,8 @@ private:
     Resources m_limits;
 
     std::unordered_map<uint64_t, Resources> m_staging;
+
+    std::unordered_map<uint64_t, Resources> m_using;
 };
 
 struct ResourceContext

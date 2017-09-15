@@ -337,8 +337,8 @@ void ExecTask::run(Callbacks cbs)
         nodestats::SetAllStart(stats);
     }
 
-    DEBUG("Process node: {} step {} {} is dead {}: on device {}",
-          id, params.step_id, SummarizeNodeDef(node->def()), tagged_node.is_dead, ditem.device->name());
+    DEBUG("Process node: {}, on device {}, allocation ticket {}",
+          SummarizeNodeDef(node->def()), rctx.spec, rctx.ticket);
 
     auto input_tensors = m_state->GetInputTensors(input_frame, input_iter);
     auto first_input = input_tensors + item.input_start;
