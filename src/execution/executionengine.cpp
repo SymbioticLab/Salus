@@ -212,7 +212,10 @@ void ExecutionEngine::scheduleLoop()
     STACK_SENTINEL;
     m_resMonitor.initializeLimits();
 
+    static const int kMaxNoProgressIters = 4;
+
     m_runningTasks = 0;
+    int noProgressIters = 0;
 
     while (!m_shouldExit) {
         STACK_SENTINEL;
@@ -273,14 +276,19 @@ void ExecutionEngine::scheduleLoop()
             ERR("Session {} requested for deletion but not found in queue", d->sessHandle);
         }
 
+        bool noProgress = remainingCount > 0 && scheduled == 0;
+
+        noProgressIters = noProgress ? noProgressIters + 1 : 0;
+
         // check if we need paging
         int64_t running_tasks = m_runningTasks;
-        if (scheduled == 0 && running_tasks == 0 && remainingCount > 0) {
+        bool needPaging = (noProgress && running_tasks == 0)
+                          || (noProgressIters > kMaxNoProgressIters);
+        if (needPaging) {
             doPaging();
             continue;
         }
 
-        /*
         std::chrono::nanoseconds ns;
         if (shouldWaitForAWhile(scheduled, ns)) {
             // no progress for a long time.
@@ -288,7 +296,6 @@ void ExecutionEngine::scheduleLoop()
 //             std::this_thread::yield();
             std::this_thread::sleep_for(ns);
         }
-        */
 
         if (!remainingCount) {
             INFO("Wait on m_note_has_work");
