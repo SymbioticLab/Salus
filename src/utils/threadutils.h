@@ -29,6 +29,10 @@ namespace utils {
 using Guard = std::lock_guard<std::mutex>;
 using UGuard = std::unique_lock<std::mutex>;
 
+// Catch bug where variable name is omitted, e.g. Guard (mu);
+#define Guard(x) static_assert(0, "Guard declaration missing variable name");
+#define UGuard(x) static_assert(0, "UGuard declaration missing variable name");
+
 /**
  * Semaphore that can wait on count.
  */
