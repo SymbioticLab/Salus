@@ -23,6 +23,7 @@
 #include "utils/stringutils.h"
 #include "utils/envutils.h"
 #include "execution/devices.h"
+#include "execution/executionengine.h"
 
 #include "protos.h"
 
@@ -127,7 +128,15 @@ std::ostream &operator<<(std::ostream &os, const google::protobuf::Message &c)
 
 std::ostream &operator<<(std::ostream &os, const DeviceSpec &c)
 {
-    return os << "DeviceSpec(type=" << c.type << ", id=" << c.id << ")";
+    return os << enumToString(c.type) << ":" << c.id;
+}
+
+std::ostream &operator<<(std::ostream &os, const ResourceContext &c)
+{
+    if (c.ticket == 0) {
+        return os << "AllocationTicket(Invalid)";
+    }
+    return os << "AllocationTicket(" << c.ticket << ", device=" << c.spec << ")";
 }
 
 std::ostream &operator<<(std::ostream &os, const PtrPrintHelper &helper)

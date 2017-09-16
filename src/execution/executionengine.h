@@ -25,6 +25,7 @@
 #include "execution/itask.h"
 #include "platform/logging.h"
 #include "utils/threadutils.h"
+#include "execution/resources.h"
 
 #include <q/lib.hpp>
 #include <q/promise.hpp>
@@ -35,11 +36,12 @@
 #include <memory>
 #include <atomic>
 #include <unordered_set>
+#include <unordered_map>
 #include <future>
 #include <chrono>
 
 class OperationTask;
-class ResourceMonitor;
+struct ResourceContext;
 
 /**
  * @todo write docs
@@ -57,6 +59,15 @@ public:
 
     ~ExecutionEngine();
 
+    struct PagingCallbacks
+    {
+        std::function<void(uint64_t, void*)> forceEvicted;
+        std::function<bool(uint64_t, std::shared_ptr<ResourceContext>&&)> volunteer;
+
+        operator bool() const {
+            return forceEvicted && volunteer;
+        }
+    };
     class InserterImpl
     {
     public:
@@ -68,6 +79,8 @@ public:
         ~InserterImpl();
 
         std::future<void> enqueueOperation(std::unique_ptr<OperationTask> &&task);
+
+        void registerPagingCallbacks(PagingCallbacks &&pcb);
 
     private:
         std::shared_ptr<SessionItem> m_item;
@@ -131,10 +144,23 @@ private:
     ExecutionEngine();
 
     std::atomic<bool> m_shouldExit = {false};
-    void scheduleLoop();
-    size_t maybeScheduleFrom(ResourceMonitor &resMon, std::shared_ptr<SessionItem> item);
-    bool shouldWaitForAWhile(size_t scheduled, std::chrono::nanoseconds &ns);
     std::unique_ptr<std::thread> m_schedThread;
+    void scheduleLoop();
+    bool shouldWaitForAWhile(size_t scheduled, std::chrono::nanoseconds &ns);
+
+    // Task life cycle
+    size_t maybeScheduleFrom(std::shared_ptr<SessionItem> item);
+    bool maybePreAllocateFor(SessionItem &item, OperationItem &opItem, const DeviceSpec &spec);
+
+    void taskStopped(SessionItem &item, OperationItem &opItem);
+
+    // Bookkeeping
+    ResourceMonitor m_resMonitor;
+    std::atomic_int_fast64_t m_runningTasks;
+    std::unordered_map<uint64_t, std::weak_ptr<SessionItem>> m_ticketOwners;
+
+    // Paging
+    void doPaging();
 
     // Incoming kernels
     // Use a minimal linked list because the only operation we need is
@@ -147,8 +173,14 @@ private:
         KernelQueue queue;
         std::mutex mu;
 
-        // Only be accessed by scheduling thread
+        PagingCallbacks pagingCb;
+
+        // Only accessed by main scheduling thread
         UnsafeQueue bgQueue;
+
+        // Accessed by multiple scheduling thread
+        std::unordered_set<uint64_t> tickets;
+        std::mutex tickets_mu;
 
         explicit SessionItem(const std::string &handle) : sessHandle(handle) {}
 
@@ -160,8 +192,11 @@ private:
     struct OperationItem
     {
         std::unique_ptr<OperationTask> op;
+
         std::promise<void> promise;
+        std::shared_ptr<ResourceContext> rctx;
     };
+    friend struct ResourceContext;
 
     using SessionList = std::list<std::shared_ptr<SessionItem>>;
     using SessionSet = std::unordered_set<std::shared_ptr<SessionItem>>;
@@ -173,6 +208,7 @@ private:
     std::mutex m_delMu;
 
     utils::notification m_note_has_work;
+    SessionList m_sessions;
 
     void insertSession(std::shared_ptr<SessionItem> item);
     void deleteSession(std::shared_ptr<SessionItem> item);
@@ -182,5 +218,25 @@ private:
     q::scope m_qscope;
     qExecutionContext m_qec;
 };
+
+struct ResourceContext
+{
+    ResourceMonitor &resMon;
+    DeviceSpec spec;
+    uint64_t ticket;
+
+    ResourceContext(ExecutionEngine::SessionItem &item, ResourceMonitor &resMon);
+    ~ResourceContext();
+
+    bool initializeStaging(const DeviceSpec &spec, const Resources &res);
+    void releaseStaging();
+
+    bool allocMemory(size_t num_bytes);
+    void deallocMemory(size_t num_bytes);
+
+private:
+    ExecutionEngine::SessionItem &session;
+};
+
 
 #endif // EXECUTIONENGINE_H

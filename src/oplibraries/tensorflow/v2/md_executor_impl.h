@@ -19,10 +19,12 @@
 #ifndef MULTIDEVICEEXECUTORSTATEIMPL_H
 #define MULTIDEVICEEXECUTORSTATEIMPL_H
 
-#include "oplibraries/tensorflow/tensorflow_headers.h"
+#include "oplibraries/tensorflow/v2/tensorutils.h"
 
 #include "execution/executionengine.h"
 #include "utils/threadutils.h"
+
+#include "oplibraries/tensorflow/tensorflow_headers.h"
 
 #include <list>
 #include <unordered_set>
@@ -60,6 +62,7 @@ void SetReferencedTensors(tf::NodeExecStats *nt, const tf::TensorReferenceVector
 bool SetTimelineLabel(tf::NodeExecStats *node_stats, const tf::Node* node);
 } // namespace nodestats
 
+class PerOpAllocDevice;
 class ExecutorImpl : public tf::Executor
 {
 public:
@@ -74,6 +77,19 @@ public:
 private:
     friend class ExecutorState;
     friend class ExecTask;
+
+    bool handlePagingRequest(uint64_t oldTicket, std::shared_ptr<ResourceContext> &&rctx);
+    void forceEvicted(uint64_t ticket, void *addr);
+
+    struct DeviceItem
+    {
+        std::shared_ptr<PerOpAllocDevice> device = nullptr;
+        std::shared_ptr<tf::FunctionLibraryRuntime> function_library = nullptr;
+        bool device_record_tensor_access = false;
+    };
+
+    std::unique_ptr<PerOpAllocDevice> CreatePerOpAllocDevice(tf::Device *dev);
+    tf::Status LookupDevice(const DeviceSpec &spec, DeviceItem *item);
 
     struct ControlFlowInfo
     {
@@ -126,9 +142,9 @@ private:
     GraphView gview_;
     ExecutionEngine::Inserter inserter_;
 
-    // A cached value of params_
-    // TODO: remove this
-    bool device_record_tensor_accesses_ = false;
+    // Active entries. Used for handle paging request
+    std::mutex entry_mu_;
+    std::unordered_map<uint64_t, Entry *> active_entries_;
 
     // Root nodes (with no in edges) that should form the initial ready queue
     std::vector<const tf::Node *> root_nodes_;
@@ -161,96 +177,6 @@ public:
 
 private:
     friend class ExecTask;
-    // Either a tensor pointer (pass-by-reference) or a tensor (pass-by-value).
-    // TODO(yuanbyu): A better way to do "has_value"?
-    struct Entry
-    {
-        Entry() = default;
-        Entry(const Entry &other)
-            : ref(other.ref)
-            , ref_mu(other.ref_mu)
-            , has_value(other.has_value)
-            , val_field_is_set(other.val_field_is_set)
-            , alloc_attr(other.alloc_attr)
-            , device_context(other.device_context)
-            , device(other.device)
-        {
-            if (val_field_is_set) {
-                val.Init(*other.val);
-            }
-        }
-        ~Entry()
-        {
-            if (val_field_is_set)
-                val.Destroy();
-        }
-
-        Entry &operator=(const Entry &other)
-        {
-            if (val_field_is_set) {
-                val.Destroy();
-            }
-            ref = other.ref;
-            ref_mu = other.ref_mu;
-            has_value = other.has_value;
-            val_field_is_set = other.val_field_is_set;
-            alloc_attr = other.alloc_attr;
-            device_context = other.device_context;
-            device = other.device;
-            if (val_field_is_set) {
-                val.Init(*other.val);
-            }
-            return *this;
-        }
-
-        Entry &operator=(Entry &&other)
-        {
-            if (val_field_is_set) {
-                val.Destroy();
-            }
-            ref = other.ref;
-            ref_mu = other.ref_mu;
-            has_value = other.has_value;
-            val_field_is_set = other.val_field_is_set;
-            alloc_attr = other.alloc_attr;
-            device_context = other.device_context;
-            device = std::move(other.device);
-            if (val_field_is_set) {
-                val.Init(std::move(*other.val));
-            }
-            return *this;
-        }
-
-        // Clears the <val> field.
-        void ClearVal()
-        {
-            if (val_field_is_set) {
-                val.Destroy();
-                val_field_is_set = false;
-                has_value = false;
-            }
-            device = nullptr;
-        }
-
-        // A tensor value, if val_field_is_set.
-        tf::ManualConstructor<tf::Tensor> val;
-
-        tf::Tensor *ref = nullptr;   // A tensor reference.
-        tf::mutex *ref_mu = nullptr; // mutex for *ref if ref is not nullptr.
-
-        // Whether the value exists, either in <val> or <ref>.
-        bool has_value = false;
-
-        bool val_field_is_set = false;
-
-        // The attributes of the allocator that creates the tensor.
-        tf::AllocatorAttributes alloc_attr;
-
-        // Every entry carries an optional DeviceContext containing
-        // Device-specific information about how the Tensor was produced.
-        tf::DeviceContext *device_context = nullptr;
-        std::shared_ptr<tf::Device> device = nullptr;
-    };
 
     struct TaggedNode;
     using TaggedNodeSeq = gtl::InlinedVector<TaggedNode, 8>;
@@ -337,7 +263,7 @@ private:
 
     struct FrameState
     {
-        explicit FrameState(const ExecutorImpl *impl, int parallel_iters)
+        explicit FrameState(ExecutorImpl *impl, int parallel_iters)
             : executor(impl)
             , max_parallel_iterations(parallel_iters)
             , num_outstanding_iterations(1)
@@ -373,7 +299,7 @@ private:
         // don't introduce unnecessary overhead.
 
         // The executor the frame is in.
-        const ExecutorImpl *executor = nullptr;
+        ExecutorImpl *executor = nullptr;
 
         // The name of this frame, which is the concatenation of its parent
         // frame name, the iteration of the parent frame when this frame was
@@ -617,7 +543,7 @@ private:
     tf::ScopedStepContainer *step_container_;
     tf::StepStatsCollector *stats_collector_;
     tf::FunctionCallFrame *call_frame_;
-    const ExecutorImpl *impl_;
+    ExecutorImpl *impl_;
     tf::CancellationManager *cancellation_manager_;
     tf::Executor::Args::Runner runner_;
 
@@ -674,9 +600,8 @@ private:
     void Process(TaggedNode node, int64_t scheduled_usec);
 
     // Instantiate the op kernel for node.
-    tf::Status SetupKernel(TaggedNode node, const DeviceItem &ditem, tf::OpKernel **op_kernel);
+    tf::Status SetupKernel(TaggedNode node, const ExecutorImpl::DeviceItem &ditem, tf::OpKernel **op_kernel);
 
-    std::unique_ptr<PerOpAllocDevice> CreatePerOpAllocDevice(tf::Device *dev);
     // Find a device context, or return nullptr
     tf::DeviceContext *FindDeviceContext(size_t id, tf::Device *dev);
 
@@ -690,8 +615,12 @@ private:
 
     // After item->kernel computation is done, processes its outputs.
     tf::Status ProcessOutputs(const NodeItem &item, tf::OpKernelContext *ctx,
+                              const ResourceContext &rctx,
                               const std::shared_ptr<tf::Device> &device,
                               EntryVector *outputs, tf::NodeExecStats *stats);
+
+    // After item->kernel computation is done, clear its inputs.
+    void ClearInputs(Entry *first, size_t num);
 
     // After processing the outputs, propagates the outputs to their dsts.
     // Contents of *outputs are left in an indeterminate state after

@@ -18,6 +18,8 @@
 
 #include "md_executor_impl.h"
 
+#include "oplibraries/tensorflow/v2/peropallocdevice.h"
+
 #include "oplibraries/tensorflow/tensorflow_headers.h"
 
 namespace nodestats {
@@ -263,4 +265,80 @@ void ExecutorState::addNodeToRefiner(const TaggedNode &tn)
             ctx->set_output(0, ctx->MakeShape(dims));
         }
     }
+}
+
+bool ExecutorImpl::handlePagingRequest(uint64_t oldTicket, std::shared_ptr<ResourceContext> &&rctx)
+{
+    utils::Guard g(entry_mu_);
+    auto it = active_entries_.find(oldTicket);
+    if (it == active_entries_.end()) {
+        ERR("Requested ticket for paging not found: {}", oldTicket);
+        return false;
+    }
+
+    auto &entry = *it->second;
+    if (entry.expect_ref) {
+        ERR("Can't move an reference tensor");
+        return false;
+    }
+
+    // Create target device
+    DeviceItem item;
+    auto ok = LookupDevice(rctx->spec, &item);
+    if (!ok.ok()) {
+        ERR("Error when looking up device for paging: {}", ok);
+        return false;
+    }
+    ok = derefMoveTensor(entry, item.device, nullptr, {},
+                         tf::strings::StrCat("Paging tensor of ticket ", oldTicket));
+
+    if (!ok.ok()) {
+        ERR("Error when paging out tensor: {}", ok);
+        return false;
+    }
+    return true;
+}
+
+void ExecutorImpl::forceEvicted(uint64_t ticket, void *addr)
+{
+    UNUSED(ticket);
+    UNUSED(addr);
+    // TODO: handle when addr was force evicted.
+}
+
+std::unique_ptr<PerOpAllocDevice> ExecutorImpl::CreatePerOpAllocDevice(tf::Device *dev)
+{
+    // TODO: impliment a free list
+    return std::make_unique<PerOpAllocDevice>(dev);
+}
+
+tf::Status ExecutorImpl::LookupDevice(const DeviceSpec &spec, DeviceItem *item)
+{
+    std::string name;
+    switch (spec.type) {
+    case DeviceType::CPU:
+        name = "CPU:";
+        break;
+    case DeviceType::GPU:
+        name = "GPU:";
+        break;
+    default:
+        name = "CPU:";
+        break;
+    }
+    name += std::to_string(spec.id);
+
+    tf::Device *tfdev;
+    auto ok = params_.deviceMgr->LookupDevice(name, &tfdev);
+    if (!ok.ok()) {
+        ERR("Cannot find device for {}: {}", spec, ok);
+        return ok;
+    }
+    item->device = CreatePerOpAllocDevice(tfdev);
+
+    auto fruntime = params_.create_fruntime(item->device.get());
+    item->function_library.reset(fruntime, params_.delete_fruntime);
+
+    item->device_record_tensor_access = item->device->RequiresRecordingAccessedTensors();
+    return tf::Status::OK();
 }

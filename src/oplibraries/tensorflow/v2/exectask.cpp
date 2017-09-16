@@ -36,7 +36,7 @@ ExecTask::ExecTask(ExecutorState *state, utils::semaphore &num_finished_ops,
                    ExecutorState::TaggedNode &node, ExecutorState::TaggedNodeSeq &ready,
                    ExecutorState::TaggedNodeReadyQueue &inline_ready,
                    tf::NodeExecStats *stats, tf::OpKernelContext::Params &params,
-                   int64_t &scheduled_usec, ExecutorState::EntryVector &outputs,
+                   int64_t &scheduled_usec,
                    TensorValueVec &inputs, DeviceContextVec &input_device_contexts,
                    AllocatorAttributeVec &input_alloc_attrs, bool &completed, tf::Rendezvous *rendez,
                    int maxFailures)
@@ -50,7 +50,6 @@ ExecTask::ExecTask(ExecutorState *state, utils::semaphore &num_finished_ops,
     , stats(stats)
     , params(params)
     , scheduled_usec(scheduled_usec)
-    , outputs(outputs)
     , inputs(inputs)
     , input_device_contexts(input_device_contexts)
     , input_alloc_attrs(input_alloc_attrs)
@@ -88,23 +87,22 @@ const std::vector<DeviceType> &ExecTask::supportedDeviceTypes() const
     return supportedTypes;
 }
 
-bool ExecTask::prepare(const ResourceContext &ctx)
+bool ExecTask::prepare(const std::shared_ptr<ResourceContext> &ctx)
 {
     rctx = ctx;
 
-    auto &dev = rctx.spec;
+    auto &dev = rctx->spec;
 
     auto match = [&dev](auto type) { return type == dev.type; };
     if (std::none_of(supportedTypes.begin(), supportedTypes.end(), match)) {
         return false;
     }
 
-    auto s = LookupDevice(dev, ditem);
+    auto s = m_state->impl_->LookupDevice(dev, &ditem);
     if (!s.ok()) {
         return false;
     }
 
-    assert(rctx.resMon != nullptr);
     ditem.device->setResourceContext(rctx);
 
     // First check if we already created the kernel on some device
@@ -134,13 +132,6 @@ bool ExecTask::prepare(const ResourceContext &ctx)
     }
 
     return true;
-}
-
-void ExecTask::releasePreAllocation()
-{
-    if (rctx.resMon) {
-        rctx.resMon->free(rctx.ticket);
-    }
 }
 
 Resources ExecTask::estimatedUsage(const DeviceSpec& dev)
@@ -185,10 +176,10 @@ Resources ExecTask::estimatedUsage(const DeviceSpec& dev)
         return res;
     }
 
-    DeviceItem ditem;
+    ExecutorImpl::DeviceItem ditem;
     tf::MemoryTypeVector input_mtypes;
     tf::MemoryTypeVector output_mtypes;
-    auto mtypeStatus = LookupDevice(dev, ditem);
+    auto mtypeStatus = m_state->impl_->LookupDevice(dev, &ditem);
     if (mtypeStatus.ok()) {
         mtypeStatus.Update(tf::remote::MemoryTypesForNode(m_state->impl_->graph_->op_registry(),
                                                           tf::DeviceType(ditem.device->device_type()),
@@ -241,38 +232,6 @@ std::string ExecTask::DebugString()
         << ", session=" << m_state->impl_->params_.session
         << ", failures=" << failureTimes << ")";
     return oss.str();
-}
-
-tf::Status ExecTask::LookupDevice(const DeviceSpec &spec, DeviceItem &item)
-{
-    std::string name;
-    switch (spec.type) {
-    case DeviceType::CPU:
-        name = "CPU:";
-        break;
-    case DeviceType::GPU:
-        name = "GPU:";
-        break;
-    default:
-        name = "CPU:";
-        break;
-    }
-    name += std::to_string(spec.id);
-
-    tf::Device *tfdev;
-    auto ok = m_state->impl_->params_.deviceMgr->LookupDevice(name, &tfdev);
-    if (!ok.ok()) {
-        ERR("Cannot find device for {}: {}", spec, ok);
-        return ok;
-    }
-    item.device = m_state->CreatePerOpAllocDevice(tfdev);
-
-    auto fruntime = m_state->impl_->params_.create_fruntime(item.device.get());
-    item.function_library = std::shared_ptr<tf::FunctionLibraryRuntime>(fruntime,
-                                                                        m_state->impl_->params_.delete_fruntime);
-
-    item.device_record_tensor_access = item.device->RequiresRecordingAccessedTensors();
-    return tf::Status::OK();
 }
 
 void ExecTask::run(Callbacks cbs)
@@ -337,15 +296,15 @@ void ExecTask::run(Callbacks cbs)
         nodestats::SetAllStart(stats);
     }
 
-    DEBUG("Process node: {}, on device {}, allocation ticket {}",
-          SummarizeNodeDef(node->def()), rctx.spec, rctx.ticket);
+    DEBUG("Process node: {}, {}", SummarizeNodeDef(node->def()), rctx);
 
     auto input_tensors = m_state->GetInputTensors(input_frame, input_iter);
     auto first_input = input_tensors + item.input_start;
-    outputs.clear();
 
+    ExecutorState::EntryVector outputs; // for use of sync compute
     tf::TensorReferenceVector accessed_tensors;
     tf::DeviceContext *device_context = nullptr;
+
     // Only execute this node if it is not dead or it is a send/recv
     // transfer node. For transfer nodes, we need to propagate the "dead"
     // bit even when the node is dead.
@@ -360,10 +319,7 @@ void ExecTask::run(Callbacks cbs)
                         &is_input_dead);
         if (!s.ok()) {
             // Clear inputs.
-            int num_inputs = item.num_inputs;
-            for (int i = 0; i < num_inputs; ++i) {
-                (first_input + i)->ClearVal();
-            }
+            m_state->ClearInputs(first_input, item.num_inputs);
             m_state->MaybeMarkCompleted(input_frame, input_iter, id);
             afterRun(s, cbs);
             return;
@@ -400,14 +356,11 @@ void ExecTask::run(Callbacks cbs)
                 if (stats)
                     nodestats::SetOpEnd(stats);
                 ExecutorState::EntryVector outputs;
-                auto s = execState->ProcessOutputs(*state->item, &state->ctx, device, &outputs, stats);
+                auto s = execState->ProcessOutputs(*state->item, &state->ctx, *rctx, device, &outputs, stats);
                 if (stats)
                     nodestats::SetMemory(stats, &state->ctx);
                 // Clears inputs.
-                const int num_inputs = state->item->num_inputs;
-                for (int i = 0; i < num_inputs; ++i) {
-                    (first_input + i)->ClearVal();
-                }
+                execState->ClearInputs(first_input, state->item->num_inputs);
                 // mark completed
                 auto input_frame = state->tagged_node.input_frame;
                 const int64_t input_iter = state->tagged_node.input_iter;
@@ -458,7 +411,7 @@ void ExecTask::run(Callbacks cbs)
             }
 
             TRACE("Sync ProcessOutputs");
-            s = m_state->ProcessOutputs(item, &ctx, ditem.device, &outputs, stats);
+            s = m_state->ProcessOutputs(item, &ctx, *rctx, ditem.device, &outputs, stats);
             if (s.ok() && ditem.device_record_tensor_access) {
                 // Get the list of all tensors accessed during the execution
                 ctx.retrieve_accessed_tensors(&accessed_tensors);
@@ -471,10 +424,7 @@ void ExecTask::run(Callbacks cbs)
 
     if (!launched_asynchronously) {
         // Clears inputs.
-        const int num_inputs = item.num_inputs;
-        for (int i = 0; i < num_inputs; ++i) {
-            (first_input + i)->ClearVal();
-        }
+        m_state->ClearInputs(first_input, item.num_inputs);
         m_state->MaybeMarkCompleted(input_frame, input_iter, id);
         // Propagates outputs.
         if (s.ok()) {

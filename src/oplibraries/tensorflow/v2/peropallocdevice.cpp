@@ -18,7 +18,9 @@
 
 #include "peropallocdevice.h"
 
+#include "execution/executionengine.h"
 #include "utils/threadutils.h"
+
 #include "oplibraries/tensorflow/v2/tfallocator.h"
 
 PerOpAllocDevice::PerOpAllocDevice(tf::Device *other)
@@ -37,7 +39,7 @@ PerOpAllocDevice::PerOpAllocDevice(tf::Device *other)
 
 PerOpAllocDevice::~PerOpAllocDevice() = default;
 
-void PerOpAllocDevice::setResourceContext(const ResourceContext &rctx)
+void PerOpAllocDevice::setResourceContext(const std::shared_ptr<ResourceContext> &rctx)
 {
     m_rctx = rctx;
 }
@@ -115,15 +117,13 @@ tf::Allocator* PerOpAllocDevice::GetStepAllocator(tf::AllocatorAttributes attr,
 
 tf::Allocator *PerOpAllocDevice::wrapAllocator(tf::Allocator *alloc)
 {
-    assert(m_rctx.resMon);
-
     utils::Guard g(m_mu);
     auto it = m_wrappedAllocators.find(alloc);
     if (it != m_wrappedAllocators.end()) {
         return it->second.get();
     }
 
-    auto a = utils::make_scoped_unref<PerOpAllocator>(m_rctx.ticket, m_rctx.spec, *m_rctx.resMon, alloc);
+    auto a = utils::make_scoped_unref<PerOpAllocator>(m_rctx, alloc);
     auto pa = a.get();
     m_wrappedAllocators.emplace(alloc, std::move(a));
     return pa;

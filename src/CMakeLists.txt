@@ -20,6 +20,7 @@ set(SRC_LIST
     "utils/threadutils.cpp"
     "utils/envutils.cpp"
     "utils/zmqutils.cpp"
+    "utils/containerutils.cpp"
     "utils/cpp17.cpp"
     "utils/debugging.cpp"
 
@@ -36,6 +37,7 @@ if(USE_TENSORFLOW)
         "oplibraries/tensorflow/v2/tfallocator.cpp"
         "oplibraries/tensorflow/v2/peropallocdevice.cpp"
         "oplibraries/tensorflow/v2/exectask.cpp"
+        "oplibraries/tensorflow/v2/tensorutils.cpp"
         "oplibraries/tensorflow/v2/md_executor_impl.cpp"
 #         "oplibraries/tensorflow/tfoplibrary.cpp"
 #         "oplibraries/tensorflow/tfmocks/tfdevice.cpp"

@@ -19,13 +19,13 @@
 #ifndef PEROPALLOCDEVICE_H
 #define PEROPALLOCDEVICE_H
 
-#include "execution/resources.h"
 #include "utils/pointerutils.h"
 
 #include "oplibraries/tensorflow/tensorflow_headers.h"
 
 #include <mutex>
 
+struct ResourceContext;
 class PerOpAllocator;
 class PerOpAllocDevice : public tf::Device
 {
@@ -33,7 +33,7 @@ public:
     explicit PerOpAllocDevice(tf::Device *other);
     ~PerOpAllocDevice() override;
 
-    void setResourceContext(const ResourceContext &rctx);
+    void setResourceContext(const std::shared_ptr<ResourceContext> &rctx);
 
     tf::Device *underlayingDevice() const {
         return m_wrapped;
@@ -69,7 +69,7 @@ private:
     tf::Allocator *wrapAllocator(tf::Allocator *alloc);
 
     tf::Device *m_wrapped;
-    ResourceContext m_rctx;
+    std::shared_ptr<ResourceContext> m_rctx;
 
     std::mutex m_mu;
     std::unordered_map<tf::Allocator*, utils::ScopedUnref<PerOpAllocator>> m_wrappedAllocators;

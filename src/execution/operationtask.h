@@ -24,7 +24,9 @@
 
 #include <vector>
 #include <functional>
+#include <memory>
 
+struct ResourceContext;
 class OperationTask
 {
 public:
@@ -48,9 +50,7 @@ public:
 
     virtual int failedTimes() const = 0;
 
-    virtual bool prepare(const ResourceContext &rctx) = 0;
-
-    virtual void releasePreAllocation() = 0;
+    virtual bool prepare(const std::shared_ptr<ResourceContext> &rctx) = 0;
 
     virtual void run(Callbacks cbs) = 0;
 };

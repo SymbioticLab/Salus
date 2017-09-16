@@ -19,6 +19,7 @@
 
 #include "tfallocator.h"
 
+#include "execution/executionengine.h"
 #include "memorymgr/memorymgr.h"
 #include "platform/logging.h"
 #include "utils/macros.h"
@@ -129,13 +130,11 @@ void TFAllocator::DeallocateRaw(void *ptr)
     }
 }
 
-PerOpAllocator::PerOpAllocator(uint64_t ticket, const DeviceSpec &spec,
-                               ResourceMonitor &resMon, tensorflow::Allocator *other)
-    : m_ticket(ticket)
-    , m_spec(spec)
-    , m_resMon(resMon)
+PerOpAllocator::PerOpAllocator(const std::shared_ptr<ResourceContext> &rctx, tensorflow::Allocator *other)
+    : m_rctx(rctx)
     , m_actualAlloc(other)
 {
+    assert(m_rctx);
     assert(m_actualAlloc);
 }
 
@@ -143,7 +142,7 @@ PerOpAllocator::~PerOpAllocator() = default;
 
 std::string PerOpAllocator::Name()
 {
-    return tf::strings::StrCat("PerOp_", m_ticket, "_", nameOrNull(m_actualAlloc));
+    return tf::strings::StrCat("PerOp_", nameOrNull(m_actualAlloc));
 }
 
 void *PerOpAllocator::AllocateRaw(size_t alignment, size_t num_bytes)
@@ -151,10 +150,7 @@ void *PerOpAllocator::AllocateRaw(size_t alignment, size_t num_bytes)
     TRACE("TFAllocator allocating {} bytes of memory with alignment {} using allocator {}@{}", num_bytes,
          alignment, nameOrNull(m_actualAlloc), as_hex(m_actualAlloc));
 
-    Resources res {
-        {{ResourceType::MEMORY, m_spec}, num_bytes}
-    };
-    if (!m_resMon.allocate(m_ticket, res)) {
+    if (!m_rctx->allocMemory(num_bytes)) {
         // No enough memory
         TRACE("TFAllocator failed to allocate.");
         return nullptr;
@@ -184,10 +180,7 @@ void* PerOpAllocator::AllocateRaw(size_t alignment, size_t num_bytes, const tens
          " using allocator {}@{}",
          attr, num_bytes, alignment, nameOrNull(m_actualAlloc), as_hex(m_actualAlloc));
 
-    Resources res {
-        {{ResourceType::MEMORY, m_spec}, num_bytes}
-    };
-    if (!m_resMon.allocate(m_ticket, res)) {
+    if (!m_rctx->allocMemory(num_bytes)) {
         // No enough memory
         TRACE("TFAllocator failed to allocate.");
         return nullptr;
@@ -225,10 +218,7 @@ void PerOpAllocator::DeallocateRaw(void *ptr)
     DEBUG("TFAllocator deallocating memory at {} size {} using allocator {}@{}", as_hex(ptr),
           num_bytes, nameOrNull(m_actualAlloc), as_hex(m_actualAlloc));
 
-    Resources res {
-        {{ResourceType::MEMORY, m_spec}, num_bytes}
-    };
-    m_resMon.free(m_ticket, res);
+    m_rctx->deallocMemory(num_bytes);
 
     m_actualAlloc->DeallocateRaw(ptr);
     Unref();

@@ -19,11 +19,11 @@
 #include "resources.h"
 
 #include "utils/threadutils.h"
+#include "utils/containerutils.h"
 #include "platform/logging.h"
 
 #include <sstream>
 #include <tuple>
-#include <algorithm>
 #include <algorithm>
 #include <functional>
 
@@ -72,6 +72,63 @@ ResourceType resourceTypeFromString(const std::string &rt)
     }
 
     return tag;
+}
+
+std::string ResourceTag::DebugString() const
+{
+    std::ostringstream oss;
+    oss << enumToString(type) << "@" << device.DebugString();
+    return oss.str();
+}
+
+std::string ResourceMap::DebugString() const
+{
+    std::ostringstream oss;
+    oss << "ResourceMap" << std::endl;
+    oss << "    Temporary" << std::endl;
+    for (auto p : temporary) {
+        oss << "        " << p.first.DebugString() << " -> " << p.second << std::endl;
+    }
+    oss << "    Persistant (handle='" << persistantHandle << "')" << std::endl;
+    for (auto p : persistant) {
+        oss << "        " << p.first.DebugString() << " -> " << p.second << std::endl;
+    }
+    return oss.str();
+}
+
+std::string ResourceMonitor::DebugString() const
+{
+    std::ostringstream oss;
+    oss << "ResourceMonitor: dumping available resources" << std::endl;
+
+    Guard g(m_mu);
+
+    oss << "    Available" << std::endl;
+    for (auto p : m_limits) {
+        oss << "        ";
+        oss << p.first.DebugString() << " -> " << p.second << std::endl;
+    }
+    oss << "    Staging" << std::endl;
+    for (auto p : m_staging) {
+        oss << "        ";
+        oss << "Ticket: " <<  p.first << std::endl;
+
+        for (auto pp : p.second) {
+            oss << "            ";
+            oss << pp.first.DebugString() << " -> " << pp.second << std::endl;
+        }
+    }
+    oss << "    In use" << std::endl;
+    for (auto p : m_using) {
+        oss << "        ";
+        oss << "Ticket: " <<  p.first << std::endl;
+
+        for (auto pp : p.second) {
+            oss << "            ";
+            oss << pp.first.DebugString() << " -> " << pp.second << std::endl;
+        }
+    }
+    return oss.str();
 }
 
 namespace resources {
@@ -340,6 +397,11 @@ bool ResourceMonitor::preAllocate(const Resources &cap, uint64_t *ticket)
 
 bool ResourceMonitor::allocate(uint64_t ticket, const Resources &res)
 {
+    if (ticket == 0) {
+        ERR("Invalid ticket 0");
+        return false;
+    }
+
     auto remaining(res);
     Guard g(m_mu);
     auto it = m_staging.find(ticket);
@@ -388,6 +450,11 @@ bool ResourceMonitor::allocate(uint64_t ticket, const Resources &res)
 // Release remaining pre-allocated resources
 void ResourceMonitor::free(uint64_t ticket)
 {
+    if (ticket == 0) {
+        ERR("Invalid ticket 0");
+        return;
+    }
+
     Guard g(m_mu);
 
     auto it = m_staging.find(ticket);
@@ -400,9 +467,13 @@ void ResourceMonitor::free(uint64_t ticket)
     m_staging.erase(it);
 }
 
-// Free resources
-void ResourceMonitor::free(uint64_t ticket, const Resources &res)
+bool ResourceMonitor::free(uint64_t ticket, const Resources &res)
 {
+    if (ticket == 0) {
+        ERR("Invalid ticket 0");
+        return true;
+    }
+
     Guard g(m_mu);
     merge(m_limits, res);
 
@@ -415,62 +486,37 @@ void ResourceMonitor::free(uint64_t ticket, const Resources &res)
     removeZeros(it->second);
     if (it->second.empty()) {
         m_using.erase(it);
+        return true;
     }
+    return false;
 }
 
-std::string ResourceTag::DebugString() const
+std::vector<std::pair<double, uint64_t>> ResourceMonitor::sortVictim(const std::unordered_set<uint64_t> &candidates)
 {
-    std::ostringstream oss;
-    oss << enumToString(type) << "@" << device.DebugString();
-    return oss.str();
+    assert(!candidates.empty());
+
+    std::vector<std::pair<double, uint64_t>> usages;
+    usages.reserve(candidates.size());
+
+    // TODO: currently only select based on GPU memory usage, generalize to all resources
+    ResourceTag tag{ ResourceType::MEMORY, {DeviceType::GPU, 0}};
+    {
+        Guard g(m_mu);
+        for (auto &ticket : candidates) {
+            auto usage = utils::getOrDefault(m_using, ticket, utils::optional<Resources>{});
+            if (!usage) {
+                continue;
+            }
+            usages.emplace_back(utils::getOrDefault(usage, tag, 0.0), ticket);
+        }
+    }
+
+    std::sort(usages.begin(), usages.end());
+    return usages;
 }
 
-std::string ResourceMap::DebugString() const
+utils::optional<Resources> ResourceMonitor::queryUsage(uint64_t ticket)
 {
-    std::ostringstream oss;
-    oss << "ResourceMap" << std::endl;
-    oss << "    Temporary" << std::endl;
-    for (auto p : temporary) {
-        oss << "        " << p.first.DebugString() << " -> " << p.second << std::endl;
-    }
-    oss << "    Persistant (handle='" << persistantHandle << "')" << std::endl;
-    for (auto p : persistant) {
-        oss << "        " << p.first.DebugString() << " -> " << p.second << std::endl;
-    }
-    return oss.str();
-}
-
-std::string ResourceMonitor::DebugString() const
-{
-    std::ostringstream oss;
-    oss << "ResourceMonitor: dumping available resources" << std::endl;
-
     Guard g(m_mu);
-
-    oss << "    Available" << std::endl;
-    for (auto p : m_limits) {
-        oss << "        ";
-        oss << p.first.DebugString() << " -> " << p.second << std::endl;
-    }
-    oss << "    Staging" << std::endl;
-    for (auto p : m_staging) {
-        oss << "        ";
-        oss << "Ticket: " <<  p.first << std::endl;
-
-        for (auto pp : p.second) {
-            oss << "            ";
-            oss << pp.first.DebugString() << " -> " << pp.second << std::endl;
-        }
-    }
-    oss << "    In use" << std::endl;
-    for (auto p : m_using) {
-        oss << "        ";
-        oss << "Ticket: " <<  p.first << std::endl;
-
-        for (auto pp : p.second) {
-            oss << "            ";
-            oss << pp.first.DebugString() << " -> " << pp.second << std::endl;
-        }
-    }
-    return oss.str();
+    return utils::getOrDefault(m_using, ticket, utils::optional<Resources>{});
 }

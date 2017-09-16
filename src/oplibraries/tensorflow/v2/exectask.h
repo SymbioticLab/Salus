@@ -26,14 +26,6 @@
 
 #include "oplibraries/tensorflow/tensorflow_headers.h"
 
-class PerOpAllocDevice;
-struct DeviceItem
-{
-    std::shared_ptr<PerOpAllocDevice> device = nullptr;
-    std::shared_ptr<tf::FunctionLibraryRuntime> function_library = nullptr;
-    bool device_record_tensor_access = false;
-};
-
 namespace utils {
 class semaphore;
 } // namespace
@@ -48,24 +40,18 @@ public:
              ExecutorState::TaggedNode &node, ExecutorState::TaggedNodeSeq &ready,
              ExecutorState::TaggedNodeReadyQueue &inline_ready,
              tf::NodeExecStats *stats, tf::OpKernelContext::Params &params,
-             int64_t &scheduled_usec,
-             ExecutorState::EntryVector &outputs,
-             TensorValueVec &inputs,
+             int64_t &scheduled_usec, TensorValueVec &inputs,
              DeviceContextVec &input_device_contexts,
              AllocatorAttributeVec &input_alloc_attrs,
              bool &completed, tf::Rendezvous *rendez, int maxFailures = 2);
 
-    bool prepare(const ResourceContext &rctx) override;
+    bool prepare(const std::shared_ptr<ResourceContext> &rctx) override;
 
     void run(Callbacks cbs) override;
-
-    void afterRun(const tf::Status &s, const Callbacks &cbs);
 
     int failedTimes() const override { return failureTimes; }
 
     Resources estimatedUsage(const DeviceSpec &dev) override;
-
-    void releasePreAllocation() override;
 
     const std::vector<DeviceType> &supportedDeviceTypes() const override;
 
@@ -73,14 +59,16 @@ public:
 
     std::string DebugString() override;
 
-private:
-    tensorflow::Status LookupDevice(const DeviceSpec &spec, DeviceItem &item);
+    const ResourceContext &resourceContext() const { return *rctx; };
 
+private:
     bool maybeMemoryFailure(const tf::Status &s, DoneCallback memFailure);
 
+    void afterRun(const tf::Status &s, const Callbacks &cbs);
+
 private:
-    ResourceContext rctx;
-    DeviceItem ditem;
+    std::shared_ptr<ResourceContext> rctx;
+    ExecutorImpl::DeviceItem ditem;
     std::unordered_map<DeviceSpec, Resources> cachedUsage;
     std::vector<DeviceType> supportedTypes;
     std::function<void(tf::OpKernel*, tf::FunctionLibraryRuntime*)> deleteKernel;
@@ -101,7 +89,6 @@ private:
     tf::NodeExecStats *stats;
     tf::OpKernelContext::Params &params;
     int64_t &scheduled_usec;
-    ExecutorState::EntryVector &outputs;
     TensorValueVec &inputs;
     DeviceContextVec &input_device_contexts;
     AllocatorAttributeVec &input_alloc_attrs;

@@ -29,6 +29,8 @@
 /**
  * @todo write docs
  */
+struct ResourceContext;
+
 class TFAllocator : public tensorflow::Allocator
 {
 public:
@@ -53,7 +55,7 @@ private:
 class PerOpAllocator : public tensorflow::Allocator, public tensorflow::core::RefCounted
 {
 public:
-    explicit PerOpAllocator(uint64_t ticket, const DeviceSpec &dev, ResourceMonitor &resMon, tensorflow::Allocator *other);
+    explicit PerOpAllocator(const std::shared_ptr<ResourceContext> &rctx, tensorflow::Allocator *other);
 
     ~PerOpAllocator() override;
 
@@ -75,10 +77,8 @@ private:
     void recordSize(void *ptr, size_t size);
     size_t findSize(void *ptr);
 
-    const uint64_t m_ticket;
-    const DeviceSpec m_spec;
+    std::shared_ptr<ResourceContext> m_rctx;
 
-    ResourceMonitor &m_resMon;
     tensorflow::Allocator *m_actualAlloc;
 
     std::mutex m_mu;

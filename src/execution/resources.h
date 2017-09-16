@@ -24,8 +24,10 @@
 #include "utils/cpp17.h"
 
 #include <unordered_map>
+#include <unordered_set>
 #include <mutex>
 #include <list>
+#include <vector>
 
 enum class ResourceType
 {
@@ -169,27 +171,25 @@ public:
     // Release remaining pre-allocated resources
     void free(uint64_t ticket);
 
-    // Free resources
-    void free(uint64_t ticket, const Resources &res);
+    // Free resources, return true if after this, the ticket hold no more resources.
+    bool free(uint64_t ticket, const Resources &res);
+
+    std::vector<std::pair<double, uint64_t>> sortVictim(const std::unordered_set<uint64_t> &candidates);
+
+    utils::optional<Resources> queryUsage(uint64_t ticket);
 
     std::string DebugString() const;
 
 private:
     mutable std::mutex m_mu;
 
-    uint64_t m_nextTicket = 0;
+    // 0 is invalid ticket
+    uint64_t m_nextTicket = 1;
     Resources m_limits;
 
     std::unordered_map<uint64_t, Resources> m_staging;
 
     std::unordered_map<uint64_t, Resources> m_using;
-};
-
-struct ResourceContext
-{
-    ResourceMonitor *resMon = nullptr;
-    DeviceSpec spec;
-    uint64_t ticket;
 };
 
 #endif // EXECUTION_RESOURCES_H

@@ -19,14 +19,15 @@
 
 #include "executionengine.h"
 
-#include "execution/resources.h"
 #include "execution/operationtask.h"
 #include "utils/macros.h"
 #include "utils/envutils.h"
 #include "utils/threadutils.h"
+#include "utils/containerutils.h"
 #include "utils/debugging.h"
 
 #include <functional>
+#include <algorithm>
 
 using std::chrono::steady_clock;
 using namespace std::chrono_literals;
@@ -148,12 +149,20 @@ std::future<void> ExecutionEngine::InserterImpl::enqueueOperation(std::unique_pt
     STACK_SENTINEL;
     auto opItem = std::make_shared<OperationItem>();
     opItem->op = std::move(task);
+    opItem->rctx = std::make_shared<ResourceContext>(*m_item, m_engine.m_resMonitor);
 
     m_engine.pushToSessionQueue(m_item, opItem);
 
     assert(opItem);
 
     return opItem->promise.get_future();
+}
+
+void ExecutionEngine::InserterImpl::registerPagingCallbacks(PagingCallbacks &&pcb)
+{
+    STACK_SENTINEL;
+
+    m_item->pagingCb = std::move(pcb);
 }
 
 void ExecutionEngine::pushToSessionQueue(std::shared_ptr<SessionItem> item, std::shared_ptr<OperationItem> opItem)
@@ -201,11 +210,9 @@ bool ExecutionEngine::shouldWaitForAWhile(size_t scheduled, std::chrono::nanosec
 void ExecutionEngine::scheduleLoop()
 {
     STACK_SENTINEL;
-    ResourceMonitor resMon;
-    resMon.initializeLimits();
+    m_resMonitor.initializeLimits();
 
-    SessionList sessions;
-
+    m_runningTasks = 0;
 
     while (!m_shouldExit) {
         STACK_SENTINEL;
@@ -226,21 +233,21 @@ void ExecutionEngine::scheduleLoop()
 
             TRACE("Got {} session to add", m_newSessions.size());
 
-            sessions.splice(sessions.end(), m_newSessions);
+            m_sessions.splice(m_sessions.end(), m_newSessions);
             assert(m_newSessions.size() == 0);
         }
 
-        TRACE("Handling {} sessions in this iteration", sessions.size());
+        TRACE("Handling {} sessions in this iteration", m_sessions.size());
         // Loop through sessions
         size_t scheduled = 0;
         size_t remainingCount = 0;
-        auto it = sessions.begin();
-        auto end = sessions.end();
+        auto it = m_sessions.begin();
+        auto end = m_sessions.end();
         while (it != end) {
             auto &item = *it;
             if (del.erase(item) > 0) {
                 TRACE("Deleting session {}@{}", item->sessHandle, as_hex(item));
-                it = sessions.erase(it);
+                it = m_sessions.erase(it);
             } else {
                 // Move from front end queue to backing storage
                 TRACE("Looking at session {}@{}", item->sessHandle, as_hex(item));
@@ -255,7 +262,7 @@ void ExecutionEngine::scheduleLoop()
                 // NOTE: don't use scheduled || maybeScheduleFrom(...)
                 // we don't want short-cut eval here and maybeScheduleFrom
                 // should always be called.
-                auto count = maybeScheduleFrom(resMon, item);
+                auto count = maybeScheduleFrom(item);
                 remainingCount -= count;
                 scheduled += count;
                 ++it;
@@ -264,6 +271,13 @@ void ExecutionEngine::scheduleLoop()
 
         for (auto &d : del) {
             ERR("Session {} requested for deletion but not found in queue", d->sessHandle);
+        }
+
+        // check if we need paging
+        int64_t running_tasks = m_runningTasks;
+        if (scheduled == 0 && running_tasks == 0) {
+            doPaging();
+            continue;
         }
 
         std::chrono::nanoseconds ns;
@@ -281,7 +295,7 @@ void ExecutionEngine::scheduleLoop()
     }
 
     // Cleanup
-    sessions.clear();
+    m_sessions.clear();
 }
 
 ExecutionEngine::SessionItem::~SessionItem()
@@ -291,28 +305,28 @@ ExecutionEngine::SessionItem::~SessionItem()
     queue.clear();
 }
 
-bool tryScheduleOn(ResourceMonitor &resMon, OperationTask *t, const std::string &,
-                   const DeviceSpec &dev)
+bool ExecutionEngine::maybePreAllocateFor(SessionItem &item, OperationItem &opItem, const DeviceSpec &spec)
 {
     STACK_SENTINEL;
-    auto expectedDev = dev;
 
-    auto usage = t->estimatedUsage(expectedDev);
+    auto usage = opItem.op->estimatedUsage(spec);
 
-    ResourceContext rctx {&resMon, dev, 0};
-    if (!resMon.preAllocate(usage, &rctx.ticket)) {
-        logScheduleFailure(usage, resMon);
+    if (!opItem.rctx->initializeStaging(spec, usage)) {
+        logScheduleFailure(usage, m_resMonitor);
         return false;
     }
-    if (t->prepare(rctx)) {
-        return true;
+
+    if (!opItem.op->prepare(opItem.rctx)) {
+        opItem.rctx->releaseStaging();
+        return false;
     }
 
-    resMon.free(rctx.ticket);
-    return false;
+    utils::Guard g(item.tickets_mu);
+    item.tickets.insert(opItem.rctx->ticket);
+    return true;
 }
 
-size_t ExecutionEngine::maybeScheduleFrom(ResourceMonitor &resMon, std::shared_ptr<SessionItem> item)
+size_t ExecutionEngine::maybeScheduleFrom(std::shared_ptr<SessionItem> item)
 {
     STACK_SENTINEL;
     auto &queue = item->bgQueue;
@@ -326,7 +340,7 @@ size_t ExecutionEngine::maybeScheduleFrom(ResourceMonitor &resMon, std::shared_p
     }
 
     // Try schedule the operation
-    auto doSchedule = [&resMon, this](std::shared_ptr<SessionItem> item, std::shared_ptr<OperationItem> &&opItem) -> std::shared_ptr<OperationItem>{
+    auto doSchedule = [this](std::shared_ptr<SessionItem> item, std::shared_ptr<OperationItem> &&opItem) -> std::shared_ptr<OperationItem>{
         STACK_SENTINEL;
         TRACE("Scheduling opItem in session {}: {}", item->sessHandle, opItem->op->DebugString());
 
@@ -337,7 +351,7 @@ size_t ExecutionEngine::maybeScheduleFrom(ResourceMonitor &resMon, std::shared_p
                 continue;
             }
             spec = DeviceSpec(dt, 0);
-            if (tryScheduleOn(resMon, opItem->op.get(), item->sessHandle, spec)) {
+            if (maybePreAllocateFor(*item, *opItem, spec)) {
                 INFO("Task scheduled on {}", spec.DebugString());
                 scheduled = true;
                 break;
@@ -346,6 +360,7 @@ size_t ExecutionEngine::maybeScheduleFrom(ResourceMonitor &resMon, std::shared_p
 
         // Send to thread pool
         if (scheduled) {
+            m_runningTasks += 1;
             TRACE("Adding to thread pool: opItem in session {}: {}", item->sessHandle, opItem->op->DebugString());
             q::with(m_qec->queue(), std::move(opItem)).then([item, this](std::shared_ptr<OperationItem> &&opItem){
                 STACK_SENTINEL;
@@ -357,14 +372,14 @@ size_t ExecutionEngine::maybeScheduleFrom(ResourceMonitor &resMon, std::shared_p
                 cbs.launched = [opItem]() {
                     opItem->promise.set_value();
                 };
-                cbs.done = [opItem]() {
+                cbs.done = [item, opItem, this]() {
                     // succeed
-                    opItem->op->releasePreAllocation();
+                    taskStopped(*item, *opItem);
                 };
-                cbs.memFailure = [opItem, item, this]() mutable {
+                cbs.memFailure = [item, opItem, this]() mutable {
+                    taskStopped(*item, *opItem);
                     // failed due to OOM. Push back to queue
                     WARN("Opkernel {} failed due to OOM", opItem->op->DebugString());
-                    opItem->op->releasePreAllocation();
                     pushToSessionQueue(item, std::move(opItem));
                 };
 
@@ -405,4 +420,129 @@ size_t ExecutionEngine::maybeScheduleFrom(ResourceMonitor &resMon, std::shared_p
     TRACE("Adding back {} opItem in session {}", queue.size(), item->sessHandle);
 
     return size - queue.size();
+}
+
+void ExecutionEngine::taskStopped(SessionItem &item, OperationItem &opItem)
+{
+    UNUSED(item);
+
+    opItem.rctx->releaseStaging();
+    m_runningTasks -= 1;
+}
+
+void ExecutionEngine::doPaging()
+{
+    // Step 1: select candidate sessions
+
+    std::vector<std::pair<
+        double,
+        std::reference_wrapper<SessionItem>
+    >> candidates;
+    candidates.reserve(m_sessions.size());
+
+    // Step 1.1: count total memory usage for each session
+    // TODO: we currently assume we are paging GPU memory to CPU, make it generic to use Resources
+    ResourceTag gpuTag {ResourceType::MEMORY, {DeviceType::GPU, 0}};
+    ResourceTag cpuTag {ResourceType::MEMORY, {DeviceType::CPU, 0}};
+
+    for (auto &pSess : m_sessions) {
+        double mem = 0;
+        for (auto ticket : pSess->tickets) {
+            auto usage = m_resMonitor.queryUsage(ticket);
+            if (!usage) continue;
+            mem += utils::getOrDefault(usage, gpuTag, 0);
+        }
+        candidates.emplace_back(mem, *pSess);
+    }
+
+    std::sort(candidates.begin(), candidates.end(),
+              [](const auto &lhs, const auto &rhs){
+        return lhs.first < rhs.first;
+    });
+
+    // Step 1.2: keep the session with largest memory usage, and try from next
+    // no need to erase the first elem, as it's a O(n) operation on vector
+
+    if (candidates.size() <= 1) {
+        ERR("No candidates to do paging");
+        return;
+    }
+
+    // Step 2: inform owner to do paging given suggestion
+    for (size_t i = 1; i != candidates.size(); ++i) {
+        SessionItem &sess = candidates[i].second;
+        auto victims = m_resMonitor.sortVictim(sess.tickets);
+
+        for (auto &p : victims) {
+            auto usage = p.first;
+            auto victim = p.second;
+            // preallocate some CPU memory for use.
+            Resources res {
+                {cpuTag, usage}
+            };
+
+            auto rctx = std::make_shared<ResourceContext>(sess, m_resMonitor);
+            if (!rctx->initializeStaging({DeviceType::CPU, 0}, res)) {
+                ERR("No enough CPU memory for paging. Required: {:.0f} bytes", res[cpuTag]);
+                return;
+            }
+
+            // request the session to do paging
+            assert(sess.pagingCb);
+            if (sess.pagingCb.volunteer(victim, std::move(rctx))) {
+                // someone freed some memory on GPU, we are good to go.
+                return;
+            }
+        }
+        // continue to next session
+    }
+
+    // Step 3: TODO: force evict
+}
+
+ResourceContext::ResourceContext(ExecutionEngine::SessionItem &item, ResourceMonitor& resMon)
+    : resMon(resMon)
+    , ticket(0)
+    , session(item)
+{
+}
+
+bool ResourceContext::initializeStaging(const DeviceSpec& spec, const Resources& res)
+{
+    this->spec = spec;
+    return resMon.preAllocate(res, &ticket);
+}
+
+void ResourceContext::releaseStaging()
+{
+    if (!ticket) {
+        return;
+    }
+    resMon.free(ticket);
+    ticket = 0;
+}
+
+ResourceContext::~ResourceContext()
+{
+    releaseStaging();
+}
+
+bool ResourceContext::allocMemory(size_t num_bytes)
+{
+    Resources res {
+        {{ResourceType::MEMORY, spec}, num_bytes}
+    };
+    return resMon.allocate(ticket, res);
+}
+
+void ResourceContext::deallocMemory(size_t num_bytes)
+{
+    Resources res {
+        {{ResourceType::MEMORY, spec}, num_bytes}
+    };
+    if (resMon.free(ticket, res)) {
+        // last resource freed
+        utils::Guard g(session.tickets_mu);
+        session.tickets.erase(ticket);
+    }
 }

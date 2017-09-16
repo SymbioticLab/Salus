@@ -29,6 +29,7 @@ limitations under the License.
 #include <memory>
 #include <string>
 #include <unordered_map>
+#include <functional>
 
 namespace tf = tensorflow;
 namespace gtl = tf::gtl;
@@ -65,6 +66,12 @@ ExecutorImpl::ExecutorImpl(const tf::MultiDeviceExecutorParams &p, const tf::Gra
 {
     CHECK(p.find_kernel != nullptr);
     CHECK(p.create_kernel != nullptr);
+
+    using namespace std::placeholders;
+    inserter_->registerPagingCallbacks({
+        std::bind(&ExecutorImpl::forceEvicted, this, _1, _2),
+        std::bind(&ExecutorImpl::handlePagingRequest, this, _1, _2),
+    });
 }
 
 ExecutorImpl::~ExecutorImpl()
@@ -357,7 +364,6 @@ void ExecutorState::Process(TaggedNode tagged_node, int64_t scheduled_usec)
     params.resource_manager = impl_->params_.resourceMgr;
 
     tf::NodeExecStats *stats = nullptr;
-    EntryVector outputs;
     bool completed = false;
     inline_ready.push_back(tagged_node);
     while (!inline_ready.empty()) {
@@ -379,7 +385,7 @@ void ExecutorState::Process(TaggedNode tagged_node, int64_t scheduled_usec)
 
         auto nodeTask = std::make_unique<ExecTask>(this, num_finished_ops_,
                                                    tagged_node, ready, inline_ready, stats, params,
-                                                   scheduled_usec, outputs,
+                                                   scheduled_usec,
                                                    inputs, input_device_contexts, input_alloc_attrs,
                                                    completed, rendezvous_);
 
@@ -400,13 +406,8 @@ void ExecutorState::Process(TaggedNode tagged_node, int64_t scheduled_usec)
         Finish();
 }
 
-std::unique_ptr<PerOpAllocDevice> ExecutorState::CreatePerOpAllocDevice(tf::Device *dev)
-{
-    // TODO: impliment a free list
-    return std::make_unique<PerOpAllocDevice>(dev);
-}
-
-tf::Status ExecutorState::SetupKernel(TaggedNode node, const DeviceItem &ditem, tf::OpKernel **op_kernel)
+tf::Status ExecutorState::SetupKernel(TaggedNode node, const ExecutorImpl::DeviceItem &ditem,
+                                      tf::OpKernel **op_kernel)
 {
     auto &ndef = node.node->def();
 
@@ -559,54 +560,19 @@ tf::Status ExecutorState::PrepareInputs(const NodeItem &item, tf::OpKernel *kern
                 }
                 // case 6
                 // Automatically deref the tensor ref when the op expects a
-                // tensor but is given a ref to a tensor.  Need to deref it
-                // under the mutex.
-                {
-                    tf::mutex_lock l(*(entry->ref_mu));
-                    DCHECK(!entry->val_field_is_set);
-                    entry->val.Init(*entry->ref);
-                    entry->val_field_is_set = true;
-                }
-                entry->ref = nullptr;
-                entry->ref_mu = nullptr;
-
+                // tensor but is given a ref to a tensor.
+                entry->Dereference();
                 inp->tensor = entry->val.get();
             }
             if (!on_same_device) {
                 // case 7, 8
                 // Operation and input on different device,
                 // do a copy tensor to ensure input tensor is on the same device
-                tf::Tensor copy(device->GetAllocator(expected),
-                                inp->tensor->dtype(),
-                                inp->tensor->shape());
+                INFO("Copying from device {} to device {} to prepare {}-th input for op {}.",
+                     entry->device->name(), device->name(), i, kernel->name());
 
-                INFO("Copying from device {} to device {} to prepare {}-th input for op {}. "
-                     "source tensor buffer addr: {}, "
-                     "target tensor buffer addr: {}",
-                     entry->device->name(), device->name(), i, kernel->name(),
-                     as_hex(inp->tensor->tensor_data().data()),
-                     as_hex(copy.tensor_data().data()));
-
-                tf::Status ok;
-                auto dstDevCtx = device_context;
-                if (!dstDevCtx) {
-                    // Copied from OpKernelContext::op_device_context
-                    auto* dev_info = device->tensorflow_gpu_device_info();
-                    if (dev_info) dstDevCtx = dev_info->default_context;
-                }
-                INFO("Src dev context {}, dst dev context {}",
-                        as_hex(entry->device_context), as_hex(dstDevCtx));
-
-                tf::Notification n;
-                tf::CopyTensor::ViaDMA(tf::strings::StrCat(i, "-th input of ", kernel->name()),
-                                       entry->device_context, dstDevCtx,
-                                       entry->device.get(), device.get(), entry->alloc_attr,
-                                       expected, inp->tensor, &copy,
-                                       [&n, &ok](auto status) {
-                                            ok = status;
-                                            n.Notify();
-                                       });
-                n.WaitForNotification();
+                auto ok = derefMoveTensor(*entry, device, device_context, expected,
+                                          tf::strings::StrCat(i, "-th input of ", kernel->name()));
 
                 if (!ok.ok()) {
                     ERR("Copying from device {} to device {} failed when preparing {}-th input "
@@ -614,19 +580,6 @@ tf::Status ExecutorState::PrepareInputs(const NodeItem &item, tf::OpKernel *kern
                         entry->device->name(), device->name(), i, kernel->name(), ok);
                     return ok;
                 }
-
-                // move copy back into entry, remember to destroy previous one first.
-                // Note we cannot directly use copy's address because copy is stack allocated.
-                entry->ClearVal();
-                entry->ref = nullptr;
-                entry->ref_mu = nullptr;
-                entry->val.Init(std::move(copy));
-                entry->val_field_is_set = true;
-
-                inp->tensor = entry->val.get();
-                entry->alloc_attr = expected;
-                entry->device_context = dstDevCtx;
-                entry->device = device;
             }
         }
 
@@ -639,6 +592,7 @@ tf::Status ExecutorState::PrepareInputs(const NodeItem &item, tf::OpKernel *kern
 }
 
 tf::Status ExecutorState::ProcessOutputs(const NodeItem &item, tf::OpKernelContext *ctx,
+                                         const ResourceContext &rctx,
                                          const std::shared_ptr<tf::Device> &device,
                                          EntryVector *outputs, tf::NodeExecStats *stats)
 {
@@ -690,6 +644,7 @@ tf::Status ExecutorState::ProcessOutputs(const NodeItem &item, tf::OpKernelConte
 
             // Set the allocator attributes of the output entry.
             out->alloc_attr = ctx->output_alloc_attr(i);
+            out->alloc_ticket = rctx.ticket;
 
             // Sanity check of output tensor types.
             auto dtype = val->dtype();
@@ -737,6 +692,18 @@ tf::Status ExecutorState::ProcessOutputs(const NodeItem &item, tf::OpKernelConte
         }
     }
     return s;
+}
+
+void ExecutorState::ClearInputs(Entry *first, size_t num)
+{
+
+    for (size_t i = 0; i < num; ++i) {
+        auto entry = first + i;
+        entry->ClearVal();
+
+        utils::Guard g(impl_->entry_mu_);
+        impl_->active_entries_.erase(entry->alloc_ticket);
+    }
 }
 
 void ExecutorState::PropagateOutputs(const TaggedNode &tagged_node, const NodeItem *item,
@@ -1318,6 +1285,12 @@ void ExecutorState::FrameState::ActivateNodes(const NodeItem *item, const bool i
             } else {
                 input_tensors[dst_loc] = (*outputs)[src_slot];
             }
+
+            input_tensors[dst_loc].expect_ref = IsRefType(dst_item->input_type(dst_slot));
+
+            utils::Guard g(executor->entry_mu_);
+            executor->active_entries_.emplace(input_tensors[dst_loc].alloc_ticket,
+                                              &input_tensors[dst_loc]);
         }
 
         // Add dst to the ready queue if it's ready
