@@ -289,6 +289,9 @@ bool ExecutorImpl::handlePagingRequest(uint64_t oldTicket, std::shared_ptr<Resou
         ERR("Error when looking up device for paging: {}", ok);
         return false;
     }
+    item.device->setResourceContext(std::move(rctx));
+
+    // Move!
     ok = derefMoveTensor(entry, item.device, nullptr, {},
                          tf::strings::StrCat("Paging tensor of ticket ", oldTicket));
 

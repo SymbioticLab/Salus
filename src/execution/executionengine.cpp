@@ -212,7 +212,7 @@ void ExecutionEngine::scheduleLoop()
     STACK_SENTINEL;
     m_resMonitor.initializeLimits();
 
-    static const int kMaxNoProgressIters = 4;
+    static const int kMaxNoProgressIters = 10;
 
     m_runningTasks = 0;
     int noProgressIters = 0;
