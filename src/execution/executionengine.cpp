@@ -365,7 +365,7 @@ size_t ExecutionEngine::maybeScheduleFrom(std::shared_ptr<SessionItem> item)
             m_runningTasks += 1;
 
             {
-                utils::Guard(item->tickets_mu);
+                utils::Guard g(item->tickets_mu);
                 item->running.emplace(opItem->rctx->ticket, opItem);
             }
 
