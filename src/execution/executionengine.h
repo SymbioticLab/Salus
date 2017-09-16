@@ -162,6 +162,9 @@ private:
     // Paging
     void doPaging();
 
+    // Debugging
+    void dumpRunningTasks();
+
     // Incoming kernels
     // Use a minimal linked list because the only operation we need is
     // iterate through the whole list, insert at end, and delete.
@@ -180,6 +183,7 @@ private:
 
         // Accessed by multiple scheduling thread
         std::unordered_set<uint64_t> tickets;
+        std::unordered_map<uint64_t, std::weak_ptr<OperationItem>> running;
         std::mutex tickets_mu;
 
         explicit SessionItem(const std::string &handle) : sessHandle(handle) {}

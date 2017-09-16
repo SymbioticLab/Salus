@@ -280,6 +280,7 @@ void ExecutionEngine::scheduleLoop()
             continue;
         }
 
+        /*
         std::chrono::nanoseconds ns;
         if (shouldWaitForAWhile(scheduled, ns)) {
             // no progress for a long time.
@@ -287,6 +288,7 @@ void ExecutionEngine::scheduleLoop()
 //             std::this_thread::yield();
             std::this_thread::sleep_for(ns);
         }
+        */
 
         if (!remainingCount) {
             INFO("Wait on m_note_has_work");
@@ -340,7 +342,7 @@ size_t ExecutionEngine::maybeScheduleFrom(std::shared_ptr<SessionItem> item)
     }
 
     // Try schedule the operation
-    auto doSchedule = [this](std::shared_ptr<SessionItem> item, std::shared_ptr<OperationItem> &&opItem) -> std::shared_ptr<OperationItem>{
+    auto doSchedule = [this](std::shared_ptr<SessionItem> item, std::shared_ptr<OperationItem> &&opItem) {
         STACK_SENTINEL;
         TRACE("Scheduling opItem in session {}: {}", item->sessHandle, opItem->op->DebugString());
 
@@ -361,6 +363,12 @@ size_t ExecutionEngine::maybeScheduleFrom(std::shared_ptr<SessionItem> item)
         // Send to thread pool
         if (scheduled) {
             m_runningTasks += 1;
+
+            {
+                utils::Guard(item->tickets_mu);
+                item->running.emplace(opItem->rctx->ticket, opItem);
+            }
+
             TRACE("Adding to thread pool: opItem in session {}: {}", item->sessHandle, opItem->op->DebugString());
             q::with(m_qec->queue(), std::move(opItem)).then([item, this](std::shared_ptr<OperationItem> &&opItem){
                 STACK_SENTINEL;
@@ -389,7 +397,7 @@ size_t ExecutionEngine::maybeScheduleFrom(std::shared_ptr<SessionItem> item)
         } else {
             TRACE("Failed to schedule opItem in session {}: {}", item->sessHandle, opItem->op->DebugString());
         }
-        return opItem;;
+        return opItem;
     };
 
     // Do all schedule in queue in parallel
@@ -428,6 +436,9 @@ void ExecutionEngine::taskStopped(SessionItem &item, OperationItem &opItem)
 
     opItem.rctx->releaseStaging();
     m_runningTasks -= 1;
+
+    utils::Guard g(item.tickets_mu);
+    item.running.erase(opItem.rctx->ticket);
 }
 
 void ExecutionEngine::doPaging()
@@ -551,5 +562,18 @@ void ResourceContext::deallocMemory(size_t num_bytes)
         // last resource freed
         utils::Guard g(session.tickets_mu);
         session.tickets.erase(ticket);
+    }
+}
+
+void ExecutionEngine::dumpRunningTasks()
+{
+    for (auto &sess : m_sessions) {
+        for (auto &p : sess->running) {
+            if (auto opItem = p.second.lock()) {
+                DEBUG("{} -> {}", opItem->rctx, opItem->op->DebugString());
+            } else {
+                DEBUG("Ticket: {} -> Task deleted", p.first);
+            }
+        }
     }
 }

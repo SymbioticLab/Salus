@@ -469,10 +469,9 @@ void ResourceMonitor::free(uint64_t ticket)
 
 bool ResourceMonitor::free(uint64_t ticket, const Resources &res)
 {
-    if (ticket == 0) {
-        ERR("Invalid ticket 0");
-        return true;
-    }
+    // Ticket can not be 0 when free actual resource to prevent
+    // monitor go out of sync of physical usage.
+    assert(ticket != 0);
 
     Guard g(m_mu);
     merge(m_limits, res);
