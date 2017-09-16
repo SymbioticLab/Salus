@@ -473,9 +473,10 @@ void ExecutionEngine::doPaging()
         candidates.emplace_back(mem, *pSess);
     }
 
+    // sort in des order
     std::sort(candidates.begin(), candidates.end(),
               [](const auto &lhs, const auto &rhs){
-        return lhs.first < rhs.first;
+        return lhs.first > rhs.first;
     });
 
     // Step 1.2: keep the session with largest memory usage, and try from next

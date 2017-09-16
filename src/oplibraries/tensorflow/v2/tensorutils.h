@@ -35,6 +35,7 @@ struct Entry
         , has_value(other.has_value)
         , val_field_is_set(other.val_field_is_set)
         , alloc_attr(other.alloc_attr)
+        , alloc_ticket(other.alloc_ticket)
         , device_context(other.device_context)
         , device(other.device)
     {
@@ -58,6 +59,7 @@ struct Entry
         has_value = other.has_value;
         val_field_is_set = other.val_field_is_set;
         alloc_attr = other.alloc_attr;
+        alloc_ticket = other.alloc_ticket;
         device_context = other.device_context;
         device = other.device;
         if (val_field_is_set) {
@@ -76,6 +78,7 @@ struct Entry
         has_value = other.has_value;
         val_field_is_set = other.val_field_is_set;
         alloc_attr = other.alloc_attr;
+        alloc_ticket = other.alloc_ticket;
         device_context = other.device_context;
         device = std::move(other.device);
         if (val_field_is_set) {
