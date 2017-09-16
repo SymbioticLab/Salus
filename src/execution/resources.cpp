@@ -510,7 +510,9 @@ std::vector<std::pair<double, uint64_t>> ResourceMonitor::sortVictim(const std::
         }
     }
 
-    std::sort(usages.begin(), usages.end(), std::greater<double>());
+    std::sort(usages.begin(), usages.end(), [](const auto &lhs, const auto &rhs){
+        return lhs > rhs;
+    });
     return usages;
 }
 
