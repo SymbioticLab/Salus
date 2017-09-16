@@ -275,7 +275,7 @@ void ExecutionEngine::scheduleLoop()
 
         // check if we need paging
         int64_t running_tasks = m_runningTasks;
-        if (scheduled == 0 && running_tasks == 0) {
+        if (scheduled == 0 && running_tasks == 0 && remainingCount > 0) {
             doPaging();
             continue;
         }
@@ -432,8 +432,8 @@ void ExecutionEngine::taskStopped(SessionItem &item, OperationItem &opItem)
 
 void ExecutionEngine::doPaging()
 {
+    DEBUG("Begin paging due to low memory");
     // Step 1: select candidate sessions
-
     std::vector<std::pair<
         double,
         std::reference_wrapper<SessionItem>
@@ -473,6 +473,8 @@ void ExecutionEngine::doPaging()
         SessionItem &sess = candidates[i].second;
         auto victims = m_resMonitor.sortVictim(sess.tickets);
 
+        DEBUG("Visiting session: {}", sess.sessHandle);
+
         for (auto &p : victims) {
             auto usage = p.first;
             auto victim = p.second;
@@ -487,12 +489,14 @@ void ExecutionEngine::doPaging()
                 return;
             }
 
+            DEBUG("    request to page out ticket {} of usage {}", victim, usage);
             // request the session to do paging
             assert(sess.pagingCb);
             if (sess.pagingCb.volunteer(victim, std::move(rctx))) {
                 // someone freed some memory on GPU, we are good to go.
                 return;
             }
+            DEBUG("    failed");
         }
         // continue to next session
     }
