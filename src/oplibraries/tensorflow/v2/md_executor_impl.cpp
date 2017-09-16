@@ -269,15 +269,19 @@ void ExecutorState::addNodeToRefiner(const TaggedNode &tn)
 
 bool ExecutorImpl::handlePagingRequest(uint64_t oldTicket, std::shared_ptr<ResourceContext> &&rctx)
 {
-    utils::Guard g(entry_mu_);
-    auto it = active_entries_.find(oldTicket);
-    if (it == active_entries_.end()) {
-        ERR("Requested ticket for paging not found: {}", oldTicket);
-        return false;
+    Entry *entry = nullptr;
+    {
+        utils::Guard g(entry_mu_);
+        auto it = active_entries_.find(oldTicket);
+        if (it == active_entries_.end()) {
+            ERR("Requested ticket for paging not found: {}", oldTicket);
+            return false;
+        }
+        entry = it->second;
     }
+    assert(entry != nullptr);
 
-    auto &entry = *it->second;
-    if (entry.expect_ref) {
+    if (entry->expect_ref) {
         ERR("Can't move an reference tensor");
         return false;
     }
@@ -292,7 +296,7 @@ bool ExecutorImpl::handlePagingRequest(uint64_t oldTicket, std::shared_ptr<Resou
     item.device->setResourceContext(std::move(rctx));
 
     // Move!
-    ok = derefMoveTensor(entry, item.device, nullptr, {},
+    ok = derefMoveTensor(*entry, item.device, nullptr, {},
                          tf::strings::StrCat("Paging tensor of ticket ", oldTicket));
 
     if (!ok.ok()) {
