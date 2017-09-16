@@ -236,7 +236,7 @@ struct ResourceContext
 
 private:
     ExecutionEngine::SessionItem &session;
+    std::atomic<bool> hasStaging;
 };
-
 
 #endif // EXECUTIONENGINE_H

@@ -508,22 +508,25 @@ ResourceContext::ResourceContext(ExecutionEngine::SessionItem &item, ResourceMon
     : resMon(resMon)
     , ticket(0)
     , session(item)
+    , hasStaging(false)
 {
 }
 
 bool ResourceContext::initializeStaging(const DeviceSpec& spec, const Resources& res)
 {
     this->spec = spec;
-    return resMon.preAllocate(res, &ticket);
+    auto ok = resMon.preAllocate(res, &ticket);
+    hasStaging = ok;
+    return ok;
 }
 
 void ResourceContext::releaseStaging()
 {
-    if (!ticket) {
+    if (!hasStaging) {
         return;
     }
     resMon.free(ticket);
-    ticket = 0;
+    hasStaging = false;
 }
 
 ResourceContext::~ResourceContext()
