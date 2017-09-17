@@ -22,6 +22,8 @@
 
 #include "oplibraries/tensorflow/tensorflow_headers.h"
 
+#include <boost/range/adaptor/sliced.hpp>
+
 namespace nodestats {
 void SetScheduled(tf::NodeExecStats *nt, int64_t t)
 {
@@ -267,23 +269,34 @@ void ExecutorState::addNodeToRefiner(const TaggedNode &tn)
     }
 }
 
+void ExecutorImpl::dumpActiveEntries()
+{
+    for (auto &p : active_entries_) {
+        DEBUG("{} -> {}", p.first, as_hex(p.second));
+    }
+}
+
 bool ExecutorImpl::handlePagingRequest(uint64_t oldTicket, std::shared_ptr<ResourceContext> &&rctx)
 {
-    Entry *entry = nullptr;
+    // There may be multiple tensor entries that uses this ticket,
+    // and potentially share the storage.
+    // We want to move one complete set of tensors that are sharing buffer.
+    std::vector<Entry *> entries;
+    entries.reserve(8);
+
     {
         utils::Guard g(entry_mu_);
-        auto it = active_entries_.find(oldTicket);
-        if (it == active_entries_.end()) {
+        auto range = active_entries_.equal_range(oldTicket);
+        if (range.first == range.second) {
             ERR("Requested ticket for paging not found: {}", oldTicket);
             return false;
         }
-        entry = it->second;
-    }
-    assert(entry != nullptr);
-
-    if (entry->expect_ref) {
-        ERR("Can't move an reference tensor");
-        return false;
+        for (auto it = range.first; it != range.second; ++it) {
+            assert(it->second);
+            entries.push_back(it->second);
+        }
+        // we will add them back later
+        active_entries_.erase(oldTicket);
     }
 
     // Create target device
@@ -295,14 +308,90 @@ bool ExecutorImpl::handlePagingRequest(uint64_t oldTicket, std::shared_ptr<Resou
     }
     item.device->setResourceContext(std::move(rctx));
 
-    // Move!
-    ok = derefMoveTensor(*entry, item.device, nullptr, {},
-                         tf::strings::StrCat("Paging tensor of ticket ", oldTicket));
-
-    if (!ok.ok()) {
-        ERR("Error when paging out tensor: {}", ok);
-        return false;
+    struct Part{
+        std::vector<Entry*> roots;
+        std::unordered_map<tf::TensorBuffer*, std::vector<Entry*>> subs;
+    };
+    std::unordered_map<tf::TensorBuffer*, Part> parts;
+    // partition into groups with the same root buffer
+    for (auto entry : entries) {
+        assert(entry != nullptr);
+        if (entry->expect_ref) {
+            WARN("Skip reference tensor when paging");
+            continue;
+        }
+        auto tensor = entry->MaybeDereference();
+        auto buf = tf::remote::PagingHelper::bufferOf(*tensor);
+        auto &part = parts[buf->root_buffer()];
+        if (buf == buf->root_buffer()) {
+            part.roots.push_back(entry);
+        } else {
+            part.subs[buf].push_back(entry);
+        }
     }
+
+    for (auto &p : parts) {
+        auto &part = p.second;
+        assert(!part.roots.empty());
+
+        Entry *firstEntry = nullptr;
+        tf::TensorBuffer *newRoot = nullptr;
+        // Firstly page out root buffer
+        for (auto entry : part.roots) {
+            if (!newRoot) {
+                // only need to actually move the first in roots
+                ok = derefMoveTensor(*entry, item.device, nullptr, {},
+                                    tf::strings::StrCat("Paging tensor of ticket ", oldTicket));
+                if (!ok.ok()) {
+                    ERR("Error when paging: {}", ok);
+                    break;
+                }
+                newRoot = tf::remote::PagingHelper::bufferOf(*(entry->val.get()));
+                firstEntry = entry;
+                continue;
+            }
+            // rest of the entry can just be a copy of first entry
+            auto t = tf::remote::PagingHelper::cloneWithNewBuffer(*entry->MaybeDereference(),
+                                                                  newRoot);
+            entry->ClearVal();
+            // copy everything from firstEntry, except for val
+            // temporary unset to avoid one more copy
+            assert(firstEntry->val_field_is_set);
+            firstEntry->val_field_is_set = false;
+            *entry = *firstEntry;
+            firstEntry->val_field_is_set = true;
+            entry->SetVal(std::move(t));
+        }
+        if (!newRoot) {
+            continue;
+        }
+        // Secondly retarget sub buffers to new root
+        for (auto &pp : part.subs) {
+            auto oldSub = pp.first;
+            tf::TensorBuffer *newSub = oldSub->clone(newRoot);
+            for (auto &entry : pp.second) {
+                auto t = tf::remote::PagingHelper::cloneWithNewBuffer(*entry->MaybeDereference(),
+                                                                      newSub);
+                entry->ClearVal();
+                // copy everything from firstEntry, except for val
+                // temporary unset to avoid one more copy
+                assert(firstEntry->val_field_is_set);
+                firstEntry->val_field_is_set = false;
+                *entry = *firstEntry;
+                firstEntry->val_field_is_set = true;
+                entry->SetVal(std::move(t));
+            }
+        }
+    }
+
+    // Add back to active entries with updated value
+    {
+        utils::Guard g(entry_mu_);
+        for (auto entry : entries) {
+            active_entries_.emplace(entry->alloc_ticket, entry);
+        }
+    }
+
     return true;
 }
 

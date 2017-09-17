@@ -34,6 +34,7 @@ public:
     ~PerOpAllocDevice() override;
 
     void setResourceContext(const std::shared_ptr<ResourceContext> &rctx);
+    const ResourceContext &resourceContext() const { return *m_rctx; }
 
     tf::Device *underlayingDevice() const {
         return m_wrapped;

@@ -28,6 +28,7 @@
 
 #include <list>
 #include <unordered_set>
+#include <unordered_map>
 
 namespace tf = tensorflow;
 namespace gtl = tf::gtl;
@@ -80,6 +81,7 @@ private:
 
     bool handlePagingRequest(uint64_t oldTicket, std::shared_ptr<ResourceContext> &&rctx);
     void forceEvicted(uint64_t ticket, void *addr);
+    void dumpActiveEntries();
 
     struct DeviceItem
     {
@@ -144,7 +146,7 @@ private:
 
     // Active entries. Used for handle paging request
     std::mutex entry_mu_;
-    std::unordered_map<uint64_t, Entry *> active_entries_;
+    std::unordered_multimap<uint64_t, Entry *> active_entries_;
 
     // Root nodes (with no in edges) that should form the initial ready queue
     std::vector<const tf::Node *> root_nodes_;
@@ -607,7 +609,7 @@ private:
 
     // Before invoking item->kernel, fills in its "inputs".
     tf::Status PrepareInputs(const NodeItem &item, tf::OpKernel *kernel,
-                             std::shared_ptr<tf::Device> device,
+                             std::shared_ptr<PerOpAllocDevice> device,
                              tf::DeviceContext *device_context,
                              Entry *first_input, TensorValueVec *inputs,
                              DeviceContextVec *input_device_contexts,

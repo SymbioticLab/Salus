@@ -55,6 +55,8 @@ private:
 class PerOpAllocator : public tensorflow::Allocator, public tensorflow::core::RefCounted
 {
 public:
+    static const std::string NamePrefix;
+
     explicit PerOpAllocator(const std::shared_ptr<ResourceContext> &rctx, tensorflow::Allocator *other);
 
     ~PerOpAllocator() override;
@@ -72,6 +74,8 @@ public:
     size_t RequestedSize(void* ptr) override;
 
     tf::int64 AllocationId(void* ptr) override;
+
+    const ResourceContext &resourceContext() const { return *m_rctx; }
 
 private:
     void recordSize(void *ptr, size_t size);

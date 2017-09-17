@@ -19,7 +19,10 @@
 
 #include "stringutils.h"
 
-std::string utils::bytesToHexString(const uint8_t *info, size_t infoLength, size_t maxLen)
+#include <algorithm>
+
+namespace utils {
+std::string bytesToHexString(const uint8_t *info, size_t infoLength, size_t maxLen)
 {
     static const char pszNibbleToHex[] = "0123456789ABCDEF";
     static const char ellipses[] = "...";
@@ -51,3 +54,13 @@ std::string utils::bytesToHexString(const uint8_t *info, size_t infoLength, size
 
     return result;
 }
+
+bool startsWith(const std::string &str, const std::string &prefix)
+{
+    if (prefix.size() > str.size()) {
+        return false;
+    }
+    return std::equal(prefix.begin(), prefix.end(), str.begin());
+}
+
+} // namespace utils

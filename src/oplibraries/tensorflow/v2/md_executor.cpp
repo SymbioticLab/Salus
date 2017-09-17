@@ -18,10 +18,12 @@ limitations under the License.
 
 #include "oplibraries/tensorflow/v2/exectask.h"
 #include "oplibraries/tensorflow/v2/peropallocdevice.h"
+#include "oplibraries/tensorflow/v2/tfallocator.h"
 #include "execution/devices.h"
 #include "execution/executionengine.h"
 #include "platform/logging.h"
 #include "utils/threadutils.h"
+#include "utils/stringutils.h"
 
 #include "oplibraries/tensorflow/tensorflow_headers.h"
 
@@ -467,7 +469,7 @@ bool onSameDevice(tensorflow::Device *devA, const tensorflow::AllocatorAttribute
 } // namespace
 
 tf::Status ExecutorState::PrepareInputs(const NodeItem &item, tf::OpKernel *kernel,
-                                        const std::shared_ptr<tf::Device> device,
+                                        const std::shared_ptr<PerOpAllocDevice> device,
                                         tf::DeviceContext *device_context,
                                         Entry *first_input, TensorValueVec *inputs,
                                         DeviceContextVec *input_device_contexts,
@@ -571,6 +573,7 @@ tf::Status ExecutorState::PrepareInputs(const NodeItem &item, tf::OpKernel *kern
                 INFO("Copying from device {} to device {} to prepare {}-th input for op {}.",
                      entry->device->name(), device->name(), i, kernel->name());
 
+                auto oldTicket = entry->alloc_ticket;
                 auto ok = derefMoveTensor(*entry, device, device_context, expected,
                                           tf::strings::StrCat(i, "-th input of ", kernel->name()));
 
@@ -580,6 +583,17 @@ tf::Status ExecutorState::PrepareInputs(const NodeItem &item, tf::OpKernel *kern
                         entry->device->name(), device->name(), i, kernel->name(), ok);
                     return ok;
                 }
+
+                // Update active entries as needed
+                utils::Guard g(impl_->entry_mu_);
+                auto range = impl_->active_entries_.equal_range(oldTicket);
+                for (auto it = range.first; it != range.second; ++it) {
+                    if (it->second == entry) {
+                        impl_->active_entries_.erase(it);
+                        break;
+                    }
+                }
+                impl_->active_entries_.emplace(entry->alloc_ticket, entry);
             }
         }
 
@@ -645,6 +659,15 @@ tf::Status ExecutorState::ProcessOutputs(const NodeItem &item, tf::OpKernelConte
             // Set the allocator attributes of the output entry.
             out->alloc_attr = ctx->output_alloc_attr(i);
             out->alloc_ticket = rctx.ticket;
+            // Pull more accurate ticket info if the tensor is initialized
+            if (val.tensor->IsInitialized()) {
+                auto buf = tf::remote::PagingHelper::bufferOf(*val.tensor);
+                auto alloc = buf->allocator();
+                if (utils::startsWith(alloc->Name(), PerOpAllocator::NamePrefix)) {
+                    auto poa = static_cast<PerOpAllocator*>(alloc);
+                    out->alloc_ticket = poa->resourceContext().ticket;
+                }
+            }
 
             // Sanity check of output tensor types.
             auto dtype = val->dtype();
@@ -702,7 +725,13 @@ void ExecutorState::ClearInputs(Entry *first, size_t num)
         entry->ClearVal();
 
         utils::Guard g(impl_->entry_mu_);
-        impl_->active_entries_.erase(entry->alloc_ticket);
+        auto range = impl_->active_entries_.equal_range(entry->alloc_ticket);
+        for (auto it = range.first; it != range.second; ++it) {
+            if (it->second == entry) {
+                impl_->active_entries_.erase(it);
+                break;
+            }
+        }
     }
 }
 

@@ -39,6 +39,7 @@
 #include <tensorflow/core/distributed_runtime/zrpc/exechelper/memorytypes.h>
 #include <tensorflow/core/distributed_runtime/zrpc/exechelper/tfoplibraryproxy.h>
 #include <tensorflow/core/distributed_runtime/zrpc/exechelper/allocators.h>
+#include <tensorflow/core/distributed_runtime/zrpc/exechelper/paginghelper.h>
 #include <tensorflow/core/distributed_runtime/zrpc/zrpc_wrapped_devicecontext.h>
 #include <tensorflow/core/distributed_runtime/zrpc/zrpc_rendezvous_mgr.h>
 #include <tensorflow/core/framework/allocator.h>

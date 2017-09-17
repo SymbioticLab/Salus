@@ -43,6 +43,7 @@ struct Entry
             val.Init(*other.val);
         }
     }
+
     ~Entry()
     {
         if (val_field_is_set)
@@ -119,6 +120,14 @@ struct Entry
         return val.get();
     }
 
+    template<typename ...Args>
+    void SetVal(Args... args) {
+        ref = nullptr;
+        ref_mu = nullptr;
+        val.Init(std::forward<Args>(args)...);
+        val_field_is_set = true;
+    }
+
     // A tensor value, if val_field_is_set.
     tf::ManualConstructor<tf::Tensor> val;
 
@@ -144,10 +153,11 @@ struct Entry
     bool expect_ref = false;
 };
 
+class PerOpAllocDevice;
 /**
  * Automatically dereference and move tensor to dstDevice if needed
  */
-tf::Status derefMoveTensor(Entry &entry, const std::shared_ptr<tf::Device> &dstDevice,
+tf::Status derefMoveTensor(Entry &entry, const std::shared_ptr<PerOpAllocDevice> &dstDevice,
                            tf::DeviceContext *dstCtx, const tf::AllocatorAttributes &attr,
                            const std::string &name = "");
 

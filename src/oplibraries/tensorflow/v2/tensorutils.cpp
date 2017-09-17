@@ -18,7 +18,10 @@
 
 #include "tensorutils.h"
 
-tensorflow::Status derefMoveTensor(Entry &entry, const std::shared_ptr<tf::Device> &dstDevice,
+#include "oplibraries/tensorflow/v2/peropallocdevice.h"
+#include "execution/executionengine.h"
+
+tensorflow::Status derefMoveTensor(Entry &entry, const std::shared_ptr<PerOpAllocDevice> &dstDevice,
                                    tensorflow::DeviceContext *dstCtx,
                                    const tensorflow::AllocatorAttributes &attr, const std::string &name)
 {
@@ -55,14 +58,12 @@ tensorflow::Status derefMoveTensor(Entry &entry, const std::shared_ptr<tf::Devic
     // move copy back into entry, remember to destroy previous one first.
     // Note we cannot directly use copy's address because copy is stack allocated.
     entry.ClearVal();
-    entry.ref = nullptr;
-    entry.ref_mu = nullptr;
-    entry.val.Init(std::move(copy));
-    entry.val_field_is_set = true;
+    entry.SetVal(std::move(copy));
 
     entry.alloc_attr = attr;
     entry.device_context = dstCtx;
     entry.device = dstDevice;
+    entry.alloc_ticket = dstDevice->resourceContext().ticket;
 
     return tf::Status::OK();
 }

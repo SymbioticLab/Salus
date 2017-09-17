@@ -140,9 +140,11 @@ PerOpAllocator::PerOpAllocator(const std::shared_ptr<ResourceContext> &rctx, ten
 
 PerOpAllocator::~PerOpAllocator() = default;
 
+const std::string PerOpAllocator::NamePrefix;
+
 std::string PerOpAllocator::Name()
 {
-    return tf::strings::StrCat("PerOp_", nameOrNull(m_actualAlloc));
+    return tf::strings::StrCat(NamePrefix, nameOrNull(m_actualAlloc));
 }
 
 void *PerOpAllocator::AllocateRaw(size_t alignment, size_t num_bytes)
