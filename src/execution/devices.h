@@ -64,6 +64,8 @@ inline bool operator!=(const DeviceSpec &lhs, const DeviceSpec &rhs)
     return lhs.tie() != rhs.tie();
 }
 
+std::ostream &operator<<(std::ostream &os, const DeviceSpec &c);
+
 namespace std {
 template<>
 class hash<DeviceSpec>

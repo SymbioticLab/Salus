@@ -242,5 +242,6 @@ private:
     ExecutionEngine::SessionItem &session;
     std::atomic<bool> hasStaging;
 };
+std::ostream &operator<<(std::ostream &os, const ResourceContext &c);
 
 #endif // EXECUTIONENGINE_H

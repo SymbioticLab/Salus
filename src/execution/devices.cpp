@@ -75,3 +75,8 @@ std::string DeviceSpec::DebugString() const
     oss << enumToString(type) << ":" << id;
     return oss.str();
 }
+
+std::ostream &operator<<(std::ostream &os, const DeviceSpec &c)
+{
+    return os << enumToString(c.type) << ":" << c.id;
+}

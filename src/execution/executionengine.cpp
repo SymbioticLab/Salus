@@ -573,6 +573,14 @@ void ResourceContext::deallocMemory(size_t num_bytes)
     }
 }
 
+std::ostream &operator<<(std::ostream &os, const ResourceContext &c)
+{
+    if (c.ticket == 0) {
+        return os << "AllocationTicket(Invalid)";
+    }
+    return os << "AllocationTicket(" << c.ticket << ", device=" << c.spec << ")";
+}
+
 void ExecutionEngine::dumpRunningTasks()
 {
     for (auto &sess : m_sessions) {

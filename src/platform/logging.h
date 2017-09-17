@@ -80,12 +80,6 @@ class Message;
 
 std::ostream &operator<<(std::ostream &os, const google::protobuf::Message &c);
 
-struct DeviceSpec;
-std::ostream &operator<<(std::ostream &os, const DeviceSpec &c);
-
-struct ResourceContext;
-std::ostream &operator<<(std::ostream &os, const ResourceContext &c);
-
 /**
  * Generic operator<< for strong enum classes
  */
