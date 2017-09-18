@@ -333,6 +333,11 @@ bool ExecutorImpl::handlePagingRequest(uint64_t oldTicket, std::shared_ptr<Resou
         }
     }
 
+    if (parts.empty()) {
+        WARN("No tensor available for paging");
+        return false;
+    }
+
     for (auto &p : parts) {
         auto &part = p.second;
         assert(!part.roots.empty());
