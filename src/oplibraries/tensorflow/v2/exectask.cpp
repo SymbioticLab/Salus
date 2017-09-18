@@ -296,7 +296,7 @@ void ExecTask::run(Callbacks cbs)
         nodestats::SetAllStart(stats);
     }
 
-    DEBUG("Process node: {}, {}", SummarizeNodeDef(node->def()), rctx);
+    DEBUG("Process node: {}, {}", SummarizeNodeDef(node->def()), *rctx);
 
     auto input_tensors = m_state->GetInputTensors(input_frame, input_iter);
     auto first_input = input_tensors + item.input_start;
