@@ -149,7 +149,7 @@ Resources ExecTask::estimatedUsage(const DeviceSpec& dev)
                 WARN("Failure time exceeds maximum failures: {} (max {})", f, maxFailures);
                 f = maxFailures;
             }
-            uint64_t scale = 1 << (maxFailures + 1 - f);
+            uint64_t scale = 1 << (maxFailures - f);
             resources::scale(rm->temporary, 1.0 / scale);
 
             // Update cache

@@ -322,6 +322,7 @@ bool ExecutorImpl::handlePagingRequest(uint64_t oldTicket, std::shared_ptr<Resou
         }
         auto tensor = entry->MaybeDereference();
         auto buf = tf::remote::PagingHelper::bufferOf(*tensor);
+        if (!buf) continue;
         auto root_buf = buf->root_buffer();
         if (!root_buf) continue;
         auto &part = parts[root_buf];

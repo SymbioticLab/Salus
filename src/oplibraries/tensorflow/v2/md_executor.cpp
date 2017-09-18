@@ -659,9 +659,9 @@ tf::Status ExecutorState::ProcessOutputs(const NodeItem &item, tf::OpKernelConte
             // Set the allocator attributes of the output entry.
             out->alloc_attr = ctx->output_alloc_attr(i);
             out->alloc_ticket = rctx.ticket;
-            // Pull more accurate ticket info if the tensor is initialized
-            if (val.tensor->IsInitialized()) {
-                auto buf = tf::remote::PagingHelper::bufferOf(*val.tensor);
+            // Pull more accurate ticket info if the tensor is initialized and has a buffer
+            auto buf = tf::remote::PagingHelper::bufferOf(*val.tensor);
+            if (buf) {
                 auto alloc = buf->allocator();
                 if (utils::startsWith(alloc->Name(), PerOpAllocator::NamePrefix)) {
                     auto poa = static_cast<PerOpAllocator*>(alloc);

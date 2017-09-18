@@ -140,7 +140,7 @@ PerOpAllocator::PerOpAllocator(const std::shared_ptr<ResourceContext> &rctx, ten
 
 PerOpAllocator::~PerOpAllocator() = default;
 
-const std::string PerOpAllocator::NamePrefix;
+const std::string PerOpAllocator::NamePrefix = "PerOp_";
 
 std::string PerOpAllocator::Name()
 {
