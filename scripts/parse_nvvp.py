@@ -4,51 +4,10 @@ import re
 from datetime import datetime, timedelta
 from nvvpreader import NvvpReader
 
-import numpy as np
 import pandas as pd
 # import seaborn as sns
-import matplotlib.pyplot as plt
 
-
-def axhlines(ys, **plot_kwargs):
-    """
-    Draw horizontal lines across plot
-    :param ys: A scalar, list, or 1D array of vertical offsets
-    :param plot_kwargs: Keyword arguments to be passed to plot
-    :return: The plot object corresponding to the lines.
-    """
-    if 'ax' in plot_kwargs:
-        ax = plot_kwargs['ax']
-        del plot_kwargs['ax']
-    else:
-        ax = plt.gca()
-    ys = np.array((ys, ) if np.isscalar(ys) else ys, copy=False)
-    lims = ax.get_xlim()
-    y_points = np.repeat(ys[:, None], repeats=3, axis=1).flatten()
-    x_points = np.repeat(np.array(lims + (np.nan, ))[None, :], repeats=len(ys), axis=0).flatten()
-    plot = ax.plot(x_points, y_points, scalex=False, **plot_kwargs)
-    return plot
-
-
-def axvlines(xs, **plot_kwargs):
-    """
-    Draw vertical lines on plot
-    :param xs: A scalar, list, or 1D array of horizontal offsets
-    :param plot_kwargs: Keyword arguments to be passed to plot
-    :return: The plot object corresponding to the lines.
-    """
-    print(plot_kwargs)
-    if 'ax' in plot_kwargs:
-        ax = plot_kwargs['ax']
-        del plot_kwargs['ax']
-    else:
-        ax = plt.gca()
-    xs = np.array((xs, ) if np.isscalar(xs) else xs, copy=False)
-    lims = ax.get_ylim()
-    x_points = np.repeat(xs[:, None], repeats=3, axis=1).flatten()
-    y_points = np.repeat(np.array(lims + (np.nan, ))[None, :], repeats=len(xs), axis=0).flatten()
-    plot = ax.plot(x_points, y_points, scaley=False, **plot_kwargs)
-    return plot
+import plotutils as pu
 
 
 def load_file(path):
@@ -72,7 +31,7 @@ def parse_iterations(path):
     return iterations
 
 
-def active_warp_trend(reader, iter_times):
+def active_warp_trend(reader, iter_times=None):
     data = []
     df = reader.kernels
     df = df[df['event'] == 'active_warps']
@@ -92,8 +51,9 @@ def active_warp_trend(reader, iter_times):
     ddf = df.cumsum()
 
     # drop first iteration
-    starts, ends = zip(*iter_times[1:])
-    ddf = ddf.loc[starts[0]:ends[-1]]
+    if iter_times is not None:
+        starts, ends = zip(*iter_times[1:])
+        ddf = ddf.loc[starts[0]:ends[-1]]
 
     ax = ddf.plot()
     ax.grid('on')
@@ -101,12 +61,13 @@ def active_warp_trend(reader, iter_times):
     ax.set_xlabel('Time')
     ax.set_title('Estimated Warp Activation (Dropped first iteration)')
 
-    axvlines(starts, ax=ax, linestyle='--', color='lightgreen', label='Iteration Begin')
-    axvlines(ends, ax=ax, linestyle='--', color='r', label='Iteration End')
+    if iter_times is not None:
+        pu.axvlines(starts, ax=ax, linestyle='--', color='lightgreen', label='Iteration Begin')
+        pu.axvlines(ends, ax=ax, linestyle='--', color='r', label='Iteration End')
 
     ax.autoscale(axis='x')
     ax.set_ylim(bottom=-10)
     ax.legend()
     ax.figure.tight_layout()
 
-    return df, ax
+    return df, ax.figure

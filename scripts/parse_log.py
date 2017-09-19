@@ -9,6 +9,8 @@ import seaborn as sns
 import numpy as np
 import matplotlib.pyplot as plt
 
+import plotutils as pu
+
 
 ptn_exec = re.compile(r"""^\[(?P<timestamp>\d+-\d+-\d+\s\d+:\d+:\d+\.\d{6})\d{3}\]\s
                            \[(?P<thread>\d+)\]\s
@@ -153,6 +155,7 @@ ptn_mem_alloc = re.compile(r"""TFAllocator\s.+\s(?P<size>\d+)\sbytes\sof\smemory
                                (?P<mem_type>\w+)@(?P<alloc_inst>\w+)""",
                            re.VERBOSE)
 ptn_mem_dealloc = re.compile(r"""TFAllocator\sdeallocating\smemory\sat\s(?P<addr>\w+)\s
+                                 size\s(?P<size>\d+)\s
                                  using\sallocator\s(?P<mem_type>\w+)@(?P<alloc_inst>\w+)""",
                              re.VERBOSE)
 
@@ -295,11 +298,14 @@ def match_exec_content(content, entry):
         addr = m.group('addr')
         if addr not in blocks:
             print('Unknown deallocation at: ', addr)
-            size = 0
+            size = int(m.group('size'))
         else:
             block = blocks[addr]
             del blocks[addr]
             size = block['size']
+            if size != int(m.group('size')):
+                print('WARNING: size differ: actual {}, rememered {}'.format(m.group('size'), size))
+                size = int(m.group('size'))
         return {
             'type': 'mem_dealloc',
             'addr': addr,
@@ -442,7 +448,7 @@ def message_size(logs):
 
     fig.tight_layout()
 
-    return rs, ss
+    return rs, ss, fig
 
 
 def scheduling_time(logs):
@@ -461,7 +467,7 @@ def scheduling_time(logs):
     ax.set_title('Preparation time for {} RunRequests'.format(len(ts)))
     ax.figure.tight_layout()
 
-    return ts
+    return ts, ax.figure
 
 
 def compute_time(logs):
@@ -480,7 +486,7 @@ def compute_time(logs):
     ax.set_title('Compute time for {} messages'.format(len(ts)))
     ax.figure.tight_layout()
 
-    return ts
+    return ts, ax.figure
 
 
 def process_time(logs):
@@ -499,7 +505,7 @@ def process_time(logs):
     ax.set_title('Post process time for {} messages'.format(len(ts)))
     ax.figure.tight_layout()
 
-    return ts
+    return ts, ax.figure
 
 
 def roundtrip_time(logs):
@@ -518,7 +524,7 @@ def roundtrip_time(logs):
     ax.set_title('Round-trip for {} messages'.format(len(ts)))
     ax.figure.tight_layout()
 
-    return ts
+    return ts, ax.figure
 
 
 def req_on_wire_time(logs):
@@ -537,7 +543,7 @@ def req_on_wire_time(logs):
     ax.set_title('Transmission for {} requests'.format(len(ts)))
     ax.figure.tight_layout()
 
-    return ts
+    return ts, ax.figure
 
 
 def resp_on_wire_time(logs):
@@ -556,14 +562,17 @@ def resp_on_wire_time(logs):
     ax.set_title('Transmission for {} responses'.format(len(ts)))
     ax.figure.tight_layout()
 
-    return ts
+    return ts, ax.figure
 
 
-def memory_usage(logs):
+def memory_usage(logs, iter_times=None):
     mem_usages = [l for l in logs if l.type == 'mem_alloc' or l.type == 'mem_dealloc']
 
     mem_activities = []
     for m in mem_usages:
+        if m.addr == '0x0':
+            continue
+
         if m.type == 'mem_alloc':
             mem_activities.append({
                 'timestamp': m.timestamp,
@@ -583,12 +592,24 @@ def memory_usage(logs):
 
     df = pd.DataFrame(mem_activities)
     df = df.set_index('timestamp').sort_index()
+
+    if iter_times is not None:
+        starts, ends = zip(*iter_times)
+        df = df.loc[starts[0]:ends[-1]]
+
     fig, axs = plt.subplots(ncols=1, nrows=4, sharex=True)
     for (name, group), ax in zip(df.groupby('mem_type'), axs):
         group.cumsum().plot(ax=ax, title=name)
         ax.grid('on')
         ax.xaxis.label.set_visible(False)
+        ax.legend().remove()
+        pu.cleanup_axis_bytes(ax.yaxis)
+
+    pu.cleanup_axis_datetime(fig.axes[-1].xaxis)
+    fig.axes[-1].autoscale(axis='x')
+
     fig.tight_layout()
-    fig.text(0.5, 0.04, 'Time (s)', ha='center')
-    fig.text(0.04, 0.5, 'Memory Usage (bytes)', va='center', rotation='vertical')
-    return df
+    fig.text(0.5, 0.02, 'Time (s)', ha='center')
+    fig.text(0.02, 0.5, 'Memory Usage (bytes)', va='center', rotation='vertical')
+    fig.subplots_adjust(left=0.1, bottom=0.13)
+    return df, fig
