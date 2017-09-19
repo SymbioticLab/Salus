@@ -1,3 +1,5 @@
+from __future__ import print_function, division, absolute_import
+
 from contextlib import contextmanager
 
 from timeit import default_timer
@@ -32,14 +34,14 @@ def sess_and_device(target='', dev='', config=None, seed=None):
     if seed is None:
         seed = 233
 
-    start_time = default_timer()
     with tf.Graph().as_default():
         tf.set_random_seed(seed)
         np.random.seed(seed)
         with tf.device(dev):
             with tf.Session(target, config=finalCfg) as sess:
+                start_time = default_timer()
                 yield sess
-    duration = default_timer() - start_time
+                duration = default_timer() - start_time
     print("JCT: {:.3f} s".format(duration))
 
 
@@ -70,6 +72,9 @@ def run_on_sessions(func, targets, *args, **kwargs):
                     retry = False
             except:
                 retry = True
+                print("Retrying due to error:")
+                import traceback
+                traceback.print_exc()
 
     return tuple(results)
 

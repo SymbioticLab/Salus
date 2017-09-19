@@ -4,6 +4,7 @@ import unittest
 from datetime import datetime
 from timeit import default_timer
 
+import numpy as np
 import tensorflow as tf
 
 from . import run_on_rpc_and_cpu, run_on_rpc_and_gpu, run_on_sessions, run_on_devices
@@ -41,21 +42,39 @@ def run_vgg(vgg, sess, input_data):
     queue_threads = tf.train.start_queue_runners(sess, coord)
     print('{} threads started for queue'.format(len(queue_threads)))
     speeds = []
+    inbetween = []
+    last_end_time = 0
+    JCT = 0
     for i in range(5):
         if coord.should_stop():
             break
         print("Start running step {}".format(i))
         start_time = default_timer()
         _, loss_value = sess.run([train_step, cross_entropy], feed_dict={train_mode: True})
-        duration = default_timer() - start_time
+        end_time = default_timer()
 
+        if last_end_time > 0:
+            inbetween.append(start_time - last_end_time)
+        last_end_time = end_time
+
+        duration = end_time - start_time
         examples_per_sec = batch_size / duration
         sec_per_batch = float(duration)
         speeds.append(examples_per_sec)
         fmt_str = '{}: step {}, loss = {:.2f} ({:.1f} examples/sec; {:.3f} sec/batch'
         print(fmt_str.format(datetime.now(), i, loss_value, examples_per_sec, sec_per_batch))
 
+    print('Average %.3f sec/batch' % np.average(speeds))
+    print('Average %.3f spent between batches' % np.average(inbetween))
+    JCT = default_timer() - JCT
+    print('JCT is %.3f sec' % JCT)
+
+    print('Start final eva')
+    start_time = default_timer()
     final_acc = sess.run(accuracy, feed_dict={train_mode: False})
+    duration = default_timer() - start_time
+    print('Final eval takes %.3f sec' % duration)
+
     coord.request_stop()
     coord.join(queue_threads)
 

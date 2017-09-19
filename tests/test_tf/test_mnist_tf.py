@@ -167,22 +167,39 @@ def run_mnist_large(sess, mnist):
     batch_num = 50
     batch_size = 50
     speeds = []
+    inbetween = []
+    last_end_time = 0
+    JCT = default_timer()
     for i in range(batch_num):
         batch = mnist.train.next_batch(batch_size)
         print("Start running step {}".format(i))
         start_time = default_timer()
-        sess.run(train_step, feed_dict={x: batch[0], y_: batch[1], keep_prob: 0.5})
-        duration = default_timer() - start_time
+        _, loss_value = sess.run([train_step, cross_entropy],
+                                 feed_dict={x: batch[0], y_: batch[1], keep_prob: 0.5})
+        end_time = default_timer()
+
+        if last_end_time > 0:
+            inbetween.append(start_time - last_end_time)
+        last_end_time = end_time
+
+        duration = end_time - start_time
         examples_per_sec = batch_size / duration
         sec_per_batch = float(duration)
         speeds.append(sec_per_batch)
-        loss_value = sess.run(cross_entropy, feed_dict={x: batch[0], y_: batch[1], keep_prob: 0.5})
 
         fmt_str = '{}: step {}, loss = {:.2f} ({:.1f} examples/sec; {:.3f} sec/batch'
         print(fmt_str.format(datetime.now(), i, loss_value, examples_per_sec, sec_per_batch))
     print('Average %.3f sec/batch' % np.average(speeds))
+    print('Average %.3f spent between batches' % np.average(inbetween))
+    JCT = default_timer() - JCT
+    print('JCT is %.3f sec' % JCT)
 
-    return sess.run(accuracy, feed_dict={x: mnist.test.images, y_: mnist.test.labels, keep_prob: 1.0})
+    print('Start final eva')
+    start_time = default_timer()
+    acc = sess.run(accuracy, feed_dict={x: mnist.test.images, y_: mnist.test.labels, keep_prob: 1.0})
+    duration = default_timer() - start_time
+    print('Final eval takes %.3f sec' % duration)
+    return acc
 
 
 class MnistConvBase(unittest.TestCase):
