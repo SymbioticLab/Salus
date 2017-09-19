@@ -62,7 +62,7 @@ public:
     struct PagingCallbacks
     {
         std::function<void(uint64_t, void*)> forceEvicted;
-        std::function<bool(uint64_t, std::shared_ptr<ResourceContext>&&)> volunteer;
+        std::function<size_t(uint64_t, std::shared_ptr<ResourceContext>&&)> volunteer;
 
         operator bool() const {
             return forceEvicted && volunteer;

@@ -79,7 +79,7 @@ private:
     friend class ExecutorState;
     friend class ExecTask;
 
-    bool handlePagingRequest(uint64_t oldTicket, std::shared_ptr<ResourceContext> &&rctx);
+    size_t handlePagingRequest(uint64_t oldTicket, std::shared_ptr<ResourceContext> &&rctx);
     void forceEvicted(uint64_t ticket, void *addr);
     void dumpActiveEntries();
 

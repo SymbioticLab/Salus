@@ -100,6 +100,7 @@ std::ostream &operator<<(std::ostream &os, const executor::EvenlopDef &c)
 {
     return os << "EvenlopDef(type='" << c.type()
               << "', seq=" << c.seq()
+              << ", sess=" << c.sessionid()
               << ", recvId='"
               << utils::bytesToHexString(reinterpret_cast<const uint8_t*>(c.recvidentity().data()),
                                          c.recvidentity().size())

@@ -333,7 +333,7 @@ void TFOpLibraryV2::handleCloseSession(const std::string &recvId, const executor
 
     auto preq = req.release();
     auto pproxy = proxy.release();
-    pproxy->HandleCloseSession(preq, [this, cb, preq, pproxy](auto resp, auto status) {
+    pproxy->HandleCloseSession(preq, [cb, preq, pproxy](auto resp, auto status) {
         std::unique_ptr<tf::CloseSessionRequest> req(preq);
         std::unique_ptr<Proxy> proxy(pproxy);
         SessionResourceTracker::instance().free(req->session_handle());

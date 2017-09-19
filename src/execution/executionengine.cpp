@@ -285,7 +285,9 @@ void ExecutionEngine::scheduleLoop()
         bool needPaging = (noProgress && running_tasks == 0)
                           || (noProgressIters > kMaxNoProgressIters);
         if (needPaging) {
+            DEBUG("Paging begin");
             doPaging();
+            DEBUG("Paging end");
             continue;
         }
 
@@ -450,7 +452,6 @@ void ExecutionEngine::taskStopped(SessionItem &item, OperationItem &opItem)
 
 void ExecutionEngine::doPaging()
 {
-    DEBUG("Begin paging due to low memory");
     // Step 1: select candidate sessions
     std::vector<std::pair<
         double,
@@ -511,9 +512,10 @@ void ExecutionEngine::doPaging()
             DEBUG("    request to page out ticket {} of usage {}", victim, usage);
             // request the session to do paging
             assert(sess.pagingCb);
-            if (sess.pagingCb.volunteer(victim, std::move(rctx))) {
+            auto released = sess.pagingCb.volunteer(victim, std::move(rctx));
+            if (released > 0) {
                 // someone freed some memory on GPU, we are good to go.
-            DEBUG("    paging request fulfilled");
+                DEBUG("    released {} bytes via paging", released);
                 return;
             }
             DEBUG("    failed");

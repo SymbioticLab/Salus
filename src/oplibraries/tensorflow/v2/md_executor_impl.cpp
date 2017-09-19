@@ -280,7 +280,7 @@ void ExecutorImpl::dumpActiveEntries()
     }
 }
 
-bool ExecutorImpl::handlePagingRequest(uint64_t oldTicket, std::shared_ptr<ResourceContext> &&rctx)
+size_t ExecutorImpl::handlePagingRequest(uint64_t oldTicket, std::shared_ptr<ResourceContext> &&rctx)
 {
     // There may be multiple tensor entries that uses this ticket,
     // and potentially share the storage.
@@ -295,7 +295,7 @@ bool ExecutorImpl::handlePagingRequest(uint64_t oldTicket, std::shared_ptr<Resou
         auto range = active_entries_.equal_range(oldTicket);
         if (range.first == range.second) {
             ERR("Requested ticket for paging not found: {}", oldTicket);
-            return false;
+            return 0;
         }
         for (auto it = range.first; it != range.second; ++it) {
             assert(it->second);
@@ -313,7 +313,7 @@ bool ExecutorImpl::handlePagingRequest(uint64_t oldTicket, std::shared_ptr<Resou
     auto ok = LookupDevice(rctx->spec, &item);
     if (!ok.ok()) {
         ERR("Error when looking up device for paging: {}", ok);
-        return false;
+        return 0;
     }
     item.device->setResourceContext(std::move(rctx));
 
@@ -337,8 +337,10 @@ bool ExecutorImpl::handlePagingRequest(uint64_t oldTicket, std::shared_ptr<Resou
         auto tensor = entry->RefOrVal();
         auto buf = tf::remote::PagingHelper::bufferOf(*tensor);
         if (!buf) continue;
+
         auto root_buf = buf->root_buffer();
         if (!root_buf) continue;
+
         auto &part = parts[root_buf];
         if (buf == root_buf) {
             part.roots.push_back(entry);
@@ -349,12 +351,17 @@ bool ExecutorImpl::handlePagingRequest(uint64_t oldTicket, std::shared_ptr<Resou
 
     if (parts.empty()) {
         WARN("No tensor available for paging");
-        return false;
+        return 0;
     }
 
+    size_t totalReleased = 0;
+
     for (auto &p : parts) {
+        auto oldRoot = p.first;
         auto &part = p.second;
         assert(!part.roots.empty());
+
+        oldRoot->Ref();
 
         std::unordered_set<tf::Tensor*> movedReferences;
         Entry *firstEntry = nullptr;
@@ -401,6 +408,8 @@ bool ExecutorImpl::handlePagingRequest(uint64_t oldTicket, std::shared_ptr<Resou
         // Secondly re-target sub buffers to new root
         for (auto &pp : part.subs) {
             auto oldSub = pp.first;
+            oldSub->Ref();
+
             tf::TensorBuffer *newSub = oldSub->clone(newRoot);
             for (auto &entry : pp.second) {
                 entry->ClearVal();
@@ -419,8 +428,17 @@ bool ExecutorImpl::handlePagingRequest(uint64_t oldTicket, std::shared_ptr<Resou
                     entry->SetVal(std::move(t));
                 }
             }
+
+            assert(oldSub->RefCountIsOne());
+            oldSub->Unref();
         }
+
+        assert(oldRoot->RefCountIsOne());
+        totalReleased += oldRoot->size();
+        oldRoot->Unref();
     }
+
+    DEBUG("Paging released {} bytes of memory", totalReleased);
 
     // Add back to active entries with updated value
     {
@@ -430,7 +448,7 @@ bool ExecutorImpl::handlePagingRequest(uint64_t oldTicket, std::shared_ptr<Resou
         }
     }
 
-    return true;
+    return totalReleased;
 }
 
 void ExecutorImpl::forceEvicted(uint64_t ticket, void *addr)
