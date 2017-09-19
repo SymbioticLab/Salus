@@ -96,6 +96,8 @@ Resources &removeZeros(Resources &lhs);
 Resources &merge(Resources &lhs, const Resources &rhs, bool skipNonExist=false);
 Resources &subtract(Resources &lhs, const Resources &rhs, bool skipNonExist=false);
 Resources &scale(Resources &lhs, double scale);
+
+std::string DebugString(const Resources &res, const std::string &indent = "");
 } // namespace resources
 
 struct ResourceMap

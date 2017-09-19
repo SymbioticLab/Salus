@@ -86,13 +86,9 @@ std::string ResourceMap::DebugString() const
     std::ostringstream oss;
     oss << "ResourceMap" << std::endl;
     oss << "    Temporary" << std::endl;
-    for (auto p : temporary) {
-        oss << "        " << p.first.DebugString() << " -> " << p.second << std::endl;
-    }
+    oss << resources::DebugString(temporary, "        ");
     oss << "    Persistant (handle='" << persistantHandle << "')" << std::endl;
-    for (auto p : persistant) {
-        oss << "        " << p.first.DebugString() << " -> " << p.second << std::endl;
-    }
+    oss << resources::DebugString(persistant, "        ");
     return oss.str();
 }
 
@@ -103,31 +99,23 @@ std::string ResourceMonitor::DebugString() const
 
     Guard g(m_mu);
 
-    oss << "    Available" << std::endl;
-    for (auto p : m_limits) {
-        oss << "        ";
-        oss << p.first.DebugString() << " -> " << p.second << std::endl;
-    }
-    oss << "    Staging" << std::endl;
+    oss << "    Available:" << std::endl;
+    oss << resources::DebugString(m_limits, "        ");
+
+    oss << "    Staging " << m_staging.size() << " tickets, in total:" << std::endl;
+    Resources total;
     for (auto p : m_staging) {
-        oss << "        ";
-        oss << "Ticket: " <<  p.first << std::endl;
-
-        for (auto pp : p.second) {
-            oss << "            ";
-            oss << pp.first.DebugString() << " -> " << pp.second << std::endl;
-        }
+        resources::merge(total, p.second);
     }
-    oss << "    In use" << std::endl;
+    oss << resources::DebugString(total, "       ");
+
+    oss << "    In use " << m_using.size() << " tickets, in total:" << std::endl;
+    total.clear();
     for (auto p : m_using) {
-        oss << "        ";
-        oss << "Ticket: " <<  p.first << std::endl;
-
-        for (auto pp : p.second) {
-            oss << "            ";
-            oss << pp.first.DebugString() << " -> " << pp.second << std::endl;
-        }
+        resources::merge(total, p.second);
     }
+    oss << resources::DebugString(total, "       ");
+
     return oss.str();
 }
 
@@ -204,6 +192,15 @@ Resources &removeZeros(Resources &lhs)
         }
     }
     return lhs;
+}
+
+std::string DebugString(const Resources &res, const std::string &indent)
+{
+    std::ostringstream oss;
+    for (auto p : res) {
+        oss << indent << p.first.DebugString() << " -> " << p.second << std::endl;
+    }
+    return oss.str();
 }
 
 } // namespace resources;
