@@ -488,9 +488,19 @@ void ExecutionEngine::doPaging()
         return;
     }
 
+    for (size_t i = 1; i != candidates.size(); ++i) {
+        auto usage = candidates[i].first;
+        SessionItem &sess = candidates[i].second;
+        DEBUG("Session {} usage: {}", sess.sessHandle, usage);
+    }
+
     // Step 2: inform owner to do paging given suggestion
     for (size_t i = 1; i != candidates.size(); ++i) {
         SessionItem &sess = candidates[i].second;
+        if (sess.tickets.empty()) {
+            // no need to go beyond
+            break;
+        }
         auto victims = m_resMonitor.sortVictim(sess.tickets);
 
         DEBUG("Visiting session: {}", sess.sessHandle);
