@@ -190,7 +190,7 @@ def run_mnist_large(sess, mnist):
         fmt_str = '{}: step {}, loss = {:.2f} ({:.1f} examples/sec; {:.3f} sec/batch'
         print(fmt_str.format(datetime.now(), i, loss_value, examples_per_sec, sec_per_batch))
     print('Average %.3f sec/batch' % np.average(speeds))
-    print('Average %.3f spent between batches' % np.average(inbetween))
+    print('Average %.6f sec spent between batches' % np.average(inbetween))
     JCT = default_timer() - JCT
     print('JCT is %.3f sec' % JCT)
 

@@ -44,11 +44,11 @@ def run_vgg(vgg, sess, input_data):
     speeds = []
     inbetween = []
     last_end_time = 0
-    JCT = 0
+    JCT = default_timer()
     for i in range(5):
         if coord.should_stop():
             break
-        print("Start running step {}".format(i))
+        print("{}: Start running step {}".format(datetime.now(), i))
         start_time = default_timer()
         _, loss_value = sess.run([train_step, cross_entropy], feed_dict={train_mode: True})
         end_time = default_timer()
@@ -60,7 +60,7 @@ def run_vgg(vgg, sess, input_data):
         duration = end_time - start_time
         examples_per_sec = batch_size / duration
         sec_per_batch = float(duration)
-        speeds.append(examples_per_sec)
+        speeds.append(sec_per_batch)
         fmt_str = '{}: step {}, loss = {:.2f} ({:.1f} examples/sec; {:.3f} sec/batch'
         print(fmt_str.format(datetime.now(), i, loss_value, examples_per_sec, sec_per_batch))
 
@@ -69,7 +69,7 @@ def run_vgg(vgg, sess, input_data):
     JCT = default_timer() - JCT
     print('JCT is %.3f sec' % JCT)
 
-    print('Start final eva')
+    print('{}: Start final eva'.format(datetime.now()))
     start_time = default_timer()
     final_acc = sess.run(accuracy, feed_dict={train_mode: False})
     duration = default_timer() - start_time
