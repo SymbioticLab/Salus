@@ -65,7 +65,7 @@ def run_vgg(vgg, sess, input_data):
         print(fmt_str.format(datetime.now(), i, loss_value, examples_per_sec, sec_per_batch))
 
     print('Average %.3f sec/batch' % np.average(speeds))
-    print('Average %.3f spent between batches' % np.average(inbetween))
+    print('Average %.6f sec spent between batches' % np.average(inbetween))
     JCT = default_timer() - JCT
     print('JCT is %.3f sec' % JCT)
 
