@@ -55,9 +55,8 @@ struct ScopedUnref
     }
 
     ScopedUnref &operator=(ScopedUnref &&other) {
-        auto tmp(std::move(other));
-        using std::swap;
-        swap(*this, tmp);
+        obj = other.obj;
+        other.obj = nullptr;
         return *this;
     }
 
