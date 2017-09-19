@@ -229,6 +229,7 @@ struct ResourceContext
     DeviceSpec spec;
     uint64_t ticket;
 
+    ResourceContext(const ResourceContext &other, const DeviceSpec &spec);
     ResourceContext(ExecutionEngine::SessionItem &item, ResourceMonitor &resMon);
     ~ResourceContext();
 

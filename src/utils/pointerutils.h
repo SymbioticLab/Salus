@@ -44,7 +44,7 @@ std::unique_ptr<Derived> dynamic_unique_ptr_cast(std::unique_ptr<Base> &&p)
 template<typename T>
 struct ScopedUnref
 {
-    explicit ScopedUnref(T *o) : obj(o) {}
+    explicit ScopedUnref(T *o = nullptr) : obj(o) {}
     ~ScopedUnref() {
         if (obj) obj->Unref();
     }
@@ -52,6 +52,13 @@ struct ScopedUnref
     ScopedUnref(ScopedUnref &&other) {
         obj = other.obj;
         other.obj = nullptr;
+    }
+
+    ScopedUnref &operator=(ScopedUnref &&other) {
+        auto tmp(std::move(other));
+        using std::swap;
+        swap(*this, tmp);
+        return *this;
     }
 
     auto get() const {
@@ -67,7 +74,7 @@ private:
     T *obj;
 
     ScopedUnref(const ScopedUnref&) = delete;
-    void operator=(const ScopedUnref&) = delete;
+    ScopedUnref<T> & operator=(const ScopedUnref&) = delete;
 };
 
 template<typename T, typename... Args>

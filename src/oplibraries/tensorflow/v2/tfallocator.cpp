@@ -138,6 +138,14 @@ PerOpAllocator::PerOpAllocator(const std::shared_ptr<ResourceContext> &rctx, ten
     assert(m_actualAlloc);
 }
 
+PerOpAllocator::PerOpAllocator(std::shared_ptr<ResourceContext> &&rctx, tensorflow::Allocator *other)
+    : m_rctx(std::move(rctx))
+    , m_actualAlloc(other)
+{
+    assert(m_rctx);
+    assert(m_actualAlloc);
+}
+
 PerOpAllocator::~PerOpAllocator() = default;
 
 const std::string PerOpAllocator::NamePrefix = "PerOp_";

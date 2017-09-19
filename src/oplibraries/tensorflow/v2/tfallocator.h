@@ -58,6 +58,7 @@ public:
     static const std::string NamePrefix;
 
     explicit PerOpAllocator(const std::shared_ptr<ResourceContext> &rctx, tensorflow::Allocator *other);
+    explicit PerOpAllocator(std::shared_ptr<ResourceContext> &&rctx, tensorflow::Allocator *other);
 
     ~PerOpAllocator() override;
 

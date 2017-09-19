@@ -105,26 +105,35 @@ tf::Status PerOpAllocDevice::FillContextMap(const tf::Graph* graph, tf::DeviceCo
 tf::Allocator* PerOpAllocDevice::GetAllocator(tf::AllocatorAttributes attr)
 {
     auto a = m_wrapped->GetAllocator(attr);
-    return wrapAllocator(a);
+    return wrapAllocator(a, attr);
 }
 
 tf::Allocator* PerOpAllocDevice::GetStepAllocator(tf::AllocatorAttributes attr,
                                 tf::ResourceMgr* step_resource_manager)
 {
     auto a = m_wrapped->GetStepAllocator(attr, step_resource_manager);
-    return wrapAllocator(a);
+    return wrapAllocator(a, attr);
 }
 
-tf::Allocator *PerOpAllocDevice::wrapAllocator(tf::Allocator *alloc)
+tf::Allocator *PerOpAllocDevice::wrapAllocator(tf::Allocator *alloc, const tf::AllocatorAttributes &attr)
 {
+    AA key{alloc, attr};
+
     utils::Guard g(m_mu);
-    auto it = m_wrappedAllocators.find(alloc);
+    auto it = m_wrappedAllocators.find(key);
     if (it != m_wrappedAllocators.end()) {
         return it->second.get();
     }
 
-    auto a = utils::make_scoped_unref<PerOpAllocator>(m_rctx, alloc);
+    utils::ScopedUnref<PerOpAllocator> a;
+    if (attr.on_host()) {
+        DeviceSpec cpuSpec {DeviceType::CPU, 0};
+        auto rctx = std::make_shared<ResourceContext>(*m_rctx, cpuSpec);
+        a = utils::make_scoped_unref<PerOpAllocator>(std::move(rctx), alloc);
+    } else {
+        a = utils::make_scoped_unref<PerOpAllocator>(m_rctx, alloc);
+    }
     auto pa = a.get();
-    m_wrappedAllocators.emplace(alloc, std::move(a));
+    m_wrappedAllocators.emplace(key, std::move(a));
     return pa;
 }

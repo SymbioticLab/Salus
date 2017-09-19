@@ -536,6 +536,15 @@ void ExecutionEngine::doPaging()
     // Step 3: TODO: force evict
 }
 
+ResourceContext::ResourceContext(const ResourceContext &other, const DeviceSpec &spec)
+    : resMon(other.resMon)
+    , spec(spec)
+    , ticket(other.ticket)
+    , session(other.session)
+    , hasStaging(false)
+{
+}
+
 ResourceContext::ResourceContext(ExecutionEngine::SessionItem &item, ResourceMonitor& resMon)
     : resMon(resMon)
     , ticket(0)

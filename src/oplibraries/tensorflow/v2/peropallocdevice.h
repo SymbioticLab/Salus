@@ -20,6 +20,7 @@
 #define PEROPALLOCDEVICE_H
 
 #include "utils/pointerutils.h"
+#include "utils/macros.h"
 
 #include "oplibraries/tensorflow/tensorflow_headers.h"
 
@@ -67,13 +68,30 @@ public:
 
 private:
 
-    tf::Allocator *wrapAllocator(tf::Allocator *alloc);
+    tf::Allocator *wrapAllocator(tf::Allocator *alloc, const tf::AllocatorAttributes &alloc_attrs);
 
     tf::Device *m_wrapped;
     std::shared_ptr<ResourceContext> m_rctx;
 
     std::mutex m_mu;
-    std::unordered_map<tf::Allocator*, utils::ScopedUnref<PerOpAllocator>> m_wrappedAllocators;
+    struct AA {
+        tf::Allocator *alloc;
+        tf::AllocatorAttributes attr;
+
+        bool operator==(const AA &other) const {
+            return alloc == other.alloc && attr.value == other.attr.value;
+        }
+    };
+    struct AAHasher {
+        size_t operator()(const AA &aa) const {
+            using std::hash;
+            size_t val = 0;
+            utils::hash_combine(val, aa.alloc);
+            utils::hash_combine(val, aa.attr.value);
+            return val;
+        }
+    };
+    std::unordered_map<AA, utils::ScopedUnref<PerOpAllocator>, AAHasher> m_wrappedAllocators;
 };
 
 #endif // PEROPALLOCDEVICE_H
