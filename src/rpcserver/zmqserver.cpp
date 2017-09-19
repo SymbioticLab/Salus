@@ -278,7 +278,7 @@ void ZmqServer::SenderImpl::sendMessage(const std::string &typeName, MultiPartMe
     evenlop.SerializeToArray(parts->back().data(), parts->back().size());
 
     // step 4.2. append actual message
-    TRACE("Response proto object have size {} with evenlop {}", msg.totalSize(), evenlop);
+    DEBUG("Response proto object have size {} with evenlop {}", msg.totalSize(), evenlop);
     parts.merge(std::move(msg));
 
     m_server.sendMessage(std::move(parts));

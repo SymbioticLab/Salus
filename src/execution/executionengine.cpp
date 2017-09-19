@@ -361,7 +361,7 @@ size_t ExecutionEngine::maybeScheduleFrom(std::shared_ptr<SessionItem> item)
             }
             spec = DeviceSpec(dt, 0);
             if (maybePreAllocateFor(*item, *opItem, spec)) {
-                INFO("Task scheduled on {}", spec.DebugString());
+                TRACE("Task scheduled on {}", spec.DebugString());
                 scheduled = true;
                 break;
             }
@@ -376,7 +376,7 @@ size_t ExecutionEngine::maybeScheduleFrom(std::shared_ptr<SessionItem> item)
                 item->running.emplace(opItem->rctx->ticket, opItem);
             }
 
-            TRACE("Adding to thread pool: opItem in session {}: {}", item->sessHandle, opItem->op->DebugString());
+            DEBUG("Adding to thread pool: opItem in session {}: {}", item->sessHandle, opItem->op->DebugString());
             q::with(m_qec->queue(), std::move(opItem)).then([item, this](std::shared_ptr<OperationItem> &&opItem){
                 STACK_SENTINEL;
                 OperationTask::Callbacks cbs;
@@ -513,6 +513,7 @@ void ExecutionEngine::doPaging()
             assert(sess.pagingCb);
             if (sess.pagingCb.volunteer(victim, std::move(rctx))) {
                 // someone freed some memory on GPU, we are good to go.
+            DEBUG("    paging request fulfilled");
                 return;
             }
             DEBUG("    failed");
