@@ -55,6 +55,7 @@ target_link_libraries(executor
     protobuf::libprotobuf
     ZeroMQ::zmq
     Boost::boost
+    Boost::thread
     q
     docopt_s
 )

@@ -514,12 +514,16 @@ tf::Status ExecutorState::PrepareInputs(const NodeItem &item, tf::OpKernel *kern
         //    Entry   |   OpInput   |   Device   |   Result   |
         // 1  noref         ref          same        reject
         // 2  noref         ref          diff        reject
-        // 3   ref          ref          diff        reject
-        // 4   ref          ref          same        get ref
-        // 5  noref        noref         same        get val
-        // 6   ref         noref         same         deref
-        // 7  noref        noref         diff        devcopy
-        // 8   ref         noref         diff        devcopy
+
+        // 3   ref         noref         same    deref,          get val
+        // 6   ref         noref         diff    deref, devcopy, get val
+
+        // 4   ref          ref          same                    get ref
+        // 7   ref          ref          diff           devcopy, get ref
+
+        // 5  noref        noref         same                    get val
+        // 8  noref        noref         diff           devcopy, get val
+
         tensorflow::AllocatorAttributes expected;
         if (kernel->input_memory_types()[i] == tensorflow::HOST_MEMORY) {
             expected.set_on_host(true);
@@ -531,71 +535,66 @@ tf::Status ExecutorState::PrepareInputs(const NodeItem &item, tf::OpKernel *kern
               (entry->ref ? "ref": "noref"), (expect_ref ? "ref": "noref"),
               entry->alloc_attr, as_hex(entry->device), expected, as_hex(device), on_same_device);
 
-        if (expect_ref) {
-            if (entry->ref == nullptr) {
-                // case 1, 2
-                ERR("{}-th input expects a ref type: {}", i, node->def());
-                return AttachDef(tf::errors::InvalidArgument(i, "-th input expects a ref type"),
-                                node->def());
-            }
-
-            if (!on_same_device) {
-                // case 3
-                ERR("Operation {} expects an reference, but input[{}] is on different device.",
-                    kernel->name(), i);
-                return AttachDef(tf::errors::InvalidArgument(i, "-th input got a ref on different device"),
-                                 node->def());
-            }
-            // case 4
-            inp->mutex_if_ref = entry->ref_mu;
-            inp->tensor = entry->ref;
-        } else {
-            if (entry->ref == nullptr) {
-                // case 5
-                inp->tensor = entry->val.get();
-            } else {
-                if (!entry->ref->IsInitialized() && !IsInitializationOp(item.node)) {
-                    return AttachDef(
-                        tf::errors::FailedPrecondition("Attempting to use uninitialized value ",
-                                                       kernel->def().input(i)),
-                                     kernel->def());
-                }
-                // case 6
-                // Automatically deref the tensor ref when the op expects a
-                // tensor but is given a ref to a tensor.
-                entry->Dereference();
-                inp->tensor = entry->val.get();
-            }
-            if (!on_same_device) {
-                // case 7, 8
-                // Operation and input on different device,
-                // do a copy tensor to ensure input tensor is on the same device
-                INFO("Copying from device {} to device {} to prepare {}-th input for op {}.",
-                     entry->device->name(), device->name(), i, kernel->name());
-
-                auto oldTicket = entry->alloc_ticket;
-                auto ok = derefMoveTensor(*entry, device, device_context, expected,
-                                          tf::strings::StrCat(i, "-th input of ", kernel->name()));
-
-                if (!ok.ok()) {
-                    ERR("Copying from device {} to device {} failed when preparing {}-th input "
-                        "for op {}: {}",
-                        entry->device->name(), device->name(), i, kernel->name(), ok);
-                    return ok;
-                }
-
-                // Update active entries as needed
-                utils::Guard g(impl_->entry_mu_);
-                auto range = impl_->active_entries_.equal_range(oldTicket);
-                for (auto it = range.first; it != range.second; ++it) {
-                    if (it->second == entry) {
-                        impl_->active_entries_.erase(it);
-                        break;
-                    }
-                }
-                impl_->active_entries_.emplace(entry->alloc_ticket, entry);
-            }
+        if (expect_ref && entry->ref == nullptr) {
+            // case 1, 2
+            ERR("{}-th input expects a ref type: {}", i, node->def());
+            return AttachDef(tf::errors::InvalidArgument(i, "-th input expects a ref type"),
+                            node->def());
         }
+
+        // Dereference if needed
+        if (!expect_ref) {
+            // case 3, 6
+            if (entry->ref && !entry->ref->IsInitialized() && !IsInitializationOp(item.node)) {
+                return AttachDef(
+                    tf::errors::FailedPrecondition("Attempting to use uninitialized value ",
+                                                   kernel->def().input(i)),
+                                 kernel->def());
+            }
+            entry->MaybeDereference();
+        }
+
+        // Move to same device if needed
+        if (!on_same_device) {
+            // case 6,7,8
+
+            // Operation and input on different device,
+            // do a copy tensor to ensure input tensor is on the same device
+            INFO("Copying from device {} to device {} to prepare {}-th input for op {}.",
+                 entry->device->name(), device->name(), i, kernel->name());
+            auto oldTicket = entry->alloc_ticket;
+            tf::Status ok;
+            {
+                Entry::MaybeLock l(entry);
+                ok = moveTensor(*entry, device, device_context, expected, "");
+            }
+            if (!ok.ok()) {
+                ERR("Copying from device {} to device {} failed when preparing {}-th input "
+                    "for op {}: {}",
+                    entry->device->name(), device->name(), i, kernel->name(), ok);
+                return ok;
+            }
+
+            // Update active entries as needed
+            utils::Guard g(impl_->entry_mu_);
+            auto range = impl_->active_entries_.equal_range(oldTicket);
+            for (auto it = range.first; it != range.second; ++it) {
+                if (it->second == entry) {
+                    impl_->active_entries_.erase(it);
+                    break;
+                }
+            }
+            impl_->active_entries_.emplace(entry->alloc_ticket, entry);
+        }
+
+        // Copy mutex if needed
+        if (entry->ref) {
+            // case 4, 7
+            inp->mutex_if_ref = entry->ref_mu;
+        }
+
+        // case 3,4,5,6,7,8
+        inp->tensor = entry->RefOrVal();
 
         TRACE("    Input {} has data block at {}", i, as_hex(inp->tensor->tensor_data().data()));
         (*input_device_contexts)[i] = entry->device_context;
@@ -1314,8 +1313,6 @@ void ExecutorState::FrameState::ActivateNodes(const NodeItem *item, const bool i
             } else {
                 input_tensors[dst_loc] = (*outputs)[src_slot];
             }
-
-            input_tensors[dst_loc].expect_ref = IsRefType(dst_item->input_type(dst_slot));
 
             utils::Guard g(executor->entry_mu_);
             executor->active_entries_.emplace(input_tensors[dst_loc].alloc_ticket,

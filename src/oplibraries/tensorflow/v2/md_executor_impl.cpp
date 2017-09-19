@@ -22,7 +22,11 @@
 
 #include "oplibraries/tensorflow/tensorflow_headers.h"
 
-#include <boost/range/adaptor/sliced.hpp>
+#include <boost/thread/lock_algorithms.hpp>
+#include <boost/iterator/indirect_iterator.hpp>
+
+#include <vector>
+#include <unordered_set>
 
 namespace nodestats {
 void SetScheduled(tf::NodeExecStats *nt, int64_t t)
@@ -282,7 +286,9 @@ bool ExecutorImpl::handlePagingRequest(uint64_t oldTicket, std::shared_ptr<Resou
     // and potentially share the storage.
     // We want to move one complete set of tensors that are sharing buffer.
     std::vector<Entry *> entries;
+    std::unordered_set<std::mutex *> reflocks;
     entries.reserve(8);
+    reflocks.reserve(8);
 
     {
         utils::Guard g(entry_mu_);
@@ -294,6 +300,9 @@ bool ExecutorImpl::handlePagingRequest(uint64_t oldTicket, std::shared_ptr<Resou
         for (auto it = range.first; it != range.second; ++it) {
             assert(it->second);
             entries.push_back(it->second);
+            if (it->second->ref_mu) {
+                reflocks.insert(it->second->ref_mu);
+            }
         }
         // we will add them back later
         active_entries_.erase(oldTicket);
@@ -313,14 +322,19 @@ bool ExecutorImpl::handlePagingRequest(uint64_t oldTicket, std::shared_ptr<Resou
         std::unordered_map<tf::TensorBuffer*, std::vector<Entry*>> subs;
     };
     std::unordered_map<tf::TensorBuffer*, Part> parts;
+
+    // Lock all references, and all read/write should happen after this
+    boost::lock(boost::make_indirect_iterator(reflocks.begin()),
+                boost::make_indirect_iterator(reflocks.end()));
+    std::vector<utils::UGuard> guards;
+    for (auto l : reflocks) {
+        guards.emplace_back(*l, std::adopt_lock);
+    }
+
     // partition into groups with the same root buffer
     for (auto entry : entries) {
         assert(entry != nullptr);
-        if (entry->expect_ref) {
-            WARN("Skip reference tensor when paging");
-            continue;
-        }
-        auto tensor = entry->MaybeDereference();
+        auto tensor = entry->RefOrVal();
         auto buf = tf::remote::PagingHelper::bufferOf(*tensor);
         if (!buf) continue;
         auto root_buf = buf->root_buffer();
@@ -342,52 +356,68 @@ bool ExecutorImpl::handlePagingRequest(uint64_t oldTicket, std::shared_ptr<Resou
         auto &part = p.second;
         assert(!part.roots.empty());
 
+        std::unordered_set<tf::Tensor*> movedReferences;
         Entry *firstEntry = nullptr;
         tf::TensorBuffer *newRoot = nullptr;
         // Firstly page out root buffer
         for (auto entry : part.roots) {
             if (!newRoot) {
                 // only need to actually move the first in roots
-                ok = derefMoveTensor(*entry, item.device, nullptr, {},
-                                    tf::strings::StrCat("Paging tensor of ticket ", oldTicket));
+                ok = moveTensor(*entry, item.device, nullptr, {},
+                                tf::strings::StrCat("Paging tensor of ticket ", oldTicket));
                 if (!ok.ok()) {
                     ERR("Error when paging: {}", ok);
                     break;
                 }
                 newRoot = tf::remote::PagingHelper::bufferOf(*(entry->val.get()));
                 firstEntry = entry;
+
+                if (entry->ref) {
+                    movedReferences.insert(entry->ref);
+                }
                 continue;
             }
-            // rest of the entry can just be a copy of first entry
-            auto t = tf::remote::PagingHelper::cloneWithNewBuffer(*entry->MaybeDereference(),
-                                                                  newRoot);
+            // copy everything from firstEntry, except for val, which may be ref
             entry->ClearVal();
-            // copy everything from firstEntry, except for val
-            // temporary unset to avoid one more copy
-            assert(firstEntry->val_field_is_set);
-            firstEntry->val_field_is_set = false;
-            *entry = *firstEntry;
-            firstEntry->val_field_is_set = true;
-            entry->SetVal(std::move(t));
+            entry->CopyProperties(*firstEntry);
+
+            // only one reference entry need to be moved
+            if (entry->ref && movedReferences.count(entry->ref) > 0) {
+                continue;
+            }
+
+            auto t = tf::remote::PagingHelper::cloneWithNewBuffer(*entry->RefOrVal(),
+                                                                  newRoot);
+            if (entry->ref) {
+                *entry->ref = std::move(t);
+                movedReferences.insert(entry->ref);
+            } else {
+                entry->SetVal(std::move(t));
+            }
         }
         if (!newRoot) {
             continue;
         }
-        // Secondly retarget sub buffers to new root
+        // Secondly re-target sub buffers to new root
         for (auto &pp : part.subs) {
             auto oldSub = pp.first;
             tf::TensorBuffer *newSub = oldSub->clone(newRoot);
             for (auto &entry : pp.second) {
-                auto t = tf::remote::PagingHelper::cloneWithNewBuffer(*entry->MaybeDereference(),
-                                                                      newSub);
                 entry->ClearVal();
-                // copy everything from firstEntry, except for val
-                // temporary unset to avoid one more copy
-                assert(firstEntry->val_field_is_set);
-                firstEntry->val_field_is_set = false;
-                *entry = *firstEntry;
-                firstEntry->val_field_is_set = true;
-                entry->SetVal(std::move(t));
+                entry->CopyProperties(*firstEntry);
+
+                // Only need to move first ref entry
+                if (entry->ref && movedReferences.count(entry->ref) > 0) {
+                    continue;
+                }
+
+                auto t = tf::remote::PagingHelper::cloneWithNewBuffer(*entry->RefOrVal(),
+                                                                      newSub);
+                if (entry->ref) {
+                    *entry->ref = std::move(t);
+                } else {
+                    entry->SetVal(std::move(t));
+                }
             }
         }
     }

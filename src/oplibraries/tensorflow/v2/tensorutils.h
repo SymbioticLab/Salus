@@ -34,14 +34,11 @@ struct Entry
         , ref_mu(other.ref_mu)
         , has_value(other.has_value)
         , val_field_is_set(other.val_field_is_set)
-        , alloc_attr(other.alloc_attr)
-        , alloc_ticket(other.alloc_ticket)
-        , device_context(other.device_context)
-        , device(other.device)
     {
         if (val_field_is_set) {
             val.Init(*other.val);
         }
+        CopyProperties(other);
     }
 
     ~Entry()
@@ -59,13 +56,10 @@ struct Entry
         ref_mu = other.ref_mu;
         has_value = other.has_value;
         val_field_is_set = other.val_field_is_set;
-        alloc_attr = other.alloc_attr;
-        alloc_ticket = other.alloc_ticket;
-        device_context = other.device_context;
-        device = other.device;
         if (val_field_is_set) {
             val.Init(*other.val);
         }
+        CopyProperties(other);
         return *this;
     }
 
@@ -78,14 +72,27 @@ struct Entry
         ref_mu = other.ref_mu;
         has_value = other.has_value;
         val_field_is_set = other.val_field_is_set;
+        if (val_field_is_set) {
+            val.Init(std::move(*other.val));
+        }
+        CopyProperties(other);
+        return *this;
+    }
+
+    void CopyProperties(const Entry &other)
+    {
+        alloc_attr = other.alloc_attr;
+        alloc_ticket = other.alloc_ticket;
+        device_context = other.device_context;
+        device = other.device;
+    }
+
+    void CopyProperties(Entry &&other)
+    {
         alloc_attr = other.alloc_attr;
         alloc_ticket = other.alloc_ticket;
         device_context = other.device_context;
         device = std::move(other.device);
-        if (val_field_is_set) {
-            val.Init(std::move(*other.val));
-        }
-        return *this;
     }
 
     // Clears the <val> field.
@@ -112,10 +119,17 @@ struct Entry
         ref_mu = nullptr;
     }
 
-    tf::Tensor *MaybeDereference()
+    void MaybeDereference()
     {
         if (ref) {
             Dereference();
+        }
+    }
+
+    tf::Tensor *RefOrVal()
+    {
+        if (ref) {
+            return ref;
         }
         return val.get();
     }
@@ -127,6 +141,22 @@ struct Entry
         val.Init(std::forward<Args>(args)...);
         val_field_is_set = true;
     }
+
+    struct MaybeLock
+    {
+        MaybeLock(Entry *en) : mu(en->ref_mu){
+            if (mu) {
+                mu->lock();
+            }
+        }
+        ~MaybeLock() {
+            if (mu) {
+                mu->unlock();
+            }
+        }
+    private:
+        tf::mutex *mu;
+    };
 
     // A tensor value, if val_field_is_set.
     tf::ManualConstructor<tf::Tensor> val;
@@ -148,9 +178,6 @@ struct Entry
     // Device-specific information about how the Tensor was produced.
     tf::DeviceContext *device_context = nullptr;
     std::shared_ptr<tf::Device> device = nullptr;
-
-    // Whether this entry is expected to be used as ref
-    bool expect_ref = false;
 };
 
 class PerOpAllocDevice;
@@ -160,5 +187,13 @@ class PerOpAllocDevice;
 tf::Status derefMoveTensor(Entry &entry, const std::shared_ptr<PerOpAllocDevice> &dstDevice,
                            tf::DeviceContext *dstCtx, const tf::AllocatorAttributes &attr,
                            const std::string &name = "");
+
+/**
+ * Move tensor to dstDevice.
+ * Prerequest: entry.ref_mu locked if not null
+ */
+tf::Status moveTensor(Entry &entry, const std::shared_ptr<PerOpAllocDevice> &dstDevice,
+                      tf::DeviceContext *dstCtx, const tf::AllocatorAttributes &attr,
+                      const std::string &name = "");
 
 #endif // TENSORUTILS_H

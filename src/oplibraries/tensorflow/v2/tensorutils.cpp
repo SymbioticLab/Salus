@@ -21,11 +21,11 @@
 #include "oplibraries/tensorflow/v2/peropallocdevice.h"
 #include "execution/executionengine.h"
 
-tensorflow::Status derefMoveTensor(Entry &entry, const std::shared_ptr<PerOpAllocDevice> &dstDevice,
-                                   tensorflow::DeviceContext *dstCtx,
-                                   const tensorflow::AllocatorAttributes &attr, const std::string &name)
+tensorflow::Status moveTensor(Entry &entry, const std::shared_ptr<PerOpAllocDevice> &dstDevice,
+                              tensorflow::DeviceContext *dstCtx,
+                              const tensorflow::AllocatorAttributes &attr, const std::string &name)
 {
-    auto input = entry.MaybeDereference();
+    auto input = entry.RefOrVal();
 
     tf::Tensor copy(dstDevice->GetAllocator(attr), input->dtype(), input->shape());
 
@@ -55,10 +55,14 @@ tensorflow::Status derefMoveTensor(Entry &entry, const std::shared_ptr<PerOpAllo
         return ok;
     }
 
-    // move copy back into entry, remember to destroy previous one first.
-    // Note we cannot directly use copy's address because copy is stack allocated.
-    entry.ClearVal();
-    entry.SetVal(std::move(copy));
+    // Note copy is stack allocated, we need to move it back into entry
+    if (entry.ref) {
+        *input = std::move(copy);
+    } else {
+        // Remember to destory val first
+        entry.ClearVal();
+        entry.SetVal(std::move(copy));
+    }
 
     entry.alloc_attr = attr;
     entry.device_context = dstCtx;
