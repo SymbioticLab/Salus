@@ -158,6 +158,7 @@ def load_both(exec_file, tf_file):
 
 ptn_recv_frame = re.compile(r"""Received \w+ frame( \d+)?: zmq::message_t\(len=(?P<size>\d+),.*""")
 ptn_recv_evenlop = re.compile(r"""Received request evenlop: .+type='executor.(?P<req_type>\w+)', seq=(?P<seq>\d+),.*""")
+ptn_disp_custom = re.compile(r"""Dispatching custom task (?P<req>\w+) of seq (?P<seq>\d+)""")
 ptn_create_opkernel = re.compile(r"""Created OpKernel for seq (?P<seq>\d+)""")
 ptn_running = re.compile(r"""running(?P<async> async)? in thread \d+""")
 ptn_compute_done = re.compile(r"""OpKernel->Compute finished with status.*""")
@@ -211,6 +212,16 @@ def match_exec_content(content, entry):
             'type': 'recv_evenlop',
             'seq': seq,
             'req_type': m.group('req_type')
+        }
+
+    m = ptn_disp_custom.match(content)
+    if m:
+        seq = int(m.group('seq'))
+        seq_info[seq]['disp_custom'] = entry
+        return {
+            'type': 'disp_custom',
+            'seq': seq,
+            'req': m.group('req')
         }
 
     m = ptn_create_opkernel.match(content)
@@ -455,6 +466,12 @@ def match_tf_content(content, entry):
     return {}
 
 
+def get_beginning(logs):
+    for l in logs:
+        if l.type == 'disp_custom' and l.req == 'tensorflow.CreateSessionRequest':
+                return l.timestamp
+
+
 def message_size(logs):
     recv_sizes = [l.size for l in logs if l.type == 'recv_msg']
     rs = pd.Series(recv_sizes)
@@ -623,6 +640,8 @@ def resp_on_wire_time(logs):
 
 
 def memory_usage(logs, iter_times=None):
+    beginning = get_beginning(logs)
+
     mem_usages = [l for l in logs if l.type == 'mem_alloc' or l.type == 'mem_dealloc']
 
     mem_activities = []
@@ -654,9 +673,13 @@ def memory_usage(logs, iter_times=None):
 
     df = df.set_index('timestamp').sort_index()
 
+    # Restrict x axis to iteration times
     if iter_times is not None:
         starts, ends = zip(*iter_times)
         df = df.loc[starts[0]:ends[-1]]
+
+    # Change to timedelta
+    df.index = df.index - beginning
 
     fig, axs = plt.subplots(ncols=1, nrows=4, sharex=True)
     for (name, group), ax in zip(df.groupby('mem_type'), axs):
@@ -666,7 +689,7 @@ def memory_usage(logs, iter_times=None):
         ax.legend().remove()
         pu.cleanup_axis_bytes(ax.yaxis)
 
-    pu.cleanup_axis_datetime(fig.axes[-1].xaxis)
+    # pu.cleanup_axis_datetime(fig.axes[-1].xaxis)
     fig.axes[-1].autoscale(axis='x')
 
     fig.tight_layout()
@@ -678,17 +701,24 @@ def memory_usage(logs, iter_times=None):
 
 def paging_stat(logs):
     data = []
+    beginning = None
     for l in logs:
-        if l.type != 'paging_end':
-            continue
-        data.append({
-            'start': l.start,
-            'end': l.end
-        })
+        if l.type == 'disp_custom':
+            if l.req == 'tensorflow.CreateSessionRequest' and beginning is None:
+                beginning = l.timestamp
+        elif l.type == 'paging_end':
+            data.append({
+                'start': l.start,
+                'end': l.end
+            })
 
     df = pd.DataFrame(data)
     if len(df) == 0:
         return df, None
+
+    # convert to reltime
+    df.start = df.start - beginning
+    df.end = df.end - beginning
 
     df.start = df.start.astype(datetime)
     df.end = df.end.astype(datetime)
