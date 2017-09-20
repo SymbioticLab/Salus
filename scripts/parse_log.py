@@ -639,8 +639,9 @@ def resp_on_wire_time(logs):
     return ts, ax.figure
 
 
-def memory_usage(logs, iter_times=None):
-    beginning = get_beginning(logs)
+def memory_usage(logs, iter_times=None, beginning=None):
+    if beginning is None:
+        beginning = get_beginning(logs)
 
     mem_usages = [l for l in logs if l.type == 'mem_alloc' or l.type == 'mem_dealloc']
 
@@ -679,7 +680,7 @@ def memory_usage(logs, iter_times=None):
         df = df.loc[starts[0]:ends[-1]]
 
     # Change to timedelta
-    df.index = df.index - beginning
+    # df.index = df.index - beginning
 
     fig, axs = plt.subplots(ncols=1, nrows=4, sharex=True)
     for (name, group), ax in zip(df.groupby('mem_type'), axs):
@@ -689,7 +690,7 @@ def memory_usage(logs, iter_times=None):
         ax.legend().remove()
         pu.cleanup_axis_bytes(ax.yaxis)
 
-    # pu.cleanup_axis_datetime(fig.axes[-1].xaxis)
+    pu.cleanup_axis_datetime(fig.axes[-1].xaxis)
     fig.axes[-1].autoscale(axis='x')
 
     fig.tight_layout()
@@ -717,8 +718,8 @@ def paging_stat(logs):
         return df, None
 
     # convert to reltime
-    df.start = df.start - beginning
-    df.end = df.end - beginning
+    # df.start = df.start - beginning
+    # df.end = df.end - beginning
 
     df.start = df.start.astype(datetime)
     df.end = df.end.astype(datetime)
