@@ -177,7 +177,7 @@ ptn_mem_dealloc = re.compile(r"""TFAllocator\sdeallocating\smemory\sat\s(?P<addr
                                  using\sallocator\s(?P<mem_type>\w+)@(?P<alloc_inst>\w+)""",
                              re.VERBOSE)
 ptn_paging_begin = re.compile(r"""Paging begin""")
-ptn_paging_end = re.compile(r"""Paging begin""")
+ptn_paging_end = re.compile(r"""Paging end""")
 
 ptn_tf_vanilla_start = re.compile(r"""\w+ Kernel Compute start: seq=(?P<seq>\d+)""")
 ptn_tf_vanilla_done = re.compile(r"""\w+ Kernel Compute done: seq=(?P<seq>\d+)""")
