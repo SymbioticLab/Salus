@@ -147,7 +147,6 @@ private:
     // Active entries. Used for handle paging request
     std::mutex entry_mu_;
     std::unordered_multimap<uint64_t, Entry *> active_entries_;
-    std::unordered_set<uint64_t> used_entries_;
 
     // Root nodes (with no in edges) that should form the initial ready queue
     std::vector<const tf::Node *> root_nodes_;

@@ -162,9 +162,6 @@ private:
     // Paging
     void doPaging();
 
-    // Debugging
-    void dumpRunningTasks();
-
     // Incoming kernels
     // Use a minimal linked list because the only operation we need is
     // iterate through the whole list, insert at end, and delete.

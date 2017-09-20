@@ -35,15 +35,14 @@ using namespace std::chrono_literals;
 // #define ENABLE_STACK_SENTINEL
 
 namespace {
-void logScheduleFailure(const Resources &usage, const ResourceMonitor &resMon)
+inline void logScheduleFailure(const Resources &usage, const ResourceMonitor &resMon)
 {
     STACK_SENTINEL;
 
-    DEBUG("Try to allocate resource failed. Requested:");
-    for (auto p : usage) {
-        DEBUG("    {} -> {}", p.first.DebugString(), p.second);
-    }
+#ifndef NDEBUG
+    DEBUG("Try to allocate resource failed. Requested: {}", resources::DebugString(usage));
     DEBUG("Available: {}", resMon.DebugString());
+#endif
 }
 
 } // namespace
@@ -228,19 +227,15 @@ void ExecutionEngine::scheduleLoop()
             swap(del, m_deletedSessions);
             assert(m_deletedSessions.size() == 0);
         }
-        TRACE("Got {} session to delete", del.size());
 
         // Append any new sessions
         {
             utils::Guard g(m_newMu);
 
-            TRACE("Got {} session to add", m_newSessions.size());
-
             m_sessions.splice(m_sessions.end(), m_newSessions);
             assert(m_newSessions.size() == 0);
         }
 
-        TRACE("Handling {} sessions in this iteration", m_sessions.size());
         // Loop through sessions
         size_t scheduled = 0;
         size_t remainingCount = 0;
@@ -253,14 +248,11 @@ void ExecutionEngine::scheduleLoop()
                 it = m_sessions.erase(it);
             } else {
                 // Move from front end queue to backing storage
-                TRACE("Looking at session {}@{}", item->sessHandle, as_hex(item));
-                TRACE("bgQueue has {} opItems", item->bgQueue.size());
                 {
                     utils::Guard g(item->mu);
                     item->bgQueue.splice(item->bgQueue.end(), item->queue);
                 }
                 remainingCount += item->bgQueue.size();
-                TRACE("bgQueue has {} opItems after collection", item->bgQueue.size());
 
                 // NOTE: don't use scheduled || maybeScheduleFrom(...)
                 // we don't want short-cut eval here and maybeScheduleFrom
@@ -270,10 +262,6 @@ void ExecutionEngine::scheduleLoop()
                 scheduled += count;
                 ++it;
             }
-        }
-
-        for (auto &d : del) {
-            ERR("Session {} requested for deletion but not found in queue", d->sessHandle);
         }
 
         bool noProgress = remainingCount > 0 && scheduled == 0;
@@ -373,11 +361,6 @@ size_t ExecutionEngine::maybeScheduleFrom(std::shared_ptr<SessionItem> item)
         if (scheduled) {
             m_runningTasks += 1;
 
-            {
-                utils::Guard g(item->tickets_mu);
-                item->running.emplace(opItem->rctx->ticket, opItem);
-            }
-
             DEBUG("Adding to thread pool: opItem in session {}: {}", item->sessHandle, opItem->op->DebugString());
             q::with(m_qec->queue(), std::move(opItem)).then([item, this](std::shared_ptr<OperationItem> &&opItem){
                 STACK_SENTINEL;
@@ -434,8 +417,6 @@ size_t ExecutionEngine::maybeScheduleFrom(std::shared_ptr<SessionItem> item)
     });
     n.wait();
 
-    TRACE("Adding back {} opItem in session {}", queue.size(), item->sessHandle);
-
     return size - queue.size();
 }
 
@@ -445,9 +426,6 @@ void ExecutionEngine::taskStopped(SessionItem &item, OperationItem &opItem)
 
     opItem.rctx->releaseStaging();
     m_runningTasks -= 1;
-
-    utils::Guard g(item.tickets_mu);
-    item.running.erase(opItem.rctx->ticket);
 }
 
 void ExecutionEngine::doPaging()
@@ -610,17 +588,4 @@ std::ostream &operator<<(std::ostream &os, const ResourceContext &c)
         return os << "AllocationTicket(Invalid)";
     }
     return os << "AllocationTicket(" << c.ticket << ", device=" << c.spec << ")";
-}
-
-void ExecutionEngine::dumpRunningTasks()
-{
-    for (auto &sess : m_sessions) {
-        for (auto &p : sess->running) {
-            if (auto opItem = p.second.lock()) {
-                DEBUG("{} -> {}", opItem->rctx, opItem->op->DebugString());
-            } else {
-                DEBUG("Ticket: {} -> Task deleted", p.first);
-            }
-        }
-    }
 }
