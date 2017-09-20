@@ -450,8 +450,15 @@ size_t ExecutorImpl::handlePagingRequest(uint64_t oldTicket, std::shared_ptr<Res
     // Add back to active entries with updated value
     {
         utils::Guard g(entry_mu_);
+        bool noMoreOldTicket = true;
         for (auto entry : entries) {
             active_entries_.emplace(entry->alloc_ticket, entry);
+            if (entry->alloc_ticket == oldTicket) {
+                noMoreOldTicket = false;
+            }
+        }
+        if (noMoreOldTicket) {
+            used_entries_.insert(oldTicket);
         }
     }
 

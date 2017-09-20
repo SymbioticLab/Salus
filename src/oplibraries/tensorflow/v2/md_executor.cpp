@@ -576,11 +576,13 @@ tf::Status ExecutorState::PrepareInputs(const NodeItem &item, tf::OpKernel *kern
             }
 
             // Update active entries as needed
+            assert(oldTicket != entry->alloc_ticket);
             utils::Guard g(impl_->entry_mu_);
             auto range = impl_->active_entries_.equal_range(oldTicket);
             for (auto it = range.first; it != range.second; ++it) {
                 if (it->second == entry) {
                     impl_->active_entries_.erase(it);
+                    impl_->used_entries_.insert(oldTicket);
                     break;
                 }
             }
@@ -727,6 +729,7 @@ void ExecutorState::ClearInputs(Entry *first, size_t num)
         for (auto it = range.first; it != range.second; ++it) {
             if (it->second == entry) {
                 impl_->active_entries_.erase(it);
+                impl_->used_entries_.insert(entry->alloc_ticket);
                 break;
             }
         }
