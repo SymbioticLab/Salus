@@ -454,7 +454,7 @@ void ExecutionEngine::doPaging()
 {
     // Step 1: select candidate sessions
     std::vector<std::pair<
-        double,
+        size_t,
         std::reference_wrapper<SessionItem>
     >> candidates;
     candidates.reserve(m_sessions.size());
@@ -465,7 +465,7 @@ void ExecutionEngine::doPaging()
     ResourceTag cpuTag {ResourceType::MEMORY, {DeviceType::CPU, 0}};
 
     for (auto &pSess : m_sessions) {
-        double mem = 0;
+        size_t mem = 0;
         for (auto ticket : pSess->tickets) {
             auto usage = m_resMonitor.queryUsage(ticket);
             if (!usage) continue;

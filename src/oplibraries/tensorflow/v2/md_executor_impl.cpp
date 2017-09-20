@@ -295,7 +295,11 @@ size_t ExecutorImpl::handlePagingRequest(uint64_t oldTicket, std::shared_ptr<Res
         utils::Guard g(entry_mu_);
         auto range = active_entries_.equal_range(oldTicket);
         if (range.first == range.second) {
-            ERR("Requested ticket for paging not found: {}", oldTicket);
+            if (used_entries_.count(oldTicket) > 0) {
+                ERR("Requested ticket has already been removed: {}", oldTicket);
+            } else {
+                ERR("Requested ticket for paging not found: {}", oldTicket);
+            }
             return 0;
         }
         for (auto it = range.first; it != range.second; ++it) {
