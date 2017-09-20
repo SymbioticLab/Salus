@@ -488,7 +488,7 @@ void ExecutionEngine::doPaging()
         return;
     }
 
-    for (size_t i = 1; i != candidates.size(); ++i) {
+    for (size_t i = 0; i != candidates.size(); ++i) {
         auto usage = candidates[i].first;
         SessionItem &sess = candidates[i].second;
         DEBUG("Session {} usage: {}", sess.sessHandle, usage);
