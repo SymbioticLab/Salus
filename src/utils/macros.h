@@ -40,6 +40,8 @@ public:
 } // namespace std
 #endif // CXX_HAS_ENUM_HASH
 
+constexpr std::size_t operator "" _sz (unsigned long long n) { return n; }
+
 namespace utils {
 template <class T>
 inline void hash_combine(std::size_t& seed, const T& v)

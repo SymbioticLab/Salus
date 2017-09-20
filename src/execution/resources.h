@@ -81,7 +81,7 @@ public:
 };
 } // namespace std
 
-using Resources = std::unordered_map<ResourceTag, double>;
+using Resources = std::unordered_map<ResourceTag, size_t>;
 
 namespace resources {
 // Return true iff avail contains req
@@ -176,7 +176,7 @@ public:
     // Free resources, return true if after this, the ticket hold no more resources.
     bool free(uint64_t ticket, const Resources &res);
 
-    std::vector<std::pair<double, uint64_t>> sortVictim(const std::unordered_set<uint64_t> &candidates);
+    std::vector<std::pair<size_t, uint64_t>> sortVictim(const std::unordered_set<uint64_t> &candidates);
 
     utils::optional<Resources> queryUsage(uint64_t ticket);
 

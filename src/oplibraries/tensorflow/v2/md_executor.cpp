@@ -661,10 +661,9 @@ tf::Status ExecutorState::ProcessOutputs(const NodeItem &item, tf::OpKernelConte
             // Pull more accurate ticket info if the tensor is initialized and has a buffer
             auto buf = tf::remote::PagingHelper::bufferOf(*val.tensor);
             if (buf) {
-                auto alloc = buf->allocator();
-                if (utils::startsWith(alloc->Name(), PerOpAllocator::NamePrefix)) {
-                    auto poa = static_cast<PerOpAllocator*>(alloc);
-                    out->alloc_ticket = poa->resourceContext().ticket;
+                auto alloc = PerOpAllocator::downcast(buf->allocator());
+                if (alloc) {
+                    out->alloc_ticket = alloc->resourceContext().ticket;
                 }
             }
 

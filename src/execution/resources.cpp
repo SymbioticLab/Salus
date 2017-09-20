@@ -126,7 +126,7 @@ bool contains(const Resources &avail, const Resources &req)
     auto aend = avail.end();
 
     ResourceTag tag;
-    double val;
+    size_t val;
     for (auto p : req) {
         std::tie(tag, val) = p;
         auto it = avail.find(tag);
@@ -218,10 +218,10 @@ using namespace resources;
 SessionResourceTracker::SessionResourceTracker()
 {
     // 100 G for CPU
-    m_limits[{ResourceType::MEMORY, DeviceType::CPU}] = 100.0 * 1024 * 1024 * 1024;
+    m_limits[{ResourceType::MEMORY, DeviceType::CPU}] = 100_sz * 1024 * 1024 * 1024;
 
     // 14 G for GPU 0
-    m_limits[{ResourceType::MEMORY, DeviceType::GPU}] = 14.0 * 1024 * 1024 * 1024;
+    m_limits[{ResourceType::MEMORY, DeviceType::GPU}] = 14_sz * 1024 * 1024 * 1024;
 }
 
 SessionResourceTracker::SessionResourceTracker(const Resources &cap)
@@ -230,7 +230,7 @@ SessionResourceTracker::SessionResourceTracker(const Resources &cap)
     auto lend = m_limits.end();
 
     ResourceTag tag;
-    double val;
+    size_t val;
     for (auto p : cap) {
         std::tie(tag, val) = p;
         auto it = m_limits.find(tag);
@@ -351,10 +351,10 @@ void ResourceMonitor::initializeLimits()
     Guard g(m_mu);
 
     // 100 G for CPU
-    m_limits[{ResourceType::MEMORY, DeviceType::CPU}] = 100.0 * 1024 * 1024 * 1024;
+    m_limits[{ResourceType::MEMORY, DeviceType::CPU}] = 100_sz * 1024 * 1024 * 1024;
 
     // 14 G for GPU 0
-    m_limits[{ResourceType::MEMORY, DeviceType::GPU}] = 14.0 * 1024 * 1024 * 1024;
+    m_limits[{ResourceType::MEMORY, DeviceType::GPU}] = 14_sz * 1024 * 1024 * 1024;
 }
 
 void ResourceMonitor::initializeLimits(const Resources &cap)
@@ -366,7 +366,7 @@ void ResourceMonitor::initializeLimits(const Resources &cap)
     auto lend = m_limits.end();
 
     ResourceTag tag;
-    double val;
+    size_t val;
     for (auto p : cap) {
         std::tie(tag, val) = p;
         auto it = m_limits.find(tag);
@@ -487,11 +487,11 @@ bool ResourceMonitor::free(uint64_t ticket, const Resources &res)
     return false;
 }
 
-std::vector<std::pair<double, uint64_t>> ResourceMonitor::sortVictim(const std::unordered_set<uint64_t> &candidates)
+std::vector<std::pair<size_t, uint64_t>> ResourceMonitor::sortVictim(const std::unordered_set<uint64_t> &candidates)
 {
     assert(!candidates.empty());
 
-    std::vector<std::pair<double, uint64_t>> usages;
+    std::vector<std::pair<size_t, uint64_t>> usages;
     usages.reserve(candidates.size());
 
     // TODO: currently only select based on GPU memory usage, generalize to all resources
@@ -499,11 +499,15 @@ std::vector<std::pair<double, uint64_t>> ResourceMonitor::sortVictim(const std::
     {
         Guard g(m_mu);
         for (auto &ticket : candidates) {
-            auto usage = utils::getOrDefault(m_using, ticket, utils::optional<Resources>{});
-            if (!usage) {
+            auto usagemap = utils::optionalGet(m_using, ticket);
+            if (!usagemap) {
                 continue;
             }
-            usages.emplace_back(utils::getOrDefault(usage, tag, 0.0), ticket);
+            auto gpuusage = utils::optionalGet(usagemap, tag);
+            if (!gpuusage || *gpuusage == 0) {
+                continue;
+            }
+            usages.emplace_back(*gpuusage, ticket);
         }
     }
 
@@ -516,5 +520,5 @@ std::vector<std::pair<double, uint64_t>> ResourceMonitor::sortVictim(const std::
 utils::optional<Resources> ResourceMonitor::queryUsage(uint64_t ticket)
 {
     Guard g(m_mu);
-    return utils::getOrDefault(m_using, ticket, utils::optional<Resources>{});
+    return utils::optionalGet(m_using, ticket);
 }

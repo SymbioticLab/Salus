@@ -19,6 +19,7 @@
 #include "md_executor_impl.h"
 
 #include "oplibraries/tensorflow/v2/peropallocdevice.h"
+#include "oplibraries/tensorflow/v2/tfallocator.h"
 
 #include "oplibraries/tensorflow/tensorflow_headers.h"
 
@@ -340,6 +341,12 @@ size_t ExecutorImpl::handlePagingRequest(uint64_t oldTicket, std::shared_ptr<Res
 
         auto root_buf = buf->root_buffer();
         if (!root_buf) continue;
+
+        auto alloc = PerOpAllocator::downcast(root_buf->allocator());
+
+        if (!alloc || alloc->resourceContext().spec.type != DeviceType::GPU) {
+            continue;
+        }
 
         auto &part = parts[root_buf];
         if (buf == root_buf) {

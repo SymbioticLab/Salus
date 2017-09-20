@@ -24,6 +24,7 @@
 #include "platform/logging.h"
 #include "utils/macros.h"
 #include "utils/threadutils.h"
+#include "utils/stringutils.h"
 
 namespace {
 void checkMemory(void *ptr, size_t num_bytes)
@@ -128,6 +129,14 @@ void TFAllocator::DeallocateRaw(void *ptr)
     } else {
         MemoryMgr::instance().deallocate(ptr);
     }
+}
+
+PerOpAllocator *PerOpAllocator::downcast(tf::Allocator *alloc)
+{
+    if (utils::startsWith(alloc->Name(), NamePrefix)) {
+        return static_cast<PerOpAllocator*>(alloc);
+    }
+    return nullptr;
 }
 
 PerOpAllocator::PerOpAllocator(const std::shared_ptr<ResourceContext> &rctx, tensorflow::Allocator *other)

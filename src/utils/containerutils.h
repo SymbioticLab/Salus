@@ -25,8 +25,31 @@
 
 namespace utils {
 
-template<typename C, typename K, typename V>
-V getOrDefault(C &c, const K &k, const V &defv)
+template<typename C>
+auto optionalGet(const C &c, const typename C::key_type &k) -> optional<typename C::mapped_type>
+{
+    optional<typename C::mapped_type> res;
+    auto it = c.find(k);
+    if (it != c.end()) {
+        res = it->second;
+    }
+    return res;
+}
+
+template<typename C>
+auto optionalGet(const optional<C> &c, const typename C::key_type &k) -> optional<typename C::mapped_type>
+{
+    optional<typename C::mapped_type> res;
+    auto it = c->find(k);
+    if (it != c->end()) {
+        res = it->second;
+    }
+    return res;
+}
+
+template<typename C>
+auto getOrDefault(const C &c, const typename C::key_type &k, const typename C::mapped_type &defv)
+    -> typename C::mapped_type
 {
     auto it = c.find(k);
     if (it == c.end()) {
@@ -35,8 +58,9 @@ V getOrDefault(C &c, const K &k, const V &defv)
     return it->second;
 }
 
-template<typename C, typename K, typename V>
-V getOrDefault(optional<C> &c, const K &k, const V &defv)
+template<typename C>
+auto getOrDefault(const optional<C> &c, const typename C::key_type &k, const typename C::mapped_type &defv)
+    -> typename C::mapped_type
 {
     auto it = c->find(k);
     if (it == c->end()) {

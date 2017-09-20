@@ -57,6 +57,8 @@ class PerOpAllocator : public tensorflow::Allocator, public tensorflow::core::Re
 public:
     static const std::string NamePrefix;
 
+    static PerOpAllocator *downcast(tf::Allocator *);
+
     explicit PerOpAllocator(const std::shared_ptr<ResourceContext> &rctx, tensorflow::Allocator *other);
     explicit PerOpAllocator(std::shared_ptr<ResourceContext> &&rctx, tensorflow::Allocator *other);
 
