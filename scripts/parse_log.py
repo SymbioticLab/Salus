@@ -8,6 +8,7 @@ import pandas as pd
 import seaborn as sns
 import numpy as np
 import matplotlib.pyplot as plt
+import matplotlib.dates as dt
 
 import plotutils as pu
 
@@ -67,6 +68,27 @@ class Entry(object):
         del self.raw_content
         self.__dict__.update(d)
         return self
+
+
+thread_seq_map = {}
+tf_thread_seq_map = {}
+seq_info = defaultdict(dict)
+blocks = {}
+thread_alloc_type_map = {}
+last_paging_start = None
+
+
+def initialize():
+    global thread_seq_map, tf_thread_seq_map, seq_info, blocks, thread_alloc_type_map
+    thread_seq_map = {}
+    tf_thread_seq_map = {}
+    seq_info = defaultdict(dict)
+    blocks = {}
+    thread_alloc_type_map = {}
+    last_paging_start = None
+
+
+initialize()
 
 
 def load_file(path):
@@ -131,13 +153,6 @@ def load_both(exec_file, tf_file):
     return logs
 
 
-thread_seq_map = {}
-tf_thread_seq_map = {}
-seq_info = defaultdict(dict)
-blocks = {}
-thread_alloc_type_map = {}
-
-
 ptn_recv_frame = re.compile(r"""Received \w+ frame( \d+)?: zmq::message_t\(len=(?P<size>\d+),.*""")
 ptn_recv_evenlop = re.compile(r"""Received request evenlop: .+type='executor.(?P<req_type>\w+)', seq=(?P<seq>\d+),.*""")
 ptn_create_opkernel = re.compile(r"""Created OpKernel for seq (?P<seq>\d+)""")
@@ -158,6 +173,8 @@ ptn_mem_dealloc = re.compile(r"""TFAllocator\sdeallocating\smemory\sat\s(?P<addr
                                  size\s(?P<size>\d+)\s
                                  using\sallocator\s(?P<mem_type>\w+)@(?P<alloc_inst>\w+)""",
                              re.VERBOSE)
+ptn_paging_begin = re.compile(r"""Paging begin""")
+ptn_paging_end = re.compile(r"""Paging begin""")
 
 ptn_tf_vanilla_start = re.compile(r"""\w+ Kernel Compute start: seq=(?P<seq>\d+)""")
 ptn_tf_vanilla_done = re.compile(r"""\w+ Kernel Compute done: seq=(?P<seq>\d+)""")
@@ -311,6 +328,25 @@ def match_exec_content(content, entry):
             'addr': addr,
             'size': size,
             'block': block
+        }
+
+    m = ptn_paging_begin.match(content)
+    if m:
+        if last_paging_start is not None:
+            raise ValueError('Concecutive paging start event')
+        last_paging_start = entry.timestamp
+        return {
+            'type': 'paging_begin'
+        }
+
+    m = ptn_paging_end.match(content)
+    if m:
+        if last_paging_start is None:
+            raise ValueError('Concecutive paging end event')
+        return {
+            'type': 'paging_end',
+            'start': last_paging_start,
+            'end': entry.timestamp
         }
 
     return {}
@@ -613,3 +649,19 @@ def memory_usage(logs, iter_times=None):
     fig.text(0.02, 0.5, 'Memory Usage (bytes)', va='center', rotation='vertical')
     fig.subplots_adjust(left=0.1, bottom=0.13)
     return df, fig
+
+
+def paging_stat(logs):
+    data = []
+    for l in logs:
+        if l.type != 'paging_end':
+            continue
+        data.append({
+            'start': l.start,
+            'end': l.end
+        })
+
+    df = pd.DataFrame(data)
+    ax = plt.hlines(df.index, dt.date2num(df.start), dt.date2num(df.end))
+
+    return df, ax.figure
