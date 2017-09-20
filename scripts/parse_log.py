@@ -496,7 +496,7 @@ def scheduling_time(logs):
     ts = pd.Series(times)
 
     if len(ts) == 0:
-        return ts, plt.figure()
+        return ts, None
 
     print('Preparation times for {} RunRequests'.format(len(ts)))
     print('Cumulative count at each point: ', np.array([.25, .75, .90, .999, .9999]) * len(ts))
@@ -518,7 +518,7 @@ def compute_time(logs):
     ts = pd.Series(times)
 
     if len(ts) == 0:
-        return ts, plt.figure()
+        return ts, None
 
     print('Compute time for {} requests'.format(len(ts)))
     print('Cumulative count at each point: ', np.array([.25, .75, .90, .999, .9999]) * len(ts))
@@ -540,7 +540,7 @@ def process_time(logs):
     ts = pd.Series(times)
 
     if len(ts) == 0:
-        return ts, plt.figure()
+        return ts, None
 
     print('Post process time for {} requests'.format(len(ts)))
     print('Cumulative count at each point: ', np.array([.25, .75, .90, .999, .9999]) * len(ts))
@@ -562,7 +562,7 @@ def roundtrip_time(logs):
     ts = pd.Series(times)
 
     if len(ts) == 0:
-        return ts, plt.figure()
+        return ts, None
 
     print('Round-trip time for {} messages'.format(len(ts)))
     print('Cumulative count at each point: ', np.array([.25, .75, .90, .999, .9999]) * len(ts))
@@ -583,7 +583,7 @@ def req_on_wire_time(logs):
     times = [l.travel_time for l in logs if l.type == 'recv_evenlop' and hasattr(l, 'travel_time')]
     ts = pd.Series(times)
     if len(ts) == 0:
-        return ts, plt.figure()
+        return ts, None
 
     print('Transmission time for {} requests'.format(len(ts)))
     print('Cumulative count at each point: ', np.array([.25, .75, .90, .999, .9999]) * len(ts))
@@ -605,7 +605,7 @@ def resp_on_wire_time(logs):
     ts = pd.Series(times)
 
     if len(ts) == 0:
-        return ts, plt.figure()
+        return ts, None
 
     print('Transmission time for {} responses'.format(len(ts)))
     print('Cumulative count at each point: ', np.array([.25, .75, .90, .999, .9999]) * len(ts))
@@ -650,7 +650,7 @@ def memory_usage(logs, iter_times=None):
     df = pd.DataFrame(mem_activities)
 
     if len(df) == 0:
-        return df, plt.figure()
+        return df, None
 
     df = df.set_index('timestamp').sort_index()
 
@@ -688,7 +688,7 @@ def paging_stat(logs):
 
     df = pd.DataFrame(data)
     if len(df) == 0:
-        return df, plt.figure()
+        return df, None
 
     df.start = df.start.astype(datetime)
     df.end = df.end.astype(datetime)
