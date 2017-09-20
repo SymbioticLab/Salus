@@ -495,6 +495,9 @@ def scheduling_time(logs):
     times = [l.prep_time for l in logs if l.type == 'start_running']
     ts = pd.Series(times)
 
+    if len(ts) == 0:
+        return ts, plt.figure()
+
     print('Preparation times for {} RunRequests'.format(len(ts)))
     print('Cumulative count at each point: ', np.array([.25, .75, .90, .999, .9999]) * len(ts))
     print(ts.quantile([.25, .75, .90, .999, .9999]))
@@ -513,6 +516,9 @@ def scheduling_time(logs):
 def compute_time(logs):
     times = [l.compute_time for l in logs if l.type == 'compute_done']
     ts = pd.Series(times)
+
+    if len(ts) == 0:
+        return ts, plt.figure()
 
     print('Compute time for {} requests'.format(len(ts)))
     print('Cumulative count at each point: ', np.array([.25, .75, .90, .999, .9999]) * len(ts))
@@ -533,6 +539,9 @@ def process_time(logs):
     times = [l.process_time for l in logs if l.type == 'resp_sent' and hasattr(l, 'process_time')]
     ts = pd.Series(times)
 
+    if len(ts) == 0:
+        return ts, plt.figure()
+
     print('Post process time for {} requests'.format(len(ts)))
     print('Cumulative count at each point: ', np.array([.25, .75, .90, .999, .9999]) * len(ts))
     print(ts.quantile([.25, .75, .90, .999, .9999]))
@@ -552,6 +561,9 @@ def roundtrip_time(logs):
     times = [l.roundtrip for l in logs if l.type == 'tf_rpc_return']
     ts = pd.Series(times)
 
+    if len(ts) == 0:
+        return ts, plt.figure()
+
     print('Round-trip time for {} messages'.format(len(ts)))
     print('Cumulative count at each point: ', np.array([.25, .75, .90, .999, .9999]) * len(ts))
     print(ts.quantile([.25, .75, .90, .999, .9999]))
@@ -570,6 +582,8 @@ def roundtrip_time(logs):
 def req_on_wire_time(logs):
     times = [l.travel_time for l in logs if l.type == 'recv_evenlop' and hasattr(l, 'travel_time')]
     ts = pd.Series(times)
+    if len(ts) == 0:
+        return ts, plt.figure()
 
     print('Transmission time for {} requests'.format(len(ts)))
     print('Cumulative count at each point: ', np.array([.25, .75, .90, .999, .9999]) * len(ts))
@@ -589,6 +603,9 @@ def req_on_wire_time(logs):
 def resp_on_wire_time(logs):
     times = [l.travel_time for l in logs if l.type == 'tf_rpc_return' and hasattr(l, 'travel_time')]
     ts = pd.Series(times)
+
+    if len(ts) == 0:
+        return ts, plt.figure()
 
     print('Transmission time for {} responses'.format(len(ts)))
     print('Cumulative count at each point: ', np.array([.25, .75, .90, .999, .9999]) * len(ts))
@@ -631,6 +648,10 @@ def memory_usage(logs, iter_times=None):
             raise ValueError("Unexpected value: ", m)
 
     df = pd.DataFrame(mem_activities)
+
+    if len(df) == 0:
+        return df, plt.figure()
+
     df = df.set_index('timestamp').sort_index()
 
     if iter_times is not None:
@@ -666,6 +687,11 @@ def paging_stat(logs):
         })
 
     df = pd.DataFrame(data)
+    if len(df) == 0:
+        return df, plt.figure()
+
+    df.start = df.start.astype(datetime)
+    df.end = df.end.astype(datetime)
     ax = plt.hlines(df.index, dt.date2num(df.start), dt.date2num(df.end))
 
     return df, ax.figure
