@@ -75,7 +75,7 @@ tf_thread_seq_map = {}
 seq_info = defaultdict(dict)
 blocks = {}
 thread_alloc_type_map = {}
-last_paging_start = None
+last_paging_start = []
 
 
 def initialize():
@@ -85,7 +85,7 @@ def initialize():
     seq_info = defaultdict(dict)
     blocks = {}
     thread_alloc_type_map = {}
-    last_paging_start = None
+    last_paging_start = []
 
 
 initialize()
@@ -332,20 +332,21 @@ def match_exec_content(content, entry):
 
     m = ptn_paging_begin.match(content)
     if m:
-        if last_paging_start is not None:
+        if len(last_paging_start) != 0:
             raise ValueError('Concecutive paging start event')
-        last_paging_start = entry.timestamp
+        last_paging_start.append(entry.timestamp)
         return {
             'type': 'paging_begin'
         }
 
     m = ptn_paging_end.match(content)
     if m:
-        if last_paging_start is None:
+        if len(last_paging_start) == 0:
             raise ValueError('Concecutive paging end event')
+        last_start = last_paging_start.pop()
         return {
             'type': 'paging_end',
-            'start': last_paging_start,
+            'start': last_start,
             'end': entry.timestamp
         }
 
