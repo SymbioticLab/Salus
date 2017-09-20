@@ -91,9 +91,12 @@ def initialize():
 initialize()
 
 
-def load_file(path):
+def load_file(path, reinitialize=True):
     """Load logs"""
     logs = []
+
+    if reinitialize:
+        initialize()
 
     with open(path) as f:
         entry = None
@@ -132,7 +135,7 @@ def load_both(exec_file, tf_file):
     print('Loaded {} entries'.format(len(log1)))
 
     print('Loading ', tf_file)
-    log2 = load_file(tf_file)
+    log2 = load_file(tf_file, reinitialize=False)
     print('Loaded {} entries'.format(len(log2)))
 
     print('Merging...')
@@ -333,8 +336,8 @@ def match_exec_content(content, entry):
     m = ptn_paging_begin.match(content)
     if m:
         if len(last_paging_start) != 0:
-            raise ValueError('Concecutive paging start event')
-        last_paging_start.append(entry.timestamp)
+            raise ValueError('Concecutive paging start event, previous one: ', last_paging_start[-1])
+        last_paging_start.append(entry)
         return {
             'type': 'paging_begin'
         }
@@ -346,7 +349,7 @@ def match_exec_content(content, entry):
         last_start = last_paging_start.pop()
         return {
             'type': 'paging_end',
-            'start': last_start,
+            'start': last_start.timestamp,
             'end': entry.timestamp
         }
 
