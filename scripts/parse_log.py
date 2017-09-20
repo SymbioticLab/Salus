@@ -79,7 +79,7 @@ last_paging_start = None
 
 
 def initialize():
-    global thread_seq_map, tf_thread_seq_map, seq_info, blocks, thread_alloc_type_map
+    global thread_seq_map, tf_thread_seq_map, seq_info, blocks, thread_alloc_type_map, last_paging_start
     thread_seq_map = {}
     tf_thread_seq_map = {}
     seq_info = defaultdict(dict)
