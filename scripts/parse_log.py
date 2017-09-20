@@ -158,7 +158,7 @@ def load_both(exec_file, tf_file):
 
 ptn_recv_frame = re.compile(r"""Received \w+ frame( \d+)?: zmq::message_t\(len=(?P<size>\d+),.*""")
 ptn_recv_evenlop = re.compile(r"""Received request evenlop: .+type='executor.(?P<req_type>\w+)', seq=(?P<seq>\d+),.*""")
-ptn_disp_custom = re.compile(r"""Dispatching custom task (?P<req>\w+) of seq (?P<seq>\d+)""")
+ptn_disp_custom = re.compile(r"""Dispatching custom task (?P<req>[\w.]+) of seq (?P<seq>\d+)""")
 ptn_create_opkernel = re.compile(r"""Created OpKernel for seq (?P<seq>\d+)""")
 ptn_running = re.compile(r"""running(?P<async> async)? in thread \d+""")
 ptn_compute_done = re.compile(r"""OpKernel->Compute finished with status.*""")
