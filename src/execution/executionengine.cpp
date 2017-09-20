@@ -533,6 +533,15 @@ void ExecutionEngine::doPaging()
         // continue to next session
     }
 
+    ERR("All paging request failed. Dump all session usage");
+    for (size_t i = 0; i != candidates.size(); ++i) {
+        auto usage = candidates[i].first;
+        SessionItem &sess = candidates[i].second;
+        ERR("Session {} usage: {}", sess.sessHandle, usage);
+    }
+    ERR("Dump resource monitor status: {}", m_resMonitor.DebugString());
+
+
     // Step 3: TODO: force evict
 }
 
