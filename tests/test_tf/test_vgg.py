@@ -89,7 +89,7 @@ class VGGCaseBase(unittest.TestCase):
     def _config(self, **kwargs):
         return None
 
-    @parameterized.expand([(50,), (100,), (150,)])
+    @parameterized.expand([(25,), (50,), (100,)])
     def test_gpu(self, batch_size):
         def func():
             def input_data(*a, **kw):
@@ -110,7 +110,7 @@ class VGGCaseBase(unittest.TestCase):
 
         run_on_devices(func, '/device:CPU:0')
 
-    @parameterized.expand([(50,), (100,), (150,)])
+    @parameterized.expand([(25,), (50,), (100,)])
     def test_rpc_only(self, batch_size):
         def func():
             def input_data(*a, **kw):
@@ -183,9 +183,9 @@ class TestVgg16(VGGCaseBase):
 
     def _config(self, **kwargs):
         memusages = {
+            25: (11494955340, 1.67e9),
             50: (11494955340, 1.67e9),
             100: (11494955340, 1.67e9),
-            150: (11494955340, 1.67e9),
         }
         batch_size = kwargs.get('batch_size', 100)
 
