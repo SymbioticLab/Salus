@@ -39,6 +39,9 @@ inline void logScheduleFailure(const Resources &usage, const ResourceMonitor &re
 {
     STACK_SENTINEL;
 
+    UNUSED(usage);
+    UNUSED(resMon);
+
 #ifndef NDEBUG
     DEBUG("Try to allocate resource failed. Requested: {}", resources::DebugString(usage));
     DEBUG("Available: {}", resMon.DebugString());
