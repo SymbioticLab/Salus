@@ -6,13 +6,15 @@ import numpy as np
 from datetime import datetime
 from timeit import default_timer
 
+from parameterized import parameterized
+
 import tensorflow as tf
 from tensorflow.examples.tutorials.mnist import input_data
 
 from . import run_on_rpc_and_cpu, run_on_devices, run_on_sessions, assertAllClose
 
 
-def run_mnist_softmax(sess, mnist):
+def run_mnist_softmax(sess, mnist, batch_size=50):
     x = tf.placeholder(tf.float32, shape=[None, 784])
     y_ = tf.placeholder(tf.float32, shape=[None, 10])
     W = tf.Variable(tf.zeros([784, 10]))
@@ -23,14 +25,14 @@ def run_mnist_softmax(sess, mnist):
         tf.nn.softmax_cross_entropy_with_logits(labels=y_, logits=y))
     train_step = tf.train.GradientDescentOptimizer(0.5).minimize(cross_entropy)
     for _ in range(50):
-        batch = mnist.train.next_batch(100)
+        batch = mnist.train.next_batch(batch_size)
         sess.run(train_step, feed_dict={x: batch[0], y_: batch[1]})
     correct_prediction = tf.equal(tf.argmax(y, 1), tf.argmax(y_, 1))
     accuracy = tf.reduce_mean(tf.cast(correct_prediction, tf.float32))
     return sess.run(accuracy, feed_dict={x: mnist.test.images, y_: mnist.test.labels})
 
 
-def run_mnist_conv(sess, mnist):
+def run_mnist_conv(sess, mnist, batch_size=50):
     def weight_variable(shape):
         initial = tf.truncated_normal(shape, stddev=0.1)
         return tf.Variable(initial)
@@ -81,7 +83,6 @@ def run_mnist_conv(sess, mnist):
     sess.run(tf.global_variables_initializer())
 
     batch_num = 50
-    batch_size = 50
     speeds = []
     for i in range(batch_num):
         batch = mnist.train.next_batch(batch_size)
@@ -101,7 +102,7 @@ def run_mnist_conv(sess, mnist):
     return sess.run(accuracy, feed_dict={x: mnist.test.images, y_: mnist.test.labels, keep_prob: 1.0})
 
 
-def run_mnist_large(sess, mnist):
+def run_mnist_large(sess, mnist, batch_size=50):
     def weight_variable(shape):
         initial = tf.truncated_normal(shape, stddev=0.1)
         return tf.Variable(initial)
@@ -165,7 +166,6 @@ def run_mnist_large(sess, mnist):
     sess.run(tf.global_variables_initializer())
 
     batch_num = 50
-    batch_size = 50
     speeds = []
     inbetween = []
     last_end_time = 0
@@ -206,13 +206,16 @@ class MnistConvBase(unittest.TestCase):
     def _runner(self):
         return None
 
+    def _config(self):
+        return None
+
     def test_gpu(self):
         def func():
             mnist = input_data.read_data_sets('MNIST_data', one_hot=True)
             sess = tf.get_default_session()
             return self._runner()(sess, mnist)
 
-        run_on_devices(func, '/device:GPU:0')
+        run_on_devices(func, '/device:GPU:0', config=self._config())
 
     def test_cpu(self):
         def func():
@@ -220,14 +223,15 @@ class MnistConvBase(unittest.TestCase):
             sess = tf.get_default_session()
             return self._runner()(sess, mnist)
 
-        run_on_devices(func, '/device:CPU:0')
+        run_on_devices(func, '/device:CPU:0', config=self._config())
 
-    def test_rpc(self):
+    @parameterized.expand([(25,), (50,), (100,)])
+    def test_rpc(self, batch_size):
         def func():
             mnist = input_data.read_data_sets('MNIST_data', one_hot=True)
             sess = tf.get_default_session()
-            return self._runner()(sess, mnist)
-        run_on_sessions(func, 'zrpc://tcp://127.0.0.1:5501')
+            return self._runner()(sess, mnist, batch_size=batch_size)
+        run_on_sessions(func, 'zrpc://tcp://127.0.0.1:5501', config=self._config())
 
     def test_correctness(self):
         def func():
@@ -235,7 +239,7 @@ class MnistConvBase(unittest.TestCase):
             sess = tf.get_default_session()
             return self._runner()(sess, mnist)
 
-        actual, expected = run_on_rpc_and_cpu(func)
+        actual, expected = run_on_rpc_and_cpu(func, config=self._config())
         assertAllClose(actual, expected, rtol=1e-3)
 
 
@@ -252,6 +256,19 @@ class TestMnistConv(MnistConvBase):
 class TestMnistLarge(MnistConvBase):
     def _runner(self):
         return run_mnist_large
+
+    def _config(self, **kwargs):
+        memusages = {
+            25: (5715962884 - 23494616, 23494616),
+            50: (5715962884 - 23494616, 23494616),
+            100: (5715962884 - 23494616, 23494616),
+        }
+        batch_size = kwargs.get('batch_size', 50)
+
+        config = tf.ConfigProto()
+        config.zmq_options.resource_map.temporary['MEMORY:GPU'] = memusages[batch_size][0]
+        config.zmq_options.resource_map.persistant['MEMORY:GPU'] = memusages[batch_size][1]
+        return config
 
 
 del MnistConvBase

@@ -7,16 +7,17 @@ from timeit import default_timer
 import numpy as np
 import tensorflow as tf
 
+from parameterized import parameterized
+
 from . import run_on_rpc_and_cpu, run_on_rpc_and_gpu, run_on_sessions, run_on_devices
 from . import networks, datasets
 from .lib import tfhelper
 
 
-def run_vgg(vgg, sess, input_data):
+def run_vgg(vgg, sess, input_data, batch_size=100):
     if vgg is None:
         raise ValueError('VGG is None!!')
 
-    batch_size = 100
     images, labels, num_classes = input_data(batch_size=batch_size, batch_num=100)
     train_mode = tf.placeholder(tf.bool)
 
@@ -85,6 +86,9 @@ class VGGCaseBase(unittest.TestCase):
     def _vgg(self):
         return None
 
+    def _config(self, **kwargs):
+        return None
+
     def test_gpu(self):
         def func():
             def input_data(*a, **kw):
@@ -103,17 +107,15 @@ class VGGCaseBase(unittest.TestCase):
 
         run_on_devices(func, '/device:CPU:0')
 
-    def test_rpc_only(self):
+    @parameterized.expand([(50,), (100,), (150,)])
+    def test_rpc_only(self, batch_size):
         def func():
             def input_data(*a, **kw):
                 return datasets.fake_data(*a, height=224, width=224, num_classes=1000, **kw)
             sess = tf.get_default_session()
-            return run_vgg(self._vgg(), sess, input_data)
+            return run_vgg(self._vgg(), sess, input_data, batch_size=batch_size)
 
-        config=tf.ConfigProto()
-        config.zmq_options.resource_map.temporary['MEMORY:GPU'] = 11494955340
-        config.zmq_options.resource_map.persistant['MEMORY:GPU'] = 1.67e9
-        run_on_sessions(func, 'zrpc://tcp://127.0.0.1:5501', config=config)
+        run_on_sessions(func, 'zrpc://tcp://127.0.0.1:5501', config=self._config(batch_size=batch_size))
 
     def test_fake_data(self):
         def func():
@@ -175,6 +177,19 @@ class TestVgg11(VGGCaseBase):
 class TestVgg16(VGGCaseBase):
     def _vgg(self):
         return networks.Vgg16Trainable()
+
+    def _config(self, **kwargs):
+        memusages = {
+            50: (11494955340, 1.67e9),
+            100: (11494955340, 1.67e9),
+            150: (11494955340, 1.67e9),
+        }
+        batch_size = kwargs.get('batch_size', 100)
+
+        config = tf.ConfigProto()
+        config.zmq_options.resource_map.temporary['MEMORY:GPU'] = memusages[batch_size][0]
+        config.zmq_options.resource_map.persistant['MEMORY:GPU'] = memusages[batch_size][1]
+        return config
 
 
 class TestVgg19(VGGCaseBase):
