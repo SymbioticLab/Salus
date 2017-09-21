@@ -89,14 +89,17 @@ class VGGCaseBase(unittest.TestCase):
     def _config(self, **kwargs):
         return None
 
-    def test_gpu(self):
+    @parameterized.expand([(50,), (100,), (150,)])
+    def test_gpu(self, batch_size):
         def func():
             def input_data(*a, **kw):
                 return datasets.fake_data(*a, height=224, width=224, num_classes=1000, **kw)
             sess = tf.get_default_session()
-            return run_vgg(self._vgg(), sess, input_data)
+            return run_vgg(self._vgg(), sess, input_data, batch_size=batch_size)
 
-        run_on_devices(func, '/device:GPU:0', config=tf.ConfigProto(allow_soft_placement=True))
+        config = self._config(batch_size=batch_size)
+        config.allow_soft_placement = True
+        run_on_devices(func, '/device:GPU:0', config=config)
 
     def test_cpu(self):
         def func():

@@ -209,13 +209,14 @@ class MnistConvBase(unittest.TestCase):
     def _config(self):
         return None
 
-    def test_gpu(self):
+    @parameterized.expand([(25,), (50,), (100,)])
+    def test_gpu(self, batch_size):
         def func():
             mnist = input_data.read_data_sets('MNIST_data', one_hot=True)
             sess = tf.get_default_session()
-            return self._runner()(sess, mnist)
+            return self._runner()(sess, mnist, batch_size=batch_size)
 
-        run_on_devices(func, '/device:GPU:0', config=self._config())
+        run_on_devices(func, '/device:GPU:0', config=self._config(batch_size=batch_size))
 
     def test_cpu(self):
         def func():
@@ -231,7 +232,7 @@ class MnistConvBase(unittest.TestCase):
             mnist = input_data.read_data_sets('MNIST_data', one_hot=True)
             sess = tf.get_default_session()
             return self._runner()(sess, mnist, batch_size=batch_size)
-        run_on_sessions(func, 'zrpc://tcp://127.0.0.1:5501', config=self._config())
+        run_on_sessions(func, 'zrpc://tcp://127.0.0.1:5501', config=self._config(batch_size=batch_size))
 
     def test_correctness(self):
         def func():
