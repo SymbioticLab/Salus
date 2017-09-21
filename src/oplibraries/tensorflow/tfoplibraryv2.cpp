@@ -288,6 +288,8 @@ void TFOpLibraryV2::handleCreateSession(const std::string &recvId, const executo
 
     uint64_t ticket;
     if (!SessionResourceTracker::instance().admit(rm, ticket)) {
+        WARN("Rejecting session due to unsafe resource usage. Predicted usage: {}, current usage: {}",
+             rm.DebugString(), SessionResourceTracker::instance().DebugString());
         cb(consumeResponse<tf::CreateSessionResponse>(nullptr, tf::errors::Internal("")));
         return;
     }

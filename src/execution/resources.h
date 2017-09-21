@@ -138,6 +138,8 @@ public:
     void free(const std::string &sessHandle);
     void free(uint64_t ticket);
 
+    std::string DebugString() const;
+
 private:
     mutable std::mutex m_mu;
 

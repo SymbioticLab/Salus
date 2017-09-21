@@ -346,6 +346,22 @@ void SessionResourceTracker::free(const std::string &sessHandle)
     freeUnsafe(it->second);
 }
 
+std::string SessionResourceTracker::DebugString() const
+{
+    std::ostringstream oss;
+
+    oss << "SessionResourceTracker" << std::endl;
+    oss << "    Issued tickets:" << std::endl;
+    for (auto &p : m_sessions) {
+        oss << "      " << p.first << " -> " <<  p.second.DebugString();
+    }
+    oss << "    Sessions:" << std::endl;
+    for (auto &p : m_sessToTicket) {
+        oss << "      " << p.first << " -> " << p.second << std::endl;
+    }
+    return oss.str();
+}
+
 void ResourceMonitor::initializeLimits()
 {
     Guard g(m_mu);
