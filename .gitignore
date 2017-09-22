@@ -12,7 +12,7 @@ CMakeLists.txt.user*
 
 # Build dir
 build/*
-build-kdev/*
+build-*/*
 spack_packages
 
 # Vagrant
@@ -20,6 +20,7 @@ spack_packages
 
 # Data files in test
 MNIST_data
+tests/*.output
 
 # Scripts
 scripts/**
