@@ -66,6 +66,8 @@ private:
 
     void afterRun(const tf::Status &s, const Callbacks &cbs);
 
+    void updateRefEntryTickets(const std::vector<Entry*> &entries);
+
 private:
     std::shared_ptr<ResourceContext> rctx;
     ExecutorImpl::DeviceItem ditem;
@@ -81,6 +83,8 @@ private:
     tf::OpKernel *op_kernel = nullptr;
     bool kernel_is_async;
     bool has_ref_input;
+
+    std::vector<Entry*> reffedEntries;
 
     // Borrowed from ExecutorState
     ExecutorState::TaggedNode &tagged_node;

@@ -577,15 +577,27 @@ tf::Status ExecutorState::PrepareInputs(const NodeItem &item, tf::OpKernel *kern
 
             // Update active entries as needed
             assert(oldTicket != entry->alloc_ticket);
+
+            std::vector<Entry*> needUpdate;
+            needUpdate.reserve(16);
+            needUpdate.push_back(entry);
+
             utils::Guard g(impl_->entry_mu_);
             auto range = impl_->active_entries_.equal_range(oldTicket);
-            for (auto it = range.first; it != range.second; ++it) {
+            for (auto it = range.first; it != range.second; ) {
                 if (it->second == entry) {
-                    impl_->active_entries_.erase(it);
-                    break;
+                    it = impl_->active_entries_.erase(it);
+                } else if (entry->ref && it->second->ref == entry->ref) {
+                    needUpdate.push_back(it->second);
+                    it->second->alloc_ticket = entry->alloc_ticket;
+                    it = impl_->active_entries_.erase(it);
+                } else {
+                    ++it;
                 }
             }
-            impl_->active_entries_.emplace(entry->alloc_ticket, entry);
+            for (auto &e : needUpdate) {
+                impl_->active_entries_.emplace(e->alloc_ticket, e);
+            }
         }
 
         // Copy mutex if needed

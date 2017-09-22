@@ -258,7 +258,9 @@ void ExecutionEngine::scheduleLoop()
             if (del.erase(item) > 0) {
                 TRACE("Deleting session {}@{}", item->sessHandle, as_hex(item));
                 assert(item.use_count() == 1);
-                assert(item->tickets.empty());
+                // The deletion of session's executor is async to this thread.
+                // So it's legit for tickets to be nonempt
+                // assert(item->tickets.empty());
                 it = m_sessions.erase(it);
             } else {
                 if (sessionsChanged == 0) {
@@ -353,6 +355,7 @@ bool ExecutionEngine::maybePreAllocateFor(SessionItem &item, OperationItem &opIt
         return false;
     }
 
+    TRACE("Pre allocated {} for {}", *opItem.rctx, opItem.op->DebugString());
     utils::Guard g(item.tickets_mu);
     item.tickets.insert(opItem.rctx->ticket);
     return true;

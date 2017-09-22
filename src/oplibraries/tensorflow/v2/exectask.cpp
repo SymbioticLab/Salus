@@ -325,6 +325,14 @@ void ExecTask::run(Callbacks cbs)
             return;
         }
 
+        // Remember tickets for reffed inputs, they may be modified by the op
+        reffedEntries.clear();
+        for (auto entry = first_input; entry != first_input + item.num_inputs; ++entry) {
+            if (entry->ref) {
+                reffedEntries.push_back(entry);
+            }
+        }
+
         // Set up compute params.
         params.op_kernel = op_kernel;
         params.frame_iter = tf::FrameAndIter(input_frame->frame_id, input_iter);
@@ -359,6 +367,8 @@ void ExecTask::run(Callbacks cbs)
                 auto s = execState->ProcessOutputs(*state->item, &state->ctx, *rctx, device, &outputs, stats);
                 if (stats)
                     nodestats::SetMemory(stats, &state->ctx);
+                // Update ref entry tickets
+                updateRefEntryTickets(reffedEntries);
                 // Clears inputs.
                 execState->ClearInputs(first_input, state->item->num_inputs);
                 // mark completed
@@ -423,6 +433,8 @@ void ExecTask::run(Callbacks cbs)
     }
 
     if (!launched_asynchronously) {
+        // Update ref entry tickets
+        updateRefEntryTickets(reffedEntries);
         // Clears inputs.
         m_state->ClearInputs(first_input, item.num_inputs);
         m_state->MaybeMarkCompleted(input_frame, input_iter, id);
@@ -446,6 +458,41 @@ void ExecTask::run(Callbacks cbs)
         TRACE("Postprocess completed: {}", completed);
     } else {
         cbs.launched();
+    }
+}
+
+void ExecTask::updateRefEntryTickets(const std::vector<Entry*> &entries)
+{
+    for (auto &entry : entries) {
+        auto tensor = entry->ref;
+        assert(tensor);
+        auto buf = tf::remote::PagingHelper::bufferOf(*tensor);
+        assert(buf);
+        auto alloc = PerOpAllocator::downcast(buf->allocator());
+        assert(alloc);
+
+        auto ticket = alloc->resourceContext().ticket;
+        if (entry->alloc_ticket != ticket) {
+            auto oldTicket = entry->alloc_ticket;
+            // Update all entry that is reference to this tensor
+            auto impl = m_state->impl_;
+            utils::Guard g(impl->entry_mu_);
+            std::vector<Entry*> needUpdate;
+            auto range = impl->active_entries_.equal_range(oldTicket);
+            needUpdate.reserve(std::distance(range.first, range.second));
+            for (auto it = range.first; it != range.second; ) {
+                if (it->second->ref == entry->ref) {
+                    needUpdate.push_back(it->second);
+                    it->second->alloc_ticket = ticket;
+                    it = impl->active_entries_.erase(it);
+                } else {
+                    ++it;
+                }
+            }
+            for (auto &e : needUpdate) {
+                impl->active_entries_.emplace(e->alloc_ticket, e);
+            }
+        }
     }
 }
 
