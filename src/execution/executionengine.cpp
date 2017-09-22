@@ -456,20 +456,22 @@ void ExecutionEngine::taskStopped(SessionItem &item, OperationItem &opItem)
 {
     UNUSED(item);
 
-    auto memUsage = m_resMonitor.queryUsage(opItem.rctx->ticket);
-    assert(memUsage);
-
     auto dur = duration_cast<microseconds>(steady_clock::now() - opItem.tScheduled).count();
 
     // For now only count memory usage, and simply add up memory usages on different
     // devices.
     // TODO: find better formula to do this
+    auto memUsage = m_resMonitor.queryUsage(opItem.rctx->ticket);
     uint64_t unifiedRes = 0;
-    for (auto &p : *memUsage) {
-        if (p.first.type != ResourceType::MEMORY) {
-            continue;
+    if (memUsage) {
+        for (auto &p : *memUsage) {
+            if (p.first.type != ResourceType::MEMORY) {
+                continue;
+            }
+            unifiedRes += p.second;
         }
-        unifiedRes += p.second;
+    } else {
+        unifiedRes = 1;
     }
     unifiedRes *= dur;
     item.unifiedRes += unifiedRes;
