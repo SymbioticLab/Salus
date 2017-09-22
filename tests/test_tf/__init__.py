@@ -39,10 +39,7 @@ def sess_and_device(target='', dev='', config=None, seed=None):
         np.random.seed(seed)
         with tf.device(dev):
             with tf.Session(target, config=finalCfg) as sess:
-                start_time = default_timer()
                 yield sess
-                duration = default_timer() - start_time
-    print("JCT: {:.3f} s".format(duration))
 
 
 def run_on_devices(func, devices, *args, **kwargs):
@@ -63,6 +60,7 @@ def run_on_sessions(func, targets, *args, **kwargs):
 
     results = []
     for t in targets:
+        start_time = default_timer()
         retry = True
         while retry:
             try:
@@ -75,6 +73,8 @@ def run_on_sessions(func, targets, *args, **kwargs):
                 print("Retrying due to error:")
                 import traceback
                 traceback.print_exc()
+        duration = default_timer() - start_time
+        print("JCT: {:.3f} s".format(duration))
 
     return tuple(results)
 
