@@ -257,6 +257,8 @@ void ExecutionEngine::scheduleLoop()
             auto &item = *it;
             if (del.count(item) > 0) {
                 TRACE("Deleting session {}@{}", item->sessHandle, as_hex(item));
+                assert(item.use_count() == 1);
+                assert(item->tickets.empty());
                 it = m_sessions.erase(it);
             } else {
                 if (sessionsChanged == 0) {
