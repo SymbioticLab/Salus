@@ -252,9 +252,8 @@ void ExecutionEngine::scheduleLoop()
 
         // Snapshot resource usage counter first, or reset them
         // and delete sessions as requested
-        auto it = m_sessions.begin();
-        auto itend = m_sessions.end();
-        while (it != itend) {
+        for (auto it = m_sessions.begin(),
+             itend = m_sessions.end(); it != itend;) {
             auto &item = *it;
             if (del.count(item) > 0) {
                 TRACE("Deleting session {}@{}", item->sessHandle, as_hex(item));
@@ -265,6 +264,7 @@ void ExecutionEngine::scheduleLoop()
                 } else {
                     item->unifiedResSnapshot = item->unifiedRes = 0;
                 }
+                ++it;
             }
         }
 
@@ -285,8 +285,6 @@ void ExecutionEngine::scheduleLoop()
                 item->bgQueue.splice(item->bgQueue.end(), item->queue);
             }
             remainingCount += item->bgQueue.size();
-
-            ++it;
         }
 
         // Schedule in order
