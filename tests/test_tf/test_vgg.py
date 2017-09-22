@@ -87,7 +87,7 @@ class VGGCaseBase(unittest.TestCase):
         return None
 
     def _config(self, **kwargs):
-        return None
+        return tf.ConfigProto()
 
     @parameterized.expand([(25,), (50,), (100,)])
     def test_gpu(self, batch_size):
