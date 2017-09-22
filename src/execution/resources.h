@@ -178,9 +178,10 @@ public:
     // Free resources, return true if after this, the ticket hold no more resources.
     bool free(uint64_t ticket, const Resources &res);
 
-    std::vector<std::pair<size_t, uint64_t>> sortVictim(const std::unordered_set<uint64_t> &candidates);
+    std::vector<std::pair<size_t, uint64_t>> sortVictim(const std::unordered_set<uint64_t> &candidates) const;
 
-    utils::optional<Resources> queryUsage(uint64_t ticket);
+    utils::optional<Resources> queryUsage(uint64_t ticket) const;
+    bool hasUsage(uint64_t ticket) const;
 
     std::string DebugString() const;
 

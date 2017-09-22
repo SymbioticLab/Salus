@@ -255,7 +255,7 @@ void ExecutionEngine::scheduleLoop()
         for (auto it = m_sessions.begin(),
              itend = m_sessions.end(); it != itend;) {
             auto &item = *it;
-            if (del.count(item) > 0) {
+            if (del.erase(item) > 0) {
                 TRACE("Deleting session {}@{}", item->sessHandle, as_hex(item));
                 assert(item.use_count() == 1);
                 assert(item->tickets.empty());
@@ -609,6 +609,18 @@ void ResourceContext::releaseStaging()
     }
     resMon.free(ticket);
     hasStaging = false;
+
+    // clean up session tickets
+    if (!resMon.hasUsage(ticket)) {
+        removeTicketFromSession();
+    }
+}
+
+void ResourceContext::removeTicketFromSession()
+{
+    // last resource freed
+    utils::Guard g(session.tickets_mu);
+    session.tickets.erase(ticket);
 }
 
 ResourceContext::~ResourceContext()
@@ -630,9 +642,7 @@ void ResourceContext::deallocMemory(size_t num_bytes)
         {{ResourceType::MEMORY, spec}, num_bytes}
     };
     if (resMon.free(ticket, res)) {
-        // last resource freed
-        utils::Guard g(session.tickets_mu);
-        session.tickets.erase(ticket);
+        removeTicketFromSession();
     }
 }
 

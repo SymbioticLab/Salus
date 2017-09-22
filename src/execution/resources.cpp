@@ -503,7 +503,7 @@ bool ResourceMonitor::free(uint64_t ticket, const Resources &res)
     return false;
 }
 
-std::vector<std::pair<size_t, uint64_t>> ResourceMonitor::sortVictim(const std::unordered_set<uint64_t> &candidates)
+std::vector<std::pair<size_t, uint64_t>> ResourceMonitor::sortVictim(const std::unordered_set<uint64_t> &candidates) const
 {
     assert(!candidates.empty());
 
@@ -533,8 +533,14 @@ std::vector<std::pair<size_t, uint64_t>> ResourceMonitor::sortVictim(const std::
     return usages;
 }
 
-utils::optional<Resources> ResourceMonitor::queryUsage(uint64_t ticket)
+utils::optional<Resources> ResourceMonitor::queryUsage(uint64_t ticket) const
 {
     Guard g(m_mu);
     return utils::optionalGet(m_using, ticket);
+}
+
+bool ResourceMonitor::hasUsage(uint64_t ticket) const
+{
+    Guard g(m_mu);
+    return m_using.count(ticket) > 0;
 }

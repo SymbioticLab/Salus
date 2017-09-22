@@ -239,6 +239,8 @@ struct ResourceContext
     void deallocMemory(size_t num_bytes);
 
 private:
+    void removeTicketFromSession();
+
     ExecutionEngine::SessionItem &session;
     std::atomic<bool> hasStaging;
 };
