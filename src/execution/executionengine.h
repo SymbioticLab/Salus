@@ -249,7 +249,7 @@ struct ResourceContext
         operator bool() const { return valid; }
 
     private:
-        friend class ResourceContext;
+        friend struct ResourceContext;
 
         bool valid = true;
         ResourceMonitor::LockedProxy proxy;

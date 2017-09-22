@@ -577,6 +577,7 @@ tf::Status ExecutorState::PrepareInputs(const NodeItem &item, tf::OpKernel *kern
 
             // Update active entries as needed
             assert(oldTicket != entry->alloc_ticket);
+            DEBUG("Due to dev move, update allocation ticket from {} to {}", oldTicket, entry->alloc_ticket);
 
             std::vector<Entry*> needUpdate;
             needUpdate.reserve(16);
@@ -586,16 +587,19 @@ tf::Status ExecutorState::PrepareInputs(const NodeItem &item, tf::OpKernel *kern
             auto range = impl_->active_entries_.equal_range(oldTicket);
             for (auto it = range.first; it != range.second; ) {
                 if (it->second == entry) {
+                    DEBUG("Removing entry {} of ticket {} due to devcopy", as_hex(it->second), it->second->alloc_ticket);
                     it = impl_->active_entries_.erase(it);
                 } else if (entry->ref && it->second->ref == entry->ref) {
                     needUpdate.push_back(it->second);
                     it->second->alloc_ticket = entry->alloc_ticket;
+                    DEBUG("Removing entry {} of ticket {} due to devcopy", as_hex(it->second), it->second->alloc_ticket);
                     it = impl_->active_entries_.erase(it);
                 } else {
                     ++it;
                 }
             }
             for (auto &e : needUpdate) {
+                DEBUG("Adding entry {} of ticket {} due to devcopy", as_hex(e), e->alloc_ticket);
                 impl_->active_entries_.emplace(e->alloc_ticket, e);
             }
         }
@@ -739,6 +743,7 @@ void ExecutorState::ClearInputs(Entry *first, size_t num)
         auto range = impl_->active_entries_.equal_range(entry->alloc_ticket);
         for (auto it = range.first; it != range.second; ++it) {
             if (it->second == entry) {
+                DEBUG("Removing entry {} of ticket {} due to clearinputs", as_hex(entry), entry->alloc_ticket);
                 impl_->active_entries_.erase(it);
                 break;
             }
@@ -1327,6 +1332,8 @@ void ExecutorState::FrameState::ActivateNodes(const NodeItem *item, const bool i
             }
 
             utils::Guard g(executor->entry_mu_);
+            DEBUG("Adding entry {} of ticket {} due to actvation", as_hex(&input_tensors[dst_loc]),
+                  input_tensors[dst_loc].alloc_ticket);
             executor->active_entries_.emplace(input_tensors[dst_loc].alloc_ticket,
                                               &input_tensors[dst_loc]);
         }

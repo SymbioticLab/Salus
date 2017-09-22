@@ -304,6 +304,7 @@ size_t ExecutorImpl::handlePagingRequest(uint64_t oldTicket, std::shared_ptr<Res
             if (it->second->ref_mu) {
                 reflocks.insert(it->second->ref_mu);
             }
+            DEBUG("Removing entry {} of ticket {} due to paging", as_hex(it->second), oldTicket);
         }
         // we will add them back later
         active_entries_.erase(oldTicket);
@@ -451,6 +452,7 @@ size_t ExecutorImpl::handlePagingRequest(uint64_t oldTicket, std::shared_ptr<Res
     {
         utils::Guard g(entry_mu_);
         for (auto entry : entries) {
+            DEBUG("Adding entry {} of ticket {} due to paging", as_hex(entry), entry->alloc_ticket);
             active_entries_.emplace(entry->alloc_ticket, entry);
         }
     }

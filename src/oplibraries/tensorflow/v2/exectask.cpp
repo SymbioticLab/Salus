@@ -473,6 +473,7 @@ void ExecTask::updateRefEntryTickets(const std::vector<Entry*> &entries)
 
         auto ticket = alloc->resourceContext().ticket;
         if (entry->alloc_ticket != ticket) {
+            DEBUG("Update allocation ticket from {} to {}", entry->alloc_ticket, ticket);
             auto oldTicket = entry->alloc_ticket;
             // Update all entry that is reference to this tensor
             auto impl = m_state->impl_;
@@ -484,12 +485,15 @@ void ExecTask::updateRefEntryTickets(const std::vector<Entry*> &entries)
                 if (it->second->ref == entry->ref) {
                     needUpdate.push_back(it->second);
                     it->second->alloc_ticket = ticket;
+                    DEBUG("Removing entry {} of ticket {} due to updateref", as_hex(it->second), it->second->alloc_ticket);
                     it = impl->active_entries_.erase(it);
                 } else {
                     ++it;
                 }
             }
+            assert(!needUpdate.empty());
             for (auto &e : needUpdate) {
+                DEBUG("Adding entry {} of ticket {} due to updateref", as_hex(e), e->alloc_ticket);
                 impl->active_entries_.emplace(e->alloc_ticket, e);
             }
         }
