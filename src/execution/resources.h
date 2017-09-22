@@ -183,9 +183,53 @@ public:
     utils::optional<Resources> queryUsage(uint64_t ticket) const;
     bool hasUsage(uint64_t ticket) const;
 
+    struct LockedProxy
+    {
+        LockedProxy(ResourceMonitor *resMon) : m_resMonitor(resMon) {
+            assert(m_resMonitor);
+            m_resMonitor->m_mu.lock();
+        }
+
+        LockedProxy(LockedProxy &&other) : m_resMonitor(other.m_resMonitor) {
+            other.m_resMonitor = nullptr;
+        }
+
+        LockedProxy &operator=(LockedProxy &&other) {
+            release();
+            using std::swap;
+            swap(m_resMonitor, other.m_resMonitor);
+            return *this;
+        }
+
+        ~LockedProxy() {
+            release();
+        }
+
+        bool allocate(uint64_t ticket, const Resources &res);
+        bool free(uint64_t ticket, const Resources &res);
+    private:
+        void release() {
+            if (m_resMonitor) {
+                m_resMonitor->m_mu.unlock();
+                m_resMonitor = nullptr;
+            }
+        }
+        LockedProxy(const LockedProxy &other) = delete;
+        LockedProxy &operator=(const LockedProxy &other) = delete;
+
+        ResourceMonitor *m_resMonitor;
+    };
+
+    LockedProxy lock() {
+        return LockedProxy(this);
+    }
+
     std::string DebugString() const;
 
 private:
+    bool allocateUnsafe(uint64_t ticket, const Resources &res);
+    bool freeUnsafe(uint64_t ticket, const Resources &res);
+
     mutable std::mutex m_mu;
 
     // 0 is invalid ticket

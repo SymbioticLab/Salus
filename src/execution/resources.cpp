@@ -410,13 +410,24 @@ bool ResourceMonitor::preAllocate(const Resources &cap, uint64_t *ticket)
 
 bool ResourceMonitor::allocate(uint64_t ticket, const Resources &res)
 {
+    Guard g(m_mu);
+    return allocateUnsafe(ticket, res);
+}
+
+bool ResourceMonitor::LockedProxy::allocate(uint64_t ticket, const Resources& res)
+{
+    assert(m_resMonitor);
+    return m_resMonitor->allocateUnsafe(ticket, res);
+}
+
+bool ResourceMonitor::allocateUnsafe(uint64_t ticket, const Resources &res)
+{
     if (ticket == 0) {
         ERR("Invalid ticket 0");
         return false;
     }
 
     auto remaining(res);
-    Guard g(m_mu);
     auto it = m_staging.find(ticket);
     if (it != m_staging.end()) {
         // first try allocate from reserve
@@ -482,11 +493,22 @@ void ResourceMonitor::free(uint64_t ticket)
 
 bool ResourceMonitor::free(uint64_t ticket, const Resources &res)
 {
+    Guard g(m_mu);
+    return freeUnsafe(ticket, res);
+}
+
+bool ResourceMonitor::LockedProxy::free(uint64_t ticket, const Resources& res)
+{
+    assert(m_resMonitor);
+    return m_resMonitor->freeUnsafe(ticket, res);
+}
+
+bool ResourceMonitor::freeUnsafe(uint64_t ticket, const Resources &res)
+{
     // Ticket can not be 0 when free actual resource to prevent
     // monitor go out of sync of physical usage.
     assert(ticket != 0);
 
-    Guard g(m_mu);
     merge(m_limits, res);
 
     auto it = m_using.find(ticket);

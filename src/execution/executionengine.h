@@ -235,8 +235,28 @@ struct ResourceContext
     bool initializeStaging(const DeviceSpec &spec, const Resources &res);
     void releaseStaging();
 
-    bool allocMemory(size_t num_bytes);
-    void deallocMemory(size_t num_bytes);
+    struct OperationScope
+    {
+        explicit OperationScope(ResourceMonitor::LockedProxy &&proxy)
+            : proxy(std::move(proxy))
+        {}
+
+        OperationScope(OperationScope &&scope)
+            : valid(scope.valid)
+            , proxy(std::move(scope.proxy))
+        {}
+
+        operator bool() const { return valid; }
+
+    private:
+        friend class ResourceContext;
+
+        bool valid = true;
+        ResourceMonitor::LockedProxy proxy;
+    };
+
+    OperationScope allocMemory(size_t num_bytes);
+    OperationScope deallocMemory(size_t num_bytes);
 
 private:
     void removeTicketFromSession();

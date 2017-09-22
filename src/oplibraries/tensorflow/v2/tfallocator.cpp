@@ -169,14 +169,15 @@ void *PerOpAllocator::AllocateRaw(size_t alignment, size_t num_bytes)
     TRACE("TFAllocator allocating {} bytes of memory with alignment {} using allocator {}@{}", num_bytes,
          alignment, nameOrNull(m_actualAlloc), as_hex(m_actualAlloc));
 
-    if (!m_rctx->allocMemory(num_bytes)) {
+    void *ptr = nullptr;
+    if (auto scope = m_rctx->allocMemory(num_bytes)) {
+        ptr = m_actualAlloc->AllocateRaw(alignment, num_bytes);
+        checkMemory(ptr, num_bytes);
+    } else {
         // No enough memory
         TRACE("TFAllocator failed to allocate.");
         return nullptr;
     }
-
-    auto ptr = m_actualAlloc->AllocateRaw(alignment, num_bytes);
-    checkMemory(ptr, num_bytes);
 
     if (ptr) {
         recordSize(ptr, num_bytes);
@@ -199,14 +200,15 @@ void* PerOpAllocator::AllocateRaw(size_t alignment, size_t num_bytes, const tens
          " using allocator {}@{}",
          attr, num_bytes, alignment, nameOrNull(m_actualAlloc), as_hex(m_actualAlloc));
 
-    if (!m_rctx->allocMemory(num_bytes)) {
+    void *ptr = nullptr;
+    if (auto scope = m_rctx->allocMemory(num_bytes)) {
+        ptr = m_actualAlloc->AllocateRaw(alignment, num_bytes, attr);
+        checkMemory(ptr, num_bytes);
+    } else {
         // No enough memory
         TRACE("TFAllocator failed to allocate.");
         return nullptr;
     }
-
-    auto ptr = m_actualAlloc->AllocateRaw(alignment, num_bytes, attr);
-    checkMemory(ptr, num_bytes);
 
     if (ptr) {
         recordSize(ptr, num_bytes);
@@ -237,9 +239,11 @@ void PerOpAllocator::DeallocateRaw(void *ptr)
     DEBUG("TFAllocator deallocating memory at {} size {} using allocator {}@{}", as_hex(ptr),
           num_bytes, nameOrNull(m_actualAlloc), as_hex(m_actualAlloc));
 
-    m_rctx->deallocMemory(num_bytes);
+    {
+        auto scope = m_rctx->deallocMemory(num_bytes);
+        m_actualAlloc->DeallocateRaw(ptr);
+    }
 
-    m_actualAlloc->DeallocateRaw(ptr);
     Unref();
 }
 

@@ -628,22 +628,32 @@ ResourceContext::~ResourceContext()
     releaseStaging();
 }
 
-bool ResourceContext::allocMemory(size_t num_bytes)
+ResourceContext::OperationScope ResourceContext::allocMemory(size_t num_bytes)
 {
     Resources res {
         {{ResourceType::MEMORY, spec}, num_bytes}
     };
-    return resMon.allocate(ticket, res);
+
+    OperationScope scope(resMon.lock());
+
+    scope.valid = scope.proxy.allocate(ticket, res);
+
+    return scope;
 }
 
-void ResourceContext::deallocMemory(size_t num_bytes)
+ResourceContext::OperationScope ResourceContext::deallocMemory(size_t num_bytes)
 {
     Resources res {
         {{ResourceType::MEMORY, spec}, num_bytes}
     };
-    if (resMon.free(ticket, res)) {
+
+    OperationScope scope(resMon.lock());
+    scope.valid = true;
+
+    if (scope.proxy.free(ticket, res)) {
         removeTicketFromSession();
     }
+    return scope;
 }
 
 std::ostream &operator<<(std::ostream &os, const ResourceContext &c)
