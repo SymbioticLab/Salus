@@ -177,10 +177,11 @@ private:
 
         // Only accessed by main scheduling thread
         UnsafeQueue bgQueue;
+        uint64_t unifiedResSnapshot;
 
         // Accessed by multiple scheduling thread
+        std::atomic_uint_fast64_t unifiedRes = {0};
         std::unordered_set<uint64_t> tickets;
-        std::unordered_map<uint64_t, std::weak_ptr<OperationItem>> running;
         std::mutex tickets_mu;
 
         explicit SessionItem(const std::string &handle) : sessHandle(handle) {}
@@ -196,6 +197,7 @@ private:
 
         std::promise<void> promise;
         std::shared_ptr<ResourceContext> rctx;
+        std::chrono::time_point<std::chrono::steady_clock> tScheduled;
     };
     friend struct ResourceContext;
 

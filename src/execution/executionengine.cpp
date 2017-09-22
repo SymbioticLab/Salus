@@ -30,6 +30,10 @@
 #include <algorithm>
 
 using std::chrono::steady_clock;
+using std::chrono::duration_cast;
+using std::chrono::milliseconds;
+using std::chrono::nanoseconds;
+using std::chrono::microseconds;
 using namespace std::chrono_literals;
 
 // #define ENABLE_STACK_SENTINEL
@@ -184,7 +188,7 @@ ExecutionEngine::InserterImpl::~InserterImpl()
         m_engine.deleteSession(m_item);
 }
 
-bool ExecutionEngine::shouldWaitForAWhile(size_t scheduled, std::chrono::nanoseconds &ns)
+bool ExecutionEngine::shouldWaitForAWhile(size_t scheduled, nanoseconds &ns)
 {
     STACK_SENTINEL;
     static auto last = steady_clock::now();
@@ -197,11 +201,11 @@ bool ExecutionEngine::shouldWaitForAWhile(size_t scheduled, std::chrono::nanosec
         sleep = 10ms;
     }
 
-    std::chrono::nanoseconds idle = now - last;
+    auto idle = now - last;
     if (idle > 20ms) {
         INFO("No progress for {}ms, sleep for {}ms",
-             std::chrono::duration_cast<std::chrono::milliseconds>(idle).count(),
-             std::chrono::duration_cast<std::chrono::milliseconds>(sleep).count());
+             duration_cast<milliseconds>(idle).count(),
+             duration_cast<milliseconds>(sleep).count());
         ns = sleep;
         sleep *= 2;
         return true;
@@ -222,10 +226,15 @@ void ExecutionEngine::scheduleLoop()
     while (!m_shouldExit) {
         STACK_SENTINEL;
         TRACE("Scheduler loop");
+
+        int sessionsChanged = 0;
         // Fisrt check if there's any pending deletions
         SessionSet del;
         {
             utils::Guard g(m_delMu);
+
+            sessionsChanged += m_deletedSessions.size();
+
             using std::swap;
             swap(del, m_deletedSessions);
             assert(m_deletedSessions.size() == 0);
@@ -235,43 +244,64 @@ void ExecutionEngine::scheduleLoop()
         {
             utils::Guard g(m_newMu);
 
+            sessionsChanged += m_newSessions.size();
+
             m_sessions.splice(m_sessions.end(), m_newSessions);
             assert(m_newSessions.size() == 0);
         }
 
-        // Loop through sessions
-        size_t scheduled = 0;
-        size_t remainingCount = 0;
+        // Snapshot resource usage counter first, or reset them
+        // and delete sessions as requested
         auto it = m_sessions.begin();
-        auto end = m_sessions.end();
-        while (it != end) {
+        auto itend = m_sessions.end();
+        while (it != itend) {
             auto &item = *it;
-            if (del.erase(item) > 0) {
+            if (del.count(item) > 0) {
                 TRACE("Deleting session {}@{}", item->sessHandle, as_hex(item));
                 it = m_sessions.erase(it);
             } else {
-                // Move from front end queue to backing storage
-                {
-                    utils::Guard g(item->mu);
-                    item->bgQueue.splice(item->bgQueue.end(), item->queue);
+                if (sessionsChanged == 0) {
+                    item->unifiedResSnapshot = item->unifiedRes;
+                } else {
+                    item->unifiedResSnapshot = item->unifiedRes = 0;
                 }
-                remainingCount += item->bgQueue.size();
-
-                // NOTE: don't use scheduled || maybeScheduleFrom(...)
-                // we don't want short-cut eval here and maybeScheduleFrom
-                // should always be called.
-                auto count = maybeScheduleFrom(item);
-                remainingCount -= count;
-                scheduled += count;
-                ++it;
             }
         }
 
-        bool noProgress = remainingCount > 0 && scheduled == 0;
+        // Sort sessions if needed. We assume m_sessions.size() is always less than 10,
+        // therefore sorting in every iteration is acceptable.
+        if (sessionsChanged == 0) {
+            m_sessions.sort([](const auto &lhs, const auto &rhs){
+                return lhs->unifiedResSnapshot < rhs->unifiedResSnapshot;
+            });
+        }
 
+        // Loop through and accept new tasks
+        size_t remainingCount = 0;
+        for (auto &item : m_sessions) {
+            // Move from front end queue to backing storage
+            {
+                utils::Guard g(item->mu);
+                item->bgQueue.splice(item->bgQueue.end(), item->queue);
+            }
+            remainingCount += item->bgQueue.size();
+
+            ++it;
+        }
+
+        // Schedule in order
+        size_t scheduled = 0;
+        for (auto &item : m_sessions) {
+            auto count = maybeScheduleFrom(item);
+            scheduled += count;
+            remainingCount -= count;
+        }
+
+        // Update conditions
+        bool noProgress = remainingCount > 0 && scheduled == 0;
         noProgressIters = noProgress ? noProgressIters + 1 : 0;
 
-        // check if we need paging
+        // Check if we need paging
         int64_t running_tasks = m_runningTasks;
         bool needPaging = (noProgress && running_tasks == 0)
                           || (noProgressIters > kMaxNoProgressIters);
@@ -363,6 +393,7 @@ size_t ExecutionEngine::maybeScheduleFrom(std::shared_ptr<SessionItem> item)
         // Send to thread pool
         if (scheduled) {
             m_runningTasks += 1;
+            opItem->tScheduled = steady_clock::now();
 
             DEBUG("Adding to thread pool: opItem in session {}: {}", item->sessHandle, opItem->op->DebugString());
             q::with(m_qec->queue(), std::move(opItem)).then([item, this](std::shared_ptr<OperationItem> &&opItem){
@@ -426,6 +457,24 @@ size_t ExecutionEngine::maybeScheduleFrom(std::shared_ptr<SessionItem> item)
 void ExecutionEngine::taskStopped(SessionItem &item, OperationItem &opItem)
 {
     UNUSED(item);
+
+    auto memUsage = m_resMonitor.queryUsage(opItem.rctx->ticket);
+    assert(memUsage);
+
+    auto dur = duration_cast<microseconds>(steady_clock::now() - opItem.tScheduled).count();
+
+    // For now only count memory usage, and simply add up memory usages on different
+    // devices.
+    // TODO: find better formula to do this
+    uint64_t unifiedRes = 0;
+    for (auto &p : *memUsage) {
+        if (p.first.type != ResourceType::MEMORY) {
+            continue;
+        }
+        unifiedRes += p.second;
+    }
+    unifiedRes *= dur;
+    item.unifiedRes += unifiedRes;
 
     opItem.rctx->releaseStaging();
     m_runningTasks -= 1;
