@@ -20,13 +20,17 @@
 #define UTILS_CPP17_H
 
 #include <boost/optional.hpp>
-#include <system_error>
+#include <boost/any.hpp>
 
+#include <system_error>
 #include <string>
 
 namespace utils {
 
 using boost::optional;
+
+using boost::any;
+using boost::any_cast;
 
 // TODO: use macro check
 

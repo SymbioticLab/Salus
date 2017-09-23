@@ -156,7 +156,10 @@ private:
 
     // Bookkeeping
     ResourceMonitor m_resMonitor;
+    // TODO: remove this
     std::atomic_int_fast64_t m_runningTasks;
+
+    std::atomic_int_fast64_t m_noPagingRunningTasks;
     std::unordered_map<uint64_t, std::weak_ptr<SessionItem>> m_ticketOwners;
 
     // Paging

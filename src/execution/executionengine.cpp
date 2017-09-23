@@ -218,10 +218,8 @@ void ExecutionEngine::scheduleLoop()
     STACK_SENTINEL;
     m_resMonitor.initializeLimits();
 
-    static const int kMaxNoProgressIters = 10;
-
     m_runningTasks = 0;
-    int noProgressIters = 0;
+    m_noPagingRunningTasks = 0;
 
     while (!m_shouldExit) {
         STACK_SENTINEL;
@@ -299,14 +297,10 @@ void ExecutionEngine::scheduleLoop()
             remainingCount -= count;
         }
 
-        // Update conditions
+        // Update conditions and check if we need paging
         bool noProgress = remainingCount > 0 && scheduled == 0;
-        noProgressIters = noProgress ? noProgressIters + 1 : 0;
-
-        // Check if we need paging
-        int64_t running_tasks = m_runningTasks;
-        bool needPaging = (noProgress && running_tasks == 0)
-                          || (noProgressIters > kMaxNoProgressIters);
+        int64_t running_tasks = m_noPagingRunningTasks;
+        bool needPaging = (noProgress && running_tasks == 0);
         if (needPaging) {
             DEBUG("Paging begin");
             doPaging();
@@ -396,6 +390,9 @@ size_t ExecutionEngine::maybeScheduleFrom(std::shared_ptr<SessionItem> item)
         // Send to thread pool
         if (scheduled) {
             m_runningTasks += 1;
+            if (!opItem->op->allowConcurrentPaging()) {
+                m_noPagingRunningTasks += 1;
+            }
             opItem->tScheduled = steady_clock::now();
 
             DEBUG("Adding to thread pool: opItem in session {}: {}", item->sessHandle, opItem->op->DebugString());
@@ -483,6 +480,9 @@ void ExecutionEngine::taskStopped(SessionItem &item, OperationItem &opItem)
 
     opItem.rctx->releaseStaging();
     m_runningTasks -= 1;
+    if (!opItem.op->allowConcurrentPaging()) {
+        m_noPagingRunningTasks -= 1;
+    }
 }
 
 void ExecutionEngine::doPaging()

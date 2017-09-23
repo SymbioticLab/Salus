@@ -118,20 +118,35 @@ bool ExecTask::prepare(const std::shared_ptr<ResourceContext> &ctx)
             op_kernel = nullptr;
             return false;
         }
-        if (devName == ditem.device->name()) {
-            // We are on the same device, good.
-            return true;
+        if (devName != ditem.device->name()) {
+            TRACE("Stateful kernel can not be moved: previously created on {}, now requested on {}",
+                devName, ditem.device->name());
+            op_kernel = nullptr;
+            return false;
         }
-        TRACE("Stateful kernel can not be moved: previously created on {}, now requested on {}",
-              devName, ditem.device->name());
-        op_kernel = nullptr;
-        return false;
+        // We are on the same device, good.
     } else if (!ok.ok()) {
         ERR("Failed to find kernel with status {} for Node: {}", ok, tagged_node.node->name());
         // it is okay, just continue to create the kernel
     }
 
+    // Instantiate kernel if not already done
+    if (!op_kernel) {
+        auto s = m_state->SetupKernel(tagged_node, ditem, &op_kernel);
+        if (!s.ok()) {
+            ERR("Error when creating kernel for node {}: {}", tagged_node.node->name(), s);
+            return false;
+        }
+    }
+
+    kernel_is_async = (op_kernel->AsAsync() != nullptr);
+
     return true;
+}
+
+bool ExecTask::allowConcurrentPaging() const
+{
+    return kernel_is_async;
 }
 
 Resources ExecTask::estimatedUsage(const DeviceSpec& dev)
@@ -246,19 +261,7 @@ void ExecTask::run(Callbacks cbs)
     // clear early
     params.rendezvous = nullptr;
 
-    // Instantiate kernel if not ready done
-    if (!op_kernel) {
-        auto s = m_state->SetupKernel(tagged_node, ditem, &op_kernel);
-        if (!s.ok()) {
-            ERR("Error when creating kernel for node {}: {}", node->name(), s);
-            m_state->MaybeMarkCompleted(input_frame, input_iter, id);
-            afterRun(s, cbs);
-            return;
-        }
-    }
-
     CHECK(op_kernel);
-    kernel_is_async = (op_kernel->AsAsync() != nullptr);
 
     // Go through inputs to see if there's ref type input
     for (int i = 0; i != item.num_inputs; ++i) {

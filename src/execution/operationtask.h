@@ -52,6 +52,9 @@ public:
 
     virtual bool prepare(const std::shared_ptr<ResourceContext> &rctx) = 0;
 
+    // If allow paging happen when this task is running.
+    virtual bool allowConcurrentPaging() const = 0;
+
     virtual void run(Callbacks cbs) = 0;
 };
 

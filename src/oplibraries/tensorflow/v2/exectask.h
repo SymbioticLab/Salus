@@ -59,6 +59,8 @@ public:
 
     std::string DebugString() override;
 
+    bool allowConcurrentPaging() const override;
+
     const ResourceContext &resourceContext() const { return *rctx; };
 
 private:
