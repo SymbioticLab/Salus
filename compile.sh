@@ -1,21 +1,14 @@
 #! /bin/bash
-mkdir -p build && cd build
-
 BUILD_TYPES=(Debug Release)
 
 # Configure
 for build_type in ${BUILD_TYPES[@]}; do
-    mkdir -p $build_type
-    pushd $build_type >/dev/null
-
-    cmake -DTENSORFLOW_ROOT=$HOME/buildbed/tensorflow-rpcdev -DCMAKE_BUILD_TYPE=$build_type ../..
-
-    popd >/dev/null
+    binary_tree=build/$build_type
+    [[ -d $binary_tree ]] || cmake -H. -B$binary_tree -DCMAKE_BUILD_TYPE=$biuld_type \
+        -DTENSORFLOW_ROOT=$HOME/buildbed/tensorflow-rpcdev
 done
 
 # Build
 for build_type in ${BUILD_TYPES[@]}; do
-    pushd $build_type >/dev/null
-    make -j80
-    popd >/dev/null
+    cmake --build build/$build_type -- -j80
 done
