@@ -484,8 +484,8 @@ void ExecTask::updateRefEntryTickets(const std::vector<Entry*> &entries)
             for (auto it = range.first; it != range.second; ) {
                 if (it->second->ref == entry->ref) {
                     needUpdate.push_back(it->second);
-                    it->second->alloc_ticket = ticket;
                     DEBUG("Removing entry {} of ticket {} due to updateref", as_hex(it->second), it->second->alloc_ticket);
+                    it->second->alloc_ticket = ticket;
                     it = impl->active_entries_.erase(it);
                 } else {
                     ++it;

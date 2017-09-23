@@ -452,7 +452,8 @@ size_t ExecutorImpl::handlePagingRequest(uint64_t oldTicket, std::shared_ptr<Res
     {
         utils::Guard g(entry_mu_);
         for (auto entry : entries) {
-            DEBUG("Adding entry {} of ticket {} due to paging", as_hex(entry), entry->alloc_ticket);
+            DEBUG("Adding entry {} of ticket {} (was {})due to paging", as_hex(entry), entry->alloc_ticket,
+                  oldTicket);
             active_entries_.emplace(entry->alloc_ticket, entry);
         }
     }

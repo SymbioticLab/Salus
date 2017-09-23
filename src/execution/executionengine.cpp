@@ -355,7 +355,7 @@ bool ExecutionEngine::maybePreAllocateFor(SessionItem &item, OperationItem &opIt
         return false;
     }
 
-    TRACE("Pre allocated {} for {}", *opItem.rctx, opItem.op->DebugString());
+    DEBUG("Pre allocated {} for {}", *opItem.rctx, opItem.op->DebugString());
     utils::Guard g(item.tickets_mu);
     item.tickets.insert(opItem.rctx->ticket);
     return true;
@@ -532,11 +532,15 @@ void ExecutionEngine::doPaging()
     // Step 2: inform owner to do paging given suggestion
     for (size_t i = 1; i != candidates.size(); ++i) {
         SessionItem &sess = candidates[i].second;
-        if (sess.tickets.empty()) {
-            // no need to go beyond
-            break;
+        std::vector<std::pair<size_t, uint64_t>> victims;
+        {
+            utils::Guard g(sess.tickets_mu);
+            if (sess.tickets.empty()) {
+                // no need to go beyond
+                break;
+            }
+            victims = m_resMonitor.sortVictim(sess.tickets);
         }
-        auto victims = m_resMonitor.sortVictim(sess.tickets);
 
         DEBUG("Visiting session: {}", sess.sessHandle);
 
@@ -623,6 +627,7 @@ void ResourceContext::removeTicketFromSession()
 {
     // last resource freed
     utils::Guard g(session.tickets_mu);
+    DEBUG("Removing ticket {} from session {}", ticket, session.sessHandle);
     session.tickets.erase(ticket);
 }
 

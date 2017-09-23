@@ -184,8 +184,8 @@ void *PerOpAllocator::AllocateRaw(size_t alignment, size_t num_bytes)
         Ref();
     }
 
-    DEBUG("TFAllocator allocated {} bytes of memory at {} with alignment {} using allocator {}@{}", num_bytes,
-         as_hex(ptr), alignment, nameOrNull(m_actualAlloc), as_hex(m_actualAlloc));
+    DEBUG("TFAllocator allocated {} bytes of memory at {} with alignment {} using allocator {}@{} with {}",
+          num_bytes, as_hex(ptr), alignment, nameOrNull(m_actualAlloc), as_hex(m_actualAlloc), *m_rctx);
 
     return ptr;
 }
@@ -216,9 +216,9 @@ void* PerOpAllocator::AllocateRaw(size_t alignment, size_t num_bytes, const tens
     }
 
     DEBUG("TFAllocator called for attributes {} of {} bytes of memory at {} with alignment {}"
-         " using allocator {}@{}",
+         " using allocator {}@{} with {}",
          attr, num_bytes, as_hex(ptr), alignment, nameOrNull(m_actualAlloc),
-         as_hex(m_actualAlloc));
+         as_hex(m_actualAlloc), *m_rctx);
     return ptr;
 }
 
@@ -236,8 +236,8 @@ void PerOpAllocator::DeallocateRaw(void *ptr)
 {
     auto num_bytes = RequestedSize(ptr);
 
-    DEBUG("TFAllocator deallocating memory at {} size {} using allocator {}@{}", as_hex(ptr),
-          num_bytes, nameOrNull(m_actualAlloc), as_hex(m_actualAlloc));
+    DEBUG("TFAllocator deallocating memory at {} size {} using allocator {}@{} with {}", as_hex(ptr),
+          num_bytes, nameOrNull(m_actualAlloc), as_hex(m_actualAlloc), *m_rctx);
 
     {
         auto scope = m_rctx->deallocMemory(num_bytes);
