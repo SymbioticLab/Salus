@@ -19,6 +19,8 @@
 #ifndef TENSORUTILS_H
 #define TENSORUTILS_H
 
+#include "platform/logging.h"
+
 #include "oplibraries/tensorflow/tensorflow_headers.h"
 
 #include <memory>
@@ -103,15 +105,18 @@ struct Entry
         if (val_field_is_set) {
             val.Destroy();
             val_field_is_set = false;
-            has_value = false;
         }
+        ref = nullptr;
+        ref_mu = nullptr;
         // release device
         device.reset();
         in_use = false;
+        has_value = false;
     }
 
     void Dereference()
     {
+        DEBUG("Dereferencing entry {} of ticket {}", as_hex(this), alloc_ticket);
         {
             tf::mutex_lock l(*ref_mu);
             DCHECK(!val_field_is_set);
@@ -175,7 +180,7 @@ struct Entry
     // The attributes of the allocator that creates the tensor.
     tf::AllocatorAttributes alloc_attr;
     // The ticket used to allocate the tensor
-    uint64_t alloc_ticket = -1;
+    uint64_t alloc_ticket;
 
     bool in_use = false;
 

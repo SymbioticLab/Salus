@@ -682,6 +682,9 @@ tf::Status ExecutorState::ProcessOutputs(const NodeItem &item, tf::OpKernelConte
                 auto alloc = PerOpAllocator::downcast(buf->allocator());
                 if (alloc) {
                     out->alloc_ticket = alloc->resourceContext().ticket;
+                    if (val.is_ref()) {
+                        DEBUG("{}: Buffer {} refIsOne {}", alloc->resourceContext(), as_hex(buf), buf->RefCountIsOne());
+                    }
                 }
             }
 
@@ -1432,7 +1435,7 @@ bool ExecutorState::FrameState::CleanupIterations(const GraphView *gview, int64_
             utils::Guard g(executor->entry_mu_);
             for (int i = 0; i != iterState->total_input_tensors; ++i) {
                 auto entry = iterState->input_tensors + i;
-                if (entry->alloc_ticket != -1) {
+                if (entry->has_value) {
                     auto range = executor->active_entries_.equal_range(entry->alloc_ticket);
                     for (auto it = range.first; it != range.second; ) {
                         if (it->second == entry) {
