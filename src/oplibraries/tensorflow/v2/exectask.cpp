@@ -87,10 +87,8 @@ const std::vector<DeviceType> &ExecTask::supportedDeviceTypes() const
     return supportedTypes;
 }
 
-bool ExecTask::prepare(const std::shared_ptr<ResourceContext> &ctx)
+bool ExecTask::prepare(std::unique_ptr<ResourceContext> &&rctx)
 {
-    rctx = ctx;
-
     auto &dev = rctx->spec();
 
     auto match = [&dev](auto type) { return type == dev.type; };
@@ -103,26 +101,26 @@ bool ExecTask::prepare(const std::shared_ptr<ResourceContext> &ctx)
         return false;
     }
 
-    ditem.device->setResourceContext(rctx);
+    ditem.device->setResourceContext(std::move(rctx));
 
     // First check if we already created the kernel on some device
     op_kernel = nullptr;
     std::string devName;
     auto ok = m_state->impl_->params_.find_kernel(tagged_node.node->def(), &devName, &op_kernel);
 
+    bool done = true;
     if (ok.ok() && op_kernel) {
         // we saw this kernel before, check if the device match
         if (devName.empty()) {
             WARN("We've created the kernel, but don't remember its device: {}", tagged_node.node->name());
             auto s = tf::errors::Internal("We've created the kernel, but don't remember its device");
             op_kernel = nullptr;
-            return false;
-        }
-        if (devName != ditem.device->name()) {
+            done = false;
+        } else if (devName != ditem.device->name()) {
             TRACE("Stateful kernel can not be moved: previously created on {}, now requested on {}",
                 devName, ditem.device->name());
             op_kernel = nullptr;
-            return false;
+            done = false;
         }
         // We are on the same device, good.
     } else if (!ok.ok()) {
@@ -135,10 +133,17 @@ bool ExecTask::prepare(const std::shared_ptr<ResourceContext> &ctx)
         auto s = m_state->SetupKernel(tagged_node, ditem, &op_kernel);
         if (!s.ok()) {
             ERR("Error when creating kernel for node {}: {}", tagged_node.node->name(), s);
-            return false;
+            done = false;
         }
     }
 
+    if (!done) {
+        // Release the resource context and the device we've given
+        ditem.device.reset();
+        return done;
+    }
+
+    DEBUG("Pre allocated {} for {}", ditem.device->resourceContext(), DebugString());
     kernel_is_async = (op_kernel->AsAsync() != nullptr);
 
     return true;
@@ -203,6 +208,7 @@ Resources ExecTask::estimatedUsage(const DeviceSpec& dev)
     if (!mtypeStatus.ok()) {
         WARN("Kernel not found on device {}, resource estimation may be inaccurate.", dev);
     }
+    assert(ditem.device);
 
     ResourceTag devTag{ResourceType::MEMORY, dev};
     ResourceTag cpuTag{ResourceType::MEMORY, dev};
@@ -261,7 +267,8 @@ void ExecTask::run(Callbacks cbs)
     // clear early
     params.rendezvous = nullptr;
 
-    CHECK(op_kernel);
+    assert(op_kernel);
+    assert(ditem.device);
 
     // Start run
     auto s = gview.SetAllocAttrForNode(node, ditem.device.get(), op_kernel);
@@ -291,7 +298,7 @@ void ExecTask::run(Callbacks cbs)
         nodestats::SetAllStart(stats);
     }
 
-    DEBUG("Process node: {}, {}", SummarizeNodeDef(node->def()), *rctx);
+    DEBUG("Process node: {}, {}", SummarizeNodeDef(node->def()), ditem.device->resourceContext());
 
     auto input_tensors = m_state->GetInputTensors(input_frame, input_iter);
     first_input = input_tensors + item.input_start;
@@ -360,7 +367,7 @@ void ExecTask::run(Callbacks cbs)
                 if (stats)
                     nodestats::SetOpEnd(stats);
                 ExecutorState::EntryVector outputs;
-                auto s = execState->ProcessOutputs(*state->item, &state->ctx, *rctx, device, &outputs, stats);
+                auto s = execState->ProcessOutputs(*state->item, &state->ctx, device, &outputs, stats);
                 if (stats)
                     nodestats::SetMemory(stats, &state->ctx);
                 // Update ref entry tickets
@@ -417,7 +424,7 @@ void ExecTask::run(Callbacks cbs)
             }
 
             TRACE("Sync ProcessOutputs");
-            s = m_state->ProcessOutputs(item, &ctx, *rctx, ditem.device, &outputs, stats);
+            s = m_state->ProcessOutputs(item, &ctx, ditem.device, &outputs, stats);
             if (s.ok() && ditem.device_record_tensor_access) {
                 // Get the list of all tensors accessed during the execution
                 ctx.retrieve_accessed_tensors(&accessed_tensors);
@@ -498,6 +505,7 @@ void ExecTask::updateRefEntryTickets(const std::vector<Entry*> &entries)
 
 void ExecTask::afterRun(const tf::Status &s, const Callbacks &cbs)
 {
+    assert(ditem.device);
     completed = m_state->NodeDone(s, tagged_node.node, ditem.device.get(), params.rendezvous,
                                   ready, stats, &inline_ready);
     num_finished_ops.notify();
@@ -528,9 +536,16 @@ bool ExecTask::maybeMemoryFailure(const tf::Status &s, DoneCallback memFailure)
     return false;
 }
 
+ResourceContext &ExecTask::resourceContext() const
+{
+    assert(ditem.device);
+    return ditem.device->resourceContext();
+}
+
 ExecTask::~ExecTask()
 {
     // At this time m_state may already be deleted.
+    assert(ditem.function_library);
     if (op_kernel) {
         deleteKernel(op_kernel, ditem.function_library.get());
     }

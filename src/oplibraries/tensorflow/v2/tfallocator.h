@@ -56,8 +56,8 @@ public:
 
     static PerOpAllocator *downcast(tf::Allocator *);
 
-    explicit PerOpAllocator(const std::shared_ptr<ResourceContext> &rctx, tensorflow::Allocator *other);
-    explicit PerOpAllocator(std::shared_ptr<ResourceContext> &&rctx, tensorflow::Allocator *other);
+    explicit PerOpAllocator(const std::shared_ptr<const ResourceContext> &rctx, tensorflow::Allocator *other);
+    explicit PerOpAllocator(std::shared_ptr<const ResourceContext> &&rctx, tensorflow::Allocator *other);
 
     ~PerOpAllocator() override;
 
@@ -81,7 +81,7 @@ private:
     void recordSize(void *ptr, size_t size);
     size_t findSize(void *ptr);
 
-    std::shared_ptr<ResourceContext> m_rctx;
+    std::shared_ptr<const ResourceContext> m_rctx;
 
     tensorflow::Allocator *m_actualAlloc;
 

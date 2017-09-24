@@ -62,7 +62,7 @@ public:
     struct PagingCallbacks
     {
         std::function<void(uint64_t, void*)> forceEvicted;
-        std::function<size_t(uint64_t, std::shared_ptr<ResourceContext>&&)> volunteer;
+        std::function<size_t(uint64_t, std::unique_ptr<ResourceContext>&&)> volunteer;
 
         operator bool() const {
             return forceEvicted && volunteer;
@@ -199,7 +199,6 @@ private:
         std::unique_ptr<OperationTask> op;
 
         std::promise<void> promise;
-        std::shared_ptr<ResourceContext> rctx;
         std::chrono::time_point<std::chrono::steady_clock> tScheduled;
     };
     friend class ResourceContext;
@@ -266,11 +265,11 @@ public:
         uint64_t ticket;
     };
 
-    OperationScope allocMemory(size_t num_bytes);
-    void deallocMemory(size_t num_bytes);
+    OperationScope allocMemory(size_t num_bytes) const;
+    void deallocMemory(size_t num_bytes) const;
 
 private:
-    void removeTicketFromSession();
+    void removeTicketFromSession() const;
 
     ExecutionEngine::SessionItem &session;
     std::atomic<bool> hasStaging;

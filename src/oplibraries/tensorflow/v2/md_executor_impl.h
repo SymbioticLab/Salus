@@ -79,7 +79,7 @@ private:
     friend class ExecutorState;
     friend class ExecTask;
 
-    size_t handlePagingRequest(uint64_t oldTicket, std::shared_ptr<ResourceContext> &&rctx);
+    size_t handlePagingRequest(uint64_t oldTicket, std::unique_ptr<ResourceContext> &&rctx);
     void forceEvicted(uint64_t ticket, void *addr);
     void dumpActiveEntries();
 
@@ -619,8 +619,7 @@ private:
 
     // After item->kernel computation is done, processes its outputs.
     tf::Status ProcessOutputs(const NodeItem &item, tf::OpKernelContext *ctx,
-                              const ResourceContext &rctx,
-                              const std::shared_ptr<tf::Device> &device,
+                              const std::shared_ptr<PerOpAllocDevice> &device,
                               EntryVector *outputs, tf::NodeExecStats *stats);
 
     // After item->kernel computation is done, clear its inputs.

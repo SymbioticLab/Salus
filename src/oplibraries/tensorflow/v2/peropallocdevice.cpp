@@ -39,9 +39,9 @@ PerOpAllocDevice::PerOpAllocDevice(tf::Device *other)
 
 PerOpAllocDevice::~PerOpAllocDevice() = default;
 
-void PerOpAllocDevice::setResourceContext(const std::shared_ptr<ResourceContext> &rctx)
+void PerOpAllocDevice::setResourceContext(std::unique_ptr<ResourceContext> &&rctx)
 {
-    m_rctx = rctx;
+    m_rctx = std::move(rctx);
 }
 
 bool PerOpAllocDevice::RequiresRecordingAccessedTensors() const
@@ -117,6 +117,8 @@ tf::Allocator* PerOpAllocDevice::GetStepAllocator(tf::AllocatorAttributes attr,
 
 tf::Allocator *PerOpAllocDevice::wrapAllocator(tf::Allocator *alloc, const tf::AllocatorAttributes &attr)
 {
+    assert(m_rctx);
+
     AA key{alloc, attr};
 
     utils::Guard g(m_mu);
@@ -129,7 +131,7 @@ tf::Allocator *PerOpAllocDevice::wrapAllocator(tf::Allocator *alloc, const tf::A
     if (attr.on_host()) {
         assert(alloc->Name() != "GPU_0_bfc");
         DeviceSpec cpuSpec {DeviceType::CPU, 0};
-        auto rctx = std::make_shared<ResourceContext>(*m_rctx, cpuSpec);
+        auto rctx = std::make_unique<ResourceContext>(*m_rctx, cpuSpec);
         a = utils::make_scoped_unref<PerOpAllocator>(std::move(rctx), alloc);
     } else {
         a = utils::make_scoped_unref<PerOpAllocator>(m_rctx, alloc);

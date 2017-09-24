@@ -623,8 +623,7 @@ tf::Status ExecutorState::PrepareInputs(const NodeItem &item, tf::OpKernel *kern
 }
 
 tf::Status ExecutorState::ProcessOutputs(const NodeItem &item, tf::OpKernelContext *ctx,
-                                         const ResourceContext &rctx,
-                                         const std::shared_ptr<tf::Device> &device,
+                                         const std::shared_ptr<PerOpAllocDevice> &device,
                                          EntryVector *outputs, tf::NodeExecStats *stats)
 {
     auto node = item.node;
@@ -675,7 +674,7 @@ tf::Status ExecutorState::ProcessOutputs(const NodeItem &item, tf::OpKernelConte
 
             // Set the allocator attributes of the output entry.
             out->alloc_attr = ctx->output_alloc_attr(i);
-            out->alloc_ticket = rctx.ticket();
+            out->alloc_ticket = device->resourceContext().ticket();
             // Pull more accurate ticket info if the tensor is initialized and has a buffer
             auto buf = tf::remote::PagingHelper::bufferOf(*val.tensor);
             if (buf) {

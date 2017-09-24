@@ -139,15 +139,23 @@ PerOpAllocator *PerOpAllocator::downcast(tf::Allocator *alloc)
     return nullptr;
 }
 
-PerOpAllocator::PerOpAllocator(const std::shared_ptr<ResourceContext> &rctx, tensorflow::Allocator *other)
+PerOpAllocator::PerOpAllocator(const std::shared_ptr<const ResourceContext> &rctx, tensorflow::Allocator *other)
     : m_rctx(rctx)
     , m_actualAlloc(other)
 {
     assert(m_rctx);
     assert(m_actualAlloc);
+    switch (m_rctx->spec().type) {
+    case DeviceType::GPU:
+        assert(m_actualAlloc->Name() == "GPU_0_bfc");
+        break;
+    default:
+        assert(m_actualAlloc->Name() != "GPU_0_bfc");
+        break;
+    }
 }
 
-PerOpAllocator::PerOpAllocator(std::shared_ptr<ResourceContext> &&rctx, tensorflow::Allocator *other)
+PerOpAllocator::PerOpAllocator(std::shared_ptr<const ResourceContext> &&rctx, tensorflow::Allocator *other)
     : m_rctx(std::move(rctx))
     , m_actualAlloc(other)
 {

@@ -50,7 +50,9 @@ public:
 
     virtual int failedTimes() const = 0;
 
-    virtual bool prepare(const std::shared_ptr<ResourceContext> &rctx) = 0;
+    virtual bool prepare(std::unique_ptr<ResourceContext> &&rctx) = 0;
+
+    virtual ResourceContext &resourceContext() const = 0;
 
     // If allow paging happen when this task is running.
     virtual bool allowConcurrentPaging() const = 0;

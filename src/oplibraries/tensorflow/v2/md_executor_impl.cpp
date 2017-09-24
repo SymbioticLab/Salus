@@ -282,7 +282,7 @@ void ExecutorImpl::dumpActiveEntries()
     }
 }
 
-size_t ExecutorImpl::handlePagingRequest(uint64_t oldTicket, std::shared_ptr<ResourceContext> &&rctx)
+size_t ExecutorImpl::handlePagingRequest(uint64_t oldTicket, std::unique_ptr<ResourceContext> &&rctx)
 {
     // There may be multiple tensor entries that uses this ticket,
     // and potentially share the storage.

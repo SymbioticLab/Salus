@@ -155,7 +155,6 @@ std::future<void> ExecutionEngine::InserterImpl::enqueueOperation(std::unique_pt
     STACK_SENTINEL;
     auto opItem = std::make_shared<OperationItem>();
     opItem->op = std::move(task);
-    opItem->rctx = std::make_shared<ResourceContext>(*m_item, m_engine.m_resMonitor);
 
     m_engine.pushToSessionQueue(m_item, opItem);
 
@@ -339,19 +338,19 @@ bool ExecutionEngine::maybePreAllocateFor(SessionItem &item, OperationItem &opIt
 
     auto usage = opItem.op->estimatedUsage(spec);
 
-    if (!opItem.rctx->initializeStaging(spec, usage)) {
+    auto rctx = std::make_unique<ResourceContext>(item, m_resMonitor);
+    if (!rctx->initializeStaging(spec, usage)) {
         logScheduleFailure(usage, m_resMonitor);
         return false;
     }
 
-    if (!opItem.op->prepare(opItem.rctx)) {
-        opItem.rctx->releaseStaging();
+    auto ticket = rctx->ticket();
+    if (!opItem.op->prepare(std::move(rctx))) {
         return false;
     }
 
-    DEBUG("Pre allocated {} for {}", *opItem.rctx, opItem.op->DebugString());
     utils::Guard g(item.tickets_mu);
-    item.tickets.insert(opItem.rctx->ticket());
+    item.tickets.insert(ticket);
     return true;
 }
 
@@ -458,12 +457,15 @@ void ExecutionEngine::taskStopped(SessionItem &item, OperationItem &opItem)
 {
     UNUSED(item);
 
+    auto &rctx = opItem.op->resourceContext();
+    rctx.releaseStaging();
+
     auto dur = duration_cast<microseconds>(steady_clock::now() - opItem.tScheduled).count();
 
     // For now only count memory usage, and simply add up memory usages on different
     // devices.
     // TODO: find better formula to do this
-    auto memUsage = m_resMonitor.queryUsage(opItem.rctx->ticket());
+    auto memUsage = m_resMonitor.queryUsage(rctx.ticket());
     uint64_t unifiedRes = 0;
     if (memUsage) {
         for (auto &p : *memUsage) {
@@ -478,7 +480,6 @@ void ExecutionEngine::taskStopped(SessionItem &item, OperationItem &opItem)
     unifiedRes *= dur;
     item.unifiedRes += unifiedRes;
 
-    opItem.rctx->releaseStaging();
     m_runningTasks -= 1;
     if (!opItem.op->allowConcurrentPaging()) {
         m_noPagingRunningTasks -= 1;
@@ -552,7 +553,7 @@ void ExecutionEngine::doPaging()
                 {cpuTag, usage}
             };
 
-            auto rctx = std::make_shared<ResourceContext>(sess, m_resMonitor);
+            auto rctx = std::make_unique<ResourceContext>(sess, m_resMonitor);
             if (!rctx->initializeStaging({DeviceType::CPU, 0}, res)) {
                 ERR("No enough CPU memory for paging. Required: {:.0f} bytes", res[cpuTag]);
                 return;
@@ -623,7 +624,7 @@ void ResourceContext::releaseStaging()
     }
 }
 
-void ResourceContext::removeTicketFromSession()
+void ResourceContext::removeTicketFromSession() const
 {
     // last resource freed
     utils::Guard g(session.tickets_mu);
@@ -636,7 +637,7 @@ ResourceContext::~ResourceContext()
     releaseStaging();
 }
 
-ResourceContext::OperationScope ResourceContext::allocMemory(size_t num_bytes)
+ResourceContext::OperationScope ResourceContext::allocMemory(size_t num_bytes) const
 {
 
     OperationScope scope(resMon.lock());
@@ -648,7 +649,7 @@ ResourceContext::OperationScope ResourceContext::allocMemory(size_t num_bytes)
     return scope;
 }
 
-void ResourceContext::deallocMemory(size_t num_bytes)
+void ResourceContext::deallocMemory(size_t num_bytes) const
 {
     Resources res{
         {{ResourceType::MEMORY, m_spec}, num_bytes}

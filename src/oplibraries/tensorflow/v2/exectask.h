@@ -45,7 +45,7 @@ public:
              AllocatorAttributeVec &input_alloc_attrs,
              bool &completed, tf::Rendezvous *rendez, int maxFailures = 2);
 
-    bool prepare(const std::shared_ptr<ResourceContext> &rctx) override;
+    bool prepare(std::unique_ptr<ResourceContext> &&rctx) override;
 
     void run(Callbacks cbs) override;
 
@@ -61,7 +61,7 @@ public:
 
     bool allowConcurrentPaging() const override;
 
-    const ResourceContext &resourceContext() const { return *rctx; };
+    ResourceContext &resourceContext() const override;
 
 private:
     bool maybeMemoryFailure(const tf::Status &s, DoneCallback memFailure);
