@@ -501,12 +501,8 @@ void ExecutionEngine::doPaging()
     ResourceTag cpuTag {ResourceType::MEMORY, {DeviceType::CPU, 0}};
 
     for (auto &pSess : m_sessions) {
-        size_t mem = 0;
-        for (auto ticket : pSess->tickets) {
-            auto usage = m_resMonitor.queryUsage(ticket);
-            if (!usage) continue;
-            mem += utils::getOrDefault(usage, gpuTag, 0);
-        }
+        auto usages = m_resMonitor.queryUsages(pSess->tickets);
+        auto mem = utils::getOrDefault(usages, gpuTag, 0);
         candidates.emplace_back(mem, *pSess);
     }
 

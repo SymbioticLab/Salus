@@ -555,6 +555,16 @@ std::vector<std::pair<size_t, uint64_t>> ResourceMonitor::sortVictim(const std::
     return usages;
 }
 
+Resources ResourceMonitor::queryUsages(const std::unordered_set<uint64_t> &tickets) const
+{
+    Guard g(m_mu);
+    Resources res;
+    for (auto t : tickets) {
+        merge(res, utils::getOrDefault(m_using, t, {}));
+    }
+    return res;
+}
+
 utils::optional<Resources> ResourceMonitor::queryUsage(uint64_t ticket) const
 {
     Guard g(m_mu);

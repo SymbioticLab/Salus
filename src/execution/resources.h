@@ -180,6 +180,8 @@ public:
 
     std::vector<std::pair<size_t, uint64_t>> sortVictim(const std::unordered_set<uint64_t> &candidates) const;
 
+    Resources queryUsages(const std::unordered_set<uint64_t> &tickets) const;
+
     utils::optional<Resources> queryUsage(uint64_t ticket) const;
     bool hasUsage(uint64_t ticket) const;
 
