@@ -638,30 +638,33 @@ ResourceContext::~ResourceContext()
 
 ResourceContext::OperationScope ResourceContext::allocMemory(size_t num_bytes)
 {
-    Resources res {
-        {{ResourceType::MEMORY, spec}, num_bytes}
-    };
 
     OperationScope scope(resMon.lock());
 
-    scope.valid = scope.proxy.allocate(ticket, res);
+    scope.res[{ResourceType::MEMORY, spec}] = num_bytes;
+    scope.ticket = ticket;
+    scope.valid = scope.proxy.allocate(ticket, scope.res);
 
     return scope;
 }
 
-ResourceContext::OperationScope ResourceContext::deallocMemory(size_t num_bytes)
+void ResourceContext::deallocMemory(size_t num_bytes)
 {
-    Resources res {
+    Resources res{
         {{ResourceType::MEMORY, spec}, num_bytes}
     };
 
-    OperationScope scope(resMon.lock());
-    scope.valid = true;
-
-    if (scope.proxy.free(ticket, res)) {
+    if (resMon.free(ticket, res)) {
         removeTicketFromSession();
     }
-    return scope;
+}
+
+void ResourceContext::OperationScope::rollback()
+{
+    assert(valid);
+    proxy.free(ticket, res);
+    // no need to call removeTicketFromSession
+    // because this most likely will not be the last deallocation
 }
 
 std::ostream &operator<<(std::ostream &os, const ResourceContext &c)

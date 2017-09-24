@@ -251,15 +251,19 @@ struct ResourceContext
 
         operator bool() const { return valid; }
 
+        void rollback();
+
     private:
         friend struct ResourceContext;
 
         bool valid = true;
         ResourceMonitor::LockedProxy proxy;
+        Resources res;
+        uint64_t ticket;
     };
 
     OperationScope allocMemory(size_t num_bytes);
-    OperationScope deallocMemory(size_t num_bytes);
+    void deallocMemory(size_t num_bytes);
 
 private:
     void removeTicketFromSession();

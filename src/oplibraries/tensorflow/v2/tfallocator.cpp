@@ -172,6 +172,9 @@ void *PerOpAllocator::AllocateRaw(size_t alignment, size_t num_bytes)
     void *ptr = nullptr;
     if (auto scope = m_rctx->allocMemory(num_bytes)) {
         ptr = m_actualAlloc->AllocateRaw(alignment, num_bytes);
+        if (!ptr) {
+            scope.rollback();
+        }
         checkMemory(ptr, num_bytes);
     } else {
         // No enough memory
@@ -203,6 +206,9 @@ void* PerOpAllocator::AllocateRaw(size_t alignment, size_t num_bytes, const tens
     void *ptr = nullptr;
     if (auto scope = m_rctx->allocMemory(num_bytes)) {
         ptr = m_actualAlloc->AllocateRaw(alignment, num_bytes, attr);
+        if (!ptr) {
+            scope.rollback();
+        }
         checkMemory(ptr, num_bytes);
     } else {
         // No enough memory
@@ -239,10 +245,8 @@ void PerOpAllocator::DeallocateRaw(void *ptr)
     DEBUG("TFAllocator deallocating memory at {} size {} using allocator {}@{} with {}", as_hex(ptr),
           num_bytes, nameOrNull(m_actualAlloc), as_hex(m_actualAlloc), *m_rctx);
 
-    {
-        auto scope = m_rctx->deallocMemory(num_bytes);
-        m_actualAlloc->DeallocateRaw(ptr);
-    }
+    m_rctx->deallocMemory(num_bytes);
+    m_actualAlloc->DeallocateRaw(ptr);
 
     Unref();
 }
