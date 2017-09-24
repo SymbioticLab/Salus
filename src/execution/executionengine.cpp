@@ -351,7 +351,7 @@ bool ExecutionEngine::maybePreAllocateFor(SessionItem &item, OperationItem &opIt
 
     DEBUG("Pre allocated {} for {}", *opItem.rctx, opItem.op->DebugString());
     utils::Guard g(item.tickets_mu);
-    item.tickets.insert(opItem.rctx->ticket);
+    item.tickets.insert(opItem.rctx->ticket());
     return true;
 }
 
@@ -463,7 +463,7 @@ void ExecutionEngine::taskStopped(SessionItem &item, OperationItem &opItem)
     // For now only count memory usage, and simply add up memory usages on different
     // devices.
     // TODO: find better formula to do this
-    auto memUsage = m_resMonitor.queryUsage(opItem.rctx->ticket);
+    auto memUsage = m_resMonitor.queryUsage(opItem.rctx->ticket());
     uint64_t unifiedRes = 0;
     if (memUsage) {
         for (auto &p : *memUsage) {
@@ -586,8 +586,8 @@ void ExecutionEngine::doPaging()
 
 ResourceContext::ResourceContext(const ResourceContext &other, const DeviceSpec &spec)
     : resMon(other.resMon)
-    , spec(spec)
-    , ticket(other.ticket)
+    , m_spec(spec)
+    , m_ticket(other.m_ticket)
     , session(other.session)
     , hasStaging(false)
 {
@@ -595,7 +595,7 @@ ResourceContext::ResourceContext(const ResourceContext &other, const DeviceSpec 
 
 ResourceContext::ResourceContext(ExecutionEngine::SessionItem &item, ResourceMonitor& resMon)
     : resMon(resMon)
-    , ticket(0)
+    , m_ticket(0)
     , session(item)
     , hasStaging(false)
 {
@@ -603,8 +603,8 @@ ResourceContext::ResourceContext(ExecutionEngine::SessionItem &item, ResourceMon
 
 bool ResourceContext::initializeStaging(const DeviceSpec& spec, const Resources& res)
 {
-    this->spec = spec;
-    auto ok = resMon.preAllocate(res, &ticket);
+    this->m_spec = spec;
+    auto ok = resMon.preAllocate(res, &m_ticket);
     hasStaging = ok;
     return ok;
 }
@@ -614,11 +614,11 @@ void ResourceContext::releaseStaging()
     if (!hasStaging) {
         return;
     }
-    resMon.free(ticket);
+    resMon.free(m_ticket);
     hasStaging = false;
 
     // clean up session tickets
-    if (!resMon.hasUsage(ticket)) {
+    if (!resMon.hasUsage(m_ticket)) {
         removeTicketFromSession();
     }
 }
@@ -627,8 +627,8 @@ void ResourceContext::removeTicketFromSession()
 {
     // last resource freed
     utils::Guard g(session.tickets_mu);
-    DEBUG("Removing ticket {} from session {}", ticket, session.sessHandle);
-    session.tickets.erase(ticket);
+    DEBUG("Removing ticket {} from session {}", m_ticket, session.sessHandle);
+    session.tickets.erase(m_ticket);
 }
 
 ResourceContext::~ResourceContext()
@@ -641,9 +641,9 @@ ResourceContext::OperationScope ResourceContext::allocMemory(size_t num_bytes)
 
     OperationScope scope(resMon.lock());
 
-    scope.res[{ResourceType::MEMORY, spec}] = num_bytes;
-    scope.ticket = ticket;
-    scope.valid = scope.proxy.allocate(ticket, scope.res);
+    scope.res[{ResourceType::MEMORY, m_spec}] = num_bytes;
+    scope.ticket = m_ticket;
+    scope.valid = scope.proxy.allocate(m_ticket, scope.res);
 
     return scope;
 }
@@ -651,10 +651,10 @@ ResourceContext::OperationScope ResourceContext::allocMemory(size_t num_bytes)
 void ResourceContext::deallocMemory(size_t num_bytes)
 {
     Resources res{
-        {{ResourceType::MEMORY, spec}, num_bytes}
+        {{ResourceType::MEMORY, m_spec}, num_bytes}
     };
 
-    if (resMon.free(ticket, res)) {
+    if (resMon.free(m_ticket, res)) {
         removeTicketFromSession();
     }
 }
@@ -669,8 +669,8 @@ void ResourceContext::OperationScope::rollback()
 
 std::ostream &operator<<(std::ostream &os, const ResourceContext &c)
 {
-    if (c.ticket == 0) {
+    if (c.ticket() == 0) {
         return os << "AllocationTicket(Invalid)";
     }
-    return os << "AllocationTicket(" << c.ticket << ", device=" << c.spec << ")";
+    return os << "AllocationTicket(" << c.ticket() << ", device=" << c.spec() << ")";
 }

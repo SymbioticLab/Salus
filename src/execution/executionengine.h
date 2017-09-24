@@ -41,7 +41,7 @@
 #include <chrono>
 
 class OperationTask;
-struct ResourceContext;
+class ResourceContext;
 
 /**
  * @todo write docs
@@ -202,7 +202,7 @@ private:
         std::shared_ptr<ResourceContext> rctx;
         std::chrono::time_point<std::chrono::steady_clock> tScheduled;
     };
-    friend struct ResourceContext;
+    friend class ResourceContext;
 
     using SessionList = std::list<std::shared_ptr<SessionItem>>;
     using SessionSet = std::unordered_set<std::shared_ptr<SessionItem>>;
@@ -225,11 +225,15 @@ private:
     qExecutionContext m_qec;
 };
 
-struct ResourceContext
+class ResourceContext
 {
     ResourceMonitor &resMon;
-    DeviceSpec spec;
-    uint64_t ticket;
+    DeviceSpec m_spec;
+    uint64_t m_ticket;
+
+public:
+    const DeviceSpec &spec() const { return m_spec; }
+    uint64_t ticket() const { return m_ticket; }
 
     ResourceContext(const ResourceContext &other, const DeviceSpec &spec);
     ResourceContext(ExecutionEngine::SessionItem &item, ResourceMonitor &resMon);
@@ -254,7 +258,7 @@ struct ResourceContext
         void rollback();
 
     private:
-        friend struct ResourceContext;
+        friend class ResourceContext;
 
         bool valid = true;
         ResourceMonitor::LockedProxy proxy;

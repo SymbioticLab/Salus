@@ -312,7 +312,7 @@ size_t ExecutorImpl::handlePagingRequest(uint64_t oldTicket, std::shared_ptr<Res
 
     // Create target device
     DeviceItem item;
-    auto ok = LookupDevice(rctx->spec, &item);
+    auto ok = LookupDevice(rctx->spec(), &item);
     if (!ok.ok()) {
         ERR("Error when looking up device for paging: {}", ok);
         return 0;
@@ -350,7 +350,7 @@ size_t ExecutorImpl::handlePagingRequest(uint64_t oldTicket, std::shared_ptr<Res
 
         auto alloc = PerOpAllocator::downcast(root_buf->allocator());
 
-        if (!alloc || alloc->resourceContext().spec.type != DeviceType::GPU) {
+        if (!alloc || alloc->resourceContext().spec().type != DeviceType::GPU) {
             continue;
         }
 
@@ -364,7 +364,7 @@ size_t ExecutorImpl::handlePagingRequest(uint64_t oldTicket, std::shared_ptr<Res
 
     if (parts.empty()) {
         WARN("No tensor available for paging");
-        return 0;
+        // then add back entries at end of the func
     }
 
     size_t totalReleased = 0;

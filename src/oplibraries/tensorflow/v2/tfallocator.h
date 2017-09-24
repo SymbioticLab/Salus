@@ -26,10 +26,7 @@
 
 #include <memory>
 
-/**
- * @todo write docs
- */
-struct ResourceContext;
+class ResourceContext;
 
 class TFAllocator : public tensorflow::Allocator
 {

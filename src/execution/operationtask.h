@@ -26,7 +26,7 @@
 #include <functional>
 #include <memory>
 
-struct ResourceContext;
+class ResourceContext;
 class OperationTask
 {
 public:

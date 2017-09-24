@@ -26,7 +26,7 @@
 
 #include <mutex>
 
-struct ResourceContext;
+class ResourceContext;
 class PerOpAllocator;
 class PerOpAllocDevice : public tf::Device
 {

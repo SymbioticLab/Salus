@@ -65,7 +65,7 @@ tensorflow::Status moveTensor(Entry &entry, const std::shared_ptr<PerOpAllocDevi
     entry.alloc_attr = attr;
     entry.device_context = dstCtx;
     entry.device = dstDevice;
-    entry.alloc_ticket = dstDevice->resourceContext().ticket;
+    entry.alloc_ticket = dstDevice->resourceContext().ticket();
 
     return tf::Status::OK();
 }

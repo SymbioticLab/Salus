@@ -587,12 +587,12 @@ tf::Status ExecutorState::PrepareInputs(const NodeItem &item, tf::OpKernel *kern
             auto range = impl_->active_entries_.equal_range(oldTicket);
             for (auto it = range.first; it != range.second; ) {
                 if (it->second == entry) {
-                    DEBUG("Removing entry {} of ticket {} due to devcopy", as_hex(it->second), it->second->alloc_ticket);
+                    DEBUG("Removing entry {} of ticket {} due to devcopy", as_hex(it->second), oldTicket);
                     it = impl_->active_entries_.erase(it);
                 } else if (entry->ref && it->second->ref == entry->ref) {
                     needUpdate.push_back(it->second);
                     it->second->alloc_ticket = entry->alloc_ticket;
-                    DEBUG("Removing entry {} of ticket {} due to devcopy", as_hex(it->second), it->second->alloc_ticket);
+                    DEBUG("Removing entry {} of ticket {} due to devcopy", as_hex(it->second), oldTicket);
                     it = impl_->active_entries_.erase(it);
                 } else {
                     ++it;
@@ -675,13 +675,13 @@ tf::Status ExecutorState::ProcessOutputs(const NodeItem &item, tf::OpKernelConte
 
             // Set the allocator attributes of the output entry.
             out->alloc_attr = ctx->output_alloc_attr(i);
-            out->alloc_ticket = rctx.ticket;
+            out->alloc_ticket = rctx.ticket();
             // Pull more accurate ticket info if the tensor is initialized and has a buffer
             auto buf = tf::remote::PagingHelper::bufferOf(*val.tensor);
             if (buf) {
                 auto alloc = PerOpAllocator::downcast(buf->allocator());
                 if (alloc) {
-                    out->alloc_ticket = alloc->resourceContext().ticket;
+                    out->alloc_ticket = alloc->resourceContext().ticket();
                     if (val.is_ref()) {
                         DEBUG("{}: Buffer {} refIsOne {}", alloc->resourceContext(), as_hex(buf), buf->RefCountIsOne());
                     }

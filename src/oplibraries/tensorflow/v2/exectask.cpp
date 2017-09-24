@@ -91,7 +91,7 @@ bool ExecTask::prepare(const std::shared_ptr<ResourceContext> &ctx)
 {
     rctx = ctx;
 
-    auto &dev = rctx->spec;
+    auto &dev = rctx->spec();
 
     auto match = [&dev](auto type) { return type == dev.type; };
     if (std::none_of(supportedTypes.begin(), supportedTypes.end(), match)) {
@@ -467,7 +467,7 @@ void ExecTask::updateRefEntryTickets(const std::vector<Entry*> &entries)
         auto alloc = PerOpAllocator::downcast(buf->allocator());
         assert(alloc);
 
-        auto ticket = alloc->resourceContext().ticket;
+        auto ticket = alloc->resourceContext().ticket();
         if (entry->alloc_ticket != ticket) {
             DEBUG("Update allocation ticket from {} to {}", entry->alloc_ticket, ticket);
             auto oldTicket = entry->alloc_ticket;
