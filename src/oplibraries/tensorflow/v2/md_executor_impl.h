@@ -188,6 +188,7 @@ private:
     {
         explicit IterationState(const tf::PendingCounts *pending_counts, int total_input_tensors)
             : input_tensors(new Entry[total_input_tensors])
+            , total_input_tensors(total_input_tensors)
             , outstanding_ops(0)
             , outstanding_frame_count(0)
             , counts_(*pending_counts)
@@ -205,6 +206,7 @@ private:
         // source node of an edge and is cleared by the destination of the same
         // edge. The latter node is never run concurrently with the former node.
         Entry *input_tensors;
+        int total_input_tensors;
 
         // The number of outstanding ops for each iteration.
         int outstanding_ops;

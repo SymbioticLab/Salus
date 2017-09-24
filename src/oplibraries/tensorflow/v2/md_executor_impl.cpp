@@ -447,6 +447,8 @@ size_t ExecutorImpl::handlePagingRequest(uint64_t oldTicket, std::shared_ptr<Res
         }
 
         assert(oldRoot->RefCountIsOne());
+        DEBUG("Releasing old root buffer {} with data block at {} of size {}",
+              as_hex(oldRoot), as_hex(oldRoot->data()), oldRoot->size());
         totalReleased += oldRoot->size();
         oldRoot->Unref();
     }

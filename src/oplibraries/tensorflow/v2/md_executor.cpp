@@ -1426,8 +1426,28 @@ bool ExecutorState::FrameState::CleanupIterations(const GraphView *gview, int64_
 {
     auto curr_iter = iter;
     while (curr_iter <= iteration_count && IsIterationDone(curr_iter)) {
+        auto iterState = GetIteration(curr_iter);
+        // Remove any potential entries in active_entries_
+        {
+            utils::Guard g(executor->entry_mu_);
+            for (int i = 0; i != iterState->total_input_tensors; ++i) {
+                auto entry = iterState->input_tensors + i;
+                if (entry->alloc_ticket != -1) {
+                    auto range = executor->active_entries_.equal_range(entry->alloc_ticket);
+                    for (auto it = range.first; it != range.second; ) {
+                        if (it->second == entry) {
+                            DEBUG("Removing entry {} of ticket {} due to iter deletion",
+                                  as_hex(entry), entry->alloc_ticket);
+                            it = executor->active_entries_.erase(it);
+                        } else {
+                            ++it;
+                        }
+                    }
+                }
+            }
+        }
         // Delete the iteration curr_iter.
-        delete GetIteration(curr_iter);
+        delete iterState;
         SetIteration(curr_iter, nullptr);
         --num_outstanding_iterations;
         ++curr_iter;

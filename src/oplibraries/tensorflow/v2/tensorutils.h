@@ -175,7 +175,7 @@ struct Entry
     // The attributes of the allocator that creates the tensor.
     tf::AllocatorAttributes alloc_attr;
     // The ticket used to allocate the tensor
-    uint64_t alloc_ticket;
+    uint64_t alloc_ticket = -1;
 
     bool in_use = false;
 
