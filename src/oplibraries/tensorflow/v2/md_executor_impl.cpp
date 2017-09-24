@@ -410,10 +410,9 @@ size_t ExecutorImpl::handlePagingRequest(uint64_t oldTicket, std::shared_ptr<Res
             DEBUG("    Move other tensors of same root: entry {} (ref {}) with ticket {}",
                   as_hex(entry), as_hex(entry->ref), oldTicket);
 
+            entry->CopyProperties(*firstEntry);
             // only one reference entry need to be moved
             if (entry->ref && movedReferences.count(entry->ref) > 0) {
-                entry->ClearVal();
-                entry->CopyProperties(*firstEntry);
                 continue;
             }
             DEBUG("    Move other tensors of same root: ref {} ticket {} not yet moved or this is value",
@@ -421,17 +420,14 @@ size_t ExecutorImpl::handlePagingRequest(uint64_t oldTicket, std::shared_ptr<Res
 
             auto t = tf::remote::PagingHelper::cloneWithNewBuffer(*entry->RefOrVal(),
                                                                   newRoot);
-            // copy everything from firstEntry, except for val, which may be ref
-            entry->ClearVal();
-            entry->CopyProperties(*firstEntry);
-            oldCount -= 1;
-            assert(tf::remote::PagingHelper::refCountOf(*oldRoot) == oldCount);
             if (entry->ref) {
                 *entry->ref = std::move(t);
                 movedReferences.insert(entry->ref);
             } else {
                 entry->SetVal(std::move(t));
             }
+            oldCount -= 1;
+            assert(tf::remote::PagingHelper::refCountOf(*oldRoot) == oldCount);
         }
         if (!newRoot) {
             continue;
@@ -444,7 +440,6 @@ size_t ExecutorImpl::handlePagingRequest(uint64_t oldTicket, std::shared_ptr<Res
 
             tf::TensorBuffer *newSub = oldSub->clone(newRoot);
             for (auto &entry : pp.second) {
-                entry->ClearVal();
                 entry->CopyProperties(*firstEntry);
 
                 DEBUG("    Moving sub entry: entry {} (ref {}) with ticket {}",

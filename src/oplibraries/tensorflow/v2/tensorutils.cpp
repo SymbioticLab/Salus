@@ -59,8 +59,6 @@ tensorflow::Status moveTensor(Entry &entry, const std::shared_ptr<PerOpAllocDevi
     if (entry.ref) {
         *input = std::move(copy);
     } else {
-        // Remember to destory val first
-        entry.ClearVal();
         entry.SetVal(std::move(copy));
     }
 

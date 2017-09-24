@@ -106,8 +106,6 @@ struct Entry
             val.Destroy();
             val_field_is_set = false;
         }
-        ref = nullptr;
-        ref_mu = nullptr;
         // release device
         device.reset();
         in_use = false;
@@ -144,6 +142,9 @@ struct Entry
 
     template<typename ...Args>
     void SetVal(Args... args) {
+        if (val_field_is_set) {
+            val.Destroy();
+        }
         ref = nullptr;
         ref_mu = nullptr;
         val.Init(std::forward<Args>(args)...);
