@@ -87,6 +87,7 @@ private:
     bool has_ref_input;
 
     std::vector<Entry*> reffedEntries;
+    Entry * first_input = nullptr;
 
     // Borrowed from ExecutorState
     ExecutorState::TaggedNode &tagged_node;

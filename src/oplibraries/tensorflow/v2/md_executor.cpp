@@ -616,6 +616,7 @@ tf::Status ExecutorState::PrepareInputs(const NodeItem &item, tf::OpKernel *kern
         TRACE("    Input {} has data block at {}", i, as_hex(inp->tensor->tensor_data().data()));
         (*input_device_contexts)[i] = entry->device_context;
         (*input_alloc_attrs)[i] = entry->alloc_attr;
+        entry->in_use = true;
 
     } // for (int i = 0; i < item.num_inputs; ++i) {
     return tf::Status::OK();

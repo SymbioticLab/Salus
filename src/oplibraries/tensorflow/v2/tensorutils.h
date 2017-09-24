@@ -85,6 +85,7 @@ struct Entry
         alloc_ticket = other.alloc_ticket;
         device_context = other.device_context;
         device = other.device;
+        in_use = other.in_use;
     }
 
     void CopyProperties(Entry &&other)
@@ -93,6 +94,7 @@ struct Entry
         alloc_ticket = other.alloc_ticket;
         device_context = other.device_context;
         device = std::move(other.device);
+        in_use = other.in_use;
     }
 
     // Clears the <val> field.
@@ -105,6 +107,7 @@ struct Entry
         }
         // release device
         device.reset();
+        in_use = false;
     }
 
     void Dereference()
@@ -173,6 +176,8 @@ struct Entry
     tf::AllocatorAttributes alloc_attr;
     // The ticket used to allocate the tensor
     uint64_t alloc_ticket;
+
+    bool in_use = false;
 
     // Every entry carries an optional DeviceContext containing
     // Device-specific information about how the Tensor was produced.

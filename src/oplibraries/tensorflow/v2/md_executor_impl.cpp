@@ -336,6 +336,11 @@ size_t ExecutorImpl::handlePagingRequest(uint64_t oldTicket, std::shared_ptr<Res
     // partition into groups with the same root buffer
     for (auto entry : entries) {
         assert(entry != nullptr);
+        if (entry->in_use) {
+            WARN("Skip entry {} that is in use", as_hex(entry));
+            continue;
+        }
+
         auto tensor = entry->RefOrVal();
         auto buf = tf::remote::PagingHelper::bufferOf(*tensor);
         if (!buf) continue;

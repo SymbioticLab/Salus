@@ -263,14 +263,6 @@ void ExecTask::run(Callbacks cbs)
 
     CHECK(op_kernel);
 
-    // Go through inputs to see if there's ref type input
-    for (int i = 0; i != item.num_inputs; ++i) {
-        if (IsRefType(item.input_type(i))) {
-            has_ref_input = true;
-            break;
-        }
-    }
-
     // Start run
     auto s = gview.SetAllocAttrForNode(node, ditem.device.get(), op_kernel);
     if (!s.ok()) {
@@ -302,7 +294,7 @@ void ExecTask::run(Callbacks cbs)
     DEBUG("Process node: {}, {}", SummarizeNodeDef(node->def()), *rctx);
 
     auto input_tensors = m_state->GetInputTensors(input_frame, input_iter);
-    auto first_input = input_tensors + item.input_start;
+    first_input = input_tensors + item.input_start;
 
     ExecutorState::EntryVector outputs; // for use of sync compute
     tf::TensorReferenceVector accessed_tensors;
@@ -332,6 +324,7 @@ void ExecTask::run(Callbacks cbs)
         reffedEntries.clear();
         for (auto entry = first_input; entry != first_input + item.num_inputs; ++entry) {
             if (entry->ref) {
+                has_ref_input = true;
                 reffedEntries.push_back(entry);
             }
         }
@@ -517,6 +510,13 @@ bool ExecTask::maybeMemoryFailure(const tf::Status &s, DoneCallback memFailure)
     if (s.code() == tf::error::RESOURCE_EXHAUSTED) {
         // we didn't implement rollback. So this can only happen for non ref input ops
         assert(!has_ref_input);
+
+        // also reset in_use
+        assert(first_input);
+        for (int i = 0; i != tagged_node.node->num_inputs(); ++i) {
+            auto entry = first_input + i;
+            entry->in_use = false;
+        }
 
         ++failureTimes;
         if (memFailure) {
