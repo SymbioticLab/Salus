@@ -63,4 +63,12 @@ bool startsWith(const std::string &str, const std::string &prefix)
     return std::equal(prefix.begin(), prefix.end(), str.begin());
 }
 
+bool endsWith(const std::string &str, const std::string &postfix)
+{
+    if (postfix.size() > str.size()) {
+        return false;
+    }
+    return std::equal(postfix.begin(), postfix.end(), str.end() - postfix.size());
+}
+
 } // namespace utils

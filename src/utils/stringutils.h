@@ -28,6 +28,8 @@ std::string bytesToHexString(const uint8_t *info, size_t infoLength, size_t maxL
 
 bool startsWith(const std::string &str, const std::string &prefix);
 
+bool endsWith(const std::string &str, const std::string &postfix);
+
 } // namespace utils
 
 #endif // STRINGUTILS_H

@@ -127,6 +127,7 @@ tf::Allocator *PerOpAllocDevice::wrapAllocator(tf::Allocator *alloc, const tf::A
 
     utils::ScopedUnref<PerOpAllocator> a;
     if (attr.on_host()) {
+        assert(alloc->Name() != "GPU_0_bfc");
         DeviceSpec cpuSpec {DeviceType::CPU, 0};
         auto rctx = std::make_shared<ResourceContext>(*m_rctx, cpuSpec);
         a = utils::make_scoped_unref<PerOpAllocator>(std::move(rctx), alloc);

@@ -20,6 +20,7 @@
 
 #include "oplibraries/tensorflow/v2/peropallocdevice.h"
 #include "oplibraries/tensorflow/v2/tfallocator.h"
+#include "utils/stringutils.h"
 
 #include "oplibraries/tensorflow/tensorflow_headers.h"
 
@@ -349,6 +350,15 @@ size_t ExecutorImpl::handlePagingRequest(uint64_t oldTicket, std::shared_ptr<Res
         if (!root_buf) continue;
 
         auto alloc = PerOpAllocator::downcast(root_buf->allocator());
+
+        switch (alloc->resourceContext().spec().type) {
+        case DeviceType::GPU:
+            assert(utils::endsWith(alloc->Name(), "GPU_0_bfc"));
+            break;
+        default:
+            assert(!utils::endsWith(alloc->Name(), "GPU_0_bfc"));
+            break;
+        }
 
         if (!alloc || alloc->resourceContext().spec().type != DeviceType::GPU) {
             continue;
