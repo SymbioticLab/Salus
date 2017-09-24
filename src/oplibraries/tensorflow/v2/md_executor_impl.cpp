@@ -374,10 +374,13 @@ size_t ExecutorImpl::handlePagingRequest(uint64_t oldTicket, std::shared_ptr<Res
         auto &part = p.second;
         assert(!part.roots.empty());
 
+        auto oldCount = tf::remote::PagingHelper::refCountOf(*oldRoot);
         DEBUG("    Paging visiting buffer {} (count {}) with ticket {}",
-              as_hex(oldRoot), tf::remote::PagingHelper::refCountOf(*oldRoot), oldTicket);
+              as_hex(oldRoot), oldCount, oldTicket);
 
         oldRoot->Ref();
+        oldCount += 1;
+        assert(tf::remote::PagingHelper::refCountOf(*oldRoot) == oldCount);
 
         std::unordered_set<tf::Tensor*> movedReferences;
         Entry *firstEntry = nullptr;
@@ -400,16 +403,17 @@ size_t ExecutorImpl::handlePagingRequest(uint64_t oldTicket, std::shared_ptr<Res
                 if (entry->ref) {
                     movedReferences.insert(entry->ref);
                 }
+                oldCount -= 1;
+                assert(tf::remote::PagingHelper::refCountOf(*oldRoot) == oldCount);
                 continue;
             }
             DEBUG("    Move other tensors of same root: entry {} (ref {}) with ticket {}",
                   as_hex(entry), as_hex(entry->ref), oldTicket);
-            // copy everything from firstEntry, except for val, which may be ref
-            entry->ClearVal();
-            entry->CopyProperties(*firstEntry);
 
             // only one reference entry need to be moved
             if (entry->ref && movedReferences.count(entry->ref) > 0) {
+                entry->ClearVal();
+                entry->CopyProperties(*firstEntry);
                 continue;
             }
             DEBUG("    Move other tensors of same root: ref {} ticket {} not yet moved or this is value",
@@ -417,6 +421,11 @@ size_t ExecutorImpl::handlePagingRequest(uint64_t oldTicket, std::shared_ptr<Res
 
             auto t = tf::remote::PagingHelper::cloneWithNewBuffer(*entry->RefOrVal(),
                                                                   newRoot);
+            // copy everything from firstEntry, except for val, which may be ref
+            entry->ClearVal();
+            entry->CopyProperties(*firstEntry);
+            oldCount -= 1;
+            assert(tf::remote::PagingHelper::refCountOf(*oldRoot) == oldCount);
             if (entry->ref) {
                 *entry->ref = std::move(t);
                 movedReferences.insert(entry->ref);
@@ -461,6 +470,8 @@ size_t ExecutorImpl::handlePagingRequest(uint64_t oldTicket, std::shared_ptr<Res
             oldSub->Unref();
         }
 
+        assert(oldCount == 1);
+        assert(tf::remote::PagingHelper::refCountOf(*oldRoot) == oldCount);
         assert(oldRoot->RefCountIsOne());
         DEBUG("Releasing old root buffer {} with data block at {} of size {}",
               as_hex(oldRoot), as_hex(oldRoot->data()), oldRoot->size());
