@@ -24,8 +24,6 @@
 
 #include "utils/protoutils.h"
 
-#include <q/promise.hpp>
-
 #include <memory>
 
 namespace executor {
@@ -62,19 +60,17 @@ public:
     ~RpcServerCore();
     /**
      * Dispatch the call.
-     *
-     * @return the future of response protobuf message
      */
-    q::promise<ProtoPtr> dispatch(ZmqServer::Sender sender, const executor::EvenlopDef &evenlop,
-                                  const ::google::protobuf::Message &request);
+    void dispatch(ZmqServer::Sender sender, const executor::EvenlopDef &evenlop,
+                  const ::google::protobuf::Message &request);
 
 private:
 
 #define DECL_METHOD(name) \
-    q::promise<std::unique_ptr<executor:: name##Response>> name (ZmqServer::Sender &&sender, \
-                                                                 IOpLibrary *oplib, \
-                                                                 const executor::EvenlopDef &evenlop, \
-                                                                 const executor:: name##Request &request);
+    void name (ZmqServer::Sender &&sender, \
+               IOpLibrary *oplib, \
+               const executor::EvenlopDef &evenlop, \
+               const executor:: name##Request &request);
 
     CALL_ALL_SERVICE_NAME(DECL_METHOD)
 

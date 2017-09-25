@@ -1,5 +1,7 @@
 include_directories(${CMAKE_CURRENT_SOURCE_DIR})
 
+# add_definitions(-DTHREADPOOL_USE_Q)
+
 set(SRC_LIST
     "oplibraries/ioplibrary.cpp"
 
@@ -10,6 +12,7 @@ set(SRC_LIST
     "execution/itask.cpp"
     "execution/operationtask.cpp"
     "execution/resources.cpp"
+    "execution/threadpool/nonblockingthreadpool.cpp"
 
     "rpcserver/rpcservercore.cpp"
     "rpcserver/zmqserver.cpp"
@@ -55,8 +58,8 @@ target_link_libraries(executor
     ZeroMQ::zmq
     Boost::boost
     Boost::thread
-    q
     docopt_s
+    thread-pool-cpp
 )
 
 if(USE_TENSORFLOW)

@@ -66,13 +66,7 @@ ExecutionEngine &ExecutionEngine::instance()
 }
 
 ExecutionEngine::ExecutionEngine()
-    : m_qscope(q::scoped_initialize())
-    , m_qec(q::make_execution_context<q::threadpool,
-                                      q::direct_scheduler>("executionengine",
-                                                           // The queue passed in here is only used for threadpool
-                                                           // termination. We don't care about it. Thus this queue
-                                                           // is not connected to any event dispatcher
-                                                           q::make_shared<q::queue>(0)))
+    : m_pool()
 {
     // Start scheduling thread
     m_schedThread = std::make_unique<std::thread>(std::bind(&ExecutionEngine::scheduleLoop, this));
@@ -101,25 +95,6 @@ bool useGPU()
 }
 
 } // namespace
-
-bool ExecutionEngine::schedule(ITask *t)
-{
-    return trySchedule(t, DeviceType::CPU);
-}
-
-bool ExecutionEngine::trySchedule(ITask *t, const DeviceSpec &dev)
-{
-    auto expectedDev = dev;
-    if (t->prepare(expectedDev)) {
-        return true;
-    }
-
-    if (expectedDev != dev) {
-        // the task wants to run on a different device
-        return t->prepare(expectedDev);
-    }
-    return false;
-}
 
 ExecutionEngine::Inserter ExecutionEngine::registerSession(const std::string &sessHandle)
 {
@@ -451,34 +426,35 @@ size_t ExecutionEngine::maybeScheduleFrom(PSessionItem item)
 
             VLOG(3) << "Adding to thread pool: opItem in session " << item->sessHandle
                     << ": " << opItem->op->DebugString();
-            q::with(m_qec->queue(), std::move(opItem)).then([item, this](POpItem &&opItem){
+            OperationTask::Callbacks cbs;
+            cbs.done = [item, opItem, this]() {
+                // succeed
+                taskStopped(*item, *opItem, false);
+            };
+            cbs.memFailure = [item, opItem, this]() mutable {
+                if (!item->protectOOM) {
+                    return false;
+                }
+
+                taskStopped(*item, *opItem, true);
+                // failed due to OOM. Push back to queue and retry later
+                VLOG(2) << "Putting back OOM failed task: " << opItem->op->DebugString();
+                pushToSessionQueue(item, std::move(opItem));
+                return true;
+            };
+
+            m_pool.run([item = std::move(item), opItem = std::move(opItem), cbs = std::move(cbs),
+                        randomizedExecution = m_schedParam.randomizedExecution]() {
                 TIMED_SCOPE_IF(timerInnerObj, "ExecutionEngine::maybeScheduleFrom::doSchedule::run",
                                VLOG_IS_ON(1));
-                OperationTask::Callbacks cbs;
-
                 DCHECK(item);
                 DCHECK(opItem);
 
-                cbs.done = [item, opItem, this]() {
-                    // succeed
-                    taskStopped(*item, *opItem, false);
-                };
-                cbs.memFailure = [item, opItem, this]() mutable {
-                    if (!item->protectOOM) {
-                        return false;
-                    }
-
-                    taskStopped(*item, *opItem, true);
-                    // failed due to OOM. Push back to queue and retry later
-                    VLOG(2) << "Puting back OOM failed task: " << opItem->op->DebugString();
-                    pushToSessionQueue(item, std::move(opItem));
-                    return true;
-                };
-
-                if (m_schedParam.randomizedExecution) {
+                if (randomizedExecution) {
                     milliseconds dur {std::rand() % 100};
                     std::this_thread::sleep_for(dur);
                 }
+
                 VLOG(2) << "Running opItem in session " << item->sessHandle << ": " << opItem->op->DebugString();
                 opItem->tRunning = system_clock::now();
                 opItem->op->run(cbs);
@@ -508,26 +484,22 @@ size_t ExecutionEngine::maybeScheduleFrom(PSessionItem item)
         UnsafeQueue stage;
         stage.swap(queue);
 
-        std::vector<q::promise<POpItem>> promises;
+        std::vector<std::future<std::shared_ptr<OperationItem>>> futures;
+        futures.reserve(stage.size());
         for (auto &opItem : stage) {
-            auto p = q::with(m_qec->queue(), item, std::move(opItem)).then(doSchedule);
-            promises.emplace_back(std::move(p));
+            auto fu = m_pool.post([doSchedule, item, opItem = std::move(opItem)]() mutable {
+                DCHECK(opItem);
+                return doSchedule(std::move(item), std::move(opItem));
+            });
+            futures.emplace_back(std::move(fu));
         }
 
         VLOG(2) << "All opItem in session " << item->sessHandle << " exaimed";
 
-        auto it = std::back_inserter(queue);
-        utils::notification n;
-        q::all(std::move(promises), m_qec->queue())
-        .then([it, &n](std::vector<POpItem> &&remain) mutable {
-            for (auto &poi : remain) {
-                if (poi) {
-                    it = std::move(poi);
-                }
-            }
-            n.notify();
-        });
-        n.wait();
+        for (auto &fu : futures) {
+            auto poi = fu.get();
+            queue.emplace_back(std::move(poi));
+        }
 
         scheduled = size - queue.size();
     }

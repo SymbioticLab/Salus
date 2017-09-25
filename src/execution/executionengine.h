@@ -27,18 +27,16 @@
 #include "utils/threadutils.h"
 #include "utils/containerutils.h"
 #include "execution/resources.h"
+#include "execution/threadpool/threadpool.h"
 
-#include <q/lib.hpp>
-#include <q/promise.hpp>
-#include <q/execution_context.hpp>
-#include <q/threadpool.hpp>
-
-#include <list>
-#include <memory>
 #include <atomic>
+#include <list>
+#include <future>
+#include <memory>
 #include <unordered_set>
 #include <unordered_map>
 #include <chrono>
+#include <type_traits>
 
 class OperationTask;
 class ResourceContext;
@@ -89,6 +87,7 @@ public:
             return forceEvicted && volunteer;
         }
     };
+
     class InserterImpl
     {
     public:
@@ -113,49 +112,8 @@ public:
 
     Inserter registerSession(const std::string &sessHandle);
 
-    template<typename ResponseType>
-    q::promise<std::unique_ptr<ResponseType>> enqueue(PTask &&task)
-    {
-        using PResponse = std::unique_ptr<ResponseType>;
-
-        return q::make_promise_of<PResponse>(m_qec->queue(),
-                                             [this, task = std::move(task)](auto resolve,
-                                                                            auto reject){
-            try {
-                if (this->schedule(task.get())) {
-                    if (task->isAsync()) {
-                        task->runAsync<ResponseType>([resolve](PResponse &&ptr){
-                            resolve(std::move(ptr));
-                        });
-                    } else {
-                        resolve(task->run<ResponseType>());
-                    }
-                } else {
-                    reject(std::logic_error("Task failed to prepare"));
-                }
-            } catch (std::exception &err) {
-                reject(err);
-            }
-        });
-    }
-
-    template<typename ResponseType>
-    q::promise<std::unique_ptr<ResponseType>> emptyPromise()
-    {
-        using PResponse = std::unique_ptr<ResponseType>;
-        return q::with(m_qec->queue(), PResponse(nullptr));
-    }
-
-    template<typename ResponseType>
-    q::promise<ResponseType> makePromise(ResponseType &&t)
-    {
-        return q::with(m_qec->queue(), std::move(t));
-    }
-
-    template<typename ResponseType>
-    q::promise<ResponseType> makePromise(const ResponseType &t)
-    {
-        return q::with(m_qec->queue(), t);
+    ThreadPool &pool() {
+        return m_pool;
     }
 
     void setSchedulingParam(const SchedulingParam &param) {
@@ -165,11 +123,6 @@ public:
     const SchedulingParam &schedulingParam() const {
         return m_schedParam;
     }
-
-protected:
-    bool schedule(ITask *t);
-
-    bool trySchedule(ITask *t, const DeviceSpec &dev);
 
 private:
     ExecutionEngine();
@@ -279,9 +232,7 @@ private:
     void deleteSession(PSessionItem item);
 
     // Backend thread pool
-    using qExecutionContext = q::specific_execution_context_ptr<q::threadpool>;
-    q::scope m_qscope;
-    qExecutionContext m_qec;
+    ThreadPool m_pool;
 };
 
 class ResourceContext

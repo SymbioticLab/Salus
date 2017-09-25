@@ -1,5 +1,5 @@
 # Version 3.8 required from CheckCXXFeature.cmake
-# Version 3.5 required from Boost for imported target
+# Version 3.8 required from Boost 1.64.0 for imported target
 cmake_minimum_required(VERSION 3.8.0)
 
 project(executor)
@@ -50,15 +50,11 @@ find_package(ZeroMQ REQUIRED)
 set_package_properties(ZeroMQ PROPERTIES TYPE REQUIRED PURPOSE "For communication")
 
 # Boost
-find_package(Boost 1.64 REQUIRED COMPONENTS
+find_package(Boost 1.64 EXACT REQUIRED COMPONENTS
     thread
 )
 set_package_properties(Boost PROPERTIES TYPE REQUIRED PURPOSE "For lock free queue and some utilities")
 add_definitions(-DBOOST_THREAD_VERSION=4)
-
-# Q
-find_package(Q REQUIRED)
-set_package_properties(Q PROPERTIES TYPE REQUIRED PURPOSE "For multithreaded execution")
 
 # Easylogging++
 include(thirdparty/UseEasyloggingpp.cmake)
