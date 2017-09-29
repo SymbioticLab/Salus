@@ -677,10 +677,11 @@ def memory_usage(logs, iter_times=None, beginning=None):
     # Restrict x axis to iteration times
     if iter_times is not None:
         starts, ends = zip(*iter_times)
-        df = df.loc[starts[0]:ends[-1]]
+        df = df.loc[:ends[-1]]
 
     # Change to timedelta
-    # df.index = df.index - beginning
+    df.index = df.index - df.index[0]
+    df.index = df.index.astype(int) / 1e9
 
     fig, axs = plt.subplots(ncols=1, nrows=4, sharex=True)
     for (name, group), ax in zip(df.groupby('mem_type'), axs):

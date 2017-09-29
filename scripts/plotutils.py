@@ -4,7 +4,7 @@ import numpy as np
 
 import matplotlib.pyplot as plt
 from matplotlib.dates import SECONDLY, rrulewrapper, RRuleLocator, DateFormatter
-from matplotlib.ticker import MaxNLocator
+from matplotlib.ticker import MaxNLocator, FuncFormatter
 
 
 def cleanup_axis_datetime(axis):
@@ -13,11 +13,21 @@ def cleanup_axis_datetime(axis):
     fmt = DateFormatter('%M:%S')
     axis.set_major_locator(loc)
     axis.set_major_formatter(fmt)
+    return axis
+
+
+def human_readable(num, suffix='B'):
+    for unit in ['', 'Ki', 'Mi', 'Gi', 'Ti', 'Pi', 'Ei', 'Zi']:
+        if abs(num) < 1024.0:
+            return "%3.1f%s%s" % (num, unit, suffix)
+        num /= 1024.0
+    return "%.1f%s%s" % (num, 'Yi', suffix)
 
 
 def cleanup_axis_bytes(axis):
-    nloc = MaxNLocator(nbins=4, steps=[1, 2, 4, 6, 8], integer=True)
-    axis.set_major_locator(nloc)
+    axis.set_major_locator(MaxNLocator(steps=[1, 2, 4, 6, 8, 10]))
+    axis.set_major_formatter(FuncFormatter(lambda x, pos: human_readable(x)))
+    return axis
 
 
 def axhlines(ys, **plot_kwargs):
