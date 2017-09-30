@@ -545,12 +545,18 @@ tf::Status ExecutorState::PrepareInputs(const NodeItem &item, tf::OpKernel *kern
         // Dereference if needed
         if (!expect_ref) {
             // case 3, 6
-            if (entry->ref && !entry->ref->IsInitialized() && !IsInitializationOp(item.node)) {
+            bool notInitialized = false;
+            {
+                Entry::MaybeLock l(entry);
+                notInitialized = entry->ref && !entry->ref->IsInitialized() && !IsInitializationOp(item.node);
+            }
+            if (notInitialized) {
                 return AttachDef(
                     tf::errors::FailedPrecondition("Attempting to use uninitialized value ",
-                                                   kernel->def().input(i)),
-                                 kernel->def());
+                                                kernel->def().input(i)),
+                                kernel->def());
             }
+            // Automatically gain lock
             entry->MaybeDereference();
         }
 
@@ -560,14 +566,14 @@ tf::Status ExecutorState::PrepareInputs(const NodeItem &item, tf::OpKernel *kern
 
             // Operation and input on different device,
             // do a copy tensor to ensure input tensor is on the same device
+
+            // We must lock if this is an reference, as others may update the fields
+            Entry::MaybeLock l(entry);
+
             INFO("Copying from device {} to device {} to prepare {}-th input for op {}.",
                  entry->device->name(), device->name(), i, kernel->name());
             auto oldTicket = entry->alloc_ticket;
-            tf::Status ok;
-            {
-                Entry::MaybeLock l(entry);
-                ok = moveTensor(*entry, device, device_context, expected, "");
-            }
+            auto ok = moveTensor(*entry, device, device_context, expected, "");
             if (!ok.ok()) {
                 ERR("Copying from device {} to device {} failed when preparing {}-th input "
                     "for op {}: {}",
