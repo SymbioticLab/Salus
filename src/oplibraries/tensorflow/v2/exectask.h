@@ -88,6 +88,7 @@ private:
 
     std::vector<Entry*> reffedEntries;
     Entry * first_input = nullptr;
+    BufferLockVec buflocks;
 
     // Borrowed from ExecutorState
     ExecutorState::TaggedNode &tagged_node;

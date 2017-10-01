@@ -27,6 +27,9 @@ limitations under the License.
 
 #include "oplibraries/tensorflow/tensorflow_headers.h"
 
+#include <boost/thread/shared_mutex.hpp>
+#include <boost/thread/lock_algorithms.hpp>
+
 #include <deque>
 #include <memory>
 #include <string>
@@ -472,6 +475,7 @@ tf::Status ExecutorState::PrepareInputs(const NodeItem &item, tf::OpKernel *kern
                                         const std::shared_ptr<PerOpAllocDevice> device,
                                         tf::DeviceContext *device_context,
                                         Entry *first_input, TensorValueVec *inputs,
+                                        BufferLockVec *buflocks,
                                         DeviceContextVec *input_device_contexts,
                                         AllocatorAttributeVec *input_alloc_attrs, bool *is_input_dead)
 {
@@ -487,6 +491,39 @@ tf::Status ExecutorState::PrepareInputs(const NodeItem &item, tf::OpKernel *kern
 
     *is_input_dead = false;
 
+    // Check and bring back paged out entries
+    // FIXME: get buf lock from entry
+    boost::upgrade_mutex mu;
+    {
+        for (int i = 0; i < item.num_inputs; ++i) {
+            auto entry = first_input + i;
+            boost::upgrade_lock<boost::upgrade_mutex> ul(mu);
+            if (entry->paged_out) {
+                boost::unique_lock<boost::upgrade_mutex> uul(std::move(ul));
+                // FIXME: find ref tree
+                // FIXME: bring back whole ref tree
+            }
+        }
+    }
+
+    // gather all buf lock and lock them as read for whole period
+    std::unordered_set<boost::upgrade_mutex*> locks;
+    for (int i = 0; i < item.num_inputs; ++i) {
+        auto entry = first_input + i;
+        // FIXME: get buf lock from entry
+        UNUSED(entry);
+        locks.insert(nullptr);
+    }
+    // Lock all references, and all read/write should happen after this
+    // no need for special ordering, because these are shared
+    utils::lock_shared(locks.begin(), locks.end());
+    buflocks->clear();
+    buflocks->reserve(locks.size());
+    for (auto l : locks) {
+        buflocks->emplace_back(*l, boost::adopt_lock);
+    }
+
+    // Normal check and devcopy
     bool is_merge = item.is_merge;
     for (int i = 0; i < item.num_inputs; ++i) {
         const bool expect_ref = IsRefType(item.input_type(i));
@@ -741,8 +778,9 @@ tf::Status ExecutorState::ProcessOutputs(const NodeItem &item, tf::OpKernelConte
     return s;
 }
 
-void ExecutorState::ClearInputs(Entry *first, size_t num)
+void ExecutorState::ClearInputs(Entry *first, size_t num, BufferLockVec &buflocks)
 {
+    buflocks.clear();
 
     for (size_t i = 0; i < num; ++i) {
         auto entry = first + i;

@@ -317,11 +317,12 @@ void ExecTask::run(Callbacks cbs)
         // Prepares inputs.
         bool is_input_dead = false;
         s = m_state->PrepareInputs(item, op_kernel, ditem.device, params.op_device_context,
-                        first_input, &inputs, &input_device_contexts, &input_alloc_attrs,
+                        first_input, &inputs, &buflocks,
+                        &input_device_contexts, &input_alloc_attrs,
                         &is_input_dead);
         if (!s.ok()) {
             // Clear inputs.
-            m_state->ClearInputs(first_input, item.num_inputs);
+            m_state->ClearInputs(first_input, item.num_inputs, buflocks);
             m_state->MaybeMarkCompleted(input_frame, input_iter, id);
             afterRun(s, cbs);
             return;
@@ -373,7 +374,7 @@ void ExecTask::run(Callbacks cbs)
                 // Update ref entry tickets
                 updateRefEntryTickets(reffedEntries);
                 // Clears inputs.
-                execState->ClearInputs(first_input, state->item->num_inputs);
+                execState->ClearInputs(first_input, state->item->num_inputs, buflocks);
                 // mark completed
                 auto input_frame = state->tagged_node.input_frame;
                 const int64_t input_iter = state->tagged_node.input_iter;
@@ -439,7 +440,7 @@ void ExecTask::run(Callbacks cbs)
         // Update ref entry tickets
         updateRefEntryTickets(reffedEntries);
         // Clears inputs.
-        m_state->ClearInputs(first_input, item.num_inputs);
+        m_state->ClearInputs(first_input, item.num_inputs, buflocks);
         m_state->MaybeMarkCompleted(input_frame, input_iter, id);
         // Propagates outputs.
         if (s.ok()) {
@@ -525,6 +526,9 @@ bool ExecTask::maybeMemoryFailure(const tf::Status &s, DoneCallback memFailure)
             auto entry = first_input + i;
             entry->in_use = false;
         }
+
+        // also release locks
+        buflocks.clear();
 
         ++failureTimes;
         if (memFailure) {

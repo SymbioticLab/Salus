@@ -288,7 +288,7 @@ size_t ExecutorImpl::handlePagingRequest(uint64_t oldTicket, std::unique_ptr<Res
     // and potentially share the storage.
     // We want to move one complete set of tensors that are sharing buffer.
     std::vector<Entry *> entries;
-    std::unordered_set<std::mutex *> reflocks;
+    BufferMutexSet reflocks;
     entries.reserve(8);
     reflocks.reserve(8);
 
@@ -302,9 +302,10 @@ size_t ExecutorImpl::handlePagingRequest(uint64_t oldTicket, std::unique_ptr<Res
         for (auto it = range.first; it != range.second; ++it) {
             assert(it->second);
             entries.push_back(it->second);
-            if (it->second->ref_mu) {
-                reflocks.insert(it->second->ref_mu);
-            }
+
+            // FIXME: get buf lock from entry
+            reflocks.insert(nullptr);
+
             DEBUG("Removing entry {} of ticket {} due to paging", as_hex(it->second), oldTicket);
         }
         // we will add them back later
@@ -320,16 +321,11 @@ size_t ExecutorImpl::handlePagingRequest(uint64_t oldTicket, std::unique_ptr<Res
     }
     item.device->setResourceContext(std::move(rctx));
 
-    struct Part{
-        std::vector<Entry*> roots;
-        std::unordered_map<tf::TensorBuffer*, std::vector<Entry*>> subs;
-    };
-    std::unordered_map<tf::TensorBuffer*, Part> parts;
+    std::unordered_map<tf::TensorBuffer*, TensorBufferTree> parts;
 
-    // Lock all references, and all read/write should happen after this
-    boost::lock(boost::make_indirect_iterator(reflocks.begin()),
-                boost::make_indirect_iterator(reflocks.end()));
-    std::vector<utils::UGuard> guards;
+    // Lock all buffer, and all read/write should happen after this
+    utils::lock(reflocks.begin(), reflocks.end());
+    std::vector<std::unique_lock<boost::upgrade_mutex>> guards;
     for (auto l : reflocks) {
         guards.emplace_back(*l, std::adopt_lock);
     }
@@ -380,108 +376,12 @@ size_t ExecutorImpl::handlePagingRequest(uint64_t oldTicket, std::unique_ptr<Res
     size_t totalReleased = 0;
 
     for (auto &p : parts) {
-        auto oldRoot = p.first;
-        auto &part = p.second;
-        assert(!part.roots.empty());
-
-        auto oldCount = tf::remote::PagingHelper::refCountOf(*oldRoot);
-        DEBUG("    Paging visiting buffer {} (count {}) with ticket {}",
-              as_hex(oldRoot), oldCount, oldTicket);
-
-        oldRoot->Ref();
-        oldCount += 1;
-        assert(tf::remote::PagingHelper::refCountOf(*oldRoot) == oldCount);
-
-        std::unordered_set<tf::Tensor*> movedReferences;
-        Entry *firstEntry = nullptr;
-        tf::TensorBuffer *newRoot = nullptr;
-        // Firstly page out root buffer
-        for (auto entry : part.roots) {
-            if (!newRoot) {
-                // only need to actually move the first in roots
-                DEBUG("    Actually move first in roots: entry {} (ref {}) with ticket {}",
-                      as_hex(entry), as_hex(entry->ref), oldTicket);
-                ok = moveTensor(*entry, item.device, nullptr, {},
-                                tf::strings::StrCat("Paging tensor of ticket ", oldTicket));
-                if (!ok.ok()) {
-                    ERR("Error when paging: {}", ok);
-                    break;
-                }
-                newRoot = tf::remote::PagingHelper::bufferOf(*(entry->val.get()));
-                firstEntry = entry;
-
-                if (entry->ref) {
-                    movedReferences.insert(entry->ref);
-                }
-                oldCount -= 1;
-                assert(tf::remote::PagingHelper::refCountOf(*oldRoot) == oldCount);
-                continue;
-            }
-            DEBUG("    Move other tensors of same root: entry {} (ref {}) with ticket {}",
-                  as_hex(entry), as_hex(entry->ref), oldTicket);
-
-            entry->CopyProperties(*firstEntry);
-            // only one reference entry need to be moved
-            if (entry->ref && movedReferences.count(entry->ref) > 0) {
-                continue;
-            }
-            DEBUG("    Move other tensors of same root: ref {} ticket {} not yet moved or this is value",
-                  as_hex(entry->ref), oldTicket);
-
-            auto t = tf::remote::PagingHelper::cloneWithNewBuffer(*entry->RefOrVal(),
-                                                                  newRoot);
-            if (entry->ref) {
-                *entry->ref = std::move(t);
-                movedReferences.insert(entry->ref);
-            } else {
-                entry->SetVal(std::move(t));
-            }
-            oldCount -= 1;
-            assert(tf::remote::PagingHelper::refCountOf(*oldRoot) == oldCount);
+        auto size = p.first->size();
+        if (moveTensorTree(p.second, item.device)) {
+            totalReleased += size;
+        } else {
+            return totalReleased;
         }
-        if (!newRoot) {
-            continue;
-        }
-        // Secondly re-target sub buffers to new root
-        for (auto &pp : part.subs) {
-            auto oldSub = pp.first;
-            oldSub->Ref();
-            DEBUG("    Moving subs: sub {} with ticket {}", as_hex(oldSub), oldTicket);
-
-            tf::TensorBuffer *newSub = oldSub->clone(newRoot);
-            for (auto &entry : pp.second) {
-                entry->CopyProperties(*firstEntry);
-
-                DEBUG("    Moving sub entry: entry {} (ref {}) with ticket {}",
-                      as_hex(entry), as_hex(entry->ref), oldTicket);
-                // Only need to move first ref entry
-                if (entry->ref && movedReferences.count(entry->ref) > 0) {
-                    continue;
-                }
-
-                DEBUG("    Actually Moving sub entry: entry {} (ref {}) with ticket {}",
-                      as_hex(entry), as_hex(entry->ref), oldTicket);
-
-                auto t = tf::remote::PagingHelper::cloneWithNewBuffer(*entry->RefOrVal(),
-                                                                      newSub);
-                if (entry->ref) {
-                    *entry->ref = std::move(t);
-                } else {
-                    entry->SetVal(std::move(t));
-                }
-            }
-
-            assert(oldSub->RefCountIsOne());
-            oldSub->Unref();
-        }
-
-        assert(oldCount == 1);
-        assert(tf::remote::PagingHelper::refCountOf(*oldRoot) == oldCount);
-        assert(oldRoot->RefCountIsOne());
-        DEBUG("Releasing old root buffer {} with data block at {} of size {}",
-              as_hex(oldRoot), as_hex(oldRoot->data()), oldRoot->size());
-        totalReleased += oldRoot->size();
-        oldRoot->Unref();
     }
 
     DEBUG("Paging released {} bytes of memory", totalReleased);

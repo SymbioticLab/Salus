@@ -37,6 +37,8 @@ using namespace tf::remote;
 using TensorValueVec = gtl::InlinedVector<tf::TensorValue, 4>;
 using AllocatorAttributeVec = gtl::InlinedVector<tf::AllocatorAttributes, 4>;
 using DeviceContextVec = gtl::InlinedVector<tf::DeviceContext *, 4>;
+using BufferLockVec = gtl::InlinedVector<boost::shared_lock<boost::upgrade_mutex>, 4>;
+using BufferMutexSet = std::unordered_set<boost::upgrade_mutex*>;
 
 namespace nodestats {
 inline int64_t NowInUsec()
@@ -82,6 +84,9 @@ private:
     size_t handlePagingRequest(uint64_t oldTicket, std::unique_ptr<ResourceContext> &&rctx);
     void forceEvicted(uint64_t ticket, void *addr);
     void dumpActiveEntries();
+
+    void updateEntry(Entry *);
+    void bufferTreeFromEntry(Entry *);
 
     struct DeviceItem
     {
@@ -614,6 +619,7 @@ private:
                              std::shared_ptr<PerOpAllocDevice> device,
                              tf::DeviceContext *device_context,
                              Entry *first_input, TensorValueVec *inputs,
+                             BufferLockVec *buflocks,
                              DeviceContextVec *input_device_contexts,
                              AllocatorAttributeVec *input_alloc_attrs, bool *is_input_dead);
 
@@ -623,7 +629,7 @@ private:
                               EntryVector *outputs, tf::NodeExecStats *stats);
 
     // After item->kernel computation is done, clear its inputs.
-    void ClearInputs(Entry *first, size_t num);
+    void ClearInputs(Entry *first, size_t num, BufferLockVec &buflocks);
 
     // After processing the outputs, propagates the outputs to their dsts.
     // Contents of *outputs are left in an indeterminate state after

@@ -88,6 +88,7 @@ struct Entry
         device_context = other.device_context;
         device = other.device;
         in_use = other.in_use;
+        paged_out = other.paged_out;
     }
 
     void CopyProperties(Entry &&other)
@@ -97,6 +98,7 @@ struct Entry
         device_context = other.device_context;
         device = std::move(other.device);
         in_use = other.in_use;
+        paged_out = other.paged_out;
     }
 
     // Clears the <val> field.
@@ -184,6 +186,7 @@ struct Entry
     uint64_t alloc_ticket;
 
     bool in_use = false;
+    bool paged_out = false;
 
     // Every entry carries an optional DeviceContext containing
     // Device-specific information about how the Tensor was produced.
@@ -206,5 +209,11 @@ tf::Status derefMoveTensor(Entry &entry, const std::shared_ptr<PerOpAllocDevice>
 tf::Status moveTensor(Entry &entry, const std::shared_ptr<PerOpAllocDevice> &dstDevice,
                       tf::DeviceContext *dstCtx, const tf::AllocatorAttributes &attr,
                       const std::string &name = "");
+
+struct TensorBufferTree {
+    std::vector<Entry*> roots;
+    std::unordered_map<tf::TensorBuffer*, std::vector<Entry*>> subs;
+};
+bool moveTensorTree(const TensorBufferTree &, const std::shared_ptr<PerOpAllocDevice> &dstDevice);
 
 #endif // TENSORUTILS_H
