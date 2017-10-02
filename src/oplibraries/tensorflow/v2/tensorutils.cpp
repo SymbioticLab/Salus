@@ -73,10 +73,14 @@ bool moveTensorTree(TensorBufferTree &tree, const std::shared_ptr<PerOpAllocDevi
 {
     assert(!tree.roots.empty());
 
-    auto oldRoot = tree.root_buf;
-    auto oldTicket = tree.ticket;
+    const auto oldRoot = tree.root_buf;
+    const auto oldTicket = tree.ticket;
 
     tree.ticket = dstDevice->resourceContext().ticket();
+
+    if (oldRoot == nullptr) {
+        return true;
+    }
 
     auto oldCount = tf::remote::PagingHelper::refCountOf(*oldRoot);
     DEBUG("    Paging visiting buffer {} (count {}) with ticket {}",

@@ -31,7 +31,7 @@
 struct Entry;
 struct TensorBufferTree
 : public boost::intrusive::list_base_hook<boost::intrusive::link_mode<boost::intrusive::auto_unlink>> {
-    tf::TensorBuffer *root_buf;
+    tf::TensorBuffer *root_buf = nullptr;
     uint64_t ticket;
     bool paged_out = false;
     boost::upgrade_mutex buf_mu;

@@ -301,7 +301,7 @@ size_t ExecutorImpl::handlePagingRequest(uint64_t oldTicket, std::unique_ptr<Res
         }
         for (auto it = range.first; it != range.second; ++it) {
             assert(it->second);
-            if (it->second->paged_out) continue;
+            if (it->second->root_buf == nullptr || it->second->paged_out) continue;
 
             reflocks.insert(&it->second->buf_mu);
             parts.push_back(it->second);
@@ -342,6 +342,7 @@ size_t ExecutorImpl::handlePagingRequest(uint64_t oldTicket, std::unique_ptr<Res
 
     for (auto &part : parts) {
         assert(!part->paged_out);
+        assert(part->root_buf);
 
         auto size = part->root_buf->size();
         if (moveTensorTree(*part, item.device)) {
@@ -406,12 +407,10 @@ tf::Status ExecutorImpl::LookupDevice(const DeviceSpec &spec, DeviceItem *item)
 void ExecutorImpl::updateBufferTree(Entry *entry, uint64_t ticket)
 {
     auto buf = tf::remote::PagingHelper::bufferOf(*entry->RefOrVal());
-    if (!buf) return;
-    auto root_buf = buf->root_buffer();
-    if (!root_buf) return;
+    auto root_buf = buf ? buf->root_buffer() : nullptr;
 
     utils::Guard g(entry_mu_);
-    auto tree = entry->alloc_tree;
+    auto &tree = entry->alloc_tree;
     if (!tree) {
         auto range = active_buffers_.equal_range(ticket);
         for (auto it = range.first; it != range.second; ++it) {
@@ -429,9 +428,6 @@ void ExecutorImpl::updateBufferTree(Entry *entry, uint64_t ticket)
             tree->ticket = ticket;
             tree->root_buf = root_buf;
         }
-
-        // Point the entry to the tree
-        entry->alloc_tree = tree;
     }
     assert(tree);
     assert(tree->ticket == ticket);
