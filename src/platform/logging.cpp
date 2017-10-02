@@ -39,7 +39,9 @@ struct LoggerStaticInitializer
     std::shared_ptr<spdlog::logger> logger;
     LoggerStaticInitializer()
     {
+#ifdef NDEBUG
         spdlog::set_async_mode(8192);
+#endif
         logger = spdlog::stdout_color_mt("console");
 
         logger->flush_on(spdlog::level::trace);
