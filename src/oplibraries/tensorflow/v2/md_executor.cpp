@@ -700,22 +700,6 @@ tf::Status ExecutorState::ProcessOutputs(const NodeItem &item, tf::OpKernelConte
             // Set the device context of the output entry.
             out->device_context = device_context;
 
-            // Set the allocator attributes of the output entry.
-            out->alloc_attr = ctx->output_alloc_attr(i);
-            auto ticket = device->resourceContext().ticket();
-            // Pull more accurate ticket info if the tensor is initialized and has a buffer
-            auto buf = tf::remote::PagingHelper::bufferOf(*val.tensor);
-            if (buf) {
-                auto alloc = PerOpAllocator::downcast(buf->allocator());
-                if (alloc) {
-                    ticket = alloc->resourceContext().ticket();
-                    if (val.is_ref()) {
-                        DEBUG("{}: Buffer {} refIsOne {}", alloc->resourceContext(), as_hex(buf), buf->RefCountIsOne());
-                    }
-                }
-            }
-            impl_->updateBufferTree(out, ticket);
-
             // Sanity check of output tensor types.
             auto dtype = val->dtype();
             if (val.is_ref())
@@ -754,6 +738,23 @@ tf::Status ExecutorState::ProcessOutputs(const NodeItem &item, tf::OpKernelConte
                                           DataTypeString(item.output_type(i)), " for node ",
                                           SummarizeNodeDef(node->def())));
             }
+
+            // Set the allocator attributes of the output entry, must be done after setting value in entry
+            out->alloc_attr = ctx->output_alloc_attr(i);
+            auto ticket = device->resourceContext().ticket();
+            // Pull more accurate ticket info if the tensor is initialized and has a buffer
+            auto buf = tf::remote::PagingHelper::bufferOf(*val.tensor);
+            if (buf) {
+                auto alloc = PerOpAllocator::downcast(buf->allocator());
+                if (alloc) {
+                    ticket = alloc->resourceContext().ticket();
+                    if (val.is_ref()) {
+                        DEBUG("{}: Buffer {} refIsOne {}", alloc->resourceContext(), as_hex(buf), buf->RefCountIsOne());
+                    }
+                }
+            }
+            assert(out->alloc_tree == nullptr);
+            impl_->updateBufferTree(out, ticket);
         }
         if (!val.is_ref()) {
             // If OpKernelContext returns outputs via pass-by-value, we

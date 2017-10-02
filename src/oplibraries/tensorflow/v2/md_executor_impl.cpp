@@ -406,14 +406,18 @@ tf::Status ExecutorImpl::LookupDevice(const DeviceSpec &spec, DeviceItem *item)
  */
 void ExecutorImpl::updateBufferTree(Entry *entry, uint64_t ticket)
 {
-    auto buf = tf::remote::PagingHelper::bufferOf(*entry->RefOrVal());
-    auto root_buf = buf ? buf->root_buffer() : nullptr;
+    assert(entry);
+    assert(entry->has_value);
+
+    const auto buf = tf::remote::PagingHelper::bufferOf(*entry->RefOrVal());
+    const auto root_buf = buf ? buf->root_buffer() : nullptr;
 
     utils::Guard g(entry_mu_);
     auto &tree = entry->alloc_tree;
     if (!tree) {
         auto range = active_buffers_.equal_range(ticket);
         for (auto it = range.first; it != range.second; ++it) {
+            assert(it->second);
             if (it->second->root_buf == root_buf) {
                 tree = it->second;
                 break;
