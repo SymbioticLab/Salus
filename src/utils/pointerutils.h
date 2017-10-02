@@ -20,6 +20,8 @@
 #ifndef POINTERUTILS_H
 #define POINTERUTILS_H
 
+#include <deque>
+#include <functional>
 #include <memory>
 
 namespace utils {
@@ -44,43 +46,89 @@ std::unique_ptr<Derived> dynamic_unique_ptr_cast(std::unique_ptr<Base> &&p)
 template<typename T>
 struct ScopedUnref
 {
-    explicit ScopedUnref(T *o = nullptr) : obj(o) {}
-    ~ScopedUnref() {
-        if (obj) obj->Unref();
+    explicit ScopedUnref(T *o = nullptr)
+        : obj(o)
+    {
+    }
+    ~ScopedUnref()
+    {
+        if (obj)
+            obj->Unref();
     }
 
-    ScopedUnref(ScopedUnref &&other) {
+    ScopedUnref(ScopedUnref &&other)
+    {
         obj = other.obj;
         other.obj = nullptr;
     }
 
-    ScopedUnref &operator=(ScopedUnref &&other) {
+    ScopedUnref &operator=(ScopedUnref &&other)
+    {
         obj = other.obj;
         other.obj = nullptr;
         return *this;
     }
 
-    auto get() const {
+    auto get() const
+    {
         auto a = std::make_unique<int>(1);
         return obj;
     }
 
-    operator bool() const {
+    operator bool() const
+    {
         return obj != nullptr;
     }
 
 private:
     T *obj;
 
-    ScopedUnref(const ScopedUnref&) = delete;
-    ScopedUnref<T> & operator=(const ScopedUnref&) = delete;
+    ScopedUnref(const ScopedUnref &) = delete;
+    ScopedUnref<T> &operator=(const ScopedUnref &) = delete;
 };
 
 template<typename T, typename... Args>
-auto make_scoped_unref(Args && ...args)
+auto make_scoped_unref(Args &&... args)
 {
     return ScopedUnref<T>(new T(std::forward<Args>(args)...));
 }
+
+class ScopeGuards
+{
+public:
+    using CleanupFunction = std::function<void()>;
+
+    ScopeGuards() = default;
+
+    explicit ScopeGuards(CleanupFunction &&func)
+    {
+        *this += std::forward<CleanupFunction>(func);
+    }
+
+    template<typename Callable>
+    ScopeGuards &operator+=(Callable &&undo_func)
+    {
+        funcs.emplace_front(std::forward<Callable>(undo_func));
+        return *this;
+    }
+
+    void dismiss() noexcept
+    {
+        funcs.clear();
+    }
+
+    ~ScopeGuards()
+    {
+        for (auto &f : funcs)
+            f(); // must not throw
+    }
+
+private:
+    std::deque<CleanupFunction> funcs;
+
+    ScopeGuards(const ScopeGuards &) = delete;
+    void operator=(const ScopeGuards &) = delete;
+};
 
 } // namespace utils
 

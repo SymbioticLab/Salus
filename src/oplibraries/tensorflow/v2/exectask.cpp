@@ -468,37 +468,30 @@ void ExecTask::run(Callbacks cbs)
 void ExecTask::updateRefEntryTickets(const std::vector<Entry*> &entries)
 {
     for (auto &entry : entries) {
+        Entry::MaybeLock l(entry);
+
         auto tensor = entry->ref;
         assert(tensor);
         auto buf = tf::remote::PagingHelper::bufferOf(*tensor);
         assert(buf);
-        auto alloc = PerOpAllocator::downcast(buf->allocator());
-        assert(alloc);
+        auto root_buf = buf->root_buffer();
+        assert(root_buf);
 
-        auto ticket = alloc->resourceContext().ticket();
-        if (entry->alloc_ticket != ticket) {
-            DEBUG("Update allocation ticket from {} to {}", entry->alloc_ticket, ticket);
-            auto oldTicket = entry->alloc_ticket;
-            // Update all entry that is reference to this tensor
+        auto tree = entry->alloc_tree;
+        if (tree->root_buf != root_buf) {
+            auto perop = PerOpAllocator::downcast(buf->allocator());
+            assert(perop);
+            auto ticket = perop->resourceContext().ticket();
+            DEBUG("Update allocation ticket from {} to {}", tree->ticket, ticket);
+
+            // The entry has changed it's buffer, remove it from old tree,
+            // and any other entry references the same tensor.
             auto impl = m_state->impl_;
-            utils::Guard g(impl->entry_mu_);
-            std::vector<Entry*> needUpdate;
-            auto range = impl->active_entries_.equal_range(oldTicket);
-            needUpdate.reserve(std::distance(range.first, range.second));
-            for (auto it = range.first; it != range.second; ) {
-                if (it->second->ref == entry->ref) {
-                    needUpdate.push_back(it->second);
-                    DEBUG("Removing entry {} of ticket {} due to updateref", as_hex(it->second), it->second->alloc_ticket);
-                    it->second->alloc_ticket = ticket;
-                    it = impl->active_entries_.erase(it);
-                } else {
-                    ++it;
-                }
-            }
-            assert(!needUpdate.empty());
-            for (auto &e : needUpdate) {
-                DEBUG("Adding entry {} of ticket {} due to updateref", as_hex(e), e->alloc_ticket);
-                impl->active_entries_.emplace(e->alloc_ticket, e);
+            EntryVec needUpdate;
+            impl->removeFromBufferTree(entry, &needUpdate);
+            // and update entries as if it's new
+            for (auto e : needUpdate) {
+                impl->updateBufferTree(e, ticket);
             }
         }
     }

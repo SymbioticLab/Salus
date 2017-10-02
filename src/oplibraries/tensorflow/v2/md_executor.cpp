@@ -492,16 +492,18 @@ tf::Status ExecutorState::PrepareInputs(const NodeItem &item, tf::OpKernel *kern
     *is_input_dead = false;
 
     // Check and bring back paged out entries
-    // FIXME: get buf lock from entry
-    boost::upgrade_mutex mu;
     {
         for (int i = 0; i < item.num_inputs; ++i) {
             auto entry = first_input + i;
-            boost::upgrade_lock<boost::upgrade_mutex> ul(mu);
-            if (entry->paged_out) {
+            boost::upgrade_lock<boost::upgrade_mutex> ul(entry->alloc_tree->buf_mu);
+            if (entry->alloc_tree->paged_out) {
                 boost::unique_lock<boost::upgrade_mutex> uul(std::move(ul));
-                // FIXME: find ref tree
-                // FIXME: bring back whole ref tree
+                auto tree = entry->alloc_tree;
+                if (!moveTensorTree(*tree, device)) {
+                    ERR("Error when moving paged out entry back");
+                    return tf::errors::Internal("Error when moving paged out entry back");
+                }
+                tree->paged_out = false;
             }
         }
     }
@@ -510,9 +512,7 @@ tf::Status ExecutorState::PrepareInputs(const NodeItem &item, tf::OpKernel *kern
     std::unordered_set<boost::upgrade_mutex*> locks;
     for (int i = 0; i < item.num_inputs; ++i) {
         auto entry = first_input + i;
-        // FIXME: get buf lock from entry
-        UNUSED(entry);
-        locks.insert(nullptr);
+        locks.insert(&entry->alloc_tree->buf_mu);
     }
     // Lock all references, and all read/write should happen after this
     // no need for special ordering, because these are shared
@@ -609,7 +609,7 @@ tf::Status ExecutorState::PrepareInputs(const NodeItem &item, tf::OpKernel *kern
 
             INFO("Copying from device {} to device {} to prepare {}-th input for op {}.",
                  entry->device->name(), device->name(), i, kernel->name());
-            auto oldTicket = entry->alloc_ticket;
+            auto oldTicket = entry->alloc_tree->ticket;
             auto ok = moveTensor(*entry, device, device_context, expected, "");
             if (!ok.ok()) {
                 ERR("Copying from device {} to device {} failed when preparing {}-th input "
@@ -619,31 +619,12 @@ tf::Status ExecutorState::PrepareInputs(const NodeItem &item, tf::OpKernel *kern
             }
 
             // Update active entries as needed
-            assert(oldTicket != entry->alloc_ticket);
-            DEBUG("Due to dev move, update allocation ticket from {} to {}", oldTicket, entry->alloc_ticket);
-
-            std::vector<Entry*> needUpdate;
-            needUpdate.reserve(16);
-            needUpdate.push_back(entry);
-
-            utils::Guard g(impl_->entry_mu_);
-            auto range = impl_->active_entries_.equal_range(oldTicket);
-            for (auto it = range.first; it != range.second; ) {
-                if (it->second == entry) {
-                    DEBUG("Removing entry {} of ticket {} due to devcopy", as_hex(it->second), oldTicket);
-                    it = impl_->active_entries_.erase(it);
-                } else if (entry->ref && it->second->ref == entry->ref) {
-                    needUpdate.push_back(it->second);
-                    it->second->alloc_ticket = entry->alloc_ticket;
-                    DEBUG("Removing entry {} of ticket {} due to devcopy", as_hex(it->second), oldTicket);
-                    it = impl_->active_entries_.erase(it);
-                } else {
-                    ++it;
-                }
-            }
+            EntryVec needUpdate;
+            impl_->removeFromBufferTree(entry, &needUpdate);
             for (auto &e : needUpdate) {
-                DEBUG("Adding entry {} of ticket {} due to devcopy", as_hex(e), e->alloc_ticket);
-                impl_->active_entries_.emplace(e->alloc_ticket, e);
+                impl_->updateBufferTree(entry, device->resourceContext().ticket());
+                DEBUG("Update entry {} from ticket {} to {} due to devcopy",
+                      as_hex(e), oldTicket, device->resourceContext().ticket());
             }
         }
 
@@ -717,18 +698,19 @@ tf::Status ExecutorState::ProcessOutputs(const NodeItem &item, tf::OpKernelConte
 
             // Set the allocator attributes of the output entry.
             out->alloc_attr = ctx->output_alloc_attr(i);
-            out->alloc_ticket = device->resourceContext().ticket();
+            auto ticket = device->resourceContext().ticket();
             // Pull more accurate ticket info if the tensor is initialized and has a buffer
             auto buf = tf::remote::PagingHelper::bufferOf(*val.tensor);
             if (buf) {
                 auto alloc = PerOpAllocator::downcast(buf->allocator());
                 if (alloc) {
-                    out->alloc_ticket = alloc->resourceContext().ticket();
+                    ticket = alloc->resourceContext().ticket();
                     if (val.is_ref()) {
                         DEBUG("{}: Buffer {} refIsOne {}", alloc->resourceContext(), as_hex(buf), buf->RefCountIsOne());
                     }
                 }
             }
+            impl_->updateBufferTree(out, ticket);
 
             // Sanity check of output tensor types.
             auto dtype = val->dtype();
@@ -780,20 +762,36 @@ tf::Status ExecutorState::ProcessOutputs(const NodeItem &item, tf::OpKernelConte
 
 void ExecutorState::ClearInputs(Entry *first, size_t num, BufferLockVec &buflocks)
 {
+    // Release locks first, because it may be deleted below
     buflocks.clear();
 
     for (size_t i = 0; i < num; ++i) {
         auto entry = first + i;
+
+        bool removeTree = false;
+        if (entry->val_field_is_set) {
+            auto buf = tf::remote::PagingHelper::bufferOf(*entry->val.get());
+            removeTree = buf
+                && tf::remote::PagingHelper::refCountOf(*buf) == 1
+                && tf::remote::PagingHelper::refCountOf(*buf->root_buffer()) == 1;
+        }
+
         entry->ClearVal();
 
-        utils::Guard g(impl_->entry_mu_);
-        auto range = impl_->active_entries_.equal_range(entry->alloc_ticket);
-        for (auto it = range.first; it != range.second; ++it) {
-            if (it->second == entry) {
-                DEBUG("Removing entry {} of ticket {} due to clearinputs", as_hex(entry), entry->alloc_ticket);
-                impl_->active_entries_.erase(it);
+        DEBUG("Removing entry {} of ticket {} due to clearinputs", as_hex(entry), entry->alloc_tree->ticket);
+        if (removeTree) {
+            utils::Guard g(impl_->entry_mu_);
+            auto range = impl_->active_buffers_.equal_range(entry->alloc_tree->ticket);
+            for (auto it = range.first; it != range.second; ++it) {
+                impl_->active_buffers_.erase(it);
                 break;
             }
+            // alloc_tree will auto unlink from it's container buffer_trees_
+            delete entry->alloc_tree;
+            entry->alloc_tree = nullptr;
+        } else {
+            EntryVec ignore;
+            impl_->removeFromBufferTree(entry, &ignore, false /*includeOtherRef*/);
         }
     }
 }
@@ -1378,11 +1376,10 @@ void ExecutorState::FrameState::ActivateNodes(const NodeItem *item, const bool i
                 input_tensors[dst_loc] = (*outputs)[src_slot];
             }
 
-            utils::Guard g(executor->entry_mu_);
             DEBUG("Adding entry {} of ticket {} due to actvation", as_hex(&input_tensors[dst_loc]),
-                  input_tensors[dst_loc].alloc_ticket);
-            executor->active_entries_.emplace(input_tensors[dst_loc].alloc_ticket,
-                                              &input_tensors[dst_loc]);
+                  input_tensors[dst_loc].alloc_tree->ticket);
+            executor->updateBufferTree(&input_tensors[dst_loc],
+                                       input_tensors[dst_loc].alloc_tree->ticket);
         }
 
         // Add dst to the ready queue if it's ready
@@ -1473,25 +1470,7 @@ bool ExecutorState::FrameState::CleanupIterations(const GraphView *gview, int64_
     auto curr_iter = iter;
     while (curr_iter <= iteration_count && IsIterationDone(curr_iter)) {
         auto iterState = GetIteration(curr_iter);
-        // Remove any potential entries in active_entries_
-        {
-            utils::Guard g(executor->entry_mu_);
-            for (int i = 0; i != iterState->total_input_tensors; ++i) {
-                auto entry = iterState->input_tensors + i;
-                if (entry->has_value) {
-                    auto range = executor->active_entries_.equal_range(entry->alloc_ticket);
-                    for (auto it = range.first; it != range.second; ) {
-                        if (it->second == entry) {
-                            DEBUG("Removing entry {} of ticket {} due to iter deletion",
-                                  as_hex(entry), entry->alloc_ticket);
-                            it = executor->active_entries_.erase(it);
-                        } else {
-                            ++it;
-                        }
-                    }
-                }
-            }
-        }
+
         // Delete the iteration curr_iter.
         delete iterState;
         SetIteration(curr_iter, nullptr);

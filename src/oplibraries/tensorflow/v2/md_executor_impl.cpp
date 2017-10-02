@@ -275,41 +275,53 @@ void ExecutorState::addNodeToRefiner(const TaggedNode &tn)
     }
 }
 
-void ExecutorImpl::dumpActiveEntries()
-{
-    for (auto &p : active_entries_) {
-        DEBUG("{} -> {}", p.first, as_hex(p.second));
-    }
-}
-
 size_t ExecutorImpl::handlePagingRequest(uint64_t oldTicket, std::unique_ptr<ResourceContext> &&rctx)
 {
     // There may be multiple tensor entries that uses this ticket,
     // and potentially share the storage.
     // We want to move one complete set of tensors that are sharing buffer.
-    std::vector<Entry *> entries;
+    size_t totalReleased = 0;
+    std::vector<TensorBufferTree*> parts;
+    parts.reserve(4);
     BufferMutexSet reflocks;
-    entries.reserve(8);
     reflocks.reserve(8);
+
+    // guard after decl of parts, because we need to use it.
+    utils::ScopeGuards sg;
+    sg += [&totalReleased]() {
+        DEBUG("Paging released {} bytes of memory", totalReleased);
+    };
 
     {
         utils::Guard g(entry_mu_);
-        auto range = active_entries_.equal_range(oldTicket);
+        auto range = active_buffers_.equal_range(oldTicket);
         if (range.first == range.second) {
             ERR("Requested ticket for paging not found: {}", oldTicket);
             return 0;
         }
         for (auto it = range.first; it != range.second; ++it) {
             assert(it->second);
-            entries.push_back(it->second);
+            if (it->second->paged_out) continue;
 
-            // FIXME: get buf lock from entry
-            reflocks.insert(nullptr);
+            reflocks.insert(&it->second->buf_mu);
+            parts.push_back(it->second);
 
             DEBUG("Removing entry {} of ticket {} due to paging", as_hex(it->second), oldTicket);
         }
-        // we will add them back later
-        active_entries_.erase(oldTicket);
+    }
+
+    // Add back to active entries with updated value when exit
+    sg += [this, &parts, oldTicket]() {
+        utils::Guard g(entry_mu_);
+        for (auto part : parts) {
+            DEBUG("Adding buffer tree of ticket {} (was {}) due to paging", part->ticket, oldTicket);
+            active_buffers_.emplace(part->ticket, part);
+        }
+    };
+
+    if (parts.empty()) {
+        WARN("No tensor available for paging");
+        return totalReleased;
     }
 
     // Create target device
@@ -317,11 +329,9 @@ size_t ExecutorImpl::handlePagingRequest(uint64_t oldTicket, std::unique_ptr<Res
     auto ok = LookupDevice(rctx->spec(), &item);
     if (!ok.ok()) {
         ERR("Error when looking up device for paging: {}", ok);
-        return 0;
+        return totalReleased;
     }
     item.device->setResourceContext(std::move(rctx));
-
-    std::unordered_map<tf::TensorBuffer*, TensorBufferTree> parts;
 
     // Lock all buffer, and all read/write should happen after this
     utils::lock(reflocks.begin(), reflocks.end());
@@ -330,69 +340,15 @@ size_t ExecutorImpl::handlePagingRequest(uint64_t oldTicket, std::unique_ptr<Res
         guards.emplace_back(*l, std::adopt_lock);
     }
 
-    // partition into groups with the same root buffer
-    for (auto entry : entries) {
-        assert(entry != nullptr);
-        if (entry->in_use) {
-            WARN("Skip entry {} that is in use", as_hex(entry));
-            continue;
-        }
+    for (auto &part : parts) {
+        assert(!part->paged_out);
 
-        auto tensor = entry->RefOrVal();
-        auto buf = tf::remote::PagingHelper::bufferOf(*tensor);
-        if (!buf) continue;
-
-        auto root_buf = buf->root_buffer();
-        if (!root_buf) continue;
-
-        auto alloc = PerOpAllocator::downcast(root_buf->allocator());
-
-        switch (alloc->resourceContext().spec().type) {
-        case DeviceType::GPU:
-            assert(utils::endsWith(alloc->Name(), "GPU_0_bfc"));
-            break;
-        default:
-            assert(!utils::endsWith(alloc->Name(), "GPU_0_bfc"));
-            break;
-        }
-
-        if (!alloc || alloc->resourceContext().spec().type != DeviceType::GPU) {
-            continue;
-        }
-
-        auto &part = parts[root_buf];
-        if (buf == root_buf) {
-            part.roots.push_back(entry);
-        } else {
-            part.subs[buf].push_back(entry);
-        }
-    }
-
-    if (parts.empty()) {
-        WARN("No tensor available for paging");
-        // then add back entries at end of the func
-    }
-
-    size_t totalReleased = 0;
-
-    for (auto &p : parts) {
-        auto size = p.first->size();
-        if (moveTensorTree(p.second, item.device)) {
+        auto size = part->root_buf->size();
+        if (moveTensorTree(*part, item.device)) {
             totalReleased += size;
+            part->paged_out = true;
         } else {
-            return totalReleased;
-        }
-    }
-
-    DEBUG("Paging released {} bytes of memory", totalReleased);
-
-    // Add back to active entries with updated value
-    {
-        utils::Guard g(entry_mu_);
-        for (auto entry : entries) {
-            DEBUG("Adding entry {} of ticket {} (was {})due to paging", as_hex(entry), entry->alloc_ticket,
-                  oldTicket);
-            active_entries_.emplace(entry->alloc_ticket, entry);
+            break;
         }
     }
 
@@ -441,4 +397,83 @@ tf::Status ExecutorImpl::LookupDevice(const DeviceSpec &spec, DeviceItem *item)
 
     item->device_record_tensor_access = item->device->RequiresRecordingAccessedTensors();
     return tf::Status::OK();
+}
+
+/**
+ * If entry->alloc_tree is not nullptr, add entry to entry->alloc_tree
+ * Else, find/create tree based on root_buf, and add entry to the tree
+ */
+void ExecutorImpl::updateBufferTree(Entry *entry, uint64_t ticket)
+{
+    auto buf = tf::remote::PagingHelper::bufferOf(*entry->RefOrVal());
+    if (!buf) return;
+    auto root_buf = buf->root_buffer();
+    if (!root_buf) return;
+
+    utils::Guard g(entry_mu_);
+    auto tree = entry->alloc_tree;
+    if (!tree) {
+        auto range = active_buffers_.equal_range(ticket);
+        for (auto it = range.first; it != range.second; ++it) {
+            if (it->second->root_buf == root_buf) {
+                tree = it->second;
+                break;
+            }
+        }
+        if (!tree) {
+            // construct new tree
+            tree = new TensorBufferTree;
+            buffer_trees_.push_back(*tree);
+            active_buffers_.emplace(ticket, tree);
+
+            tree->ticket = ticket;
+            tree->root_buf = root_buf;
+        }
+
+        // Point the entry to the tree
+        entry->alloc_tree = tree;
+    }
+    assert(tree);
+    assert(tree->ticket == ticket);
+    assert(tree->root_buf == root_buf);
+
+    if (root_buf == buf) {
+        auto it = std::find(tree->roots.begin(), tree->roots.end(), entry);
+        if (it == tree->roots.end()) {
+            tree->roots.emplace_back(entry);
+        }
+    } else {
+        auto &sub = tree->subs[buf];
+        auto it = std::find(sub.begin(), sub.end(), entry);
+        if (it == sub.end()) {
+            sub.emplace_back(entry);
+        }
+    }
+}
+
+void ExecutorImpl::removeFromBufferTree(const Entry *entry, EntryVec *needUpdate,
+                                        bool includeOtherRef)
+{
+    auto matchRefs = [needUpdate, entry, includeOtherRef] (auto e) {
+        if (e == entry || (includeOtherRef && e->ref == entry->ref)) {
+            needUpdate->push_back(e);
+            return true;
+        }
+        return false;
+    };
+
+    utils::Guard g(entry_mu_);
+
+    auto tree = entry->alloc_tree;
+    tree->roots.erase(std::remove_if(tree->roots.begin(), tree->roots.end(), matchRefs));
+    if (needUpdate->empty()) {
+        // the entry must be either in roots or one of the subs
+        for (auto &p : tree->subs) {
+            auto &sub = p.second;
+            sub.erase(std::remove_if(sub.begin(), sub.end(), matchRefs));
+            if (!needUpdate->empty()) {
+                break;
+            }
+        }
+    }
 }

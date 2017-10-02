@@ -65,17 +65,18 @@ tensorflow::Status moveTensor(Entry &entry, const std::shared_ptr<PerOpAllocDevi
     entry.alloc_attr = attr;
     entry.device_context = dstCtx;
     entry.device = dstDevice;
-    entry.alloc_ticket = dstDevice->resourceContext().ticket();
 
     return tf::Status::OK();
 }
 
-bool moveTensorTree(const TensorBufferTree &tree, const std::shared_ptr<PerOpAllocDevice> &dstDevice)
+bool moveTensorTree(TensorBufferTree &tree, const std::shared_ptr<PerOpAllocDevice> &dstDevice)
 {
     assert(!tree.roots.empty());
 
-    auto oldRoot = tf::remote::PagingHelper::bufferOf(*tree.roots[0]->RefOrVal());
-    auto oldTicket = tree.roots[0]->alloc_ticket;
+    auto oldRoot = tree.root_buf;
+    auto oldTicket = tree.ticket;
+
+    tree.ticket = dstDevice->resourceContext().ticket();
 
     auto oldCount = tf::remote::PagingHelper::refCountOf(*oldRoot);
     DEBUG("    Paging visiting buffer {} (count {}) with ticket {}",
@@ -127,8 +128,12 @@ bool moveTensorTree(const TensorBufferTree &tree, const std::shared_ptr<PerOpAll
     }
 
     assert(newRoot);
+    tree.root_buf = newRoot;
 
     // Secondly re-target sub buffers to new root
+    // and update subs
+    std::unordered_map<tf::TensorBuffer*, std::vector<Entry*>> newSubs;
+    newSubs.reserve(tree.subs.size());
     for (auto &pp : tree.subs) {
         auto oldSub = pp.first;
         oldSub->Ref();
@@ -156,10 +161,13 @@ bool moveTensorTree(const TensorBufferTree &tree, const std::shared_ptr<PerOpAll
                 entry->SetVal(std::move(t));
             }
         }
-
         assert(oldSub->RefCountIsOne());
         oldSub->Unref();
+
+        newSubs[newSub] = std::move(pp.second);
     }
+    using std::swap;
+    swap(tree.subs, newSubs);
 
     assert(oldRoot->RefCountIsOne());
     DEBUG("Releasing old root buffer {} with data block at {} of size {}",

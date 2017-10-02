@@ -26,7 +26,8 @@
 
 #include "oplibraries/tensorflow/tensorflow_headers.h"
 
-#include <list>
+#include <boost/intrusive/list.hpp>
+
 #include <unordered_set>
 #include <unordered_map>
 
@@ -37,6 +38,7 @@ using namespace tf::remote;
 using TensorValueVec = gtl::InlinedVector<tf::TensorValue, 4>;
 using AllocatorAttributeVec = gtl::InlinedVector<tf::AllocatorAttributes, 4>;
 using DeviceContextVec = gtl::InlinedVector<tf::DeviceContext *, 4>;
+using EntryVec = gtl::InlinedVector<Entry *, 4>;
 using BufferLockVec = gtl::InlinedVector<boost::shared_lock<boost::upgrade_mutex>, 4>;
 using BufferMutexSet = std::unordered_set<boost::upgrade_mutex*>;
 
@@ -83,10 +85,9 @@ private:
 
     size_t handlePagingRequest(uint64_t oldTicket, std::unique_ptr<ResourceContext> &&rctx);
     void forceEvicted(uint64_t ticket, void *addr);
-    void dumpActiveEntries();
 
-    void updateEntry(Entry *);
-    void bufferTreeFromEntry(Entry *);
+    void removeFromBufferTree(const Entry *entry, EntryVec *needUpdate, bool includeOtherRef = false);
+    void updateBufferTree(Entry *entry, uint64_t ticket);
 
     struct DeviceItem
     {
@@ -151,7 +152,10 @@ private:
 
     // Active entries. Used for handle paging request
     std::mutex entry_mu_;
-    std::unordered_multimap<uint64_t, Entry *> active_entries_;
+    boost::intrusive::list<TensorBufferTree,
+        boost::intrusive::constant_time_size<false>
+    > buffer_trees_;
+    std::unordered_multimap<uint64_t, TensorBufferTree*> active_buffers_;
 
     // Root nodes (with no in edges) that should form the initial ready queue
     std::vector<const tf::Node *> root_nodes_;

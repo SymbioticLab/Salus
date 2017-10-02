@@ -23,7 +23,22 @@
 
 #include "oplibraries/tensorflow/tensorflow_headers.h"
 
+#include <boost/intrusive/list_hook.hpp>
+#include <boost/thread/shared_mutex.hpp>
+
 #include <memory>
+
+struct Entry;
+struct TensorBufferTree
+: public boost::intrusive::list_base_hook<boost::intrusive::link_mode<boost::intrusive::auto_unlink>> {
+    tf::TensorBuffer *root_buf;
+    uint64_t ticket;
+    bool paged_out = false;
+    boost::upgrade_mutex buf_mu;
+
+    std::vector<Entry*> roots;
+    std::unordered_map<tf::TensorBuffer*, std::vector<Entry*>> subs;
+};
 
 /**
  * Either a tensor pointer (pass-by-reference) or a tensor (pass-by-value).
@@ -84,21 +99,19 @@ struct Entry
     void CopyProperties(const Entry &other)
     {
         alloc_attr = other.alloc_attr;
-        alloc_ticket = other.alloc_ticket;
+        alloc_tree = other.alloc_tree;
         device_context = other.device_context;
         device = other.device;
         in_use = other.in_use;
-        paged_out = other.paged_out;
     }
 
     void CopyProperties(Entry &&other)
     {
         alloc_attr = other.alloc_attr;
-        alloc_ticket = other.alloc_ticket;
+        alloc_tree = other.alloc_tree;
         device_context = other.device_context;
         device = std::move(other.device);
         in_use = other.in_use;
-        paged_out = other.paged_out;
     }
 
     // Clears the <val> field.
@@ -116,7 +129,7 @@ struct Entry
 
     void Dereference()
     {
-        DEBUG("Dereferencing entry {} of ticket {}", as_hex(this), alloc_ticket);
+        DEBUG("Dereferencing entry {} of ticket {}", as_hex(this), alloc_tree->ticket);
         {
             tf::mutex_lock l(*ref_mu);
             DCHECK(!val_field_is_set);
@@ -182,11 +195,10 @@ struct Entry
 
     // The attributes of the allocator that creates the tensor.
     tf::AllocatorAttributes alloc_attr;
-    // The ticket used to allocate the tensor
-    uint64_t alloc_ticket;
+    // The buffer tree used to allocate the tensor
+    TensorBufferTree *alloc_tree;
 
     bool in_use = false;
-    bool paged_out = false;
 
     // Every entry carries an optional DeviceContext containing
     // Device-specific information about how the Tensor was produced.
@@ -210,10 +222,6 @@ tf::Status moveTensor(Entry &entry, const std::shared_ptr<PerOpAllocDevice> &dst
                       tf::DeviceContext *dstCtx, const tf::AllocatorAttributes &attr,
                       const std::string &name = "");
 
-struct TensorBufferTree {
-    std::vector<Entry*> roots;
-    std::unordered_map<tf::TensorBuffer*, std::vector<Entry*>> subs;
-};
-bool moveTensorTree(const TensorBufferTree &, const std::shared_ptr<PerOpAllocDevice> &dstDevice);
+bool moveTensorTree(TensorBufferTree &, const std::shared_ptr<PerOpAllocDevice> &dstDevice);
 
 #endif // TENSORUTILS_H
