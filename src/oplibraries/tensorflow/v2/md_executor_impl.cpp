@@ -456,6 +456,7 @@ void ExecutorImpl::removeFromBufferTree(const Entry *entry, EntryVec *needUpdate
 {
     auto matchRefs = [needUpdate, entry, includeOtherRef] (auto e) {
         if (e == entry || (includeOtherRef && e->ref == entry->ref)) {
+            e->alloc_tree = nullptr;
             needUpdate->push_back(e);
             return true;
         }
@@ -466,8 +467,8 @@ void ExecutorImpl::removeFromBufferTree(const Entry *entry, EntryVec *needUpdate
 
     auto tree = entry->alloc_tree;
     tree->roots.erase(std::remove_if(tree->roots.begin(), tree->roots.end(), matchRefs));
+    // the entry must be either in roots or one of the subs
     if (needUpdate->empty()) {
-        // the entry must be either in roots or one of the subs
         for (auto &p : tree->subs) {
             auto &sub = p.second;
             sub.erase(std::remove_if(sub.begin(), sub.end(), matchRefs));
