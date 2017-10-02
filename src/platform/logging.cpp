@@ -46,8 +46,8 @@ struct LoggerStaticInitializer
         logger->set_pattern("[%Y-%m-%d %T.%F] [%t] [%n] [%L] %v");
 
 #ifdef NDEBUG
-        logger->flush_on(spdlog::level::error);
-        logger->set_level(spdlog::level::error);
+        logger->flush_on(spdlog::level::err);
+        logger->set_level(spdlog::level::err);
 #else
         logger->flush_on(spdlog::level::trace);
         logger->set_level(spdlog::level::trace);
