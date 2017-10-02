@@ -1381,10 +1381,12 @@ void ExecutorState::FrameState::ActivateNodes(const NodeItem *item, const bool i
                 input_tensors[dst_loc] = (*outputs)[src_slot];
             }
 
-            DEBUG("Adding entry {} of ticket {} due to actvation", as_hex(&input_tensors[dst_loc]),
-                  input_tensors[dst_loc].alloc_tree->ticket);
-            executor->updateBufferTree(&input_tensors[dst_loc],
-                                       input_tensors[dst_loc].alloc_tree->ticket);
+            if (input_tensors[dst_loc].has_value) {
+                DEBUG("Adding entry {} of ticket {} due to actvation", as_hex(&input_tensors[dst_loc]),
+                      input_tensors[dst_loc].alloc_tree->ticket);
+                executor->updateBufferTree(&input_tensors[dst_loc],
+                                        input_tensors[dst_loc].alloc_tree->ticket);
+            }
         }
 
         // Add dst to the ready queue if it's ready
