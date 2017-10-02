@@ -43,10 +43,15 @@ struct LoggerStaticInitializer
         spdlog::set_async_mode(8192);
 #endif
         logger = spdlog::stdout_color_mt("console");
+        logger->set_pattern("[%Y-%m-%d %T.%F] [%t] [%n] [%L] %v");
 
+#ifdef NDEBUG
+        logger->flush_on(spdlog::level::error);
+        logger->set_level(spdlog::level::error);
+#else
         logger->flush_on(spdlog::level::trace);
         logger->set_level(spdlog::level::trace);
-        logger->set_pattern("[%Y-%m-%d %T.%F] [%t] [%n] [%L] %v");
+#endif
 //         g3::installCrashHandler();
 //         g3::setDumpStack(false);
     }
