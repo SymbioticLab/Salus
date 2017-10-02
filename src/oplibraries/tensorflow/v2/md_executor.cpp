@@ -85,6 +85,10 @@ ExecutorImpl::~ExecutorImpl()
         delete fiter.second;
     }
     delete graph_;
+
+    buffer_trees_.clear_and_dispose([](auto tree) {
+        delete tree;
+    });
 }
 
 void GetMaxPendingCounts(const tf::Node *n, int *max_pending, int *max_dead_count)
