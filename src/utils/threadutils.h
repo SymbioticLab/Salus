@@ -67,7 +67,7 @@ public:
 
     void lock() { m_mu->lock_shared(); }
     void unlock() noexcept { m_mu->unlock_shared(); }
-    bool try_lock() noexcept { return m_mu->try_lock(); }
+    bool try_lock() noexcept { return m_mu->try_lock_shared(); }
 
 private:
     SharedLockable *m_mu;
