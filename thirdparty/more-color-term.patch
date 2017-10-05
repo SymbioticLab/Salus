@@ -1,0 +1,29 @@
+diff --git a/src/easylogging++.cc b/src/easylogging++.cc
+index 5faa9a3..e47c8d6 100644
+--- a/src/easylogging++.cc
++++ b/src/easylogging++.cc
+@@ -1062,10 +1062,20 @@ std::string OS::currentHost(void) {
+ }
+ 
+ bool OS::termSupportsColor(void) {
+-  std::string term = getEnvironmentVariable("TERM", "");
+-  return term == "xterm" || term == "xterm-color" || term == "xterm-256color"
+-         || term == "screen" || term == "linux" || term == "cygwin"
+-         || term == "screen-256color";
++  static constexpr const char* Terms[] =
++  {
++      "ansi", "color", "console", "cygwin", "gnome", "konsole", "kterm",
++      "linux", "msys", "putty", "rxvt", "screen", "vt100", "xterm"
++  };
++
++  auto env = getEnvironmentVariable("TERM", "");
++
++  static const bool result = std::any_of(
++      std::begin(Terms), std::end(Terms), [&](const char* term)
++  {
++      return env == term;
++  });
++  return result;
+ }
+ 
+ // DateTime

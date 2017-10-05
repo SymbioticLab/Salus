@@ -4,3 +4,7 @@
 [submodule "thirdparty/docopt.cpp"]
 	path = thirdparty/docopt.cpp
 	url = https://github.com/docopt/docopt.cpp.git
+[submodule "thirdparty/easyloggingpp"]
+	path = thirdparty/easyloggingpp
+	url = https://github.com/muflihun/easyloggingpp.git
+	ignore = dirty

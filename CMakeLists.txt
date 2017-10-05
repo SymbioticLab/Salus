@@ -24,6 +24,8 @@ option(WITH_TESTS "Build test suite in default target" OFF)
 
 option(WITH_BUNDLED_SPDLOG "Use bundled spdlog library instead of system provided version" OFF)
 
+option(WITH_BUNDLED_EASYLOGGINGPP "Use bundled Easylogging++ library instead of system provided version" OFF)
+
 option(WITH_BUNDLED_DOCOPT "Use bundled docopt.cpp library instead of system provided version" OFF)
 
 #---------------------------------------------------------------------------------------
@@ -63,6 +65,21 @@ add_definitions(-DBOOST_THREAD_VERSION=4)
 # Q
 find_package(Q REQUIRED)
 set_package_properties(Q PROPERTIES TYPE REQUIRED PURPOSE "For multithreaded execution")
+
+# Easylogging++
+set(USE_BUNDLED_EASYLOGGINGPP ${WITH_BUNDLED_EASYLOGGINGPP})
+if(NOT WITH_BUNDLED_EASYLOGGINGPP)
+    find_package(easyloggingpp QUIET)
+    set_package_properties(easyloggingpp PROPERTIES TYPE OPTIONAL PURPOSE "For logging")
+    if(NOT easyloggingpp_FOUND)
+        ## fallback to bundled spdlog
+        set(USE_BUNDLED_EASYLOGGINGPP ON)
+        message(WARNING "Easylogging++ requested but not found, fallback to use bundled version.")
+    endif(NOT easyloggingpp_FOUND)
+endif(NOT WITH_BUNDLED_EASYLOGGINGPP)
+if(USE_BUNDLED_EASYLOGGINGPP)
+    include(thirdparty/UseEasyloggingpp.cmake)
+endif(USE_BUNDLED_EASYLOGGINGPP)
 
 # spdlog
 set(USE_BUNDLED_SPDLOG ${WITH_BUNDLED_SPDLOG})

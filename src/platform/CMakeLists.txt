@@ -19,6 +19,7 @@ add_library(platform STATIC ${SRC_LIST})
 target_link_libraries(platform
     PUBLIC
     spdlog::spdlog
+    easyloggingpp
 
     PRIVATE
     protos_gen

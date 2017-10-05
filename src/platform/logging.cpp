@@ -20,8 +20,8 @@
 #include "logging.h"
 
 #include "crashhandler/crashhandler.hpp"
-#include "utils/stringutils.h"
 #include "utils/envutils.h"
+#include "utils/stringutils.h"
 
 #include "protos.h"
 
@@ -52,12 +52,14 @@ struct LoggerStaticInitializer
         logger->flush_on(spdlog::level::trace);
         logger->set_level(spdlog::level::trace);
 #endif
-//         g3::installCrashHandler();
-//         g3::setDumpStack(false);
+        //         g3::installCrashHandler();
+        //         g3::setDumpStack(false);
     }
 };
 
 } // namespace
+
+INITIALIZE_EASYLOGGINGPP
 
 logging::LoggerWrapper logging::logger()
 {
@@ -85,11 +87,11 @@ spdlog::logger *logging::LoggerWrapper::operator->()
     return nullptr;
 }
 
-std::ostream &operator<<(std::ostream &os, const std::exception_ptr &ep)
+MAKE_LOGGABLE(std::exception_ptr, ep, os)
 {
     try {
         std::rethrow_exception(ep);
-    } catch (const std::exception& e) {
+    } catch (const std::exception &e) {
         os << e.what();
     } catch (...) {
         os << "unknown exception";
@@ -97,42 +99,37 @@ std::ostream &operator<<(std::ostream &os, const std::exception_ptr &ep)
     return os;
 }
 
-std::ostream &operator<<(std::ostream &os, const executor::OpKernelDef &c)
+MAKE_LOGGABLE(executor::OpKernelDef, c, os)
 {
-    return os << "OpKernelDef(" << c.id() << ", "
-              << executor::OpLibraryType_Name(c.oplibrary()) << ")";
+    return os << "OpKernelDef(" << c.id() << ", " << executor::OpLibraryType_Name(c.oplibrary()) << ")";
 }
 
-std::ostream &operator<<(std::ostream &os, const executor::EvenlopDef &c)
+MAKE_LOGGABLE(executor::EvenlopDef, c, os)
 {
-    return os << "EvenlopDef(type='" << c.type()
-              << "', seq=" << c.seq()
-              << ", sess=" << c.sessionid()
+    return os << "EvenlopDef(type='" << c.type() << "', seq=" << c.seq() << ", sess=" << c.sessionid()
               << ", recvId='"
-              << utils::bytesToHexString(reinterpret_cast<const uint8_t*>(c.recvidentity().data()),
+              << utils::bytesToHexString(reinterpret_cast<const uint8_t *>(c.recvidentity().data()),
                                          c.recvidentity().size())
               << "')";
 }
 
-std::ostream &operator<<(std::ostream &os, const zmq::message_t &c)
+MAKE_LOGGABLE(zmq::message_t, c, os)
 {
-    return os << "zmq::message_t(len=" << c.size()
-              << ", data='"
+    return os << "zmq::message_t(len=" << c.size() << ", data='"
               << utils::bytesToHexString(c.data<uint8_t>(), c.size(), maxBytesDumpLen()) << "')";
 }
 
-std::ostream &operator<<(std::ostream &os, const zmq::error_t &c)
+MAKE_LOGGABLE(zmq::error_t, c, os)
 {
-    return os << "zmq::error_t(code=" << c.num()
-              << ", msg='" << c.what() << "')";
+    return os << "zmq::error_t(code=" << c.num() << ", msg='" << c.what() << "')";
 }
 
-std::ostream &operator<<(std::ostream &os, const google::protobuf::Message &c)
+MAKE_LOGGABLE(google::protobuf::Message, c, os)
 {
     return os << c.DebugString();
 }
 
-std::ostream &operator<<(std::ostream &os, const PtrPrintHelper &helper)
+MAKE_LOGGABLE(PtrPrintHelper, helper, os)
 {
     return os << "0x" << std::hex << helper.value;
 }

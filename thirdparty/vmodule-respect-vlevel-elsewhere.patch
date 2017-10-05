@@ -1,0 +1,13 @@
+diff --git a/src/easylogging++.cc b/src/easylogging++.cc
+index 5faa9a3..bb7311f 100644
+--- a/src/easylogging++.cc
++++ b/src/easylogging++.cc
+@@ -1955,7 +1955,7 @@ bool VRegistry::allowed(base::type::VerboseLevel vlevel, const char* file) {
+       }
+     }
+     if (base::utils::hasFlag(LoggingFlag::AllowVerboseIfModuleNotSpecified, *m_pFlags)) {
+-      return true;
++      return vlevel <= m_level;
+     }
+     return false;
+   }
