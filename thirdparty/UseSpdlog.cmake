@@ -2,8 +2,10 @@
 # Use CMAKE_CURRENT_LIST_DIR as this file will be included
 set(third_party_dir ${CMAKE_CURRENT_LIST_DIR})
 
+message("-- ${library_name} version: bundled")
+
 if(NOT EXISTS ${third_party_dir}/spdlog/CMakeLists.txt)
-    message(STATUS "Initialize submodule")
+    message(STATUS "--   Initialize submodule")
     execute_process(COMMAND "git" "submodule" "update" "--init" "spdlog"
         WORKING_DIRECTORY "${third_party_dir}"
         RESULT_VARIABLE retcode
