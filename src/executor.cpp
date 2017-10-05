@@ -109,9 +109,9 @@ void initializeLogging(std::map<std::string, docopt::value> &args)
     // Separate configuration for performance logger
     if (perflog) {
         Configurations perfConf;
-        conf.set(Level::Info, ConfigurationType::ToFile, "true");
-        conf.set(Level::Info, ConfigurationType::ToStandardOutput, "false");
-        conf.set(Level::Info, ConfigurationType::Filename, perflog.asString());
+        perfConf.set(Level::Info, ConfigurationType::ToFile, "true");
+        perfConf.set(Level::Info, ConfigurationType::ToStandardOutput, "false");
+        perfConf.set(Level::Info, ConfigurationType::Filename, perflog.asString());
         Loggers::reconfigureLogger("performance", perfConf);
     }
 
@@ -134,6 +134,10 @@ void printConfiguration(std::map<std::string, docopt::value> &args)
 #endif
     LOG(INFO) << "Verbose logging level: " << el::Loggers::verboseLevel()
               << " file:" << args[kVLogFileFlag].asString();
+
+    const auto &conf = el::Loggers::getLogger("performance")->typedConfigurations();
+    LOG(INFO) << "Performance logging: " << (conf->enabled(el::Level::Info) ? "enabled" : "disabled")
+              << " file: " << conf->filename(el::Level::Info);
 }
 
 int main(int argc, char **argv)
