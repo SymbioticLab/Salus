@@ -135,7 +135,6 @@ inline const char *thread_id(const el::LogMessage *)
 
 } // namespace logging
 
-#define TRACE(...) logging::logger()->trace(__VA_ARGS__)
 #define DEBUG(...) logging::logger()->debug(__VA_ARGS__)
 #define INFO(...) logging::logger()->info(__VA_ARGS__)
 #define WARN(...) logging::logger()->warn(__VA_ARGS__)

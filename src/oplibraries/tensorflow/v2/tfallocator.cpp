@@ -29,20 +29,22 @@
 namespace {
 void checkMemory(void *ptr, size_t num_bytes)
 {
-    UNUSED(ptr);
-    UNUSED(num_bytes);
-    return;
-#ifndef NDEBUG
-    DEBUG("Checking memory at {:x} of size {}", reinterpret_cast<uint64_t>(ptr), num_bytes);
+#if !defined(NDEBUG)
+    if (!VLOG_IS_ON(4)) {
+        return;
+    }
+    VLOG(4) << "Checking memory at " << as_hex(ptr) << " of size " << num_bytes;
     uint8_t *pbegin = reinterpret_cast<uint8_t *>(ptr);
     uint8_t *pend = pbegin + num_bytes;
     for (auto p = pbegin; p != pend; ++p) {
         *p = 0xde;
-        if (*p != 0xde) {
-            ERR("Some wrong at address {:x}, which belongs to block {:x}", reinterpret_cast<uint64_t>(p),
-                reinterpret_cast<uint64_t>(pbegin));
-        }
+        DCHECK_EQ(*p, 0xde) << "Something wrong at address " << as_hex(p)
+                            << ", which belongs to block " << as_hex(pbegin);
     }
+#else
+    UNUSED(ptr);
+    UNUSED(num_bytes);
+    return;
 #endif
 }
 
@@ -76,8 +78,9 @@ bool TFAllocator::ShouldAllocateEmptyTensors()
 
 void *TFAllocator::AllocateRaw(size_t alignment, size_t num_bytes)
 {
-    TRACE("TFAllocator allocating {} bytes of memory with alignment {} using allocator {}@{}", num_bytes,
-         alignment, nameOrNull(m_actualAlloc), as_hex(m_actualAlloc));
+    VLOG(3) << "TFAllocator allocating " << num_bytes
+            << " bytes of memory with alignment " << alignment
+            << " using allocator " << nameOrNull(m_actualAlloc) << "@" << as_hex(m_actualAlloc);
 
     void *ptr = nullptr;
     if (m_actualAlloc) {
@@ -86,8 +89,9 @@ void *TFAllocator::AllocateRaw(size_t alignment, size_t num_bytes)
         ptr = MemoryMgr::instance().allocate(alignment, num_bytes);
     }
 
-    DEBUG("TFAllocator allocated {} bytes of memory at {} with alignment {} using allocator {}@{}", num_bytes,
-         as_hex(ptr), alignment, nameOrNull(m_actualAlloc), as_hex(m_actualAlloc));
+    VLOG(1) << "TFAllocator allocated " << num_bytes
+            << " bytes of memory at " << as_hex(ptr) << " with alignment " << alignment
+            << " using allocator " << nameOrNull(m_actualAlloc) << "@" << as_hex(m_actualAlloc);
 
     checkMemory(ptr, num_bytes);
     return ptr;
@@ -101,9 +105,9 @@ void *TFAllocator::AllocateRaw(size_t alignment, size_t num_bytes,
     // We should not retry on failure due to the restarting feature
     attr.no_retry_on_failure = true;
 
-    TRACE("TFAllocator allocating attributes {} of {} bytes of memory with alignment {}"
-         " using allocator {}@{}",
-         attr, num_bytes, alignment, nameOrNull(m_actualAlloc), as_hex(m_actualAlloc));
+    VLOG(3) << "TFAllocator allocating attributes " << attr << " of " << num_bytes
+            << " bytes of memory with alignment " << alignment
+            << " using allocator " << nameOrNull(m_actualAlloc) << "@" << as_hex(m_actualAlloc);
 
     void *ptr = nullptr;
     if (m_actualAlloc) {
@@ -113,17 +117,17 @@ void *TFAllocator::AllocateRaw(size_t alignment, size_t num_bytes,
         ptr = MemoryMgr::instance().allocate(alignment, num_bytes);
     }
 
-    DEBUG("TFAllocator called for attributes {} of {} bytes of memory at {} with alignment {}"
-         " using allocator {}@{}",
-         attr, num_bytes, as_hex(ptr), alignment, nameOrNull(m_actualAlloc),
-         as_hex(m_actualAlloc));
+    VLOG(1) << "TFAllocator called for attributes " << attr << " of " << num_bytes
+            << " bytes of memory at " << as_hex(ptr) << " with alignment " << alignment
+            << " using allocator " << nameOrNull(m_actualAlloc) << "@" << as_hex(m_actualAlloc);
     return ptr;
 }
 
 void TFAllocator::DeallocateRaw(void *ptr)
 {
-    DEBUG("TFAllocator deallocating memory at {} using allocator {}@{}", as_hex(ptr),
-         nameOrNull(m_actualAlloc), as_hex(m_actualAlloc));
+    VLOG(1) << "TFAllocator deallocating memory at " << as_hex(ptr)
+            << " using allocator " << nameOrNull(m_actualAlloc) << "@" << as_hex(m_actualAlloc);
+
     if (m_actualAlloc) {
         m_actualAlloc->DeallocateRaw(ptr);
     } else {
@@ -174,8 +178,9 @@ std::string PerOpAllocator::Name()
 
 void *PerOpAllocator::AllocateRaw(size_t alignment, size_t num_bytes)
 {
-    TRACE("TFAllocator allocating {} bytes of memory with alignment {} using allocator {}@{}", num_bytes,
-         alignment, nameOrNull(m_actualAlloc), as_hex(m_actualAlloc));
+    VLOG(3) << "TFAllocator allocating " << num_bytes
+            << " bytes of memory with alignment " << alignment
+            << " using allocator " << nameOrNull(m_actualAlloc) << "@" << as_hex(m_actualAlloc);
 
     void *ptr = nullptr;
     if (auto scope = m_rctx->allocMemory(num_bytes)) {
@@ -186,7 +191,7 @@ void *PerOpAllocator::AllocateRaw(size_t alignment, size_t num_bytes)
         checkMemory(ptr, num_bytes);
     } else {
         // No enough memory
-        TRACE("TFAllocator failed to allocate.");
+        VLOG(2) << "TFAllocator failed to allocate.";
         return nullptr;
     }
 
@@ -195,8 +200,10 @@ void *PerOpAllocator::AllocateRaw(size_t alignment, size_t num_bytes)
         Ref();
     }
 
-    DEBUG("TFAllocator allocated {} bytes of memory at {} with alignment {} using allocator {}@{} with {}",
-          num_bytes, as_hex(ptr), alignment, nameOrNull(m_actualAlloc), as_hex(m_actualAlloc), *m_rctx);
+    VLOG(1) << "TFAllocator allocated " << num_bytes
+            << " bytes of memory at " << as_hex(ptr) << " with alignment " << alignment
+            << " using allocator " << nameOrNull(m_actualAlloc) << "@" << as_hex(m_actualAlloc)
+            << " with " << *m_rctx;
 
     return ptr;
 }
@@ -207,9 +214,9 @@ void* PerOpAllocator::AllocateRaw(size_t alignment, size_t num_bytes, const tens
     // We should not retry on failure due to the restarting feature
     attr.no_retry_on_failure = true;
 
-    TRACE("TFAllocator allocating attributes {} of {} bytes of memory with alignment {}"
-         " using allocator {}@{}",
-         attr, num_bytes, alignment, nameOrNull(m_actualAlloc), as_hex(m_actualAlloc));
+    VLOG(3) << "TFAllocator allocating attributes " << attr << " of " << num_bytes
+            << " bytes of memory with alignment " << alignment
+            << " using allocator " << nameOrNull(m_actualAlloc) << "@" << as_hex(m_actualAlloc);
 
     void *ptr = nullptr;
     if (auto scope = m_rctx->allocMemory(num_bytes)) {
@@ -220,7 +227,7 @@ void* PerOpAllocator::AllocateRaw(size_t alignment, size_t num_bytes, const tens
         checkMemory(ptr, num_bytes);
     } else {
         // No enough memory
-        TRACE("TFAllocator failed to allocate.");
+        VLOG(2) << "TFAllocator failed to allocate.";
         return nullptr;
     }
 
@@ -229,10 +236,10 @@ void* PerOpAllocator::AllocateRaw(size_t alignment, size_t num_bytes, const tens
         Ref();
     }
 
-    DEBUG("TFAllocator called for attributes {} of {} bytes of memory at {} with alignment {}"
-         " using allocator {}@{} with {}",
-         attr, num_bytes, as_hex(ptr), alignment, nameOrNull(m_actualAlloc),
-         as_hex(m_actualAlloc), *m_rctx);
+    VLOG(1) << "TFAllocator called for attributes " << attr << " of " << num_bytes
+            << " bytes of memory at " << as_hex(ptr) << " with alignment " << alignment
+            << " using allocator " << nameOrNull(m_actualAlloc) << "@" << as_hex(m_actualAlloc)
+            << " with " << *m_rctx;
     return ptr;
 }
 
@@ -250,8 +257,10 @@ void PerOpAllocator::DeallocateRaw(void *ptr)
 {
     auto num_bytes = RequestedSize(ptr);
 
-    DEBUG("TFAllocator deallocating memory at {} size {} using allocator {}@{} with {}", as_hex(ptr),
-          num_bytes, nameOrNull(m_actualAlloc), as_hex(m_actualAlloc), *m_rctx);
+    VLOG(1) << "TFAllocator deallocating memory at " << as_hex(ptr)
+            << " size " << num_bytes
+            << " using allocator " << nameOrNull(m_actualAlloc) << "@" << as_hex(m_actualAlloc)
+            << " with " << *m_rctx;
 
     m_rctx->deallocMemory(num_bytes);
     m_actualAlloc->DeallocateRaw(ptr);

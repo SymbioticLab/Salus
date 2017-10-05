@@ -222,7 +222,7 @@ void ExecutionEngine::scheduleLoop()
 
     while (!m_shouldExit) {
         STACK_SENTINEL;
-        TRACE("Scheduler loop");
+        VLOG(3) << "Scheduler loop";
 
         int sessionsChanged = 0;
         // Fisrt check if there's any pending deletions
@@ -253,7 +253,7 @@ void ExecutionEngine::scheduleLoop()
              itend = m_sessions.end(); it != itend;) {
             auto &item = *it;
             if (del.erase(item) > 0) {
-                TRACE("Deleting session {}@{}", item->sessHandle, as_hex(item));
+                VLOG(2) << "Deleting session " << item->sessHandle << "@" << as_hex(item);
                 assert(item.use_count() == 1);
                 // The deletion of session's executor is async to this thread.
                 // So it's legit for tickets to be nonempt
@@ -361,7 +361,7 @@ size_t ExecutionEngine::maybeScheduleFrom(std::shared_ptr<SessionItem> item)
 
     auto size = queue.size();
 
-    TRACE("Scheduling all opItem in session {}: queue size {}", item->sessHandle, size);
+    VLOG(2) << "Scheduling all opItem in session " << item->sessHandle << ": queue size " << size;
 
     if (size == 0) {
         return 0;
@@ -370,7 +370,7 @@ size_t ExecutionEngine::maybeScheduleFrom(std::shared_ptr<SessionItem> item)
     // Try schedule the operation
     auto doSchedule = [this](std::shared_ptr<SessionItem> item, std::shared_ptr<OperationItem> &&opItem) {
         STACK_SENTINEL;
-        TRACE("Scheduling opItem in session {}: {}", item->sessHandle, opItem->op->DebugString());
+        VLOG(2) << "Scheduling opItem in session " << item->sessHandle << ": " << opItem->op->DebugString();
 
         bool scheduled = false;
         DeviceSpec spec;
@@ -380,7 +380,7 @@ size_t ExecutionEngine::maybeScheduleFrom(std::shared_ptr<SessionItem> item)
             }
             spec = DeviceSpec(dt, 0);
             if (maybePreAllocateFor(*item, *opItem, spec)) {
-                TRACE("Task scheduled on {}", spec.DebugString());
+                VLOG(2) << "Task scheduled on " << spec.DebugString();
                 scheduled = true;
                 break;
             }
@@ -416,11 +416,11 @@ size_t ExecutionEngine::maybeScheduleFrom(std::shared_ptr<SessionItem> item)
                     pushToSessionQueue(item, std::move(opItem));
                 };
 
-                TRACE("Running opItem in session {}: {}", item->sessHandle, opItem->op->DebugString());
+                VLOG(2) << "Running opItem in session " << item->sessHandle << ": " << opItem->op->DebugString();
                 opItem->op->run(cbs);
             });
         } else {
-            TRACE("Failed to schedule opItem in session {}: {}", item->sessHandle, opItem->op->DebugString());
+            VLOG(2) << "Failed to schedule opItem in session " << item->sessHandle << ": " << opItem->op->DebugString();
         }
         return opItem;
     };
@@ -435,7 +435,7 @@ size_t ExecutionEngine::maybeScheduleFrom(std::shared_ptr<SessionItem> item)
     }
 
     assert(queue.empty());
-    TRACE("All opItem in session {} exaimed", item->sessHandle);
+    VLOG(2) << "All opItem in session " << item->sessHandle << " exaimed";
 
     auto it = std::back_inserter(queue);
     utils::notification n;

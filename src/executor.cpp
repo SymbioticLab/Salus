@@ -19,6 +19,7 @@ static auto kListenFlag = "--listen";
 static auto kVerboseFlag = "--verbose";
 static auto kVModuleFlag = "--vmodule";
 static auto kVLogFileFlag = "--vlogfile";
+static auto kPLogFileFlag = "--perflog";
 
 // <program-name> [-v | -vv | -vvv | --verbose=<verbosity>] [--vmodule=<vmodules>] [-l <endpoint>]
 static auto USAGE =
@@ -41,6 +42,7 @@ Options:
                                 [default: ]
     --vlogfile=<path>           Log file to use for verbose logging.
                                 [default: verbose.log]
+    --perflog=<path>            Enable performance logging and log to <path>.
 )"s;
 
 static auto VERSION = R"(<program-name> version 0.1)"s;
@@ -67,13 +69,13 @@ void initializeLogging(std::map<std::string, docopt::value> &args)
     const auto &verbosity = args[kVerboseFlag].asLong();
     const auto &vmodules = args[kVModuleFlag].asString();
     const auto &logfile = args[kVLogFileFlag].asString();
+    const auto &perflog = args[kPLogFileFlag];
 
     using namespace el;
 #if !defined(NDEBUG)
     Loggers::addFlag(LoggingFlag::ImmediateFlush);
 #endif
     Loggers::addFlag(LoggingFlag::ColoredTerminalOutput);
-    Loggers::addFlag(LoggingFlag::AutoSpacing);
     Loggers::addFlag(LoggingFlag::FixedTimeFormat);
     Loggers::addFlag(LoggingFlag::AllowVerboseIfModuleNotSpecified);
 
@@ -85,6 +87,11 @@ void initializeLogging(std::map<std::string, docopt::value> &args)
              R"([%datetime] [%tid] [%logger] [%levshort] %msg)");
     conf.set(Level::Global, ConfigurationType::SubsecondPrecision, "6");
     conf.set(Level::Global, ConfigurationType::ToFile, "false");
+    if (perflog) {
+        conf.set(Level::Global, ConfigurationType::PerformanceTracking, "true");
+    } else {
+        conf.set(Level::Global, ConfigurationType::PerformanceTracking, "false");
+    }
 
     // Verbose logging goes to file only
     conf.set(Level::Verbose, ConfigurationType::ToFile, "true");
@@ -95,6 +102,15 @@ void initializeLogging(std::map<std::string, docopt::value> &args)
 
     Loggers::setVerboseLevel(verbosity);
     Loggers::setVModules(vmodules.c_str());
+
+    // Separate configuration for performance logger
+    if (perflog) {
+        Configurations perfConf;
+        conf.set(Level::Info, ConfigurationType::ToFile, "true");
+        conf.set(Level::Info, ConfigurationType::ToStandardOutput, "false");
+        conf.set(Level::Info, ConfigurationType::Filename, perflog.asString());
+        Loggers::reconfigureLogger("performance", perfConf);
+    }
 
     // Deprecated spdlog configuration
     constexpr spdlog::level::level_enum vtol[] = {
@@ -124,14 +140,6 @@ int main(int argc, char **argv)
     initializeLogging(args);
 
     printConfiguration(args);
-
-    LOG(TRACE) << "Trace";
-    LOG(DEBUG) << "Debug";
-    LOG(INFO) << "Info";
-    LOG(WARNING) << "Warning";
-    LOG(ERROR) << "Error";
-    LOG(FATAL) << "Fatal";
-    VLOG(1) << "Vlog 1";
 
     ZmqServer server(make_unique<RpcServerCore>());
 

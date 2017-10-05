@@ -112,13 +112,13 @@ bool ExecTask::prepare(std::unique_ptr<ResourceContext> &&rctx)
     if (ok.ok() && op_kernel) {
         // we saw this kernel before, check if the device match
         if (devName.empty()) {
-            WARN("We've created the kernel, but don't remember its device: {}", tagged_node.node->name());
+            LOG(WARNING) << "We've created the kernel, but don't remember its device: " << tagged_node.node->name();
             auto s = tf::errors::Internal("We've created the kernel, but don't remember its device");
             op_kernel = nullptr;
             done = false;
         } else if (devName != ditem.device->name()) {
-            TRACE("Stateful kernel can not be moved: previously created on {}, now requested on {}",
-                devName, ditem.device->name());
+            VLOG(3) << "Stateful kernel can not be moved: previously created on " << devName
+                    << ", now requested on " << ditem.device->name();
             op_kernel = nullptr;
             done = false;
         }
@@ -216,10 +216,10 @@ Resources ExecTask::estimatedUsage(const DeviceSpec& dev)
     for (int i = 0; i != ctx->num_outputs(); ++i) {
         auto shp = ctx->output(i);
         if (!ctx->RankKnown(shp)) {
-            WARN("{}-th output of node {} has unknown rank", i, node->name());
+            VLOG(3) << i << "-th output of node " << node->name() << " has unknown rank";
             continue;
         }
-        TRACE("Shape of {}-th output of node {}:", i, node->name());
+        VLOG(3) << "Shape of " << i << "-th output of node " << node->name();
         size_t count = 1;
         for (int j = 0; j != ctx->Rank(shp); ++j) {
             auto dim = ctx->Dim(shp, j);
@@ -229,11 +229,11 @@ Resources ExecTask::estimatedUsage(const DeviceSpec& dev)
             }
 
             auto val = ctx->Value(dim);
-            TRACE("    {}", val);
+            VLOG(3) << "    " << val;
             count *= val;
         }
         auto dtype = node->output_type(i);
-        TRACE("    dtype {}, {} bytes", tf::DataType_Name(dtype), tf::DataTypeSize(dtype));
+        VLOG(3) << "    dtype " << tf::DataType_Name(dtype) << ", " << tf::DataTypeSize(dtype) << " bytes";
         double subtotal = count * tf::DataTypeSize(dtype);
 
         if (mtypeStatus.ok() && output_mtypes[i] == tf::HOST_MEMORY) {
@@ -345,7 +345,7 @@ void ExecTask::run(Callbacks cbs)
 
         if (kernel_is_async) {
             // Asynchronous computes.
-            TRACE("Launch Async kernel");
+            VLOG(2) << "Launch Async kernel";
             auto async = op_kernel->AsAsync();
             DCHECK(async != nullptr);
             launched_asynchronously = true;
@@ -364,7 +364,7 @@ void ExecTask::run(Callbacks cbs)
                     return;
                 }
 
-                TRACE(" Async kernel done: {}", SummarizeNodeDef(state->item->node->def()));
+                VLOG(2) << "Async kernel done: " << SummarizeNodeDef(state->item->node->def());
                 if (stats)
                     nodestats::SetOpEnd(stats);
                 ExecutorState::EntryVector outputs;
@@ -411,7 +411,7 @@ void ExecTask::run(Callbacks cbs)
             ditem.device->ComputeAsync(async, &pstate->ctx, std::move(asyncDone));
         } else {
             // Synchronous computes.
-            TRACE("Launch sync kernel");
+            VLOG(2) << "Launch sync kernel";
             tf::OpKernelContext ctx(&params, item.num_outputs);
             if (stats)
                 nodestats::SetOpStart(stats);
@@ -424,7 +424,7 @@ void ExecTask::run(Callbacks cbs)
                 return;
             }
 
-            TRACE("Sync ProcessOutputs");
+            VLOG(2) << "Sync ProcessOutputs";
             s = m_state->ProcessOutputs(item, &ctx, ditem.device, &outputs, stats);
             if (s.ok() && ditem.device_record_tensor_access) {
                 // Get the list of all tensors accessed during the execution
@@ -444,7 +444,6 @@ void ExecTask::run(Callbacks cbs)
         m_state->MaybeMarkCompleted(input_frame, input_iter, id);
         // Propagates outputs.
         if (s.ok()) {
-            TRACE("Propagates outputs");
             m_state->PropagateOutputs(tagged_node, &item, &outputs, &ready);
         }
         outputs.clear();
@@ -459,7 +458,7 @@ void ExecTask::run(Callbacks cbs)
         }
         // Postprocess.
         afterRun(s, cbs);
-        TRACE("Postprocess completed: {}", completed);
+        VLOG(2) << "Postprocess completed: " << completed;
     } else {
         cbs.launched();
     }

@@ -119,13 +119,13 @@ void ZmqServer::proxyRecvLoop()
     bool shouldDispatch = false;
     while (m_keepRunning) {
         // first blocking wait on pollin (read) events
-        TRACE("Blocking pool on {}", wait_events == &pollin_events ? "pollin events" : "all events");
+        VLOG(2) << "Blocking pool on " << (wait_events == &pollin_events ? "pollin events" : "all events");
         if (!pollWithCheck(*wait_events, -1)) {
             break;
         }
         // something happened, so we poll w/o waiting on all_events
         // to set events in all_events
-        TRACE("Non-blocking poll on all events");
+        VLOG(1) << "Non-blocking poll on all events";
         if (!pollWithCheck(all_events, 0)) {
             break;
         }
@@ -139,8 +139,8 @@ void ZmqServer::proxyRecvLoop()
                 needSendOut = (item.revents & ZMQ_POLLIN) != 0;
             }
         }
-        TRACE("Events summary: shouldDispatch={}, canSendOut={}, needSendOut={}",
-              shouldDispatch, canSendOut, needSendOut);
+        VLOG(3) << "Events summary: shouldDispatch=" << shouldDispatch
+                << ", canSendOut=" << canSendOut << ", needSendOut=" << needSendOut;
 
         // process dispatch if any
         if (shouldDispatch) {
@@ -150,19 +150,19 @@ void ZmqServer::proxyRecvLoop()
 
         // forward any send message
         if (needSendOut && canSendOut) {
-            TRACE("Forwarding message out");
+            VLOG(1) << "Forwarding message out";
             zmq::message_t msg;
             bool more = false;
             while (true) {
                 try {
                     m_backend_sock.recv(&msg);
-                    TRACE("Forwarding message part: {}", msg);
+                    VLOG(2) << "Forwarding message part: " << msg;
                     more = m_backend_sock.getsockopt<int64_t>(ZMQ_RCVMORE);
                     m_frontend_sock.send(msg, more ? ZMQ_SNDMORE : 0);
                     if (!more)
                         break;
                 } catch (zmq::error_t &err) {
-                    ERR("Dropping message part while sending out due to error: {}", err);
+                    LOG(ERROR) << "Dropping message part while sending out due to error: " << err;
                     if (!more)
                         break;
                 }
@@ -185,17 +185,17 @@ void ZmqServer::dispatch(zmq::socket_t &sock)
     zmq::message_t evenlop;
     zmq::message_t body;
     try {
-        TRACE("==============================================================");
+        VLOG(1) << "==============================================================";
         // First receive all identity frames added by ZMQ_ROUTER socket
         identities->emplace_back();
         sock.recv(&identities->back());
-        TRACE("Received identity frame {}: {}", identities->size() - 1, identities->back());
+        VLOG(2) << "Received identity frame " << (identities->size() - 1) << ": " << identities->back();
         // Identity frames stop at an empty message
         // ZMQ_RCVMORE is a int64_t according to doc, not a bool
         while (identities->back().size() != 0 && sock.getsockopt<int64_t>(ZMQ_RCVMORE)) {
             identities->emplace_back();
             sock.recv(&identities->back());
-            TRACE("Received identity frame {}: {}", identities->size() - 1, identities->back());
+            VLOG(2) << "Received identity frame " << (identities->size() - 1) << ": " << identities->back();
         }
         if (!sock.getsockopt<int64_t>(ZMQ_RCVMORE)) {
             ERR("Skipped one iteration due to no body message part found after identity frames");
@@ -203,7 +203,7 @@ void ZmqServer::dispatch(zmq::socket_t &sock)
         }
         // Now receive our message
         sock.recv(&evenlop);
-        TRACE("Received evenlop frame: {}", evenlop);
+        VLOG(2) << "Received evenlop frame: " << evenlop;
         if (!sock.getsockopt<int64_t>(ZMQ_RCVMORE)) {
             ERR("Skipped one iteration due to no body message part found after identity frames");
             return;
@@ -211,7 +211,7 @@ void ZmqServer::dispatch(zmq::socket_t &sock)
         // TODO: handle multi-part body, which is used by RecvTensorResponse
         // though it's doubtable if we will receive this on executor side.
         sock.recv(&body);
-        TRACE("Received body frame: {}", body);
+        VLOG(2) << "Received body frame: " << body;
     } catch (zmq::error_t &err) {
         ERR("Skipped one iteration due to error while receiving: {}", err);
         return;
@@ -314,7 +314,7 @@ void ZmqServer::sendLoop()
                 sock.send(msg, ZMQ_SNDMORE);
             }
             sock.send(parts->back());
-            TRACE("Response sent on internal socket");
+            VLOG(2) << "Response sent on internal socket";
         } catch (zmq::error_t &err) {
             ERR("Sending error: {}", err);
         }
