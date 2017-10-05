@@ -36,12 +36,12 @@ using std::chrono::nanoseconds;
 using std::chrono::microseconds;
 using namespace std::chrono_literals;
 
-// #define ENABLE_STACK_SENTINEL
+// #define ENABLE_TIMED_FUNC(timerObj)
 
 namespace {
 inline void logScheduleFailure(const Resources &usage, const ResourceMonitor &resMon)
 {
-    STACK_SENTINEL;
+    TIMED_FUNC(timerObj);
 
     UNUSED(usage);
     UNUSED(resMon);
@@ -57,7 +57,7 @@ inline void logScheduleFailure(const Resources &usage, const ResourceMonitor &re
 ExecutionEngine &ExecutionEngine::instance()
 {
     static ExecutionEngine eng;
-    STACK_SENTINEL;
+    TIMED_FUNC(timerObj);
     return eng;
 }
 
@@ -70,14 +70,14 @@ ExecutionEngine::ExecutionEngine()
                                                            // is not connected to any event dispatcher
                                                            q::make_shared<q::queue>(0)))
 {
-    STACK_SENTINEL;
+    TIMED_FUNC(timerObj);
     // Start scheduling thread
     m_schedThread = std::make_unique<std::thread>(std::bind(&ExecutionEngine::scheduleLoop, this));
 }
 
 ExecutionEngine::~ExecutionEngine()
 {
-    STACK_SENTINEL;
+    TIMED_FUNC(timerObj);
     // stop scheduling thread
     m_shouldExit = true;
     m_schedThread->join();
@@ -91,7 +91,7 @@ ExecutionEngine::~ExecutionEngine()
 namespace {
 bool useGPU()
 {
-    STACK_SENTINEL;
+    TIMED_FUNC(timerObj);
     auto use = utils::fromEnvVar("EXEC_SCHED_USE_GPU", true);
     INFO("Scheduling using: {}", use ? "GPU,CPU" : "CPU");
     return use;
@@ -101,13 +101,13 @@ bool useGPU()
 
 bool ExecutionEngine::schedule(ITask *t)
 {
-    STACK_SENTINEL;
+    TIMED_FUNC(timerObj);
     return trySchedule(t, DeviceType::CPU);
 }
 
 bool ExecutionEngine::trySchedule(ITask *t, const DeviceSpec &dev)
 {
-    STACK_SENTINEL;
+    TIMED_FUNC(timerObj);
     auto expectedDev = dev;
     if (t->prepare(expectedDev)) {
         return true;
@@ -122,7 +122,7 @@ bool ExecutionEngine::trySchedule(ITask *t, const DeviceSpec &dev)
 
 ExecutionEngine::Inserter ExecutionEngine::registerSession(const std::string &sessHandle)
 {
-    STACK_SENTINEL;
+    TIMED_FUNC(timerObj);
 
     auto item = std::make_shared<SessionItem>(sessHandle);
     insertSession(item);
@@ -132,7 +132,7 @@ ExecutionEngine::Inserter ExecutionEngine::registerSession(const std::string &se
 
 void ExecutionEngine::insertSession(std::shared_ptr<SessionItem> item)
 {
-    STACK_SENTINEL;
+    TIMED_FUNC(timerObj);
     {
         std::lock_guard<std::mutex> g(m_newMu);
         m_newSessions.emplace_back(std::move(item));
@@ -142,7 +142,7 @@ void ExecutionEngine::insertSession(std::shared_ptr<SessionItem> item)
 
 void ExecutionEngine::deleteSession(std::shared_ptr<SessionItem> item)
 {
-    STACK_SENTINEL;
+    TIMED_FUNC(timerObj);
     {
         std::lock_guard<std::mutex> g(m_delMu);
         m_deletedSessions.emplace(std::move(item));
@@ -152,27 +152,27 @@ void ExecutionEngine::deleteSession(std::shared_ptr<SessionItem> item)
 
 std::future<void> ExecutionEngine::InserterImpl::enqueueOperation(std::unique_ptr<OperationTask> &&task)
 {
-    STACK_SENTINEL;
+    TIMED_FUNC(timerObj);
     auto opItem = std::make_shared<OperationItem>();
     opItem->op = std::move(task);
 
     m_engine.pushToSessionQueue(m_item, opItem);
 
-    assert(opItem);
+    DCHECK(opItem);
 
     return opItem->promise.get_future();
 }
 
 void ExecutionEngine::InserterImpl::registerPagingCallbacks(PagingCallbacks &&pcb)
 {
-    STACK_SENTINEL;
+    TIMED_FUNC(timerObj);
 
     m_item->pagingCb = std::move(pcb);
 }
 
 void ExecutionEngine::pushToSessionQueue(std::shared_ptr<SessionItem> item, std::shared_ptr<OperationItem> opItem)
 {
-    STACK_SENTINEL;
+    TIMED_FUNC(timerObj);
     {
         utils::Guard g(item->mu);
         item->queue.push_back(opItem);
@@ -182,14 +182,14 @@ void ExecutionEngine::pushToSessionQueue(std::shared_ptr<SessionItem> item, std:
 
 ExecutionEngine::InserterImpl::~InserterImpl()
 {
-    STACK_SENTINEL;
+    TIMED_FUNC(timerObj);
     if (m_item)
         m_engine.deleteSession(m_item);
 }
 
 bool ExecutionEngine::shouldWaitForAWhile(size_t scheduled, nanoseconds &ns)
 {
-    STACK_SENTINEL;
+    TIMED_FUNC(timerObj);
     static auto last = steady_clock::now();
     static auto sleep = 10ms;
 
@@ -214,15 +214,15 @@ bool ExecutionEngine::shouldWaitForAWhile(size_t scheduled, nanoseconds &ns)
 
 void ExecutionEngine::scheduleLoop()
 {
-    STACK_SENTINEL;
+    TIMED_FUNC(timerObj);
     m_resMonitor.initializeLimits();
 
     m_runningTasks = 0;
     m_noPagingRunningTasks = 0;
 
     while (!m_shouldExit) {
-        STACK_SENTINEL;
-        VLOG(3) << "Scheduler loop";
+        TIMED_FUNC(timerObj);
+        TIMED_SCOPE(schedIterObj, "sched-iter");
 
         int sessionsChanged = 0;
         // Fisrt check if there's any pending deletions
@@ -234,7 +234,7 @@ void ExecutionEngine::scheduleLoop()
 
             using std::swap;
             swap(del, m_deletedSessions);
-            assert(m_deletedSessions.size() == 0);
+            DCHECK(m_deletedSessions.size() == 0);
         }
 
         // Append any new sessions
@@ -244,7 +244,7 @@ void ExecutionEngine::scheduleLoop()
             sessionsChanged += m_newSessions.size();
 
             m_sessions.splice(m_sessions.end(), m_newSessions);
-            assert(m_newSessions.size() == 0);
+            DCHECK(m_newSessions.size() == 0);
         }
 
         // Snapshot resource usage counter first, or reset them
@@ -254,10 +254,10 @@ void ExecutionEngine::scheduleLoop()
             auto &item = *it;
             if (del.erase(item) > 0) {
                 VLOG(2) << "Deleting session " << item->sessHandle << "@" << as_hex(item);
-                assert(item.use_count() == 1);
+                DCHECK(item.use_count() == 1);
                 // The deletion of session's executor is async to this thread.
                 // So it's legit for tickets to be nonempt
-                // assert(item->tickets.empty());
+                // DCHECK(item->tickets.empty());
                 it = m_sessions.erase(it);
             } else {
                 if (sessionsChanged == 0) {
@@ -268,6 +268,8 @@ void ExecutionEngine::scheduleLoop()
                 ++it;
             }
         }
+
+        PERFORMANCE_CHECKPOINT_WITH_ID(schedIterObj, "after-snapshot");
 
         // Sort sessions if needed. We assume m_sessions.size() is always less than 10,
         // therefore sorting in every iteration is acceptable.
@@ -296,14 +298,15 @@ void ExecutionEngine::scheduleLoop()
             remainingCount -= count;
         }
 
+        PERFORMANCE_CHECKPOINT_WITH_ID(schedIterObj, "after-schedule");
+
         // Update conditions and check if we need paging
         bool noProgress = remainingCount > 0 && scheduled == 0;
         int64_t running_tasks = m_noPagingRunningTasks;
         bool needPaging = (noProgress && running_tasks == 0);
         if (needPaging) {
-            DEBUG("Paging begin");
+            TIMED_SCOPE(pagingObj, "paging");
             doPaging();
-            DEBUG("Paging end");
             continue;
         }
 
@@ -327,14 +330,14 @@ void ExecutionEngine::scheduleLoop()
 
 ExecutionEngine::SessionItem::~SessionItem()
 {
-    STACK_SENTINEL;
+    TIMED_FUNC(timerObj);
     bgQueue.clear();
     queue.clear();
 }
 
 bool ExecutionEngine::maybePreAllocateFor(SessionItem &item, OperationItem &opItem, const DeviceSpec &spec)
 {
-    STACK_SENTINEL;
+    TIMED_FUNC(timerObj);
 
     auto usage = opItem.op->estimatedUsage(spec);
 
@@ -356,7 +359,8 @@ bool ExecutionEngine::maybePreAllocateFor(SessionItem &item, OperationItem &opIt
 
 size_t ExecutionEngine::maybeScheduleFrom(std::shared_ptr<SessionItem> item)
 {
-    STACK_SENTINEL;
+    TIMED_FUNC(timerObj);
+
     auto &queue = item->bgQueue;
 
     auto size = queue.size();
@@ -369,8 +373,9 @@ size_t ExecutionEngine::maybeScheduleFrom(std::shared_ptr<SessionItem> item)
 
     // Try schedule the operation
     auto doSchedule = [this](std::shared_ptr<SessionItem> item, std::shared_ptr<OperationItem> &&opItem) {
-        STACK_SENTINEL;
+        TIMED_FUNC(timerObj);
         VLOG(2) << "Scheduling opItem in session " << item->sessHandle << ": " << opItem->op->DebugString();
+        TIMED_FUNC(timerInnerObj);
 
         bool scheduled = false;
         DeviceSpec spec;
@@ -396,11 +401,11 @@ size_t ExecutionEngine::maybeScheduleFrom(std::shared_ptr<SessionItem> item)
 
             DEBUG("Adding to thread pool: opItem in session {}: {}", item->sessHandle, opItem->op->DebugString());
             q::with(m_qec->queue(), std::move(opItem)).then([item, this](std::shared_ptr<OperationItem> &&opItem){
-                STACK_SENTINEL;
+                TIMED_FUNC(timerObj);
                 OperationTask::Callbacks cbs;
 
-                assert(item);
-                assert(opItem);
+                DCHECK(item);
+                DCHECK(opItem);
 
                 cbs.launched = [opItem]() {
                     opItem->promise.set_value();
@@ -434,7 +439,7 @@ size_t ExecutionEngine::maybeScheduleFrom(std::shared_ptr<SessionItem> item)
         promises.emplace_back(std::move(p));
     }
 
-    assert(queue.empty());
+    DCHECK(queue.empty());
     VLOG(2) << "All opItem in session " << item->sessHandle << " exaimed";
 
     auto it = std::back_inserter(queue);
@@ -557,7 +562,7 @@ void ExecutionEngine::doPaging()
 
             DEBUG("    request to page out ticket {} of usage {}", victim, usage);
             // request the session to do paging
-            assert(sess.pagingCb);
+            DCHECK(sess.pagingCb);
             auto released = sess.pagingCb.volunteer(victim, std::move(rctx));
             if (released > 0) {
                 // someone freed some memory on GPU, we are good to go.
@@ -658,7 +663,7 @@ void ResourceContext::deallocMemory(size_t num_bytes) const
 
 void ResourceContext::OperationScope::rollback()
 {
-    assert(valid);
+    DCHECK(valid);
     proxy.free(ticket, res);
     // no need to call removeTicketFromSession
     // because this most likely will not be the last deallocation

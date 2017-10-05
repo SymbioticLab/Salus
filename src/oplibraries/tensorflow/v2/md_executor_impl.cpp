@@ -229,6 +229,8 @@ void ExecutorState::fetchRecvShape(const tf::Node *n)
 
 void ExecutorState::addNodeToRefiner(const TaggedNode &tn)
 {
+    TIMED_FUNC(timerObj);
+
     tf::mutex_lock l(refinerMu_);
     auto node = tn.node;
 
@@ -276,6 +278,8 @@ void ExecutorState::addNodeToRefiner(const TaggedNode &tn)
 
 size_t ExecutorImpl::handlePagingRequest(uint64_t oldTicket, std::unique_ptr<ResourceContext> &&rctx)
 {
+    TIMED_FUNC(timerObj);
+
     // There may be multiple tensor entries that uses this ticket,
     // and potentially share the storage.
     // We want to move one complete set of tensors that are sharing buffer.
@@ -365,12 +369,16 @@ void ExecutorImpl::forceEvicted(uint64_t ticket, void *addr)
 
 std::unique_ptr<PerOpAllocDevice> ExecutorImpl::CreatePerOpAllocDevice(tf::Device *dev)
 {
+    TIMED_FUNC(timerObj);
+
     // TODO: impliment a free list
     return std::make_unique<PerOpAllocDevice>(dev);
 }
 
 tf::Status ExecutorImpl::LookupDevice(const DeviceSpec &spec, DeviceItem *item)
 {
+    TIMED_FUNC(timerObj);
+
     std::string name;
     switch (spec.type) {
     case DeviceType::CPU:
@@ -406,6 +414,8 @@ tf::Status ExecutorImpl::LookupDevice(const DeviceSpec &spec, DeviceItem *item)
  */
 void ExecutorImpl::updateBufferTree(Entry *entry, uint64_t ticket)
 {
+    TIMED_FUNC(timerObj);
+
     DCHECK(entry);
     DCHECK(entry->has_value);
 
@@ -454,6 +464,8 @@ void ExecutorImpl::updateBufferTree(Entry *entry, uint64_t ticket)
 void ExecutorImpl::removeFromBufferTree(const Entry *entry, EntryVec *needUpdate,
                                         bool includeOtherRef)
 {
+    TIMED_FUNC(timerObj);
+
     auto matchRefs = [needUpdate, entry, includeOtherRef] (auto e) {
         if (e == entry || (includeOtherRef && e->ref == entry->ref)) {
             e->alloc_tree = nullptr;

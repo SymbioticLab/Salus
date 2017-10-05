@@ -132,8 +132,8 @@ void printConfiguration(std::map<std::string, docopt::value> &args)
 #else
     LOG(INFO) << "Running in Debug mode";
 #endif
-    LOG(INFO) << "Verbose logging level:" << el::Loggers::verboseLevel()
-              << "file:" << args[kVLogFileFlag].asString();
+    LOG(INFO) << "Verbose logging level: " << el::Loggers::verboseLevel()
+              << " file:" << args[kVLogFileFlag].asString();
 }
 
 int main(int argc, char **argv)
@@ -147,7 +147,7 @@ int main(int argc, char **argv)
     ZmqServer server(make_unique<RpcServerCore>());
 
     const auto &listen = args[kListenFlag].asString();
-    LOG(INFO) << "Starting server listening at" << listen;
+    LOG(INFO) << "Starting server listening at " << listen;
     server.start(listen);
 
     server.join();
