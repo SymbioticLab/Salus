@@ -34,15 +34,18 @@ Options:
     -h, --help                  Print this help message and exit.
     -V, --version               Print version and exit.
     -l <endpoint>, --listen=<endpoint>
-                                ZeroMQ endpoint to listen on.
+                                Listen on ZeroMQ endpoint <endpoint>.
                                 [default: tcp://*:5501]
-    -v, --verbose=<verbosity>   Set verbosity level. Valid range: 0-9.
+    -v <level>, --verbose=<level>
+                                Enable verbose logging level <level>.
+                                Valid range: 0-9. (0 means disable)
                                 [default: 0]
     --vmodule=<vmodules>        Specify verbose level per module.
+                                Refer to https://github.com/muflihun/easyloggingpp#vmodule
                                 [default: ]
-    --vlogfile=<path>           Log file to use for verbose logging.
+    --vlogfile=<file>           Verbose logging goes to <file>
                                 [default: verbose.log]
-    --perflog=<path>            Enable performance logging and log to <path>.
+    --perflog=<file>            Enable performance logging and log to <file>.
 )"s;
 
 static auto VERSION = R"(<program-name> version 0.1)"s;

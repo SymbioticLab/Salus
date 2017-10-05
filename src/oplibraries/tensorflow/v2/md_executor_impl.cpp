@@ -214,7 +214,7 @@ void ExecutorState::fetchRecvShape(const tf::Node *n)
     }
 
     auto zr = static_cast<tf::ZrpcRemoteRendezvous*>(rendezvous_);
-    assert(zr);
+    DCHECK_NOTNULL(zr);
 
     auto key = rendezKey(n, 0, 0);
 
@@ -234,7 +234,7 @@ void ExecutorState::addNodeToRefiner(const TaggedNode &tn)
 
     auto ok = refiner_.AddNode(node);
     if (!ok.ok()) {
-        ERR("Error when adding node {} to shape refiner: {}", node->name(), ok);
+        VLOG(3) << "Error when adding node " << node->name() << " to shape refiner: " << ok;
     }
 
     // Special handling for some nodes
@@ -243,8 +243,8 @@ void ExecutorState::addNodeToRefiner(const TaggedNode &tn)
         auto e = *node->in_edges().begin();
         auto ctx = refiner_.GetContext(e->src());
         if (!ctx) {
-            ERR("Input '{}' for '{}' was not previously added to ShapeRefiner.",
-                e->src()->name(), node->name());
+            VLOG(3) << "Input '" << e->src()->name() << "' for '"
+                    << node->name() << "' was not previously added to ShapeRefiner.";
             return;
         }
         auto key = rendezKey(tn.node, tn.input_frame->frame_id, tn.input_iter);
@@ -253,8 +253,7 @@ void ExecutorState::addNodeToRefiner(const TaggedNode &tn)
         auto key = rendezKey(tn.node, tn.input_frame->frame_id, tn.input_iter);
         auto it = sendShapes_.find(key);
         if (it == sendShapes_.end()) {
-            ERR("Send op with key '{}' for '{}' was not previously added to ShapeRefiner.",
-                key, node->name());
+            VLOG(3) << "Send op with key '" << key << "' for '" << node->name() << "' was not previously added to ShapeRefiner.";
             return;
         }
         auto &shape = it->second;
@@ -289,38 +288,39 @@ size_t ExecutorImpl::handlePagingRequest(uint64_t oldTicket, std::unique_ptr<Res
     // guard after decl of parts, because we need to use it.
     utils::ScopeGuards sg;
     sg += [&totalReleased]() {
-        DEBUG("Paging released {} bytes of memory", totalReleased);
+        VLOG(2) << "Paging released " << totalReleased << " bytes of memory";
     };
 
     {
-        utils::Guard g(entry_mu_);
+        utils::TGuard g(entry_mu_, "PagingStart");
         auto range = active_buffers_.equal_range(oldTicket);
         if (range.first == range.second) {
-            ERR("Requested ticket for paging not found: {}", oldTicket);
+            LOG(ERROR) << "Requested ticket for paging not found: " << oldTicket;
             return 0;
         }
         for (auto it = range.first; it != range.second; ++it) {
-            assert(it->second);
+            DCHECK(it->second);
             if (it->second->root_buf == nullptr || it->second->paged_out) continue;
 
             reflocks.insert(&it->second->buf_mu);
             parts.push_back(it->second);
 
-            DEBUG("Removing entry {} of ticket {} due to paging", as_hex(it->second), oldTicket);
+            VLOG(2) << "Removing entry " << as_hex(it->second)
+                    << " of ticket " << oldTicket << " due to paging";
         }
     }
 
     // Add back to active entries with updated value when exit
     sg += [this, &parts, oldTicket]() {
-        utils::Guard g(entry_mu_);
+        utils::TGuard g(entry_mu_, "PagingEnd");
         for (auto part : parts) {
-            DEBUG("Adding buffer tree of ticket {} (was {}) due to paging", part->ticket, oldTicket);
+            VLOG(2) << "Adding buffer tree of ticket " << part->ticket << " (was " << oldTicket << ") due to paging";
             active_buffers_.emplace(part->ticket, part);
         }
     };
 
     if (parts.empty()) {
-        WARN("No tensor available for paging");
+        LOG(WARNING) << "No tensor available for paging";
         return totalReleased;
     }
 
@@ -328,7 +328,7 @@ size_t ExecutorImpl::handlePagingRequest(uint64_t oldTicket, std::unique_ptr<Res
     DeviceItem item;
     auto ok = LookupDevice(rctx->spec(), &item);
     if (!ok.ok()) {
-        ERR("Error when looking up device for paging: {}", ok);
+        LOG(ERROR) << "Error when looking up device for paging: " << ok;
         return totalReleased;
     }
     item.device->setResourceContext(std::move(rctx));
@@ -341,8 +341,8 @@ size_t ExecutorImpl::handlePagingRequest(uint64_t oldTicket, std::unique_ptr<Res
     }
 
     for (auto &part : parts) {
-        assert(!part->paged_out);
-        assert(part->root_buf);
+        DCHECK(!part->paged_out);
+        DCHECK_NOTNULL(part->root_buf);
 
         auto size = part->root_buf->size();
         if (moveTensorTree(*part, item.device)) {
@@ -388,7 +388,7 @@ tf::Status ExecutorImpl::LookupDevice(const DeviceSpec &spec, DeviceItem *item)
     tf::Device *tfdev;
     auto ok = params_.deviceMgr->LookupDevice(name, &tfdev);
     if (!ok.ok()) {
-        ERR("Cannot find device for {}: {}", spec, ok);
+        LOG(ERROR) << "Cannot find device for " << spec << ": " << ok;
         return ok;
     }
     item->device = CreatePerOpAllocDevice(tfdev);
@@ -406,18 +406,18 @@ tf::Status ExecutorImpl::LookupDevice(const DeviceSpec &spec, DeviceItem *item)
  */
 void ExecutorImpl::updateBufferTree(Entry *entry, uint64_t ticket)
 {
-    assert(entry);
-    assert(entry->has_value);
+    DCHECK(entry);
+    DCHECK(entry->has_value);
 
     const auto buf = tf::remote::PagingHelper::bufferOf(*entry->RefOrVal());
     const auto root_buf = buf ? buf->root_buffer() : nullptr;
 
-    utils::Guard g(entry_mu_);
+    utils::TGuard g(entry_mu_, "UpdateBufferTree");
     auto &tree = entry->alloc_tree;
     if (!tree) {
         auto range = active_buffers_.equal_range(ticket);
         for (auto it = range.first; it != range.second; ++it) {
-            assert(it->second);
+            DCHECK(it->second);
             if (it->second->root_buf == root_buf) {
                 tree = it->second;
                 break;
@@ -433,9 +433,9 @@ void ExecutorImpl::updateBufferTree(Entry *entry, uint64_t ticket)
             tree->root_buf = root_buf;
         }
     }
-    assert(tree);
-    assert(tree->ticket == ticket);
-    assert(tree->root_buf == root_buf);
+    DCHECK(tree);
+    DCHECK_EQ(tree->ticket, ticket);
+    DCHECK_EQ(tree->root_buf, root_buf);
 
     if (root_buf == buf) {
         auto it = std::find(tree->roots.begin(), tree->roots.end(), entry);
@@ -463,7 +463,7 @@ void ExecutorImpl::removeFromBufferTree(const Entry *entry, EntryVec *needUpdate
         return false;
     };
 
-    utils::Guard g(entry_mu_);
+    utils::TGuard g(entry_mu_, "RemoveFromBufferTree");
 
     auto tree = entry->alloc_tree;
     tree->roots.erase(std::remove_if(tree->roots.begin(), tree->roots.end(), matchRefs));

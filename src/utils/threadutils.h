@@ -20,12 +20,15 @@
 #ifndef THREADUTILS_H
 #define THREADUTILS_H
 
+#include "platform/logging.h"
+
 #include <boost/iterator/indirect_iterator.hpp>
 #include <boost/thread/lock_algorithms.hpp>
 #include <boost/thread/lockable_traits.hpp>
 #include <boost/thread/shared_mutex.hpp>
 
 #include <condition_variable>
+#include <chrono>
 #include <iterator>
 #include <mutex>
 #include <memory>
@@ -35,6 +38,55 @@ namespace utils {
 
 using Guard = std::lock_guard<std::mutex>;
 using UGuard = std::unique_lock<std::mutex>;
+
+class TGuard
+{
+    std::chrono::steady_clock::time_point prelock;
+    UGuard g;
+    std::chrono::steady_clock::time_point locked;
+    std::chrono::steady_clock::time_point released;
+    std::string name;
+
+    TGuard(const TGuard &other) = delete;
+    TGuard &operator = (const TGuard &other) = delete;
+public:
+    explicit TGuard(std::mutex &mu, const std::string &name)
+        : prelock(std::chrono::steady_clock::now())
+        , g(mu)
+        , locked(std::chrono::steady_clock::now())
+        , name(name)
+    {
+    }
+
+    TGuard(TGuard &&other) = default;
+    TGuard &operator = (TGuard &&other) = default;
+
+    void lock()
+    {
+        prelock = std::chrono::steady_clock::now();
+        g.lock();
+        locked = std::chrono::steady_clock::now();
+    }
+
+    void unlock()
+    {
+        auto was_own = g.owns_lock();
+        g.unlock();
+        released = std::chrono::steady_clock::now();
+        // print time usage
+        if (was_own) {
+            using namespace std::chrono;
+            CLOG(INFO, "performance") << "Mutex " << as_hex(g.mutex())
+            << " usage: acquiring " << duration_cast<microseconds>(locked - prelock).count()
+            << "us, locking " << duration_cast<microseconds>(released - locked).count() << "us";
+        }
+    }
+
+    ~TGuard()
+    {
+        unlock();
+    }
+};
 
 // Catch bug where variable name is omitted, e.g. Guard (mu);
 #define Guard(x) static_assert(0, "Guard declaration missing variable name");

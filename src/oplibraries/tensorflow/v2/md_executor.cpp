@@ -497,16 +497,21 @@ tf::Status ExecutorState::PrepareInputs(const NodeItem &item, tf::OpKernel *kern
 
     // Check and bring back paged out entries
     {
+        TIMED_SCOPE(pagingCheckObj, "check paging");
         for (int i = 0; i < item.num_inputs; ++i) {
             auto entry = first_input + i;
             boost::shared_lock<boost::upgrade_mutex> ul(entry->alloc_tree->buf_mu);
             if (entry->alloc_tree->paged_out) {
                 ul.unlock();
+                PERFORMANCE_CHECKPOINT_WITH_ID(pagingCheckObj, "after read");
                 boost::unique_lock<boost::upgrade_mutex> uul(entry->alloc_tree->buf_mu);
                 if (entry->alloc_tree->paged_out) {
+                    VLOG(2) << "Paging back tree " << as_hex(entry->alloc_tree)
+                            << " of alloc ticket " << entry->alloc_tree->ticket
+                            << " for node " << kernel->name();
                     auto tree = entry->alloc_tree;
                     if (!moveTensorTree(*tree, device)) {
-                        ERR("Error when moving paged out entry back");
+                        LOG(ERROR) << "Error when moving paged out entry back";
                         return tf::errors::Internal("Error when moving paged out entry back");
                     }
                     // TODO: set paged_out early and use lockless atomic flag here
@@ -524,7 +529,11 @@ tf::Status ExecutorState::PrepareInputs(const NodeItem &item, tf::OpKernel *kern
     }
     // Lock all references, and all read/write should happen after this
     // no need for special ordering, because these are shared
-    utils::lock_shared(locks.begin(), locks.end());
+    {
+        TIMED_SCOPE(readLockObj, "lock all read");
+        utils::lock_shared(locks.begin(), locks.end());
+    }
+
     buflocks->clear();
     buflocks->reserve(locks.size());
     for (auto l : locks) {
@@ -761,7 +770,7 @@ tf::Status ExecutorState::ProcessOutputs(const NodeItem &item, tf::OpKernelConte
                     }
                 }
             }
-            assert(out->alloc_tree == nullptr);
+            DCHECK_EQ(out->alloc_tree, nullptr);
             impl_->updateBufferTree(out, ticket);
         }
         if (!val.is_ref()) {
@@ -791,13 +800,16 @@ void ExecutorState::ClearInputs(Entry *first, size_t num, BufferLockVec &buflock
 
         entry->ClearVal();
 
-        DEBUG("Removing entry {} of ticket {} due to clearinputs", as_hex(entry), entry->alloc_tree->ticket);
+        VLOG(2) << "Removing entry " << as_hex(entry)
+                << " of ticket " << entry->alloc_tree->ticket << " due to clearinputs";
         if (removeTree) {
-            utils::Guard g(impl_->entry_mu_);
+            utils::TGuard g(impl_->entry_mu_, "ClearInputs");
             auto range = impl_->active_buffers_.equal_range(entry->alloc_tree->ticket);
             for (auto it = range.first; it != range.second; ++it) {
-                impl_->active_buffers_.erase(it);
-                break;
+                if (it->second == entry->alloc_tree) {
+                    impl_->active_buffers_.erase(it);
+                    break;
+                }
             }
             // alloc_tree will auto unlink from it's container buffer_trees_
             delete entry->alloc_tree;
