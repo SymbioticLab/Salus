@@ -651,8 +651,9 @@ tf::Status ExecutorState::PrepareInputs(const NodeItem &item, tf::OpKernel *kern
             impl_->removeFromBufferTree(entry, &needUpdate);
             for (auto &e : needUpdate) {
                 impl_->updateBufferTree(entry, device->resourceContext().ticket());
-                DEBUG("Update entry {} from ticket {} to {} due to devcopy",
-                      as_hex(e), oldTicket, device->resourceContext().ticket());
+                VLOG(2) << "Update entry " << as_hex(e)
+                        << " from ticket " << oldTicket
+                        << " to " << device->resourceContext().ticket() << " due to devcopy";
             }
         }
 
@@ -776,7 +777,7 @@ tf::Status ExecutorState::ProcessOutputs(const NodeItem &item, tf::OpKernelConte
                 if (alloc) {
                     ticket = alloc->resourceContext().ticket();
                     if (val.is_ref()) {
-                        DEBUG("{}: Buffer {} refIsOne {}", alloc->resourceContext(), as_hex(buf), buf->RefCountIsOne());
+                        VLOG(3) << alloc->resourceContext() << ": Buffer " << as_hex(buf) << " refIsOne " << buf->RefCountIsOne();
                     }
                 }
             }
@@ -1424,8 +1425,8 @@ void ExecutorState::FrameState::ActivateNodes(const NodeItem *item, const bool i
             }
 
             if (input_tensors[dst_loc].has_value) {
-                DEBUG("Adding entry {} of ticket {} due to actvation", as_hex(&input_tensors[dst_loc]),
-                      input_tensors[dst_loc].alloc_tree->ticket);
+                VLOG(2) << "Adding entry " << as_hex(&input_tensors[dst_loc])
+                        << " of ticket " << input_tensors[dst_loc].alloc_tree->ticket << " due to actvation";
                 executor->updateBufferTree(&input_tensors[dst_loc],
                                         input_tensors[dst_loc].alloc_tree->ticket);
             }

@@ -51,19 +51,19 @@ ZmqServer::~ZmqServer()
 void ZmqServer::start(const std::string& address)
 {
     if (m_keepRunning) {
-        ERR("ZmqServer already started.");
+        LOG(ERROR) << "ZmqServer already started.";
         return;
     }
 
     try {
-        INFO("Binding frontend socket to address: {}", address);
+        LOG(INFO) << "Binding frontend socket to address: " << address;
         m_frontend_sock.bind(address);
 
         auto baddr = "inproc://backend";
-        DEBUG("Binding backend socket to address: {}", baddr);
+        VLOG(1) << "Binding backend socket to address: " << baddr;
         m_backend_sock.bind(baddr);
     } catch (zmq::error_t &err) {
-        FATAL("Error while binding sockets: {}", err);
+        LOG(FATAL) << "Error while binding sockets: " << err;
         // re-throw to stop the process
         throw;
     }
@@ -88,7 +88,7 @@ bool ZmqServer::pollWithCheck(const std::vector<zmq::pollitem_t> &items, long ti
             m_keepRunning = false;
             return false;
         default:
-            ERR("Exiting serving due to error while polling: {}", err);
+            LOG(ERROR) << "Exiting serving due to error while polling: " << err;
             m_keepRunning = false;
             return false;
         }
@@ -198,14 +198,14 @@ void ZmqServer::dispatch(zmq::socket_t &sock)
             VLOG(2) << "Received identity frame " << (identities->size() - 1) << ": " << identities->back();
         }
         if (!sock.getsockopt<int64_t>(ZMQ_RCVMORE)) {
-            ERR("Skipped one iteration due to no body message part found after identity frames");
+            LOG(ERROR) << "Skipped one iteration due to no body message part found after identity frames";
             return;
         }
         // Now receive our message
         sock.recv(&evenlop);
         VLOG(2) << "Received evenlop frame: " << evenlop;
         if (!sock.getsockopt<int64_t>(ZMQ_RCVMORE)) {
-            ERR("Skipped one iteration due to no body message part found after identity frames");
+            LOG(ERROR) << "Skipped one iteration due to no body message part found after identity frames";
             return;
         }
         // TODO: handle multi-part body, which is used by RecvTensorResponse
@@ -213,16 +213,16 @@ void ZmqServer::dispatch(zmq::socket_t &sock)
         sock.recv(&body);
         VLOG(2) << "Received body frame: " << body;
     } catch (zmq::error_t &err) {
-        ERR("Skipped one iteration due to error while receiving: {}", err);
+        LOG(ERROR) << "Skipped one iteration due to error while receiving: " << err;
         return;
     }
     auto pEvenlop = utils::createMessage<executor::EvenlopDef>("executor.EvenlopDef",
                                                                evenlop.data(), evenlop.size());
     if (!pEvenlop) {
-        ERR("Skipped one iteration due to malformatted request evenlop received.");
+        LOG(ERROR) << "Skipped one iteration due to malformatted request evenlop received.";
         return;
     }
-    DEBUG("Received request evenlop: {}", *pEvenlop);
+    VLOG(1) << "Received request evenlop: " << *pEvenlop;
 
     // step 1. replace the first frame in identity with the requested identity and make a sender
     if (!pEvenlop->recvidentity().empty()) {
@@ -233,10 +233,10 @@ void ZmqServer::dispatch(zmq::socket_t &sock)
     // step 2. create request object
     auto pRequest = utils::createMessage(pEvenlop->type(), body.data(), body.size());
     if (!pRequest) {
-        ERR("Skipped one iteration due to malformatted request received.");
+        LOG(ERROR) << "Skipped one iteration due to malformatted request received.";
         return;
     }
-    DEBUG("Received request body byte array size {}", body.size());
+    VLOG(1) << "Received request body byte array size " << body.size();
 
     // step 3. dispatch
     auto f = m_pLogic->dispatch(sender, *pEvenlop, *pRequest)
@@ -247,7 +247,7 @@ void ZmqServer::dispatch(zmq::socket_t &sock)
             sender->sendMessage(std::move(pResponse));
         }
     }).fail([](std::exception_ptr e){
-        ERR("Caught exception in logic dispatch: {}", e);
+        LOG(ERROR) << "Caught exception in logic dispatch: " << e;
     });
 }
 
@@ -278,7 +278,7 @@ void ZmqServer::SenderImpl::sendMessage(const std::string &typeName, MultiPartMe
     evenlop.SerializeToArray(parts->back().data(), parts->back().size());
 
     // step 4.2. append actual message
-    DEBUG("Response proto object have size {} with evenlop {}", msg.totalSize(), evenlop);
+    VLOG(1) << "Response proto object have size " << msg.totalSize() << " with evenlop " << evenlop;
     parts.merge(std::move(msg));
 
     m_server.sendMessage(std::move(parts));
@@ -298,7 +298,7 @@ void ZmqServer::sendLoop()
 {
     zmq::socket_t sock(m_zmqCtx, zmq::socket_type::pair);
     sock.connect(m_baddr);
-    INFO("Sending loop started");
+    VLOG(2) << "Sending loop started";
 
     while (m_keepRunning) {
         SendItem item;
@@ -316,7 +316,7 @@ void ZmqServer::sendLoop()
             sock.send(parts->back());
             VLOG(2) << "Response sent on internal socket";
         } catch (zmq::error_t &err) {
-            ERR("Sending error: {}", err);
+            LOG(ERROR) << "Sending error: " << err;
         }
     }
 }
@@ -327,7 +327,7 @@ void ZmqServer::requestStop()
         return;
     }
 
-    INFO("Stopping ZMQ context");
+    VLOG(2) << "Stopping ZMQ context";
     m_keepRunning = false;
     m_zmqCtx.close();
 }

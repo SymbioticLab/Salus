@@ -40,8 +40,10 @@ LogCapture::~LogCapture() {
    SIGNAL_HANDLER_VERIFY();
    //saveMessage(_stream.str().c_str(), _file, _line, _function, _level, _expression, _fatal_signal, _stack_trace.c_str());
    if (dumpStack) {
-      FATAL("Fatal signal ({}) caught at {}:{} {}\n{}\n{}\n\n{}",
-            _fatal_signal, _file, _line, _function, _expression,  _stream.str(), _stack_trace.c_str());
+      LOG(FATAL) << "Fatal signal (" << _fatal_signal << ") caught at "
+                 << _file << ":" << _line << " " << _function << "\n"
+                 << _expression << "\n" << _stream.str() << "\n\n"
+                 << _stack_trace.c_str();
    }
 
    logging::logger()->flush();

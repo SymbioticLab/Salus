@@ -50,8 +50,9 @@ void OpLibraryRegistary::registerOpLibrary(executor::OpLibraryType libraryType,
         if (iter->second.priority < priority) {
             iter->second = {std::move(library), priority};
         } else if (iter->second.priority == priority) {
-            FATAL("Duplicate registration of device factory for type {} with the same priority {}",
-                  executor::OpLibraryType_Name(libraryType), priority);
+            LOG(FATAL) << "Duplicate registration of device factory for type "
+                       << executor::OpLibraryType_Name(libraryType)
+                       << " with the same priority " << priority;
         }
     }
 }

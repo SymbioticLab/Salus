@@ -47,8 +47,8 @@ inline void logScheduleFailure(const Resources &usage, const ResourceMonitor &re
     UNUSED(resMon);
 
 #ifndef NDEBUG
-    DEBUG("Try to allocate resource failed. Requested: {}", resources::DebugString(usage));
-    DEBUG("Available: {}", resMon.DebugString());
+    VLOG(1) << "Try to allocate resource failed. Requested: " << resources::DebugString(usage);
+    VLOG(1) << "Available: " << resMon.DebugString();
 #endif
 }
 
@@ -399,7 +399,8 @@ size_t ExecutionEngine::maybeScheduleFrom(std::shared_ptr<SessionItem> item)
             }
             opItem->tScheduled = steady_clock::now();
 
-            DEBUG("Adding to thread pool: opItem in session {}: {}", item->sessHandle, opItem->op->DebugString());
+            VLOG(2) << "Adding to thread pool: opItem in session " << item->sessHandle
+                    << ": " << opItem->op->DebugString();
             q::with(m_qec->queue(), std::move(opItem)).then([item, this](std::shared_ptr<OperationItem> &&opItem){
                 TIMED_FUNC(timerObj);
                 OperationTask::Callbacks cbs;
@@ -525,10 +526,12 @@ void ExecutionEngine::doPaging()
         return;
     }
 
-    for (size_t i = 0; i != candidates.size(); ++i) {
-        auto usage = candidates[i].first;
-        SessionItem &sess = candidates[i].second;
-        DEBUG("Session {} usage: {}", sess.sessHandle, usage);
+    if (VLOG_IS_ON(2)) {
+        for (size_t i = 0; i != candidates.size(); ++i) {
+            auto usage = candidates[i].first;
+            SessionItem &sess = candidates[i].second;
+            VLOG(2) << "Session " << sess.sessHandle << " usage: " << usage;
+        }
     }
 
     // Step 2: inform owner to do paging given suggestion
@@ -544,7 +547,7 @@ void ExecutionEngine::doPaging()
             victims = m_resMonitor.sortVictim(sess.tickets);
         }
 
-        DEBUG("Visiting session: {}", sess.sessHandle);
+        VLOG(2) << "Visiting session: " << sess.sessHandle;
 
         for (auto &p : victims) {
             auto usage = p.first;
@@ -560,16 +563,16 @@ void ExecutionEngine::doPaging()
                 return;
             }
 
-            DEBUG("    request to page out ticket {} of usage {}", victim, usage);
+            VLOG(2) << "    request to page out ticket " << victim << " of usage " << usage;
             // request the session to do paging
             DCHECK(sess.pagingCb);
             auto released = sess.pagingCb.volunteer(victim, std::move(rctx));
             if (released > 0) {
                 // someone freed some memory on GPU, we are good to go.
-                DEBUG("    released {} bytes via paging", released);
+                VLOG(2) << "    released " << released << " bytes via paging";
                 return;
             }
-            DEBUG("    failed");
+            VLOG(2) << "    failed";
         }
         // continue to next session
     }
@@ -629,7 +632,7 @@ void ResourceContext::removeTicketFromSession() const
 {
     // last resource freed
     utils::Guard g(session.tickets_mu);
-    DEBUG("Removing ticket {} from session {}", m_ticket, session.sessHandle);
+    VLOG(2) << "Removing ticket " << m_ticket << " from session " << session.sessHandle;
     session.tickets.erase(m_ticket);
 }
 

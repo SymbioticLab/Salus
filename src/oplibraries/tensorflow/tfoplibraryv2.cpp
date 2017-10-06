@@ -64,13 +64,13 @@ TFOpLibraryV2::TFOpLibraryV2()
 //     config.mutable_gpu_options()->set_per_process_gpu_memory_fraction(0.00001);
     auto s = m_proxy->globalInit(config);
     if (!s.ok()) {
-        ERR("Failed to initialize proxy object: {}", s);
+        LOG(ERROR) << "Failed to initialize proxy object: " << s;
     }
 }
 
 TFOpLibraryV2::~TFOpLibraryV2()
 {
-    INFO("Max open sessions: {}", m_maxOpenSessions);
+    VLOG(2) << "Max open sessions: " << m_maxOpenSessions;
 }
 
 bool TFOpLibraryV2::accepts(const zrpc::OpKernelDef &operation)
@@ -117,7 +117,7 @@ PTask TFOpLibraryV2::createCustomTask(ZmqServer::Sender sender, const zrpc::Even
              utils::createMessage<tensorflow::name##Request>("tensorflow." #name "Request",                  \
                                                              creq.extra().data(), creq.extra().size());      \
          if (!req) {                                                                                         \
-             ERR("Failed to parse message");                                                                 \
+             LOG(ERROR) << "Failed to parse message";                                                                 \
              cb(nullptr);                                                                                    \
              return;                                                                                         \
          }                                                                                                   \
@@ -154,7 +154,7 @@ PTask TFOpLibraryV2::createCustomTask(ZmqServer::Sender sender, const zrpc::Even
                                                                            creq.extra().data(),
                                                                            creq.extra().size());
             if (!req) {
-                ERR("Failed to parse message");
+                LOG(ERROR) << "Failed to parse message";
                 cb(nullptr);
                 return;
             }
@@ -180,11 +180,11 @@ PTask TFOpLibraryV2::createCustomTask(ZmqServer::Sender sender, const zrpc::Even
 
     auto it = funcs.find(req.type());
     if (it == funcs.end()) {
-        ERR("{} not found in registered custom tasks", req.type());
+        LOG(ERROR) << req.type() << " not found in registered custom tasks";
         return nullptr;
     }
 
-    DEBUG("Dispatching custom task {} of seq {}", it->first, evenlop.seq());
+    VLOG(1) << "Dispatching custom task " << it->first << " of seq " << evenlop.seq();
     return make_async_lambda_task([sender = std::move(sender), recvId, req, it](auto cb) mutable {
         it->second(std::move(sender), recvId, req, cb);
     });
@@ -195,7 +195,7 @@ std::unique_ptr<TFOpLibraryV2::Proxy> TFOpLibraryV2::createProxy()
     std::unique_ptr<TFOpLibraryV2::Proxy> p;
     auto s = m_proxy->newSession(p);
     if (!s.ok()) {
-        ERR("Failed to create a proxy object: {}", s);
+        LOG(ERROR) << "Failed to create a proxy object: " << s;
     }
     return p;
 }
@@ -209,7 +209,7 @@ TFOpLibraryV2::Proxy *TFOpLibraryV2::getProxy(const std::string &sessHandle)
             // special case for a default session proxy to handle requests without session_handle
             p = createProxy();
         } else {
-            ERR("Failed to find a proxy object for session {}", sessHandle);
+            LOG(ERROR) << "Failed to find a proxy object for session " << sessHandle;
         }
     }
     return p.get();
@@ -259,7 +259,7 @@ void TFOpLibraryV2::handleCreateSession(const std::string &recvId, const executo
         utils::createMessage<tensorflow::CreateSessionRequest>("tensorflow.CreateSessionRequest",
                                                                creq.extra().data(), creq.extra().size());
     if (!req) {
-        ERR("Failed to parse message");
+        LOG(ERROR) << "Failed to parse message";
         cb(nullptr);
         return;
     }
@@ -294,7 +294,7 @@ void TFOpLibraryV2::handleCreateSession(const std::string &recvId, const executo
         return;
     }
 
-    INFO("Creating proxy object for recv id {}", recvId);
+    VLOG(2) << "Creating proxy object for recv id " << recvId;
     auto proxy = createProxy();
     auto preq = req.release();
     proxy->HandleCreateSession(preq,
@@ -321,7 +321,7 @@ void TFOpLibraryV2::handleCloseSession(const std::string &recvId, const executor
     auto req = utils::createMessage<tf::CloseSessionRequest>("tensorflow.CloseSessionRequest",
                                                              creq.extra().data(), creq.extra().size());
     if (!req) {
-        ERR("Failed to parse message");
+        LOG(ERROR) << "Failed to parse message";
         cb(nullptr);
         return;
     }

@@ -101,7 +101,7 @@ void initializeLogging(std::map<std::string, docopt::value> &args)
     conf.set(Level::Verbose, ConfigurationType::ToStandardOutput, "false");
     conf.set(Level::Verbose, ConfigurationType::Filename, logfile);
 
-    Loggers::reconfigureAllLoggers(conf);
+    Loggers::setDefaultConfigurations(conf, true /*configureExistingLoggers*/);
 
     Loggers::setVerboseLevel(verbosity);
     Loggers::setVModules(vmodules.c_str());
@@ -114,6 +114,11 @@ void initializeLogging(std::map<std::string, docopt::value> &args)
         perfConf.set(Level::Info, ConfigurationType::Filename, perflog.asString());
         Loggers::reconfigureLogger("performance", perfConf);
     }
+
+    // Separate allocation logger, which uses default configuration. Force to create it here
+    // in non-performance sensitive code path.
+    auto allocLogger = Loggers::getLogger("alloc");
+    DCHECK(allocLogger);
 
     // Deprecated spdlog configuration
     constexpr spdlog::level::level_enum vtol[] = {

@@ -36,11 +36,10 @@ tensorflow::Status moveTensor(Entry &entry, const std::shared_ptr<PerOpAllocDevi
             dstCtx = dev_info->default_context;
     }
 
-    INFO("Src dev context {}, dst dev context {}, "
-         "source tensor buffer addr: {}, target tensor buffer addr: {}",
-         as_hex(entry.device_context), as_hex(dstCtx),
-         as_hex(input->tensor_data().data()),
-         as_hex(copy.tensor_data().data()));
+    VLOG(2) << "Src dev context " << as_hex(entry.device_context)
+            << ", dst dev context " << as_hex(dstCtx)
+            << ", source tensor buffer addr: " << as_hex(input->tensor_data().data())
+            << ", target tensor buffer addr: " << as_hex(copy.tensor_data().data());
 
     tf::Status ok;
     tf::Notification n;
@@ -83,8 +82,8 @@ bool moveTensorTree(TensorBufferTree &tree, const std::shared_ptr<PerOpAllocDevi
     }
 
     auto oldCount = tf::remote::PagingHelper::refCountOf(*oldRoot);
-    DEBUG("    Paging visiting buffer {} (count {}) with ticket {}",
-          as_hex(oldRoot), oldCount, oldTicket);
+    VLOG(2) << "Moving tensor buffer " << as_hex(oldRoot) << " (count " << oldCount
+            << ") with ticket " << oldTicket;
 
     oldRoot->Ref();
 
@@ -95,12 +94,12 @@ bool moveTensorTree(TensorBufferTree &tree, const std::shared_ptr<PerOpAllocDevi
     for (auto entry : tree.roots) {
         if (!newRoot) {
             // only need to actually move the first in roots
-            DEBUG("    Actually move first in roots: entry {} (ref {}) with ticket {}",
-                  as_hex(entry), as_hex(entry->ref), oldTicket);
+            VLOG(3) << "    Actually move first in roots: entry " << as_hex(entry)
+                    << " (ref " << as_hex(entry->ref) << ") with ticket " << oldTicket;
             auto ok = moveTensor(*entry, dstDevice, nullptr, {},
                                  tf::strings::StrCat("Paging tensor of ticket ", oldTicket));
             if (!ok.ok()) {
-                ERR("Error when paging: {}", ok);
+                LOG(ERROR) << "Error when paging: " << ok;
                 return false;
             }
             newRoot = tf::remote::PagingHelper::bufferOf(*(entry->val.get()));
@@ -111,16 +110,16 @@ bool moveTensorTree(TensorBufferTree &tree, const std::shared_ptr<PerOpAllocDevi
             }
             continue;
         }
-        DEBUG("    Move other tensors of same root: entry {} (ref {}) with ticket {}",
-              as_hex(entry), as_hex(entry->ref), oldTicket);
+        VLOG(3) << "    Move other tensors of same root: entry " << as_hex(entry)
+                << " (ref " << as_hex(entry->ref) << ") with ticket " << oldTicket;
 
         entry->CopyProperties(*firstEntry);
         // only one reference entry need to be moved
         if (entry->ref && movedReferences.count(entry->ref) > 0) {
             continue;
         }
-        DEBUG("    Move other tensors of same root: ref {} ticket {} not yet moved or this is value",
-              as_hex(entry->ref), oldTicket);
+        VLOG(3) << "    Move other tensors of same root: ref " << as_hex(entry->ref)
+                << " ticket " << oldTicket << " not yet moved or this is value";
 
         auto t = tf::remote::PagingHelper::cloneWithNewBuffer(*entry->RefOrVal(), newRoot);
         if (entry->ref) {
@@ -141,21 +140,21 @@ bool moveTensorTree(TensorBufferTree &tree, const std::shared_ptr<PerOpAllocDevi
     for (auto &pp : tree.subs) {
         auto oldSub = pp.first;
         oldSub->Ref();
-        DEBUG("    Moving subs: sub {} with ticket {}", as_hex(oldSub), oldTicket);
+        VLOG(2) << "    Moving subs: sub " << as_hex(oldSub) << " with ticket " << oldTicket;
 
         auto newSub = oldSub->clone(newRoot);
         for (auto &entry : pp.second) {
             entry->CopyProperties(*firstEntry);
 
-            DEBUG("    Moving sub entry: entry {} (ref {}) with ticket {}",
-                  as_hex(entry), as_hex(entry->ref), oldTicket);
+            VLOG(3) << "    Moving sub entry: entry " << as_hex(entry)
+                    << " (ref " << as_hex(entry->ref) << ") with ticket {}" << oldTicket;
             // Only need to move first ref entry
             if (entry->ref && movedReferences.count(entry->ref) > 0) {
                 continue;
             }
 
-            DEBUG("    Actually Moving sub entry: entry {} (ref {}) with ticket {}",
-                  as_hex(entry), as_hex(entry->ref), oldTicket);
+            VLOG(3) << "    Actually Moving sub entry: entry " << as_hex(entry)
+                    << " (ref " << as_hex(entry->ref) << ") with ticket " << oldTicket;
 
             auto t = tf::remote::PagingHelper::cloneWithNewBuffer(*entry->RefOrVal(),
                                                                     newSub);
@@ -173,9 +172,9 @@ bool moveTensorTree(TensorBufferTree &tree, const std::shared_ptr<PerOpAllocDevi
     using std::swap;
     swap(tree.subs, newSubs);
 
-    assert(oldRoot->RefCountIsOne());
-    DEBUG("Releasing old root buffer {} with data block at {} of size {}",
-          as_hex(oldRoot), as_hex(oldRoot->data()), oldRoot->size());
+    DCHECK(oldRoot->RefCountIsOne());
+    VLOG(2) << "Releasing old root buffer " << as_hex(oldRoot)
+            << " with data block at " << as_hex(oldRoot->data()) << " of size " << oldRoot->size();
     oldRoot->Unref();
 
     return true;

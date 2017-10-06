@@ -133,13 +133,20 @@ inline const char *thread_id(const el::LogMessage *)
     return tid_str.c_str;
 }
 
+// logger ids
+constexpr const auto kAllocTag = "alloc";
+constexpr const auto kPerfTag = "performance";
+constexpr const auto kDefTag = "default";
+
 } // namespace logging
 
-#define DEBUG(...) logging::logger()->debug(__VA_ARGS__)
+#define PerfLog(level) CLOG(level, logging::kPerfTag)
+#define AllocLog(level) CLOG(level, logging::kAllocTag)
+#define AllocVLog(level) CVLOG(level, logging::kAllocTag)
+
 #define INFO(...) logging::logger()->info(__VA_ARGS__)
 #define WARN(...) logging::logger()->warn(__VA_ARGS__)
 #define ERR(...) logging::logger()->error(__VA_ARGS__)
-#define FATAL(...) logging::logger()->critical(__VA_ARGS__)
 
 // Additional operator<< implementations
 MAKE_LOGGABLE(std::exception_ptr, ep, os);

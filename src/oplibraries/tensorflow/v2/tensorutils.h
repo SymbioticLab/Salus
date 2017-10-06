@@ -129,7 +129,7 @@ struct Entry
 
     void Dereference()
     {
-        DEBUG("Dereferencing entry {} of ticket {}", as_hex(this), alloc_tree->ticket);
+        AllocLog(INFO) << "Dereferencing entry " << as_hex(this) << " of ticket " << alloc_tree->ticket;
         {
             tf::mutex_lock l(*ref_mu);
             DCHECK(!val_field_is_set);

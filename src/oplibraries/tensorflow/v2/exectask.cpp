@@ -143,7 +143,7 @@ bool ExecTask::prepare(std::unique_ptr<ResourceContext> &&rctx)
         return done;
     }
 
-    DEBUG("Pre allocated {} for {}", ditem.device->resourceContext(), DebugString());
+    AllocLog(INFO) << "Pre allocated " << ditem.device->resourceContext() << " for " << DebugString();
     kernel_is_async = (op_kernel->AsAsync() != nullptr);
 
     return true;
@@ -298,7 +298,7 @@ void ExecTask::run(Callbacks cbs)
         nodestats::SetAllStart(stats);
     }
 
-    DEBUG("Process node: {}, {}", SummarizeNodeDef(node->def()), ditem.device->resourceContext());
+    VLOG(2) << "Process node: " << SummarizeNodeDef(node->def()) << ditem.device->resourceContext();
 
     auto input_tensors = m_state->GetInputTensors(input_frame, input_iter);
     first_input = input_tensors + item.input_start;
@@ -481,7 +481,7 @@ void ExecTask::updateRefEntryTickets(const std::vector<Entry*> &entries)
             auto perop = PerOpAllocator::downcast(buf->allocator());
             assert(perop);
             auto ticket = perop->resourceContext().ticket();
-            DEBUG("Update allocation ticket from {} to {}", tree->ticket, ticket);
+            VLOG(2) << "Update allocation ticket from " << tree->ticket << " to " << ticket;
 
             // The entry has changed it's buffer, remove it from old tree,
             // and any other entry references the same tensor.
