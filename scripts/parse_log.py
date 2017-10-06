@@ -13,7 +13,7 @@ import matplotlib.dates as dt
 import plotutils as pu
 
 
-ptn_exec = re.compile(r"""^\[(?P<timestamp>\d+-\d+-\d+\s\d+:\d+:\d+\.\d{6})\d{3}\]\s
+ptn_exec = re.compile(r"""^\[(?P<timestamp>\d+-\d+-\d+\s\d+:\d+:\d+\.\d{6}) (\d{3})?\]\s
                            \[(?P<thread>\d+)\]\s
                            \[(?P<loc>\w+)\]\s
                            \[(?P<level>\w+)\]\s
@@ -157,7 +157,10 @@ def load_both(exec_file, tf_file):
 
 
 ptn_recv_frame = re.compile(r"""Received \w+ frame( \d+)?: zmq::message_t\(len=(?P<size>\d+),.*""")
-ptn_recv_evenlop = re.compile(r"""Received request evenlop: .+type='executor.(?P<req_type>\w+)', seq=(?P<seq>\d+),.*""")
+ptn_recv_evenlop = re.compile(r"""Received \s request \s evenlop: \s
+                                  .+type='executor.(?P<req_type>\w+)',\s
+                                  seq=(?P<seq>\d+),.*""",
+                              re.VERBOSE)
 ptn_disp_custom = re.compile(r"""Dispatching custom task (?P<req>[\w.]+) of seq (?P<seq>\d+)""")
 ptn_create_opkernel = re.compile(r"""Created OpKernel for seq (?P<seq>\d+)""")
 ptn_running = re.compile(r"""running(?P<async> async)? in thread \d+""")
@@ -253,7 +256,8 @@ def match_exec_content(content, entry):
         seq, info = seq_from_entry(entry)
         info['compute_done'] = entry
         if 'start_running' not in info:
-            raise ValueError('Seq {} info does not contain expected event start_running: {}'.format(seq, info))
+            raise ValueError(
+                'Seq {} info does not contain expected event start_running: {}'.format(seq, info))
         start_running_stamp = info['start_running'].timestamp
         return {
             'type': 'compute_done',
@@ -267,7 +271,8 @@ def match_exec_content(content, entry):
         info = seq_info[seq]
         info['compute_done'] = entry
         if 'start_running' not in info:
-            raise ValueError('Seq {} info does not contain expected event start_running: {}'.format(seq, info))
+            raise ValueError(
+                'Seq {} info does not contain expected event start_running: {}'.format(seq, info))
         start_running_stamp = info['start_running'].timestamp
         return {
             'type': 'compute_done',

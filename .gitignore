@@ -3,6 +3,9 @@
 *.autosave
 CMakeLists.txt.user*
 
+# VSCode files
+.vscode
+
 # KDevelop files
 *.kdev4
 *.kate-swp
