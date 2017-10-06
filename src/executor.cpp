@@ -87,7 +87,7 @@ void initializeLogging(std::map<std::string, docopt::value> &args)
     Configurations conf;
     conf.setToDefault();
     conf.set(Level::Global, ConfigurationType::Format,
-             R"([%datetime] [%tid] [%logger] [%levshort] %msg)");
+             R"([%datetime{%Y-%M-%d %H:%m:%s.%g}] [%tid] [%logger] [%levshort] %msg)");
     conf.set(Level::Global, ConfigurationType::SubsecondPrecision, "6");
     conf.set(Level::Global, ConfigurationType::ToFile, "false");
     if (perflog) {
