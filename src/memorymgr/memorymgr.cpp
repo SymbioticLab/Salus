@@ -37,7 +37,7 @@ void *MemoryMgr::allocate(int alignment, size_t num_bytes)
     // TODO: proper memory management
     auto ptr = mem::alignedAlloc(alignment, num_bytes);
     if (!ptr) {
-        ERR("allocation failed for request: {} bytes with alignment {}", num_bytes, alignment);
+        LOG(ERROR) << "allocation failed for request: " << num_bytes << " bytes with alignment " << alignment;
     }
     return ptr;
 }

@@ -58,17 +58,17 @@ q::promise<ProtoPtr> RpcServerCore::dispatch(ZmqServer::Sender sender, const Eve
 
     assert(sender);
 
-    INFO("Serving {} for oplibrary {}", evenlop.type(), OpLibraryType_Name(evenlop.oplibrary()));
+    VLOG(1) << "Serving " << evenlop.type() << " for oplibrary " << OpLibraryType_Name(evenlop.oplibrary());
 
     auto fit = funcs.find(evenlop.type());
     if (fit == funcs.end()) {
-        ERR("Skipping request because requested method not found: {}", evenlop.type());
+        LOG(ERROR) << "Skipping request because requested method not found: " << evenlop.type();
         return ExecutionEngine::instance().emptyPromise<Message>();
     }
 
     auto oplib = OpLibraryRegistary::instance().findOpLibrary(evenlop.oplibrary());
     if (!oplib) {
-        ERR("Skipping due to failed to find requested OpLibrary.");
+        LOG(ERROR) << "Skipping due to failed to find requested OpLibrary.";
         return ExecutionEngine::instance().emptyPromise<Message>();
     }
 
@@ -81,12 +81,12 @@ q::promise<unique_ptr<RunResponse>> RpcServerCore::Run(ZmqServer::Sender &&sende
 {
     const auto &opdef = request.opkernel();
 
-    INFO("Serving RunRequest with opkernel id {}", opdef.id());
+    VLOG(1) << "Serving RunRequest with opkernel id " << opdef.id();
     assert(oplib->accepts(opdef));
 
     auto task = oplib->createRunTask(std::move(sender), evenlop, request);
     if (!task) {
-        ERR("Skipping task due to failed creation.");
+        LOG(ERROR) << "Skipping task due to failed creation.";
         return ExecutionEngine::instance().emptyPromise<RunResponse>();
     }
 
@@ -98,11 +98,11 @@ q::promise<unique_ptr<RunGraphResponse>> RpcServerCore::RunGraph(ZmqServer::Send
                                                                  const EvenlopDef &evenlop,
                                                                  const RunGraphRequest &request)
 {
-    INFO("Serving RunGraphRequest");
+    VLOG(1) << "Serving RunGraphRequest";
 
     auto task = oplib->createRunGraphTask(std::move(sender), evenlop, request);
     if (!task) {
-        ERR("Skipping task due to failed creation.");
+        LOG(ERROR) << "Skipping task due to failed creation.";
         return ExecutionEngine::instance().emptyPromise<RunGraphResponse>();
     }
 
@@ -120,7 +120,7 @@ q::promise<unique_ptr<AllocResponse>> RpcServerCore::Alloc(ZmqServer::Sender &&s
     auto alignment = request.alignment();
     auto num_bytes = request.num_bytes();
 
-    INFO("Serving AllocRequest with alignment {} and num_bytes {}", alignment, num_bytes);
+    VLOG(1) << "Serving AllocRequest with alignment " << alignment << " and num_bytes " << num_bytes;
 
     auto ptr = MemoryMgr::instance().allocate(num_bytes, alignment);
     auto addr_handle = reinterpret_cast<uint64_t>(ptr);
@@ -128,7 +128,7 @@ q::promise<unique_ptr<AllocResponse>> RpcServerCore::Alloc(ZmqServer::Sender &&s
     auto response = std::make_unique<AllocResponse>();
     response->set_addr_handle(addr_handle);
 
-    INFO("Allocated address handel: {:x}", addr_handle);
+    VLOG(2) << "Allocated address handel: " << std::showbase << std::hex << addr_handle;
 
     response->mutable_result()->set_code(0);
     return ExecutionEngine::instance().makePromise(std::move(response));
@@ -144,7 +144,7 @@ q::promise<unique_ptr<DeallocResponse>> RpcServerCore::Dealloc(ZmqServer::Sender
 
     auto addr_handle = request.addr_handle();
 
-    INFO("Serving DeallocRequest with address handel: {:x}", addr_handle);
+    VLOG(1) << "Serving DeallocRequest with address handel: " << std::showbase << std::hex << addr_handle;
 
     MemoryMgr::instance().deallocate(reinterpret_cast<void*>(addr_handle));
 
@@ -159,7 +159,7 @@ q::promise<unique_ptr<CustomResponse>> RpcServerCore::Custom(ZmqServer::Sender &
 {
     auto task = oplib->createCustomTask(std::move(sender), evenlop, request);
     if (!task) {
-        ERR("Skipping task due to failed creation.");
+        LOG(ERROR) << "Skipping task due to failed creation.";
         return ExecutionEngine::instance().emptyPromise<CustomResponse>();
     }
 

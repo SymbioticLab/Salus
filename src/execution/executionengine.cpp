@@ -93,7 +93,7 @@ bool useGPU()
 {
     TIMED_FUNC(timerObj);
     auto use = utils::fromEnvVar("EXEC_SCHED_USE_GPU", true);
-    INFO("Scheduling using: {}", use ? "GPU,CPU" : "CPU");
+    VLOG(1) << "Scheduling using: " << (use ? "GPU,CPU" : "CPU");
     return use;
 }
 
@@ -202,9 +202,8 @@ bool ExecutionEngine::shouldWaitForAWhile(size_t scheduled, nanoseconds &ns)
 
     auto idle = now - last;
     if (idle > 20ms) {
-        INFO("No progress for {}ms, sleep for {}ms",
-             duration_cast<milliseconds>(idle).count(),
-             duration_cast<milliseconds>(sleep).count());
+        VLOG(1) << "No progress for " << duration_cast<milliseconds>(idle).count()
+                << "ms, sleep for " << duration_cast<milliseconds>(sleep).count() << "ms";
         ns = sleep;
         sleep *= 2;
         return true;
@@ -319,7 +318,7 @@ void ExecutionEngine::scheduleLoop()
         }
 
         if (!remainingCount) {
-            INFO("Wait on m_note_has_work");
+            VLOG(1) << "Wait on m_note_has_work";
             m_note_has_work.wait();
         }
     }
@@ -418,7 +417,7 @@ size_t ExecutionEngine::maybeScheduleFrom(std::shared_ptr<SessionItem> item)
                 cbs.memFailure = [item, opItem, this]() mutable {
                     taskStopped(*item, *opItem);
                     // failed due to OOM. Push back to queue
-                    WARN("Opkernel {} failed due to OOM", opItem->op->DebugString());
+                    VLOG(1) << "Puting back OOM failed task: " << opItem->op->DebugString();
                     pushToSessionQueue(item, std::move(opItem));
                 };
 
@@ -522,7 +521,7 @@ void ExecutionEngine::doPaging()
     // no need to erase the first elem, as it's a O(n) operation on vector
 
     if (candidates.size() <= 1) {
-        ERR("No candidates to do paging");
+        LOG(ERROR) << "No candidates to do paging";
         return;
     }
 
@@ -559,7 +558,7 @@ void ExecutionEngine::doPaging()
 
             auto rctx = std::make_unique<ResourceContext>(sess, m_resMonitor);
             if (!rctx->initializeStaging({DeviceType::CPU, 0}, res)) {
-                ERR("No enough CPU memory for paging. Required: {:.0f} bytes", res[cpuTag]);
+                LOG(ERROR) << "No enough CPU memory for paging. Required: " << res[cpuTag] << " bytes";
                 return;
             }
 
@@ -577,14 +576,13 @@ void ExecutionEngine::doPaging()
         // continue to next session
     }
 
-    ERR("All paging request failed. Dump all session usage");
+    LOG(ERROR) << "All paging request failed. Dump all session usage";
     for (size_t i = 0; i != candidates.size(); ++i) {
         auto usage = candidates[i].first;
         SessionItem &sess = candidates[i].second;
-        ERR("Session {} usage: {}", sess.sessHandle, usage);
+        LOG(ERROR) << "Session " << sess.sessHandle << " usage: " << usage;
     }
-    ERR("Dump resource monitor status: {}", m_resMonitor.DebugString());
-
+    LOG(ERROR) << "Dump resource monitor status: " << m_resMonitor.DebugString();
 
     // Step 3: TODO: force evict
 }

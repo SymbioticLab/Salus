@@ -39,7 +39,7 @@ bool ITask::isAsync()
 void ITask::runAsync(DoneCallback cb)
 {
     UNUSED(cb);
-    ERR("Not Implemented");
+    LOG(FATAL) << "ITask::runAsync Not Implemented";
 }
 
 AsyncTask::~AsyncTask() = default;

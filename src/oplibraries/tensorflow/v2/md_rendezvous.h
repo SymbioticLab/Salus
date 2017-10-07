@@ -20,6 +20,11 @@
 #ifndef MD_RENDEZVOUS_H
 #define MD_RENDEZVOUS_H
 
+/*
+ * Make sure tensorflow_headers is included first before
+ * any other headers, so we can correctly override TF logging
+ * with ours.
+ */
 #include "oplibraries/tensorflow/tensorflow_headers.h"
 
 #include <unordered_map>

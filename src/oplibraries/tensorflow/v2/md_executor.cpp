@@ -13,6 +13,13 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
+/*
+ * Make sure tensorflow_headers is included first before
+ * any other headers, so we can correctly override TF logging
+ * with ours.
+ */
+#include "oplibraries/tensorflow/tensorflow_headers.h"
+
 #include "md_executor.h"
 #include "md_executor_impl.h"
 
@@ -21,11 +28,8 @@ limitations under the License.
 #include "oplibraries/tensorflow/v2/tfallocator.h"
 #include "execution/devices.h"
 #include "execution/executionengine.h"
-#include "platform/logging.h"
 #include "utils/threadutils.h"
 #include "utils/stringutils.h"
-
-#include "oplibraries/tensorflow/tensorflow_headers.h"
 
 #include <boost/thread/shared_mutex.hpp>
 #include <boost/thread/lock_algorithms.hpp>
@@ -143,7 +147,7 @@ tf::Status ExecutorImpl::Initialize()
         if (IsRecv(n)) {
             auto ok = GetNodeAttr(n->def(), "client_terminated", &client_terminated);
             if (!ok.ok()) {
-                ERR("Error when initializing node {}: {}", n->name(), ok);
+                LOG(ERROR) << "Error when initializing node " << n->name() << ": " << ok;
             } else {
                 if (client_terminated) {
                     client_recv_nodes_.insert(n);
@@ -407,7 +411,7 @@ void ExecutorState::Process(TaggedNode tagged_node, int64_t scheduled_usec)
         try {
             fu.get();
         } catch (std::future_error &err) {
-            ERR("Opkernel {} failed to run: {}", node->name(), err.what());
+            LOG(ERROR) << "Opkernel " << node->name() << " failed to run: " << err.what();
         }
     } // while !inline_ready.empty()
 
@@ -425,15 +429,15 @@ tf::Status ExecutorState::SetupKernel(TaggedNode node, const ExecutorImpl::Devic
     auto &ndef = node.node->def();
 
     tf::OpKernel *kernel = nullptr;
-    INFO("Creating a kernel for device: {}", ditem.device->name());
+    VLOG(1) << "Creating a kernel for device: " << ditem.device->name();
     auto ok = impl_->params_.create_kernel(ndef, ditem.function_library.get(), &kernel);
     if (!ok.ok()) {
         *op_kernel = nullptr;
         ok = AttachDef(ok, ndef);
-        WARN("Executor failed to create kernel: {}", ok);
+        LOG(WARNING) << "Executor failed to create kernel: " << ok;
         return ok;
     }
-    CHECK(kernel);
+    DCHECK(kernel);
     *op_kernel = kernel;
     return tf::Status::OK();
 }
@@ -451,7 +455,7 @@ tf::DeviceContext * ExecutorState::FindDeviceContext(size_t id, tf::Device* devi
             tensorflow::DeviceContextMap contexts;
             auto ok = device->FillContextMap(impl_->graph_, &contexts);
             if (!ok.ok()) {
-                ERR("Filling contextmap failed: {}", ok);
+                LOG(ERROR) << "Filling contextmap failed: " << ok;
             }
             std::tie(it, std::ignore) = m_deviceContextMaps.emplace(device, std::move(contexts));
         }
@@ -602,7 +606,7 @@ tf::Status ExecutorState::PrepareInputs(const NodeItem &item, tf::OpKernel *kern
 
         if (expect_ref && entry->ref == nullptr) {
             // case 1, 2
-            ERR("{}-th input expects a ref type: {}", i, node->def());
+            LOG(ERROR) << i << "-th input expects a ref type: " << node->def();
             return AttachDef(tf::errors::InvalidArgument(i, "-th input expects a ref type"),
                             node->def());
         }
@@ -635,14 +639,16 @@ tf::Status ExecutorState::PrepareInputs(const NodeItem &item, tf::OpKernel *kern
             // We must lock if this is an reference, as others may update the fields
             Entry::MaybeLock l(entry);
 
-            INFO("Copying from device {} to device {} to prepare {}-th input for op {}.",
-                 entry->device->name(), device->name(), i, kernel->name());
+            VLOG(2) << "Copying from device " << entry->device->name()
+                    << " to device " << device->name()
+                    << " to prepare " << i << "-th input for op " << kernel->name();
             auto oldTicket = entry->alloc_tree->ticket;
             auto ok = moveTensor(*entry, device, device_context, expected, "");
             if (!ok.ok()) {
-                ERR("Copying from device {} to device {} failed when preparing {}-th input "
-                    "for op {}: {}",
-                    entry->device->name(), device->name(), i, kernel->name(), ok);
+                LOG(ERROR) << "Copying from device " << entry->device->name()
+                           << " to device " << device->name()
+                           << " failed when preparing " << i << "-th input for op "
+                           << kernel->name() << ": " << ok;
                 return ok;
             }
 
@@ -1101,15 +1107,16 @@ void ExecutorState::DumpPendingNodeState(const int node_id, const Entry *input_v
             return;
         }
     }
-    WARN("    Pending Node: {}", node.DebugString());
+    VLOG(1) << "    Pending Node: " << node.DebugString();
     for (int i = 0; i < node.num_inputs(); ++i) {
         auto &input = input_vector[input_base + i];
         auto *tensor = GetTensorValueForDump(input);
         if (tensor->IsInitialized()) {
-            WARN("      Input {}: Tensor<type: {} shape: {}>",
-                 i, DataTypeString(tensor->dtype()), tensor->shape().DebugString());
+            VLOG(1) << "      Input " << i
+                    << ": Tensor<type: " << DataTypeString(tensor->dtype())
+                    << " shape: " << tensor->shape().DebugString() << ">";
         } else {
-            WARN("      Input {}: not present", i);
+            VLOG(1) << "      Input " << i << ": not present";
         }
     }
 }
@@ -1118,16 +1125,17 @@ void ExecutorState::DumpActiveNodeState(const int node_id, const Entry *input_ve
 {
     auto &node_item = *impl_->gview_.node(node_id);
     auto &node = *node_item.node;
-    WARN("    Active Node: {}", node.DebugString());
+    VLOG(1) << "    Active Node: " << node.DebugString();
     const int input_base = node_item.input_start;
     for (int i = 0; i < node.num_inputs(); ++i) {
         auto &input = input_vector[input_base + i];
         auto *tensor = GetTensorValueForDump(input);
         if (tensor->IsInitialized()) {
-            WARN("      Input {}: Tensor<type: {} shape: {}>",
-                 i, DataTypeString(tensor->dtype()), tensor->shape().DebugString());
+            VLOG(1) << "      Input " << i
+                    << ": Tensor<type: " << DataTypeString(tensor->dtype())
+                    << " shape: " << tensor->shape().DebugString() << ">";
         } else {
-            WARN("      Input {}: not present", i);
+            VLOG(1) << "      Input " << i << ": not present";
         }
     }
 }
@@ -1159,26 +1167,27 @@ void ExecutorState::DumpIterationState(const FrameState *frame, IterationState *
         auto &input = iteration->input_tensors[i];
         auto *tensor = GetTensorValueForDump(input);
         if (tensor->IsInitialized()) {
-            WARN("    Input {}: Tensor<type: {} shape: {}, bytes: {}>",
-                 i, DataTypeString(tensor->dtype()), tensor->shape().DebugString(),
-                 tensor->TotalBytes());
+            VLOG(1) << "      Input " << i
+                    << ": Tensor<type: " << DataTypeString(tensor->dtype())
+                    << " shape: " << tensor->shape().DebugString()
+                    << " bytes: " << tensor->TotalBytes() << ">";
             total_bytes += tensor->TotalBytes();
         }
     }
-    WARN("    Total bytes {}", total_bytes);
+    VLOG(1) << "    Total bytes " << total_bytes;
 }
 
 void ExecutorState::DumpState()
 {
     tf::mutex_lock l(mu_);
     if (!dumped_on_error_) {
-        WARN("Dumping state");
+        VLOG(1) << "Dumping state";
         for (auto &frame : outstanding_frames_) {
-            WARN(frame.first);
+            VLOG(1) << frame.first;
             FrameState *frame_state = frame.second;
             tf::mutex_lock frame_lock(frame_state->mu);
             for (IterationState *iteration : frame_state->iterations) {
-                WARN("  Iteration:");
+                VLOG(1) << "  Iteration:";
                 DumpIterationState(frame_state, iteration);
             }
         }
@@ -1204,8 +1213,11 @@ void ExecutorState::Finish()
     }
     VLOG(2) << "ExecutorState about to delete this";
     delete this;
-    CHECK(done_cb != nullptr);
+    DCHECK(done_cb != nullptr);
     runner([=]() { done_cb(status); });
+#if defined(NDEBUG)
+    return;
+#endif
 }
 
 void ExecutorState::FindOrCreateChildFrame(FrameState *frame, int64_t iter, const tf::Node *node,

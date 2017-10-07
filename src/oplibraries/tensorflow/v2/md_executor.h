@@ -16,7 +16,13 @@ limitations under the License.
 #ifndef OPLIBRARIES_TENSORFLOW_MULTI_DEVICE_EXECUTOR_H_
 #define OPLIBRARIES_TENSORFLOW_MULTI_DEVICE_EXECUTOR_H_
 
+/*
+ * Make sure tensorflow_headers is included first before
+ * any other headers, so we can correctly override TF logging
+ * with ours.
+ */
 #include "oplibraries/tensorflow/tensorflow_headers.h"
+
 #include "execution/executionengine.h"
 
 #include <functional>

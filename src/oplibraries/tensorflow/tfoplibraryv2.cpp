@@ -228,7 +228,7 @@ std::unique_ptr<TFOpLibraryV2::Proxy> TFOpLibraryV2::deregisterProxy(const std::
     m_lastSession.erase(recvId);
     auto it = m_proxies.find(sessHandle);
     if (it == m_proxies.end()) {
-        WARN("No proxy object found to deregister for session {}", sessHandle);
+        LOG(WARNING) << "No proxy object found to deregister for session " << sessHandle;
         return nullptr;
     }
     auto p = std::move(it->second);
@@ -243,7 +243,7 @@ void TFOpLibraryV2::registerProxy(const std::string &recvId, const std::string &
     m_lastSession[recvId] = recvId;
     auto &p = m_proxies[sessHandle];
     if (p) {
-        WARN("Overwriting an existing proxy registered for session {}: {}", sessHandle, as_hex(p));
+        LOG(WARNING) << "Overwriting an existing proxy registered for session " << sessHandle << ": " << as_hex(p);
         p.reset();
     }
     p = std::move(proxy);
@@ -288,8 +288,8 @@ void TFOpLibraryV2::handleCreateSession(const std::string &recvId, const executo
 
     uint64_t ticket;
     if (!SessionResourceTracker::instance().admit(rm, ticket)) {
-        WARN("Rejecting session due to unsafe resource usage. Predicted usage: {}, current usage: {}",
-             rm.DebugString(), SessionResourceTracker::instance().DebugString());
+        LOG(WARNING) << "Rejecting session due to unsafe resource usage. Predicted usage: " << rm.DebugString()
+                     << ", current usage: " << SessionResourceTracker::instance().DebugString();
         cb(consumeResponse<tf::CreateSessionResponse>(nullptr, tf::errors::Internal("")));
         return;
     }

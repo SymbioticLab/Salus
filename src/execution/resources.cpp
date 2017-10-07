@@ -310,7 +310,7 @@ void SessionResourceTracker::freeUnsafe(uint64_t ticket)
 {
     auto it = m_sessions.find(ticket);
     if (it == m_sessions.end()) {
-        ERR("SessionResourceTracker: unknown ticket: {}", ticket);
+        LOG(ERROR) << "SessionResourceTracker: unknown ticket: " << ticket;
         return;
     }
 
@@ -339,7 +339,7 @@ void SessionResourceTracker::free(const std::string &sessHandle)
 
     auto it = m_sessToTicket.find(sessHandle);
     if (it == m_sessToTicket.end()) {
-        ERR("SessionResourceTracker: unknown sess handle: {}", sessHandle);
+        LOG(ERROR) << "SessionResourceTracker: unknown sess handle: " << sessHandle;
         return;
     }
 
@@ -423,7 +423,7 @@ bool ResourceMonitor::LockedProxy::allocate(uint64_t ticket, const Resources& re
 bool ResourceMonitor::allocateUnsafe(uint64_t ticket, const Resources &res)
 {
     if (ticket == 0) {
-        ERR("Invalid ticket 0");
+        LOG(ERROR) << "Invalid ticket 0";
         return false;
     }
 
@@ -441,10 +441,10 @@ bool ResourceMonitor::allocateUnsafe(uint64_t ticket, const Resources &res)
         // to request from global avail...
         subtract(remaining, it->second, true /*skipNonExist*/);
     } else {
-        ERR("Unknown ticket: {}", ticket);
+        LOG(ERROR) << "Unknown ticket: " << ticket;
     }
 
-    WARN("Try allocating from global avail for ticket: {}", ticket);
+    VLOG(1) << "Try allocating from global avail for ticket: " << ticket;
 
     removeZeros(remaining);
 
@@ -475,7 +475,7 @@ bool ResourceMonitor::allocateUnsafe(uint64_t ticket, const Resources &res)
 void ResourceMonitor::free(uint64_t ticket)
 {
     if (ticket == 0) {
-        ERR("Invalid ticket 0");
+        LOG(ERROR) << "Invalid ticket 0";
         return;
     }
 
@@ -483,7 +483,7 @@ void ResourceMonitor::free(uint64_t ticket)
 
     auto it = m_staging.find(ticket);
     if (it == m_staging.end()) {
-        ERR("Unknown ticket: {}", ticket);
+        LOG(ERROR) << "Unknown ticket: " << ticket;
         return;
     }
 

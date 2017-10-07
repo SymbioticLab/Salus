@@ -16,17 +16,21 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
+/*
+ * Make sure tensorflow_headers is included first before
+ * any other headers, so we can correctly override TF logging
+ * with ours.
+ */
+#include "oplibraries/tensorflow/tensorflow_headers.h"
+
 #include "exectask.h"
 
 #include "execution/devices.h"
-#include "platform/logging.h"
 #include "utils/threadutils.h"
 #include "utils/macros.h"
 #include "oplibraries/tensorflow/v2/md_rendezvous.h"
 #include "oplibraries/tensorflow/v2/tfallocator.h"
 #include "oplibraries/tensorflow/v2/peropallocdevice.h"
-
-#include "oplibraries/tensorflow/tensorflow_headers.h"
 
 #include <sstream>
 
@@ -62,7 +66,8 @@ ExecTask::ExecTask(ExecutorState *state, utils::semaphore &num_finished_ops,
     auto ok = tf::SupportedDeviceTypesForNode({tf::DEVICE_GPU, tf::DEVICE_CPU},
                                               tagged_node.node->def(), &tftypes);
     if (!ok.ok()) {
-        WARN("Error while querying supported device for node {}: {}", tagged_node.node->name(), ok);
+        LOG(ERROR) << "Error while querying supported device for node "
+                   << tagged_node.node->name() << ": " << ok;
     }
 
     supportedTypes.reserve(tftypes.size());
@@ -72,7 +77,7 @@ ExecTask::ExecTask(ExecutorState *state, utils::semaphore &num_finished_ops,
         } else if (tft == tf::DEVICE_GPU) {
             supportedTypes.push_back(DeviceType::GPU);
         } else {
-            WARN("Unknown tf device type: {}", tft.type());
+            LOG(ERROR) << "Unknown tf device type: " << tft.type();
         }
     }
 
@@ -124,7 +129,7 @@ bool ExecTask::prepare(std::unique_ptr<ResourceContext> &&rctx)
         }
         // We are on the same device, good.
     } else if (!ok.ok()) {
-        ERR("Failed to find kernel with status {} for Node: {}", ok, tagged_node.node->name());
+        LOG(ERROR) << "Failed to find kernel with status " << ok << " for Node: " << tagged_node.node->name();
         // it is okay, just continue to create the kernel
     }
 
@@ -132,7 +137,7 @@ bool ExecTask::prepare(std::unique_ptr<ResourceContext> &&rctx)
     if (!op_kernel) {
         auto s = m_state->SetupKernel(tagged_node, ditem, &op_kernel);
         if (!s.ok()) {
-            ERR("Error when creating kernel for node {}: {}", tagged_node.node->name(), s);
+            LOG(ERROR) << "Error when creating kernel for node " << tagged_node.node->name() << ": " << s;
             done = false;
         }
     }
@@ -166,7 +171,7 @@ Resources ExecTask::estimatedUsage(const DeviceSpec& dev)
 
             auto f = failureTimes;
             if (f > maxFailures) {
-                WARN("Failure time exceeds maximum failures: {} (max {})", f, maxFailures);
+                LOG(WARNING) << "Failure time exceeds maximum: " << f << " max " << maxFailures;
                 f = maxFailures;
             }
             uint64_t scale = 1 << (maxFailures - f);
@@ -175,7 +180,8 @@ Resources ExecTask::estimatedUsage(const DeviceSpec& dev)
             // Update cache
             cachedUsage[dev] = rm->temporary;
         } else {
-            ERR("No session usage found for exec task: {} under session {}", tagged_node.node->name(), sessHandle);
+            LOG(ERROR) << "No session usage found for exec task: " << tagged_node.node->name()
+                       << " under session " << sessHandle;
             // fallback to normal estimation
         }
     }
@@ -192,7 +198,7 @@ Resources ExecTask::estimatedUsage(const DeviceSpec& dev)
     const auto *node = tagged_node.node;
     auto ctx = m_state->shapeForNode(node);
     if (!ctx) {
-        WARN("Shape information not available for node: {}", node->name());
+        LOG(WARNING) << "Shape information not available for node: " << node->name();
         return res;
     }
 
@@ -206,7 +212,7 @@ Resources ExecTask::estimatedUsage(const DeviceSpec& dev)
                                                           node->def(), &input_mtypes, &output_mtypes));
     }
     if (!mtypeStatus.ok()) {
-        WARN("Kernel not found on device {}, resource estimation may be inaccurate.", dev);
+        LOG(WARNING) << "Kernel not found on device " << dev << ", resource estimation may be inaccurate.";
     }
     assert(ditem.device);
 
@@ -224,7 +230,7 @@ Resources ExecTask::estimatedUsage(const DeviceSpec& dev)
         for (int j = 0; j != ctx->Rank(shp); ++j) {
             auto dim = ctx->Dim(shp, j);
             if (!ctx->ValueKnown(dim)) {
-                WARN("    Unknown");
+                VLOG(3) << "    Unknown";
                 continue;
             }
 
@@ -415,7 +421,8 @@ void ExecTask::run(Callbacks cbs)
             tf::OpKernelContext ctx(&params, item.num_outputs);
             if (stats)
                 nodestats::SetOpStart(stats);
-            ditem.device->Compute(CHECK_NOTNULL(op_kernel), &ctx);
+            DCHECK_NOTNULL(op_kernel);
+            ditem.device->Compute(op_kernel, &ctx);
             if (stats)
                 nodestats::SetOpEnd(stats);
 

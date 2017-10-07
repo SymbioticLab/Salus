@@ -17,6 +17,13 @@
  *
  */
 
+/*
+ * Make sure tensorflow_headers is included first before
+ * any other headers, so we can correctly override TF logging
+ * with ours.
+ */
+#include "oplibraries/tensorflow/tensorflow_headers.h"
+
 #include "tfallocator.h"
 
 #include "execution/executionengine.h"

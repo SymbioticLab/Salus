@@ -98,7 +98,7 @@ bool ZmqServer::pollWithCheck(const std::vector<zmq::pollitem_t> &items, long ti
 
 void ZmqServer::proxyRecvLoop()
 {
-    INFO("Started recving and sending loop");
+    VLOG(1) << "Started recving and sending loop";
     // set up pulling.
     // we are interested in POLLIN and POLLOUT on m_frontend_sock, and POLLIN out m_backend_sock.
     // messages received on m_frontend_sock are directly dispatched using m_pLogic,

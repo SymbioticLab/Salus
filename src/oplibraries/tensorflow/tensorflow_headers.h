@@ -77,6 +77,7 @@
 
 namespace tf = tensorflow;
 
+// Include our logging to override TF's logging, and to provide stream operators
 #include "platform/logging.h"
 
 inline std::ostream &operator<<(std::ostream &os, const tensorflow::AllocatorAttributes &c)

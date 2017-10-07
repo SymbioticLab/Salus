@@ -16,13 +16,18 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
+/*
+ * Make sure tensorflow_headers is included first before
+ * any other headers, so we can correctly override TF logging
+ * with ours.
+ */
+#include "oplibraries/tensorflow/tensorflow_headers.h"
+
 #include "md_executor_impl.h"
 
 #include "oplibraries/tensorflow/v2/peropallocdevice.h"
 #include "oplibraries/tensorflow/v2/tfallocator.h"
 #include "utils/stringutils.h"
-
-#include "oplibraries/tensorflow/tensorflow_headers.h"
 
 #include <boost/thread/lock_algorithms.hpp>
 #include <boost/iterator/indirect_iterator.hpp>
@@ -183,19 +188,19 @@ std::string rendezKey(const tf::Node *n, uint64_t frame_id, int64_t iter)
     tf::int64 send_device_incarnation;
     auto ok = tf::GetNodeAttr(n->def(), "send_device", &send_device);
     if (!ok.ok()) {
-        ERR("Node {} doesn't have required attribute: send_device", n->name());
+        LOG(ERROR) << "Node " << n->name() << " doesn't have required attribute: send_device";
     }
     ok = tf::GetNodeAttr(n->def(), "recv_device", &recv_device);
     if (!ok.ok()) {
-        ERR("Node {} doesn't have required attribute: recv_device", n->name());
+        LOG(ERROR) << "Node " << n->name() << " doesn't have required attribute: recv_device";
     }
     ok = tf::GetNodeAttr(n->def(), "send_device_incarnation", &send_device_incarnation);
     if (!ok.ok()) {
-        ERR("Node {} doesn't have required attribute: send_device_incarnation", n->name());
+        LOG(ERROR) << "Node " << n->name() << " doesn't have required attribute: send_device_incarnation";
     }
     ok = tf::GetNodeAttr(n->def(), "tensor_name", &tensor_name);
     if (!ok.ok()) {
-        ERR("Node {} doesn't have required attribute: tensor_name", n->name());
+        LOG(ERROR) << "Node " << n->name() << " doesn't have required attribute: tensor_name";
     }
 
     return tf::strings::StrCat(send_device, ";",
@@ -223,7 +228,7 @@ void ExecutorState::fetchRecvShape(const tf::Node *n)
         tf::mutex_lock l(refinerMu_);
         sendShapes_[key] = tf::PartialTensorShape(t.shape().dim_sizes());
     } else {
-        WARN("Client terminated recv key not found: {}", key);
+        VLOG(2) << "Recv key not found for a client terminated recv op : " << key;
     }
 }
 

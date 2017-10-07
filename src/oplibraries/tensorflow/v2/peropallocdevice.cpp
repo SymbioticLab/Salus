@@ -16,12 +16,18 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
+/*
+ * Make sure tensorflow_headers is included first before
+ * any other headers, so we can correctly override TF logging
+ * with ours.
+ */
+#include "oplibraries/tensorflow/tensorflow_headers.h"
+
 #include "peropallocdevice.h"
 
 #include "execution/executionengine.h"
-#include "utils/threadutils.h"
-
 #include "oplibraries/tensorflow/v2/tfallocator.h"
+#include "utils/threadutils.h"
 
 PerOpAllocDevice::PerOpAllocDevice(tf::Device *other)
     : Device(other->env(), other->attributes(), nullptr)

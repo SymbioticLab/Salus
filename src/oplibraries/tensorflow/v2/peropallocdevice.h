@@ -19,10 +19,15 @@
 #ifndef PEROPALLOCDEVICE_H
 #define PEROPALLOCDEVICE_H
 
+/*
+ * Make sure tensorflow_headers is included first before
+ * any other headers, so we can correctly override TF logging
+ * with ours.
+ */
+#include "oplibraries/tensorflow/tensorflow_headers.h"
+
 #include "utils/pointerutils.h"
 #include "utils/macros.h"
-
-#include "oplibraries/tensorflow/tensorflow_headers.h"
 
 #include <mutex>
 

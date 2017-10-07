@@ -144,10 +144,6 @@ constexpr const auto kDefTag = "default";
 #define AllocLog(level) CLOG(level, logging::kAllocTag)
 #define AllocVLog(level) CVLOG(level, logging::kAllocTag)
 
-#define INFO(...) logging::logger()->info(__VA_ARGS__)
-#define WARN(...) logging::logger()->warn(__VA_ARGS__)
-#define ERR(...) logging::logger()->error(__VA_ARGS__)
-
 // Additional operator<< implementations
 MAKE_LOGGABLE(std::exception_ptr, ep, os);
 

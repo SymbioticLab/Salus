@@ -20,9 +20,14 @@
 #ifndef TFALLOCATOR_H
 #define TFALLOCATOR_H
 
-#include "execution/resources.h"
-
+/*
+ * Make sure tensorflow_headers is included first before
+ * any other headers, so we can correctly override TF logging
+ * with ours.
+ */
 #include "oplibraries/tensorflow/tensorflow_headers.h"
+
+#include "execution/resources.h"
 
 #include <memory>
 

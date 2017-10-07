@@ -17,12 +17,16 @@
  *
  */
 
+/*
+ * Make sure tensorflow_headers is included first before
+ * any other headers, so we can correctly override TF logging
+ * with ours.
+ */
+#include "oplibraries/tensorflow/tensorflow_headers.h"
+
 #include "md_rendezvous.h"
 
-#include "platform/logging.h"
 #include "utils/macros.h"
-
-#include "oplibraries/tensorflow/tensorflow_headers.h"
 
 using tensorflow::Status;
 using tensorflow::Tensor;
@@ -43,7 +47,7 @@ MultiDeviceRendezvous::~MultiDeviceRendezvous()
 tensorflow::Status MultiDeviceRendezvous::Send(const ParsedKey &parsed, const Args &send_args,
                                       const tensorflow::Tensor &val, const bool is_dead)
 {
-    INFO("MultiDeviceRendezvous::Send {}", parsed.FullKey().ToString());
+    VLOG(2) << "MultiDeviceRendezvous::Send " << parsed.FullKey().ToString();
 
     auto args = send_args;
     args.device_context = new tf::WrapperDeviceContext(m_device, send_args.device_context);
@@ -53,7 +57,7 @@ tensorflow::Status MultiDeviceRendezvous::Send(const ParsedKey &parsed, const Ar
 
 void MultiDeviceRendezvous::RecvAsync(const ParsedKey &parsed, const Args &recv_args, DoneCallback done)
 {
-    INFO("MultiDeviceRendezvous::RecvAsync {}", parsed.FullKey().ToString());
+    VLOG(2) << "MultiDeviceRendezvous::RecvAsync " << parsed.FullKey().ToString();
 
     auto args = recv_args;
     args.device_context = new tf::WrapperDeviceContext(m_device, recv_args.device_context);

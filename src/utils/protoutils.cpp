@@ -39,13 +39,13 @@ ProtoPtr utils::newMessage(const std::string &type)
 {
     auto desc = protobuf::DescriptorPool::generated_pool()->FindMessageTypeByName(type);
     if (!desc) {
-        WARN("Protobuf descriptor not found for type name: {}", type);
+        LOG(ERROR) << "Protobuf descriptor not found for type name: " << type;
         return {};
     }
 
     auto message = protobuf::MessageFactory::generated_factory()->GetPrototype(desc)->New();
     if (!message) {
-        WARN("Failed to create message object from descriptor of type name: {}", type);
+        LOG(ERROR) << "Failed to create message object from descriptor of type name: " << type;
         return {};
     }
 
@@ -61,7 +61,7 @@ ProtoPtr utils::createMessage(const std::string &type, const void* data, size_t 
 
     auto ok = message->ParseFromArray(data, len);
     if (!ok) {
-        WARN("Failed to parse data buffer of length {} as proto message: {}", len, type);
+        LOG(ERROR) << "Failed to parse data buffer of length " << len << " as proto message: " << type;
         return {};
     }
 
@@ -76,7 +76,7 @@ ProtoPtr utils::createLenLimitedMessage(const std::string &type, protobuf::io::C
         return {};
     }
     if (!(msg->ParseFromCodedStream(stream) && stream->ConsumedEntireMessage())) {
-        WARN("Malformatted message received in CodedInputStream for type: {}", type);
+        LOG(ERROR) << "Malformatted message received in CodedInputStream for type: " << type;
         return {};
     }
     stream->PopLimit(limit);

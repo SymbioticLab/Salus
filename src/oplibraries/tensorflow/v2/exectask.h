@@ -19,12 +19,17 @@
 #ifndef EXECTASK_H
 #define EXECTASK_H
 
+/*
+ * Make sure tensorflow_headers is included first before
+ * any other headers, so we can correctly override TF logging
+ * with ours.
+ */
+#include "oplibraries/tensorflow/tensorflow_headers.h"
+
 #include "md_executor_impl.h"
 
 #include "execution/operationtask.h"
 #include "utils/pointerutils.h"
-
-#include "oplibraries/tensorflow/tensorflow_headers.h"
 
 namespace utils {
 class semaphore;

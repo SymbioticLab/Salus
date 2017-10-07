@@ -19,12 +19,17 @@
 #ifndef MULTIDEVICEEXECUTORSTATEIMPL_H
 #define MULTIDEVICEEXECUTORSTATEIMPL_H
 
+/*
+ * Make sure tensorflow_headers is included first before
+ * any other headers, so we can correctly override TF logging
+ * with ours.
+ */
+#include "oplibraries/tensorflow/tensorflow_headers.h"
+
 #include "oplibraries/tensorflow/v2/tensorutils.h"
 
 #include "execution/executionengine.h"
 #include "utils/threadutils.h"
-
-#include "oplibraries/tensorflow/tensorflow_headers.h"
 
 #include <boost/intrusive/list.hpp>
 

@@ -63,7 +63,7 @@ DeviceType deviceTypeFromString(const std::string &rt)
 
     auto fcr = utils::from_chars(str.c_str(), str.c_str() + str.size(), spec.id);
     if (fcr.ec) {
-        ERR("Failed to convert {} to DeviceSpec", str);
+        LOG(ERROR) << "Failed to convert '" << str << "' to DeviceSpec";
     }
 
     return spec;

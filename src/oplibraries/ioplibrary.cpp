@@ -62,8 +62,8 @@ IOpLibrary *OpLibraryRegistary::findOpLibrary(const executor::OpLibraryType libr
     std::lock_guard<std::mutex> guard(m_mu);
     auto iter = m_opLibraries.find(libraryType);
     if (iter == m_opLibraries.end()) {
-        WARN("No OpLibrary registered under the library type {}",
-             executor::OpLibraryType_Name(libraryType));
+        LOG(ERROR) << "No OpLibrary registered under the library type "
+                   << executor::OpLibraryType_Name(libraryType);
         return nullptr;
     }
     return iter->second.library.get();
@@ -76,6 +76,6 @@ IOpLibrary * OpLibraryRegistary::findSuitableOpLibrary(const executor::OpKernelD
             return elem.second.library.get();
         }
     }
-    WARN("No suitable OpLibrary found for {}", opdef);
+    LOG(ERROR) << "No suitable OpLibrary found for " << opdef;
     return nullptr;
 }
