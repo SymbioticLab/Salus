@@ -113,6 +113,8 @@ void initializeLogging(std::map<std::string, docopt::value> &args)
         perfConf.set(Level::Info, ConfigurationType::ToStandardOutput, "false");
         perfConf.set(Level::Info, ConfigurationType::Filename, perflog.asString());
         Loggers::reconfigureLogger("performance", perfConf);
+    } else {
+        Loggers::reconfigureLogger(logging::kPerfTag, ConfigurationType::Enabled, "false");
     }
 
     // Separate allocation logger, which uses default configuration. Force to create it here
