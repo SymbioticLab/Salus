@@ -119,15 +119,6 @@ void initializeLogging(std::map<std::string, docopt::value> &args)
     // in non-performance sensitive code path.
     auto allocLogger = Loggers::getLogger("alloc");
     DCHECK(allocLogger);
-
-    // Deprecated spdlog configuration
-    constexpr spdlog::level::level_enum vtol[] = {
-        spdlog::level::warn,
-        spdlog::level::info,
-        spdlog::level::debug,
-        spdlog::level::trace,
-    };
-    logging::logger()->set_level(vtol[verbosity > 3 ? 3 : verbosity]);
 }
 
 void printConfiguration(std::map<std::string, docopt::value> &args)

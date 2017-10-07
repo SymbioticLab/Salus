@@ -51,7 +51,6 @@ target_link_libraries(executor
     protos_gen
     platform
 
-    spdlog::spdlog
     protobuf::libprotobuf
     ZeroMQ::zmq
     Boost::boost

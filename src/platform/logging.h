@@ -22,12 +22,6 @@
 
 #include "easylogging++.h"
 
-#include "spdlog/spdlog.h"
-
-// For additional operator<< implementations to work
-#include "spdlog/fmt/ostr.h"
-
-#include <iomanip>
 #include <type_traits>
 
 #ifdef _WIN32
@@ -66,29 +60,6 @@
 #endif
 
 namespace logging {
-
-class LoggerWrapper
-{
-public:
-    explicit LoggerWrapper(std::shared_ptr<spdlog::logger> logger);
-    LoggerWrapper(LoggerWrapper &&wrapper);
-
-    spdlog::logger *operator->();
-
-private:
-    struct Stream
-    {
-        explicit Stream(std::shared_ptr<spdlog::logger> &&l)
-            : logger(l)
-        {
-        }
-        std::shared_ptr<spdlog::logger> logger;
-        ~Stream();
-    };
-    std::unique_ptr<Stream> m_stream;
-};
-
-LoggerWrapper logger();
 
 /*
  * Return current thread id as size_t

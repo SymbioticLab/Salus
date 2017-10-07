@@ -19,7 +19,6 @@
 
 #include "logging.h"
 
-#include "crashhandler/crashhandler.hpp"
 #include "utils/envutils.h"
 #include "utils/stringutils.h"
 
@@ -34,58 +33,9 @@ uint64_t maxBytesDumpLen()
     return utils::fromEnvVarCached("EXEC_MAX_BYTES_DUMP_LEN", UINT64_C(20));
 }
 
-struct LoggerStaticInitializer
-{
-    std::shared_ptr<spdlog::logger> logger;
-    LoggerStaticInitializer()
-    {
-#ifdef NDEBUG
-        spdlog::set_async_mode(8192);
-#endif
-        logger = spdlog::stdout_color_mt("console");
-        logger->set_pattern("[%Y-%m-%d %T.%F] [%t] [%n] [%L] %v");
-
-#ifdef NDEBUG
-        logger->flush_on(spdlog::level::err);
-        logger->set_level(spdlog::level::err);
-#else
-        logger->flush_on(spdlog::level::trace);
-        logger->set_level(spdlog::level::trace);
-#endif
-        //         g3::installCrashHandler();
-        //         g3::setDumpStack(false);
-    }
-};
-
 } // namespace
 
 INITIALIZE_EASYLOGGINGPP
-
-logging::LoggerWrapper logging::logger()
-{
-    static LoggerStaticInitializer init;
-
-    return LoggerWrapper(init.logger);
-}
-
-logging::LoggerWrapper::LoggerWrapper(std::shared_ptr<spdlog::logger> logger)
-    : m_stream(std::make_unique<Stream>(std::move(logger)))
-{
-}
-
-logging::LoggerWrapper::LoggerWrapper(LoggerWrapper &&wrapper)
-    : m_stream(std::move(wrapper.m_stream))
-{
-}
-
-logging::LoggerWrapper::Stream::~Stream() = default;
-
-spdlog::logger *logging::LoggerWrapper::operator->()
-{
-    if (m_stream)
-        return m_stream->logger.get();
-    return nullptr;
-}
 
 MAKE_LOGGABLE(std::exception_ptr, ep, os)
 {
