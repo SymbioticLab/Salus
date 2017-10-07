@@ -3,7 +3,7 @@
 #-------------------------------------------------------
 # Settings
 #-------------------------------------------------------
-OUTPUT_DIR=$HOME/vgg-rpc-double
+OUTPUT_DIR=$HOME/buildbed/executor/scripts/logs/vgg-rpc-double
 PACKAGE='test_tf.test_vgg'
 CASE='TestVgg'
 RPC_ONLY_METHOD='test_rpc_only'
