@@ -819,9 +819,10 @@ void ExecutorState::ClearInputs(Entry *first, size_t num, BufferLockVec &buflock
 
         entry->ClearVal();
 
-        VLOG(2) << "Removing entry " << as_hex(entry)
-                << " of ticket " << entry->alloc_tree->ticket << " due to clearinputs";
         if (removeTree) {
+            DCHECK(entry->alloc_tree);
+            VLOG(2) << "Removing entry " << as_hex(entry)
+                    << " of ticket " << entry->alloc_tree->ticket << " due to clearinputs";
             utils::TGuard g(impl_->entry_mu_, "ClearInputs");
             auto range = impl_->active_buffers_.equal_range(entry->alloc_tree->ticket);
             for (auto it = range.first; it != range.second; ++it) {
