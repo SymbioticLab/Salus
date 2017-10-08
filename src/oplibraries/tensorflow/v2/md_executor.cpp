@@ -570,9 +570,11 @@ tf::Status ExecutorState::PrepareInputs(const NodeItem &item, tf::OpKernel *kern
             if (!is_merge) {
                 DCHECK(IsTransferNode(node));
                 DCHECK(!entry->val_field_is_set);
-                entry->has_value = true;
-                entry->val_field_is_set = true;
-                entry->val.Init(*kEmptyTensor);
+                entry->SetVal(*kEmptyTensor);
+
+                // give the entry an alloc_tree, since it has value now
+                impl_->updateBufferTree(entry, device->resourceContext().ticket());
+
                 inp->tensor = entry->val.get();
                 *is_input_dead = true;
             }
@@ -845,6 +847,7 @@ void ExecutorState::ClearInputs(Entry *first, size_t num, BufferLockVec &buflock
         }
 
         entry->ClearVal();
+        entry->in_use = false;
     }
 }
 

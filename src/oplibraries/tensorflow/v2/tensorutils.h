@@ -45,6 +45,7 @@ struct TensorBufferTree
 
 /**
  * Either a tensor pointer (pass-by-reference) or a tensor (pass-by-value).
+ * TODO: use variant to hold either a reference or value
  */
 struct Entry
 {

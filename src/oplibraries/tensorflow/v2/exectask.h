@@ -76,7 +76,6 @@ private:
     void updateRefEntryTickets(const std::vector<Entry*> &entries);
 
 private:
-    std::shared_ptr<ResourceContext> rctx;
     ExecutorImpl::DeviceItem ditem;
     std::unordered_map<DeviceSpec, Resources> cachedUsage;
     std::vector<DeviceType> supportedTypes;

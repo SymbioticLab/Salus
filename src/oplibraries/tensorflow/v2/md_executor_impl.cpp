@@ -416,6 +416,10 @@ tf::Status ExecutorImpl::LookupDevice(const DeviceSpec &spec, DeviceItem *item)
 /**
  * If entry->alloc_tree is not nullptr, add entry to entry->alloc_tree
  * Else, find/create tree based on root_buf, and add entry to the tree
+ * When the entry contains an uninitialized tensor, an special tree is
+ * assigned.
+ * TODO: currently the special tree for uninitialized tensor is create
+ * per ticket. This can actually be a global static
  */
 void ExecutorImpl::updateBufferTree(Entry *entry, uint64_t ticket)
 {
