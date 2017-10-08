@@ -107,6 +107,8 @@ void initializeLogging(std::map<std::string, docopt::value> &args)
     conf.set(Level::Global, ConfigurationType::SubsecondPrecision, "6");
     conf.set(Level::Global, ConfigurationType::ToFile, "false");
 
+    conf.set(Level::Global, ConfigurationType::PerformanceTracking, perflog ? "true" : "false");
+
     // Verbose logging goes to file only
     conf.set(Level::Verbose, ConfigurationType::ToFile, "true");
     conf.set(Level::Verbose, ConfigurationType::ToStandardOutput, "false");

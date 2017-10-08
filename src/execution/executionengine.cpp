@@ -220,7 +220,6 @@ void ExecutionEngine::scheduleLoop()
     m_noPagingRunningTasks = 0;
 
     while (!m_shouldExit) {
-        TIMED_FUNC(timerObj);
         TIMED_SCOPE(schedIterObj, "sched-iter");
 
         int sessionsChanged = 0;
@@ -372,9 +371,8 @@ size_t ExecutionEngine::maybeScheduleFrom(std::shared_ptr<SessionItem> item)
 
     // Try schedule the operation
     auto doSchedule = [this](std::shared_ptr<SessionItem> item, std::shared_ptr<OperationItem> &&opItem) {
-        TIMED_FUNC(timerObj);
         VLOG(2) << "Scheduling opItem in session " << item->sessHandle << ": " << opItem->op->DebugString();
-        TIMED_FUNC(timerInnerObj);
+        TIMED_SCOPE(timerInnerObj, "ExecutionEngine::maybeScheduleFrom::doSchedule");
 
         bool scheduled = false;
         DeviceSpec spec;
@@ -401,7 +399,7 @@ size_t ExecutionEngine::maybeScheduleFrom(std::shared_ptr<SessionItem> item)
             VLOG(2) << "Adding to thread pool: opItem in session " << item->sessHandle
                     << ": " << opItem->op->DebugString();
             q::with(m_qec->queue(), std::move(opItem)).then([item, this](std::shared_ptr<OperationItem> &&opItem){
-                TIMED_FUNC(timerObj);
+                TIMED_SCOPE(timerInnerObj, "ExecutionEngine::maybeScheduleFrom::doSchedule::run");
                 OperationTask::Callbacks cbs;
 
                 DCHECK(item);
