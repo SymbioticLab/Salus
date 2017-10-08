@@ -56,8 +56,3 @@ elseif(${CMAKE_BUILD_TYPE} STREQUAL Release)
 else()
     message(FATAL_ERROR "Unknown build type: ${CMAKE_BUILD_TYPE}")
 endif()
-
-if(${CMAKE_BUILD_TYPE} STREQUAL Release OR ${CMAKE_BUILD_TYPE} STREQUAL RelWithDebugInfo)
-    add_definitions(-DELPP_DISABLE_VERBOSE_LOGS)
-    add_definitions(-DELPP_DISABLE_PERFORMANCE_TRACKING)
-endif()

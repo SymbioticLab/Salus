@@ -22,10 +22,6 @@ option(WITH_TENSORFLOW "Build TensorFlow operation library" ON)
 
 option(WITH_TESTS "Build test suite in default target" OFF)
 
-option(WITH_BUNDLED_EASYLOGGINGPP "Use bundled Easylogging++ library instead of system provided version" OFF)
-
-option(WITH_BUNDLED_DOCOPT "Use bundled docopt.cpp library instead of system provided version" OFF)
-
 #---------------------------------------------------------------------------------------
 # Find packages
 #---------------------------------------------------------------------------------------
@@ -65,40 +61,15 @@ find_package(Q REQUIRED)
 set_package_properties(Q PROPERTIES TYPE REQUIRED PURPOSE "For multithreaded execution")
 
 # Easylogging++
-set(USE_BUNDLED_EASYLOGGINGPP ${WITH_BUNDLED_EASYLOGGINGPP})
-if(NOT WITH_BUNDLED_EASYLOGGINGPP)
-    find_package(easyloggingpp QUIET)
-    set_package_properties(easyloggingpp PROPERTIES TYPE OPTIONAL PURPOSE "For logging")
-    if(NOT easyloggingpp_FOUND)
-        ## fallback to bundled Easylogging++
-        set(USE_BUNDLED_EASYLOGGINGPP ON)
-        message(WARNING "Easylogging++ requested but not found, fallback to use bundled version.")
-    endif(NOT easyloggingpp_FOUND)
-endif(NOT WITH_BUNDLED_EASYLOGGINGPP)
-if(USE_BUNDLED_EASYLOGGINGPP)
-    include(thirdparty/UseEasyloggingpp.cmake)
-endif(USE_BUNDLED_EASYLOGGINGPP)
+include(thirdparty/UseEasyloggingpp.cmake)
 
 # docopt.cpp
-set(USE_BUNDLED_DOCOPT ${WITH_BUNDLED_DOCOPT})
-if(NOT WITH_BUNDLED_DOCOPT)
-    find_package(docopt QUIET)
-    set_package_properties(docopt PROPERTIES TYPE OPTIONAL PURPOSE "For command line interface")
-    if(NOT docopt_FOUND)
-        ## fallback to bundled docopt.cpp
-        set(USE_BUNDLED_DOCOPT ON)
-        message(WARNING "docopt.cpp requested but not found, fallback to use bundled version.")
-    endif(NOT docopt_FOUND)
-endif(NOT WITH_BUNDLED_DOCOPT)
-if(USE_BUNDLED_DOCOPT)
-    include(thirdparty/UseDocopt.cmake)
-endif(USE_BUNDLED_DOCOPT)
+include(thirdparty/UseDocopt.cmake)
 
 #---------------------------------------------------------------------------------------
 # Print summary
 #---------------------------------------------------------------------------------------
 add_feature_info(WITH_TENSORFLOW USE_TENSORFLOW "build TensorFlow operation library")
-add_feature_info(WITH_BUNDLED_DOCOPT USE_BUNDLED_DOCOPT "use bundled docopt.cpp library")
 add_feature_info(WITH_TESTS WITH_TESTS "build test suite with default target")
 feature_summary(INCLUDE_QUIET_PACKAGES FATAL_ON_MISSING_REQUIRED_PACKAGES WHAT ALL)
 
