@@ -507,13 +507,20 @@ tf::Status ExecutorState::PrepareInputs(const NodeItem &item, tf::OpKernel *kern
 
     *is_input_dead = false;
 
-    // Check and bring back paged out entries
+    // Check and bring back paged out entries. Also gather all buf lock for later use
+    std::unordered_set<boost::upgrade_mutex*> locks;
     {
         TIMED_SCOPE(pagingCheckObj, "check paging");
         for (int i = 0; i < item.num_inputs; ++i) {
             auto entry = first_input + i;
+            if (!entry->has_value) {
+                continue;
+            }
+
             auto tree = entry->alloc_tree;
             DCHECK(tree);
+
+            locks.insert(&tree->buf_mu);
 
             boost::shared_lock<boost::upgrade_mutex> ul(tree->buf_mu);
             if (tree->paged_out) {
@@ -536,16 +543,8 @@ tf::Status ExecutorState::PrepareInputs(const NodeItem &item, tf::OpKernel *kern
         }
     }
 
-    // gather all buf lock and lock them as read for whole period
-    std::unordered_set<boost::upgrade_mutex*> locks;
-    for (int i = 0; i < item.num_inputs; ++i) {
-        auto entry = first_input + i;
-        auto tree = entry->alloc_tree;
-        DCHECK(tree);
-        locks.insert(&tree->buf_mu);
-    }
-    // Lock all references, and all read/write should happen after this
-    // no need for special ordering, because these are shared
+    // lock all buflocks as read for whole period,
+    // all read/write should happen after this
     {
         TIMED_SCOPE(readLockObj, "lock all read");
         utils::lock_shared(locks.begin(), locks.end());
