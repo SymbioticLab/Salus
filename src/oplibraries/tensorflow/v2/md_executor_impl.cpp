@@ -496,8 +496,12 @@ void ExecutorImpl::removeFromBufferTree(const Entry *entry, EntryVec *needUpdate
 
     utils::TGuard g(entry_mu_, "RemoveFromBufferTree");
 
-    tree->roots.erase(std::remove_if(tree->roots.begin(), tree->roots.end(), matchRefs));
-    // the entry must be either in roots or one of the subs
+    auto it = std::remove_if(tree->roots.begin(), tree->roots.end(), matchRefs);
+    if (it != tree->roots.end()) {
+        tree->roots.erase(it);
+        return;
+    }
+    // the entry was not found in roots, so it must be in one of the subs
     if (needUpdate->empty()) {
         for (auto &p : tree->subs) {
             auto &sub = p.second;
