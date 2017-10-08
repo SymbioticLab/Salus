@@ -36,8 +36,6 @@ using std::chrono::nanoseconds;
 using std::chrono::microseconds;
 using namespace std::chrono_literals;
 
-// #define ENABLE_TIMED_FUNC(timerObj)
-
 namespace {
 inline void logScheduleFailure(const Resources &usage, const ResourceMonitor &resMon)
 {

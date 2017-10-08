@@ -33,9 +33,102 @@ uint64_t maxBytesDumpLen()
     return utils::fromEnvVarCached("EXEC_MAX_BYTES_DUMP_LEN", UINT64_C(20));
 }
 
+class ThreadSafePerformanceTrackingCallback : public el::PerformanceTrackingCallback
+{
+protected:
+    void handle(const el::PerformanceTrackingData *data)
+    {
+        using namespace el;
+        base::type::stringstream_t ss;
+        if (data->dataType() == PerformanceTrackingData::DataType::Complete) {
+            ss << "Executed [" << data->blockName()->c_str() << "] in ["
+               << *data->formattedTimeTaken() << "]";
+        } else {
+            ss << "Performance checkpoint";
+            if (!data->checkpointId().empty()) {
+                ss << " [" << data->checkpointId().c_str() << "]";
+            }
+            ss << " for block [" << data->blockName()->c_str() << "] : ["
+               << *data->performanceTracker() << "]";
+        }
+        el::base::Writer(data->performanceTracker()->level(), data->file(),data->line(), data->func())
+            .construct(1, data->loggerId().c_str())
+            << ss.str();
+    }
+};
+
 } // namespace
 
 INITIALIZE_EASYLOGGINGPP
+
+namespace logging {
+void initialize(const Params &params)
+{
+    using namespace el;
+
+    // WORKAROUND: the default performance tracking callback is not really thread safe.
+    // thus before that's fixed, we use our own.
+    Helpers::uninstallPerformanceTrackingCallback<el::base::DefaultPerformanceTrackingCallback>(
+        "DefaultPerformanceTrackingCallback");
+    Helpers::installPerformanceTrackingCallback<ThreadSafePerformanceTrackingCallback>(
+        "ThreadSafePerformanceTrackingCallback");
+
+#if !defined(NDEBUG)
+    Loggers::addFlag(LoggingFlag::ImmediateFlush);
+#endif
+    Loggers::addFlag(LoggingFlag::ColoredTerminalOutput);
+    Loggers::addFlag(LoggingFlag::FixedTimeFormat);
+    Loggers::addFlag(LoggingFlag::AllowVerboseIfModuleNotSpecified);
+
+    Helpers::installCustomFormatSpecifier(el::CustomFormatSpecifier("%tid", logging::thread_id));
+
+    Configurations conf;
+    conf.setToDefault();
+    conf.set(Level::Global, ConfigurationType::Format,
+             R"([%datetime{%Y-%M-%d %H:%m:%s.%g}] [%tid] [%logger] [%levshort] %msg)");
+    conf.set(Level::Global, ConfigurationType::SubsecondPrecision, "6");
+    conf.set(Level::Global, ConfigurationType::ToFile, "false");
+
+    conf.set(Level::Global, ConfigurationType::PerformanceTracking, params.pLogFile ? "true" : "false");
+
+    // Verbose logging goes to file only
+    conf.set(Level::Verbose, ConfigurationType::ToFile, "true");
+    conf.set(Level::Verbose, ConfigurationType::ToStandardOutput, "false");
+    if (params.vLogFile) {
+        conf.set(Level::Verbose, ConfigurationType::Filename, *params.vLogFile);
+    }
+
+    Loggers::setDefaultConfigurations(conf, true /*configureExistingLoggers*/);
+
+    if (params.verbosity) {
+        Loggers::setVerboseLevel(*params.verbosity);
+    }
+    if (params.vModules) {
+        Loggers::setVModules(params.vModules->c_str());
+    }
+    // Separate configuration for performance logger
+    if (params.pLogFile) {
+        Configurations perfConf;
+        perfConf.set(Level::Info, ConfigurationType::ToFile, "true");
+        perfConf.set(Level::Info, ConfigurationType::ToStandardOutput, "false");
+        perfConf.set(Level::Info, ConfigurationType::Filename, *params.pLogFile);
+        Loggers::reconfigureLogger(logging::kPerfTag, perfConf);
+    } else {
+        Loggers::reconfigureLogger(logging::kPerfTag, ConfigurationType::Enabled, "false");
+    }
+
+    // Separate allocation logger, which uses default configuration. Force to create it here
+    // in non-performance sensitive code path.
+    auto allocLogger = Loggers::getLogger("alloc");
+    DCHECK(allocLogger);
+
+    // Read in configuration file
+    if (params.configFile) {
+        Loggers::configureFromGlobal(params.configFile->c_str());
+    }
+}
+
+} // namespace logging
 
 MAKE_LOGGABLE(std::exception_ptr, ep, os)
 {

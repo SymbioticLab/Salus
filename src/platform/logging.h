@@ -20,6 +20,8 @@
 #ifndef LOGGING_H
 #define LOGGING_H
 
+#include "utils/cpp17.h"
+
 #include "easylogging++.h"
 
 #include <type_traits>
@@ -108,6 +110,17 @@ inline const char *thread_id(const el::LogMessage *)
 constexpr const auto kAllocTag = "alloc";
 constexpr const auto kPerfTag = "performance";
 constexpr const auto kDefTag = "default";
+
+// logging configurations
+struct Params
+{
+    utils::optional<std::string> configFile;
+    utils::optional<int> verbosity;
+    utils::optional<std::string> vModules;
+    utils::optional<std::string> vLogFile;
+    utils::optional<std::string> pLogFile;
+};
+void initialize(const Params &params);
 
 } // namespace logging
 

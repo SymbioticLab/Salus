@@ -28,6 +28,8 @@
 namespace utils {
 
 using boost::optional;
+using boost::make_optional;
+extern const boost::none_t &nullopt;
 
 using boost::any;
 using boost::any_cast;

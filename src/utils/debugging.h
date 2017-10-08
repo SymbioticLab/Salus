@@ -35,7 +35,7 @@ public:
 
 } // namespace utils
 
-#ifdef ENABLE_STACK_SENTINEL
+#if !defined(NDEBUG)
 #define STACK_SENTINEL ::utils::StackSentinel ss
 #else
 #define STACK_SENTINEL (void)0

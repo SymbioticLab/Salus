@@ -2,6 +2,7 @@
 #include "rpcserver/zmqserver.h"
 #include "rpcserver/rpcservercore.h"
 #include "platform/logging.h"
+#include "utils/cpp17.h"
 #include "utils/macros.h"
 
 #include "docopt.h"
@@ -63,6 +64,30 @@ R"(
 
 static auto kVersion = R"(AtLast: trAnsparenT deep LeArning Shared execuTion version 0.1)"s;
 
+template<typename T>
+utils::optional<T> optional_arg(const docopt::value &v);
+
+template<>
+inline utils::optional<std::string> optional_arg(const docopt::value &v)
+{
+    if (v) return v.asString();
+    return utils::nullopt;
+}
+
+template<>
+inline utils::optional<int> optional_arg(const docopt::value &v)
+{
+    if (v) return v.asLong();
+    return utils::nullopt;
+}
+
+template<>
+inline utils::optional<bool> optional_arg(const docopt::value &v)
+{
+    if (v) return v.asBool();
+    return utils::nullopt;
+}
+
 } // namespace
 
 auto parseArguments(int argc, char **argv)
@@ -84,66 +109,13 @@ auto parseArguments(int argc, char **argv)
 
 void initializeLogging(std::map<std::string, docopt::value> &args)
 {
-    const auto &conffile = args[kLogConfFlag];
-    const auto &verbosity = args[kVerboseFlag];
-    const auto &vmodules = args[kVModuleFlag];
-    const auto &logfile = args[kVLogFileFlag];
-    const auto &perflog = args[kPLogFileFlag];
-
-    using namespace el;
-#if !defined(NDEBUG)
-    Loggers::addFlag(LoggingFlag::ImmediateFlush);
-#endif
-    Loggers::addFlag(LoggingFlag::ColoredTerminalOutput);
-    Loggers::addFlag(LoggingFlag::FixedTimeFormat);
-    Loggers::addFlag(LoggingFlag::AllowVerboseIfModuleNotSpecified);
-
-    Helpers::installCustomFormatSpecifier(el::CustomFormatSpecifier("%tid", logging::thread_id));
-
-    Configurations conf;
-    conf.setToDefault();
-    conf.set(Level::Global, ConfigurationType::Format,
-             R"([%datetime{%Y-%M-%d %H:%m:%s.%g}] [%tid] [%logger] [%levshort] %msg)");
-    conf.set(Level::Global, ConfigurationType::SubsecondPrecision, "6");
-    conf.set(Level::Global, ConfigurationType::ToFile, "false");
-
-    conf.set(Level::Global, ConfigurationType::PerformanceTracking, perflog ? "true" : "false");
-
-    // Verbose logging goes to file only
-    conf.set(Level::Verbose, ConfigurationType::ToFile, "true");
-    conf.set(Level::Verbose, ConfigurationType::ToStandardOutput, "false");
-    if (logfile) {
-        conf.set(Level::Verbose, ConfigurationType::Filename, logfile.asString());
-    }
-
-    Loggers::setDefaultConfigurations(conf, true /*configureExistingLoggers*/);
-
-    if (verbosity) {
-        Loggers::setVerboseLevel(verbosity.asLong());
-    }
-    if (vmodules) {
-        Loggers::setVModules(vmodules.asString().c_str());
-    }
-    // Separate configuration for performance logger
-    if (perflog) {
-        Configurations perfConf;
-        perfConf.set(Level::Info, ConfigurationType::ToFile, "true");
-        perfConf.set(Level::Info, ConfigurationType::ToStandardOutput, "false");
-        perfConf.set(Level::Info, ConfigurationType::Filename, perflog.asString());
-        Loggers::reconfigureLogger(logging::kPerfTag, perfConf);
-    } else {
-        Loggers::reconfigureLogger(logging::kPerfTag, ConfigurationType::Enabled, "false");
-    }
-
-    // Separate allocation logger, which uses default configuration. Force to create it here
-    // in non-performance sensitive code path.
-    auto allocLogger = Loggers::getLogger("alloc");
-    DCHECK(allocLogger);
-
-    // Read in configuration file
-    if (conffile) {
-        Loggers::configureFromGlobal(conffile.asString().c_str());
-    }
+    logging::initialize({
+        optional_arg<std::string>(args[kLogConfFlag]),
+        optional_arg<int>(args[kVerboseFlag]),
+        optional_arg<std::string>(args[kVModuleFlag]),
+        optional_arg<std::string>(args[kVLogFileFlag]),
+        optional_arg<std::string>(args[kPLogFileFlag]),
+    });
 }
 
 void printConfiguration(std::map<std::string, docopt::value> &)

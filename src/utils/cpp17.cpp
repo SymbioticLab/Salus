@@ -17,3 +17,9 @@
  */
 
 #include "cpp17.h"
+
+namespace utils {
+
+const boost::none_t &nullopt = boost::none;
+
+} // namespace tuils
