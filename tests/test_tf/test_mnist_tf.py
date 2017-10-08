@@ -206,7 +206,7 @@ class MnistConvBase(unittest.TestCase):
     def _runner(self):
         return None
 
-    def _config(self):
+    def _config(self, **kwargs):
         return tf.ConfigProto()
 
     @parameterized.expand([(25,), (50,), (100,)])
