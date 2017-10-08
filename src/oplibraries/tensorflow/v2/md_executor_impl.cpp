@@ -477,18 +477,18 @@ void ExecutorImpl::updateBufferTree(Entry *entry, uint64_t ticket)
     }
 }
 
-void ExecutorImpl::removeFromBufferTree(const Entry *entry, EntryVec *needUpdate,
-                                        bool includeOtherRef)
+void ExecutorImpl::removeFromBufferTree(const Entry *entry, EntryVec *needUpdate)
 {
     TIMED_FUNC(timerObj);
 
     auto tree = entry->alloc_tree;
     DCHECK(tree);
 
-    auto matchRefs = [needUpdate, entry, includeOtherRef] (auto e) {
-        if (e == entry || (includeOtherRef && e->ref == entry->ref)) {
+    auto matchRefs = [needUpdate, entry] (auto e) {
+        if (e == entry || (needUpdate && e->ref == entry->ref)) {
             e->alloc_tree = nullptr;
-            needUpdate->push_back(e);
+            if (needUpdate)
+                needUpdate->push_back(e);
             return true;
         }
         return false;

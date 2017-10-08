@@ -91,7 +91,13 @@ private:
     size_t handlePagingRequest(uint64_t oldTicket, std::unique_ptr<ResourceContext> &&rctx);
     void forceEvicted(uint64_t ticket, void *addr);
 
-    void removeFromBufferTree(const Entry *entry, EntryVec *needUpdate, bool includeOtherRef = false);
+    /**
+     * Remove entry from it's associated buffer tree.
+     * If needUpdate is not nullptr, then other entries that is reference
+     * to this entry is also removed, and added to needUpdate, including this
+     * entry.
+     */
+    void removeFromBufferTree(const Entry *entry, EntryVec *needUpdate);
     void updateBufferTree(Entry *entry, uint64_t ticket);
 
     struct DeviceItem

@@ -66,6 +66,15 @@ struct Entry
     {
         if (val_field_is_set)
             val.Destroy();
+        // reset all pointers to be safe
+        has_value = false;
+        ref = nullptr;
+        ref_mu = nullptr;
+        val_field_is_set = false;
+        in_use = false;
+        alloc_tree = nullptr;
+        device_context = nullptr;
+        device = nullptr;
     }
 
     Entry &operator=(const Entry &other)
@@ -201,7 +210,7 @@ struct Entry
     // The attributes of the allocator that creates the tensor.
     tf::AllocatorAttributes alloc_attr;
     // The buffer tree used to allocate the tensor
-    TensorBufferTree *alloc_tree;
+    TensorBufferTree *alloc_tree = nullptr;
 
     bool in_use = false;
 

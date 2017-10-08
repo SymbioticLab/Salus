@@ -149,8 +149,6 @@ int main(int argc, char **argv)
 
     printConfiguration(args);
 
-    AllocLog(INFO) << "Test log using alloc logger";
-
     ZmqServer server(make_unique<RpcServerCore>());
 
     const auto &listen = args[kListenFlag].asString();

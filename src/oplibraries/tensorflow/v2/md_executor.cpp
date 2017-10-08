@@ -842,8 +842,7 @@ void ExecutorState::ClearInputs(Entry *first, size_t num, BufferLockVec &buflock
             delete entry->alloc_tree;
             entry->alloc_tree = nullptr;
         } else if (entry->has_value) {
-            EntryVec ignore;
-            impl_->removeFromBufferTree(entry, &ignore, false /*includeOtherRef*/);
+            impl_->removeFromBufferTree(entry, nullptr);
         }
 
         entry->ClearVal();
@@ -1545,6 +1544,16 @@ bool ExecutorState::FrameState::CleanupIterations(const GraphView *gview, int64_
     auto curr_iter = iter;
     while (curr_iter <= iteration_count && IsIterationDone(curr_iter)) {
         auto iterState = GetIteration(curr_iter);
+
+        // To be safe, remove any potential entry from buffer tree
+        for (int i = 0; i != iterState->total_input_tensors; ++i) {
+            auto &entry = iterState->input_tensors[i];
+            if (entry.alloc_tree) {
+                DCHECK(entry.has_value);
+                VLOG(1) << "Removing entry from buffer tree when it is deleted: " << as_hex(&entry);
+                executor->removeFromBufferTree(&entry, nullptr);
+            }
+        }
 
         // Delete the iteration curr_iter.
         delete iterState;
