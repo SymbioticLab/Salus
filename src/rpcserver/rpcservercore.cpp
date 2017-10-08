@@ -128,7 +128,7 @@ q::promise<unique_ptr<AllocResponse>> RpcServerCore::Alloc(ZmqServer::Sender &&s
     auto response = std::make_unique<AllocResponse>();
     response->set_addr_handle(addr_handle);
 
-    VLOG(2) << "Allocated address handel: " << std::showbase << std::hex << addr_handle;
+    VLOG(2) << "Allocated address handel: " << as_hex(ptr);
 
     response->mutable_result()->set_code(0);
     return ExecutionEngine::instance().makePromise(std::move(response));
@@ -143,10 +143,11 @@ q::promise<unique_ptr<DeallocResponse>> RpcServerCore::Dealloc(ZmqServer::Sender
     UNUSED(oplib);
 
     auto addr_handle = request.addr_handle();
+    auto ptr = reinterpret_cast<void*>(addr_handle);
 
-    VLOG(1) << "Serving DeallocRequest with address handel: " << std::showbase << std::hex << addr_handle;
+    VLOG(1) << "Serving DeallocRequest with address handel: " << as_hex(ptr);
 
-    MemoryMgr::instance().deallocate(reinterpret_cast<void*>(addr_handle));
+    MemoryMgr::instance().deallocate(ptr);
 
     auto response = std::make_unique<DeallocResponse>();
     response->mutable_result()->set_code(0);

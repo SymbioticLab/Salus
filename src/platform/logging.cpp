@@ -81,5 +81,9 @@ MAKE_LOGGABLE(google::protobuf::Message, c, os)
 
 MAKE_LOGGABLE(PtrPrintHelper, helper, os)
 {
-    return os << std::showbase << std::hex << helper.value;
+    std::ios state(nullptr);
+    state.copyfmt(os);
+    os << std::showbase << std::hex << helper.value;
+    os.copyfmt(state);
+    return os;
 }
