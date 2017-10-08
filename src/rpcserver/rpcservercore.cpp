@@ -34,6 +34,16 @@ using namespace executor;
 using ::google::protobuf::Message;
 using std::unique_ptr;
 
+RpcServerCore::RpcServerCore()
+{
+    OpLibraryRegistary::instance().initializeLibraries();
+}
+
+RpcServerCore::~RpcServerCore()
+{
+    OpLibraryRegistary::instance().uninitializeLibraries();
+}
+
 q::promise<ProtoPtr> RpcServerCore::dispatch(ZmqServer::Sender sender, const EvenlopDef &evenlop,
                                              const Message &request)
 {

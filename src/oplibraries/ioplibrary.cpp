@@ -57,6 +57,28 @@ void OpLibraryRegistary::registerOpLibrary(executor::OpLibraryType libraryType,
     }
 }
 
+void OpLibraryRegistary::initializeLibraries()
+{
+    utils::Guard g(m_mu);
+    auto it = m_opLibraries.begin();
+    auto itend = m_opLibraries.end();
+    while (it != itend) {
+        if (!it->second.library->initialize()) {
+            LOG(ERROR) << "Removing OpLibrary from registary that failed to initialize: " << as_hex(it->second.library);
+            it = m_opLibraries.erase(it);
+        } else {
+            ++it;
+        }
+    }
+}
+
+void OpLibraryRegistary::uninitializeLibraries()
+{
+    for (auto &p : m_opLibraries) {
+        p.second.library->uninitialize();
+    }
+}
+
 IOpLibrary *OpLibraryRegistary::findOpLibrary(const executor::OpLibraryType libraryType) const
 {
     std::lock_guard<std::mutex> guard(m_mu);

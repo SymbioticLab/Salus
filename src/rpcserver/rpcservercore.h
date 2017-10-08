@@ -56,6 +56,10 @@ class IOpLibrary;
 class RpcServerCore
 {
 public:
+
+    RpcServerCore();
+
+    ~RpcServerCore();
     /**
      * Dispatch the call.
      *

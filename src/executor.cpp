@@ -22,7 +22,7 @@ static auto kVLogFileFlag = "--vlogfile";
 static auto kPLogFileFlag = "--perflog";
 
 // <program-name> [-v | -vv | -vvv | --verbose=<verbosity>] [--vmodule=<vmodules>] [-l <endpoint>]
-static auto USAGE =
+static auto kUsage =
 R"(Usage:
     <program-name> [options]
     <program-name> --help
@@ -35,20 +35,28 @@ Options:
     -V, --version               Print version and exit.
     -l <endpoint>, --listen=<endpoint>
                                 Listen on ZeroMQ endpoint <endpoint>.
-                                [default: tcp://*:5501]
+                                [default: tcp://*:5501])"
+#if !defined(ELPP_DISABLE_VERBOSE_LOGS)
+R"(
     -v <level>, --verbose=<level>
                                 Enable verbose logging level <level>.
                                 Valid range: 0-9. (0 means disable)
                                 [default: 0]
     --vmodule=<vmodules>        Specify verbose level per module.
                                 Refer to https://github.com/muflihun/easyloggingpp#vmodule
+                                for syntax.
                                 [default: ]
-    --vlogfile=<file>           Verbose logging goes to <file>
-                                [default: verbose.log]
+    --vlogfile=<file>           Verbose logging goes to <file>.
+                                [default: verbose.log])"
+#endif
+#if !defined(ELPP_DISABLE_PERFORMANCE_TRACKING)
+R"(
     --perflog=<file>            Enable performance logging and log to <file>.
-)"s;
+)"
+#endif
+""s;
 
-static auto VERSION = R"(<program-name> version 0.1)"s;
+static auto kVersion = R"(AtLast: trAnsparenT deep LeArning Shared execuTion version 0.1)"s;
 
 auto parseArguments(int argc, char **argv)
 {
@@ -59,12 +67,12 @@ auto parseArguments(int argc, char **argv)
     }
 
     regex pattern(R"(<program-name>)");
-    USAGE = regex_replace(USAGE, pattern, executable);
-    VERSION = regex_replace(VERSION, pattern, executable);
-    return docopt::docopt(USAGE,
+    kUsage = regex_replace(kUsage, pattern, executable);
+    kVersion = regex_replace(kVersion, pattern, executable);
+    return docopt::docopt(kUsage,
                           {argv + 1, argv + argc},
                           true,
-                          VERSION);
+                          kVersion);
 }
 
 void initializeLogging(std::map<std::string, docopt::value> &args)

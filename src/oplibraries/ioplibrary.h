@@ -40,6 +40,14 @@ class IOpLibrary
 public:
     virtual ~IOpLibrary();
 
+    /**
+     * Any non trival initialization and cleanup should be done
+     * in the following methods. Constructor and destructor are
+     * called before/after main(), thus certain system is not available
+     */
+    virtual bool initialize() = 0;
+    virtual void uninitialize() = 0;
+
     virtual bool accepts(const executor::OpKernelDef &operation) = 0;
 
     virtual PTask createRunTask(ZmqServer::Sender sender,
@@ -69,6 +77,9 @@ public:
     void registerOpLibrary(executor::OpLibraryType libraryType, std::unique_ptr<IOpLibrary> &&library,
                            int priority);
 
+    void initializeLibraries();
+    void uninitializeLibraries();
+
     IOpLibrary *findOpLibrary(const executor::OpLibraryType libraryType) const;
     IOpLibrary *findSuitableOpLibrary(const executor::OpKernelDef &opdef) const;
 
@@ -82,6 +93,7 @@ private:
     };
     mutable std::mutex m_mu;
     std::unordered_map<executor::OpLibraryType, LibraryItem> m_opLibraries;
+    bool initialized;
 };
 
 #endif // IOPLIBRARY_H

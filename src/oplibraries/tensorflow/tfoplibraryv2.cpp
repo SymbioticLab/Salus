@@ -55,22 +55,24 @@ std::unique_ptr<zrpc::CustomResponse> consumeResponse(RESPONSE *resp, tf::Status
 
 OpLibraryRegistary::Register tfoplibraryv2(executor::TENSORFLOW, std::make_unique<TFOpLibraryV2>(), 200);
 
-TFOpLibraryV2::TFOpLibraryV2()
-    : m_proxy(std::make_unique<TFOpLibraryProxy>())
-    , m_maxOpenSessions(0)
+bool TFOpLibraryV2::initialize()
 {
+    m_proxy = std::make_unique<TFOpLibraryProxy>();
     tf::ConfigProto config;
 //     config.mutable_gpu_options()->set_allow_growth(true);
 //     config.mutable_gpu_options()->set_per_process_gpu_memory_fraction(0.00001);
     auto s = m_proxy->globalInit(config);
     if (!s.ok()) {
         LOG(ERROR) << "Failed to initialize proxy object: " << s;
+        return false;
     }
+    return true;
 }
 
-TFOpLibraryV2::~TFOpLibraryV2()
+void TFOpLibraryV2::uninitialize()
 {
     VLOG(2) << "Max open sessions: " << m_maxOpenSessions;
+    m_proxy.reset();
 }
 
 bool TFOpLibraryV2::accepts(const zrpc::OpKernelDef &operation)

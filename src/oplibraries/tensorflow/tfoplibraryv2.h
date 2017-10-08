@@ -44,15 +44,8 @@ class CustomRequest;
 class TFOpLibraryV2 : public IOpLibrary
 {
 public:
-    /**
-     * Default constructor
-     */
-    TFOpLibraryV2();
-
-    /**
-     * Destructor
-     */
-    ~TFOpLibraryV2() override;
+    bool initialize() override;
+    void uninitialize() override;
 
     bool accepts(const executor::OpKernelDef &operation) override;
 
