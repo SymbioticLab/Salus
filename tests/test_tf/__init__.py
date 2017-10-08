@@ -48,9 +48,12 @@ def run_on_devices(func, devices, *args, **kwargs):
 
     results = []
     for d in devices:
+        start_time = default_timer()
         with sess_and_device(dev=d, **kwargs):
             res = func()
             results.append(res)
+        duration = default_timer() - start_time
+        print("JCT: {:.3f} s".format(duration))
     return tuple(results)
 
 

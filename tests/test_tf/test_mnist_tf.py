@@ -192,7 +192,7 @@ def run_mnist_large(sess, mnist, batch_size=50):
     print('Average %.3f sec/batch' % np.average(speeds))
     print('Average %.6f sec spent between batches' % np.average(inbetween))
     JCT = default_timer() - JCT
-    print('JCT is %.3f sec' % JCT)
+    print('Training time is %.3f sec' % JCT)
 
     print('Start final eva')
     start_time = default_timer()
