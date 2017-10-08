@@ -514,6 +514,7 @@ tf::Status ExecutorState::PrepareInputs(const NodeItem &item, tf::OpKernel *kern
             auto entry = first_input + i;
             auto tree = entry->alloc_tree;
             DCHECK(tree);
+
             boost::shared_lock<boost::upgrade_mutex> ul(tree->buf_mu);
             if (tree->paged_out) {
                 ul.unlock();
@@ -539,8 +540,9 @@ tf::Status ExecutorState::PrepareInputs(const NodeItem &item, tf::OpKernel *kern
     std::unordered_set<boost::upgrade_mutex*> locks;
     for (int i = 0; i < item.num_inputs; ++i) {
         auto entry = first_input + i;
-        DCHECK(entry->alloc_tree);
-        locks.insert(&entry->alloc_tree->buf_mu);
+        auto tree = entry->alloc_tree;
+        DCHECK(tree);
+        locks.insert(&tree->buf_mu);
     }
     // Lock all references, and all read/write should happen after this
     // no need for special ordering, because these are shared
@@ -664,6 +666,7 @@ tf::Status ExecutorState::PrepareInputs(const NodeItem &item, tf::OpKernel *kern
                 VLOG(2) << "Update entry " << as_hex(e)
                         << " from ticket " << oldTicket
                         << " to " << device->resourceContext().ticket() << " due to devcopy";
+                DCHECK(e->alloc_tree);
             }
         }
 
@@ -793,6 +796,7 @@ tf::Status ExecutorState::ProcessOutputs(const NodeItem &item, tf::OpKernelConte
             }
             DCHECK_EQ(out->alloc_tree, nullptr);
             impl_->updateBufferTree(out, ticket);
+            DCHECK(out->alloc_tree);
         }
         if (!val.is_ref()) {
             // If OpKernelContext returns outputs via pass-by-value, we

@@ -490,11 +490,8 @@ void ExecTask::updateRefEntryTickets(const std::vector<Entry*> &entries)
         auto ticket = perop->resourceContext().ticket();
 
         auto tree = entry->alloc_tree;
-        if (!tree) {
-            // A previously non-initialized entry got initialized, update it
-            VLOG(2) << "Update allocation ticket from none to " << ticket;
-            impl->updateBufferTree(entry, ticket);
-        } else if (tree->root_buf != root_buf) {
+        DCHECK(tree);
+        if (tree->root_buf != root_buf) {
             // The entry has changed it's buffer, remove it from old tree,
             // and any other entry references the same tensor.
             VLOG(2) << "Update allocation ticket from " << tree->ticket << " to " << ticket;

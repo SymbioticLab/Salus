@@ -472,10 +472,7 @@ void ExecutorImpl::removeFromBufferTree(const Entry *entry, EntryVec *needUpdate
     TIMED_FUNC(timerObj);
 
     auto tree = entry->alloc_tree;
-    if (!tree) {
-        // the entry may contain an uninitialized tensor, which has no buffer at all.
-        return;
-    }
+    DCHECK(tree);
 
     auto matchRefs = [needUpdate, entry, includeOtherRef] (auto e) {
         if (e == entry || (includeOtherRef && e->ref == entry->ref)) {
