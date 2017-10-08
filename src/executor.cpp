@@ -15,7 +15,9 @@
 using namespace std;
 using namespace std::string_literals;
 
+namespace {
 static auto kListenFlag = "--listen";
+static auto kLogConfFlag = "--logconf";
 static auto kVerboseFlag = "--verbose";
 static auto kVModuleFlag = "--vmodule";
 static auto kVLogFileFlag = "--vlogfile";
@@ -35,7 +37,10 @@ Options:
     -V, --version               Print version and exit.
     -l <endpoint>, --listen=<endpoint>
                                 Listen on ZeroMQ endpoint <endpoint>.
-                                [default: tcp://*:5501])"
+                                [default: tcp://*:5501]
+    --logconf <file>            Path to log configuration file. Note that
+                                settings in this file takes precedence over
+                                other command line arguments.)"
 #if !defined(ELPP_DISABLE_VERBOSE_LOGS)
 R"(
     -v <level>, --verbose=<level>
@@ -58,6 +63,8 @@ R"(
 
 static auto kVersion = R"(AtLast: trAnsparenT deep LeArning Shared execuTion version 0.1)"s;
 
+} // namespace
+
 auto parseArguments(int argc, char **argv)
 {
     string executable(argv[0]);
@@ -77,6 +84,7 @@ auto parseArguments(int argc, char **argv)
 
 void initializeLogging(std::map<std::string, docopt::value> &args)
 {
+    const auto &conffile = args[kLogConfFlag];
     const auto &verbosity = args[kVerboseFlag].asLong();
     const auto &vmodules = args[kVModuleFlag].asString();
     const auto &logfile = args[kVLogFileFlag].asString();
@@ -98,11 +106,6 @@ void initializeLogging(std::map<std::string, docopt::value> &args)
              R"([%datetime{%Y-%M-%d %H:%m:%s.%g}] [%tid] [%logger] [%levshort] %msg)");
     conf.set(Level::Global, ConfigurationType::SubsecondPrecision, "6");
     conf.set(Level::Global, ConfigurationType::ToFile, "false");
-    if (perflog) {
-        conf.set(Level::Global, ConfigurationType::PerformanceTracking, "true");
-    } else {
-        conf.set(Level::Global, ConfigurationType::PerformanceTracking, "false");
-    }
 
     // Verbose logging goes to file only
     conf.set(Level::Verbose, ConfigurationType::ToFile, "true");
@@ -120,7 +123,7 @@ void initializeLogging(std::map<std::string, docopt::value> &args)
         perfConf.set(Level::Info, ConfigurationType::ToFile, "true");
         perfConf.set(Level::Info, ConfigurationType::ToStandardOutput, "false");
         perfConf.set(Level::Info, ConfigurationType::Filename, perflog.asString());
-        Loggers::reconfigureLogger("performance", perfConf);
+        Loggers::reconfigureLogger(logging::kPerfTag, perfConf);
     } else {
         Loggers::reconfigureLogger(logging::kPerfTag, ConfigurationType::Enabled, "false");
     }
@@ -129,21 +132,34 @@ void initializeLogging(std::map<std::string, docopt::value> &args)
     // in non-performance sensitive code path.
     auto allocLogger = Loggers::getLogger("alloc");
     DCHECK(allocLogger);
+
+    // Read in configuration file
+    if (conffile) {
+        Loggers::configureFromGlobal(conffile.asString().c_str());
+    }
 }
 
-void printConfiguration(std::map<std::string, docopt::value> &args)
+void printConfiguration(std::map<std::string, docopt::value> &)
 {
 #if defined(NDEBUG)
     LOG(INFO) << "Running in Release mode";
 #else
     LOG(INFO) << "Running in Debug mode";
 #endif
-    LOG(INFO) << "Verbose logging level: " << el::Loggers::verboseLevel()
-              << " file:" << args[kVLogFileFlag].asString();
-
-    const auto &conf = el::Loggers::getLogger("performance")->typedConfigurations();
-    LOG(INFO) << "Performance logging: " << (conf->enabled(el::Level::Info) ? "enabled" : "disabled")
-              << " file: " << conf->filename(el::Level::Info);
+    {
+        const auto &conf = el::Loggers::getLogger(logging::kDefTag)->typedConfigurations();
+        LOG(INFO) << "Verbose logging level: " << el::Loggers::verboseLevel()
+                  << " file: " << conf->filename(el::Level::Verbose);
+    }
+    {
+        const auto &conf = el::Loggers::getLogger(logging::kPerfTag)->typedConfigurations();
+        LOG(INFO) << "Performance logging: " << (conf->enabled(el::Level::Info) ? "enabled" : "disabled")
+                  << " file: " << conf->filename(el::Level::Info);
+    }
+    {
+        const auto &conf = el::Loggers::getLogger(logging::kAllocTag)->typedConfigurations();
+        LOG(INFO) << "Allocation logging: " << (conf->enabled(el::Level::Info) ? "enabled" : "disabled");
+    }
 }
 
 int main(int argc, char **argv)
@@ -153,6 +169,8 @@ int main(int argc, char **argv)
     initializeLogging(args);
 
     printConfiguration(args);
+
+    AllocLog(INFO) << "Test log using alloc logger";
 
     ZmqServer server(make_unique<RpcServerCore>());
 

@@ -56,7 +56,7 @@ void ZmqServer::start(const std::string& address)
     }
 
     try {
-        LOG(INFO) << "Binding frontend socket to address: " << address;
+        VLOG(1) << "Binding frontend socket to address: " << address;
         m_frontend_sock.bind(address);
 
         auto baddr = "inproc://backend";
