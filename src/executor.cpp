@@ -85,9 +85,9 @@ auto parseArguments(int argc, char **argv)
 void initializeLogging(std::map<std::string, docopt::value> &args)
 {
     const auto &conffile = args[kLogConfFlag];
-    const auto &verbosity = args[kVerboseFlag].asLong();
-    const auto &vmodules = args[kVModuleFlag].asString();
-    const auto &logfile = args[kVLogFileFlag].asString();
+    const auto &verbosity = args[kVerboseFlag];
+    const auto &vmodules = args[kVModuleFlag];
+    const auto &logfile = args[kVLogFileFlag];
     const auto &perflog = args[kPLogFileFlag];
 
     using namespace el;
@@ -110,13 +110,18 @@ void initializeLogging(std::map<std::string, docopt::value> &args)
     // Verbose logging goes to file only
     conf.set(Level::Verbose, ConfigurationType::ToFile, "true");
     conf.set(Level::Verbose, ConfigurationType::ToStandardOutput, "false");
-    conf.set(Level::Verbose, ConfigurationType::Filename, logfile);
+    if (logfile) {
+        conf.set(Level::Verbose, ConfigurationType::Filename, logfile.asString());
+    }
 
     Loggers::setDefaultConfigurations(conf, true /*configureExistingLoggers*/);
 
-    Loggers::setVerboseLevel(verbosity);
-    Loggers::setVModules(vmodules.c_str());
-
+    if (verbosity) {
+        Loggers::setVerboseLevel(verbosity.asLong());
+    }
+    if (vmodules) {
+        Loggers::setVModules(vmodules.asString().c_str());
+    }
     // Separate configuration for performance logger
     if (perflog) {
         Configurations perfConf;
