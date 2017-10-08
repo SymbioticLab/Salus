@@ -307,15 +307,22 @@ size_t ExecutorImpl::handlePagingRequest(uint64_t oldTicket, std::unique_ptr<Res
             LOG(ERROR) << "Requested ticket for paging not found: " << oldTicket;
             return 0;
         }
-        for (auto it = range.first; it != range.second; ++it) {
-            DCHECK(it->second);
-            if (it->second->root_buf == nullptr || it->second->paged_out) continue;
+        // Take candidate parts out of active_buffers_
+        auto it = range.first;
+        while (it != range.second) {
+            auto &tree = it->second;
+            DCHECK(tree);
+            if (!tree->paged_out && tree->root_buf) {
+                // candidate
+                reflocks.insert(&tree->buf_mu);
+                parts.push_back(tree);
 
-            reflocks.insert(&it->second->buf_mu);
-            parts.push_back(it->second);
-
-            VLOG(2) << "Removing entry " << as_hex(it->second)
-                    << " of ticket " << oldTicket << " due to paging";
+                VLOG(2) << "Removing tree " << as_hex(tree)
+                        << " of ticket " << oldTicket << " due to paging";
+                it = active_buffers_.erase(it);
+            } else {
+                ++it;
+            }
         }
     }
 
