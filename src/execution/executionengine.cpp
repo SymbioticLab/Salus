@@ -48,7 +48,10 @@ inline void logScheduleFailure(const Resources &usage, const ResourceMonitor &re
 
 #ifndef NDEBUG
     VLOG(1) << "Try to allocate resource failed. Requested: " << resources::DebugString(usage);
-    VLOG(1) << "Available: " << resMon.DebugString();
+    // Don't call resMon.DebugString directly in log line, as logging acquires lock, and
+    // may causing deadlock.
+    const auto &str = resMon.DebugString();
+    VLOG(1) << "Available: " << str;
 #endif
 }
 
