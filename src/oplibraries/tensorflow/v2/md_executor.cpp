@@ -512,16 +512,18 @@ tf::Status ExecutorState::PrepareInputs(const NodeItem &item, tf::OpKernel *kern
         TIMED_SCOPE(pagingCheckObj, "check paging");
         for (int i = 0; i < item.num_inputs; ++i) {
             auto entry = first_input + i;
-            boost::shared_lock<boost::upgrade_mutex> ul(entry->alloc_tree->buf_mu);
-            if (entry->alloc_tree->paged_out) {
+            auto tree = entry->alloc_tree;
+            DCHECK(tree);
+            boost::shared_lock<boost::upgrade_mutex> ul(tree->buf_mu);
+            if (tree->paged_out) {
                 ul.unlock();
                 PERFORMANCE_CHECKPOINT_WITH_ID(pagingCheckObj, "after read");
-                boost::unique_lock<boost::upgrade_mutex> uul(entry->alloc_tree->buf_mu);
-                if (entry->alloc_tree->paged_out) {
-                    VLOG(2) << "Paging back tree " << as_hex(entry->alloc_tree)
-                            << " of alloc ticket " << entry->alloc_tree->ticket
+                boost::unique_lock<boost::upgrade_mutex> uul(tree->buf_mu);
+                // double check again, as unlock-lockexclusive is not atomic
+                if (tree->paged_out) {
+                    VLOG(2) << "Paging back tree " << as_hex(tree)
+                            << " of alloc ticket " << tree->ticket
                             << " for node " << kernel->name();
-                    auto tree = entry->alloc_tree;
                     if (!moveTensorTree(*tree, device)) {
                         LOG(ERROR) << "Error when moving paged out entry back";
                         return tf::errors::Internal("Error when moving paged out entry back");
@@ -537,6 +539,7 @@ tf::Status ExecutorState::PrepareInputs(const NodeItem &item, tf::OpKernel *kern
     std::unordered_set<boost::upgrade_mutex*> locks;
     for (int i = 0; i < item.num_inputs; ++i) {
         auto entry = first_input + i;
+        DCHECK(entry->alloc_tree);
         locks.insert(&entry->alloc_tree->buf_mu);
     }
     // Lock all references, and all read/write should happen after this
@@ -642,6 +645,7 @@ tf::Status ExecutorState::PrepareInputs(const NodeItem &item, tf::OpKernel *kern
             VLOG(2) << "Copying from device " << entry->device->name()
                     << " to device " << device->name()
                     << " to prepare " << i << "-th input for op " << kernel->name();
+            DCHECK(entry->alloc_tree);
             auto oldTicket = entry->alloc_tree->ticket;
             auto ok = moveTensor(*entry, device, device_context, expected, "");
             if (!ok.ok()) {
@@ -1431,17 +1435,19 @@ void ExecutorState::FrameState::ActivateNodes(const NodeItem *item, const bool i
         if (dst_need_input) {
             const int dst_slot = e.input_slot;
             const int dst_loc = dst_item->input_start + dst_slot;
+            auto &entry = input_tensors[dst_loc];
             if (e.is_last) {
-                input_tensors[dst_loc] = std::move((*outputs)[src_slot]);
+                entry = std::move((*outputs)[src_slot]);
             } else {
-                input_tensors[dst_loc] = (*outputs)[src_slot];
+                entry = (*outputs)[src_slot];
             }
 
-            if (input_tensors[dst_loc].has_value) {
-                VLOG(2) << "Adding entry " << as_hex(&input_tensors[dst_loc])
-                        << " of ticket " << input_tensors[dst_loc].alloc_tree->ticket << " due to actvation";
-                executor->updateBufferTree(&input_tensors[dst_loc],
-                                        input_tensors[dst_loc].alloc_tree->ticket);
+            if (entry.has_value) {
+                auto tree = entry.alloc_tree;
+                DCHECK(tree);
+                VLOG(2) << "Adding entry " << as_hex(&entry)
+                        << " of ticket " << tree->ticket << " due to actvation";
+                executor->updateBufferTree(&entry, tree->ticket);
             }
         }
 

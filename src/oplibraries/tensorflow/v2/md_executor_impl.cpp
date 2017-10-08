@@ -471,6 +471,12 @@ void ExecutorImpl::removeFromBufferTree(const Entry *entry, EntryVec *needUpdate
 {
     TIMED_FUNC(timerObj);
 
+    auto tree = entry->alloc_tree;
+    if (!tree) {
+        // the entry may contain an uninitialized tensor, which has no buffer at all.
+        return;
+    }
+
     auto matchRefs = [needUpdate, entry, includeOtherRef] (auto e) {
         if (e == entry || (includeOtherRef && e->ref == entry->ref)) {
             e->alloc_tree = nullptr;
@@ -482,7 +488,6 @@ void ExecutorImpl::removeFromBufferTree(const Entry *entry, EntryVec *needUpdate
 
     utils::TGuard g(entry_mu_, "RemoveFromBufferTree");
 
-    auto tree = entry->alloc_tree;
     tree->roots.erase(std::remove_if(tree->roots.begin(), tree->roots.end(), matchRefs));
     // the entry must be either in roots or one of the subs
     if (needUpdate->empty()) {
