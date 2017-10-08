@@ -168,6 +168,7 @@ struct Entry
         ref_mu = nullptr;
         val.Init(std::forward<Args>(args)...);
         val_field_is_set = true;
+        has_value = true;
     }
 
     struct MaybeLock
