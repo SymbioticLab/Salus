@@ -825,8 +825,6 @@ void ExecutorState::ClearInputs(Entry *first, size_t num, BufferLockVec &buflock
                 && tf::remote::PagingHelper::refCountOf(*buf->root_buffer()) == 1;
         }
 
-        entry->ClearVal();
-
         if (removeTree) {
             DCHECK(entry->alloc_tree);
             VLOG(2) << "Removing entry " << as_hex(entry)
@@ -842,10 +840,12 @@ void ExecutorState::ClearInputs(Entry *first, size_t num, BufferLockVec &buflock
             // alloc_tree will auto unlink from it's container buffer_trees_
             delete entry->alloc_tree;
             entry->alloc_tree = nullptr;
-        } else {
+        } else if (entry->has_value) {
             EntryVec ignore;
             impl_->removeFromBufferTree(entry, &ignore, false /*includeOtherRef*/);
         }
+
+        entry->ClearVal();
     }
 }
 
