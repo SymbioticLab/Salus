@@ -359,14 +359,18 @@ size_t ExecutorImpl::handlePagingRequest(uint64_t oldTicket, std::unique_ptr<Res
 
     for (auto &part : parts) {
         DCHECK(!part->paged_out);
-        DCHECK_NOTNULL(part->root_buf);
+        if (!part->root_buf) {
+            // We use empty root_buf as a dumy tree for
+            // uninitialized tensors, although it's unlikely
+            // this particular tree get paged out, we have to
+            // handle this case
+            continue;
+        }
 
         auto size = part->root_buf->size();
         if (moveTensorTree(*part, item.device)) {
             totalReleased += size;
             part->paged_out = true;
-        } else {
-            break;
         }
     }
 

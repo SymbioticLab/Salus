@@ -77,7 +77,9 @@ tensorflow::Status moveTensor(Entry &entry, const std::shared_ptr<PerOpAllocDevi
 
 bool moveTensorTree(TensorBufferTree &tree, const std::shared_ptr<PerOpAllocDevice> &dstDevice)
 {
-    assert(!tree.roots.empty());
+    if (tree.roots.empty()) {
+        return false;
+    }
 
     const auto oldRoot = tree.root_buf;
     const auto oldTicket = tree.ticket;
@@ -137,7 +139,7 @@ bool moveTensorTree(TensorBufferTree &tree, const std::shared_ptr<PerOpAllocDevi
         }
     }
 
-    assert(newRoot);
+    DCHECK(newRoot);
     tree.root_buf = newRoot;
 
     // Secondly re-target sub buffers to new root
@@ -171,7 +173,7 @@ bool moveTensorTree(TensorBufferTree &tree, const std::shared_ptr<PerOpAllocDevi
                 entry->SetVal(std::move(t));
             }
         }
-        assert(oldSub->RefCountIsOne());
+        DCHECK(oldSub->RefCountIsOne());
         oldSub->Unref();
 
         newSubs[newSub] = std::move(pp.second);

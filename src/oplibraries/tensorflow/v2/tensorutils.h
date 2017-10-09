@@ -30,6 +30,7 @@
 #include <boost/thread/shared_mutex.hpp>
 
 #include <memory>
+#include <unordered_map>
 
 struct Entry;
 struct TensorBufferTree
