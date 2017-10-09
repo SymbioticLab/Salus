@@ -522,13 +522,6 @@ bool ExecTask::maybeMemoryFailure(const tf::Status &s, DoneCallback memFailure)
         // we didn't implement rollback. So this can only happen for non ref input ops
         assert(!has_ref_input);
 
-        // also reset in_use
-        assert(first_input);
-        for (int i = 0; i != tagged_node.node->num_inputs(); ++i) {
-            auto entry = first_input + i;
-            entry->in_use = false;
-        }
-
         // also release locks
         buflocks.clear();
 

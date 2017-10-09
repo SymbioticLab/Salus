@@ -71,7 +71,7 @@ struct Entry
         ref = nullptr;
         ref_mu = nullptr;
         val_field_is_set = false;
-        in_use = false;
+        alloc_ticket = 0xdeadbeef;
         alloc_tree = nullptr;
         device_context = nullptr;
         device = nullptr;
@@ -112,19 +112,19 @@ struct Entry
     void CopyProperties(const Entry &other)
     {
         alloc_attr = other.alloc_attr;
+        alloc_ticket = other.alloc_ticket;
         alloc_tree = other.alloc_tree;
         device_context = other.device_context;
         device = other.device;
-        in_use = other.in_use;
     }
 
     void CopyProperties(Entry &&other)
     {
         alloc_attr = other.alloc_attr;
+        alloc_ticket = other.alloc_ticket;
         alloc_tree = other.alloc_tree;
         device_context = other.device_context;
         device = std::move(other.device);
-        in_use = other.in_use;
     }
 
     // Clears the <val> field.
@@ -136,7 +136,6 @@ struct Entry
         }
         // release device
         device.reset();
-        in_use = false;
         has_value = false;
     }
 
@@ -209,10 +208,10 @@ struct Entry
 
     // The attributes of the allocator that creates the tensor.
     tf::AllocatorAttributes alloc_attr;
+    // The allocation ticket
+    uint64_t alloc_ticket;
     // The buffer tree used to allocate the tensor
     TensorBufferTree *alloc_tree = nullptr;
-
-    bool in_use = false;
 
     // Every entry carries an optional DeviceContext containing
     // Device-specific information about how the Tensor was produced.

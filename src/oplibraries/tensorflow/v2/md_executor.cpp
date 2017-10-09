@@ -520,7 +520,6 @@ tf::Status ExecutorState::PrepareInputs(const NodeItem &item, tf::OpKernel *kern
             auto tree = entry->alloc_tree;
             DCHECK(tree);
 
-            entry->in_use = true;
             locks.insert(&tree->buf_mu);
 
             boost::shared_lock<boost::upgrade_mutex> ul(tree->buf_mu);
@@ -795,9 +794,10 @@ tf::Status ExecutorState::ProcessOutputs(const NodeItem &item, tf::OpKernelConte
                     }
                 }
             }
+            out->alloc_ticket = ticket;
+            // Don't yet insert out into buffer tree, it has to be removed soon.
+            // Instead, in ActivateNodes, insert input_tensors into buffer tree.
             DCHECK_EQ(out->alloc_tree, nullptr);
-            impl_->updateBufferTree(out, ticket);
-            DCHECK(out->alloc_tree);
         }
         if (!val.is_ref()) {
             // If OpKernelContext returns outputs via pass-by-value, we
@@ -846,7 +846,6 @@ void ExecutorState::ClearInputs(Entry *first, size_t num, BufferLockVec &buflock
         }
 
         entry->ClearVal();
-        entry->in_use = false;
     }
 }
 
@@ -1448,11 +1447,10 @@ void ExecutorState::FrameState::ActivateNodes(const NodeItem *item, const bool i
             }
 
             if (entry.has_value) {
-                auto tree = entry.alloc_tree;
-                DCHECK(tree);
+                DCHECK_EQ(entry.alloc_tree, nullptr);
                 VLOG(2) << "Adding entry " << as_hex(&entry)
-                        << " of ticket " << tree->ticket << " due to actvation";
-                executor->updateBufferTree(&entry, tree->ticket);
+                        << " of ticket " << entry.alloc_ticket << " due to actvation";
+                executor->updateBufferTree(&entry, entry.alloc_ticket);
             }
         }
 
