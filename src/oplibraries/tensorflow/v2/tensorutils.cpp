@@ -77,6 +77,13 @@ tensorflow::Status moveTensor(Entry &entry, const std::shared_ptr<PerOpAllocDevi
 
 bool moveTensorTree(TensorBufferTree &tree, const std::shared_ptr<PerOpAllocDevice> &dstDevice)
 {
+    // No buffer to move, safe to assume we moved *0* bytes
+    if (tree.root_buf == nullptr) {
+        return true;
+    }
+
+    // Buffer is not empty, but we don't know any entries holding this buffer
+    // so can't move
     if (tree.roots.empty()) {
         return false;
     }
@@ -84,17 +91,11 @@ bool moveTensorTree(TensorBufferTree &tree, const std::shared_ptr<PerOpAllocDevi
     const auto oldRoot = tree.root_buf;
     const auto oldTicket = tree.ticket;
 
-    tree.ticket = dstDevice->resourceContext().ticket();
-
-    if (oldRoot == nullptr) {
-        return true;
-    }
-
     auto oldCount = tf::remote::PagingHelper::refCountOf(*oldRoot);
     VLOG(2) << "Moving tensor buffer " << as_hex(oldRoot) << " (count " << oldCount
             << ") with ticket " << oldTicket;
 
-    oldRoot->Ref();
+    tree.ticket = dstDevice->resourceContext().ticket();
 
     std::unordered_set<tf::Tensor*> movedReferences;
     Entry *firstEntry = nullptr;
@@ -180,11 +181,6 @@ bool moveTensorTree(TensorBufferTree &tree, const std::shared_ptr<PerOpAllocDevi
     }
     using std::swap;
     swap(tree.subs, newSubs);
-
-    DCHECK(oldRoot->RefCountIsOne());
-    VLOG(2) << "Releasing old root buffer " << as_hex(oldRoot)
-            << " with data block at " << as_hex(oldRoot->data()) << " of size " << oldRoot->size();
-    oldRoot->Unref();
 
     return true;
 }

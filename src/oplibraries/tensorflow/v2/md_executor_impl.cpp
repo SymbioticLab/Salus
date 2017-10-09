@@ -367,8 +367,17 @@ size_t ExecutorImpl::handlePagingRequest(uint64_t oldTicket, std::unique_ptr<Res
             continue;
         }
 
-        auto size = part->root_buf->size();
+        auto oldRoot = part->root_buf;
+        oldRoot->Ref();
+        utils::ScopedUnref<tf::TensorBuffer> su(oldRoot);
+
+        auto size = oldRoot->size();
         if (moveTensorTree(*part, item.device)) {
+            DCHECK(oldRoot->RefCountIsOne());
+            VLOG(2) << "Releasing old root buffer " << as_hex(oldRoot)
+                    << " with data block at " << as_hex(oldRoot->data())
+                    << " of size " << size;
+
             totalReleased += size;
             part->paged_out = true;
         }
