@@ -486,7 +486,7 @@ void ExecutorImpl::removeFromBufferTree(const Entry *entry, EntryVec *needUpdate
     DCHECK(tree);
 
     auto matchRefs = [needUpdate, entry] (auto e) {
-        if (e == entry || (needUpdate && e->ref == entry->ref)) {
+        if (e == entry || (needUpdate && entry->ref && e->ref == entry->ref)) {
             e->alloc_tree = nullptr;
             if (needUpdate)
                 needUpdate->push_back(e);
