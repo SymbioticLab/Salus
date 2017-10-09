@@ -680,7 +680,9 @@ tf::Status ExecutorState::PrepareInputs(const NodeItem &item, tf::OpKernel *kern
         // case 3,4,5,6,7,8
         inp->tensor = entry->RefOrVal();
 
-        VLOG(2) << "    Input " << i << " has data block at " << as_hex(inp->tensor->tensor_data().data());
+        VLOG(2) << "    Input " << i << " is from entry " << as_hex(entry) << " ref " << as_hex(entry->ref)
+                << " tensor " << as_hex(inp->tensor)
+                << " buffer " << as_hex(tf::remote::PagingHelper::bufferOf(*inp->tensor));
         (*input_device_contexts)[i] = entry->device_context;
         (*input_alloc_attrs)[i] = entry->alloc_attr;
 
@@ -784,12 +786,12 @@ tf::Status ExecutorState::ProcessOutputs(const NodeItem &item, tf::OpKernelConte
             out->alloc_attr = ctx->output_alloc_attr(i);
             auto ticket = device->resourceContext().ticket();
             // Pull more accurate ticket info if the tensor is initialized and has a buffer
-            auto buf = tf::remote::PagingHelper::bufferOf(*val.tensor);
+            auto buf = tf::remote::PagingHelper::bufferOf(*out->RefOrVal());
             if (buf) {
                 auto alloc = PerOpAllocator::downcast(buf->allocator());
                 if (alloc) {
                     ticket = alloc->resourceContext().ticket();
-                    if (val.is_ref()) {
+                    if (out->ref) {
                         VLOG(3) << alloc->resourceContext() << ": Buffer " << as_hex(buf) << " refIsOne " << buf->RefCountIsOne();
                     }
                 }
@@ -798,6 +800,9 @@ tf::Status ExecutorState::ProcessOutputs(const NodeItem &item, tf::OpKernelConte
             // Don't yet insert out into buffer tree, it has to be removed soon.
             // Instead, in ActivateNodes, insert input_tensors into buffer tree.
             DCHECK_EQ(out->alloc_tree, nullptr);
+            if (out->ref) {
+                VLOG(2) << "Pending to add a ref tensor to buffer tree: " << as_hex(out->ref);
+            }
         }
         if (!val.is_ref()) {
             // If OpKernelContext returns outputs via pass-by-value, we
@@ -1448,8 +1453,8 @@ void ExecutorState::FrameState::ActivateNodes(const NodeItem *item, const bool i
 
             if (entry.has_value) {
                 DCHECK_EQ(entry.alloc_tree, nullptr);
-                VLOG(2) << "Adding entry " << as_hex(&entry)
-                        << " of ticket " << entry.alloc_ticket << " due to actvation";
+                VLOG(2) << "Adding entry " << as_hex(&entry) << " ref " << as_hex(entry.ref)
+                        << " of ticket " << entry.alloc_ticket << " due to activation";
                 executor->updateBufferTree(&entry, entry.alloc_ticket);
             }
         }

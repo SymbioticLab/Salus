@@ -327,7 +327,7 @@ size_t ExecutorImpl::handlePagingRequest(uint64_t oldTicket, std::unique_ptr<Res
         }
     }
 
-    // Add back to active entries with updated value when exit
+    // Remember to add them back to active entries with updated value when exit
     sg += [this, &parts, oldTicket]() {
         utils::TGuard g(entry_mu_, "PagingEnd");
         for (auto part : parts) {

@@ -142,7 +142,9 @@ struct Entry
 
     void Dereference()
     {
-        AllocLog(INFO) << "Dereferencing entry " << as_hex(this) << " of ticket " << alloc_tree->ticket;
+        VLOG(2) << "Dereferencing entry " << as_hex(this) << " ref " << as_hex(ref)
+                << " buffer " << as_hex(tf::remote::PagingHelper::bufferOf(*ref))
+                << " of ticket " << alloc_tree->ticket;
         {
             tf::mutex_lock l(*ref_mu);
             DCHECK(!val_field_is_set);
