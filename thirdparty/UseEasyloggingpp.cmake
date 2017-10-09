@@ -49,12 +49,6 @@ set(macros
     ELPP_DISABLE_LOGGING_FLAGS_FROM_ARG
     ELPP_DISABLE_LOG_FILE_FROM_ARG
 )
-# Disable extensive logging in release
-if(${CMAKE_BUILD_TYPE} STREQUAL Release OR ${CMAKE_BUILD_TYPE} STREQUAL RelWithDebugInfo)
-    list(APPEND macros ELPP_DISABLE_VERBOSE_LOGS)
-    list(APPEND macros ELPP_DISABLE_PERFORMANCE_TRACKING)
-endif()
-
 
 # Make the target suitable for directly use
 set_property(TARGET easyloggingpp APPEND PROPERTY INCLUDE_DIRECTORIES "${third_party_dir}/${library_name}/src")

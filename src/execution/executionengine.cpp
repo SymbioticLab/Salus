@@ -278,6 +278,12 @@ void ExecutionEngine::scheduleLoop()
             });
         }
 
+        if (VLOG_IS_ON(2)) {
+            for (auto &sess : m_sessions) {
+                VLOG(2) << "Progress counter for session " << sess->sessHandle << ": " << sess->unifiedResSnapshot;
+            }
+        }
+
         // Loop through and accept new tasks
         size_t remainingCount = 0;
         for (auto &item : m_sessions) {

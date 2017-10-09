@@ -41,9 +41,7 @@ Options:
                                 [default: tcp://*:5501]
     --logconf <file>            Path to log configuration file. Note that
                                 settings in this file takes precedence over
-                                other command line arguments.)"
-#if !defined(ELPP_DISABLE_VERBOSE_LOGS)
-R"(
+                                other command line arguments.
     -v <level>, --verbose=<level>
                                 Enable verbose logging level <level>.
                                 Valid range: 0-9. (0 means disable)
@@ -53,14 +51,9 @@ R"(
                                 for syntax.
                                 [default: ]
     --vlogfile=<file>           Verbose logging goes to <file>.
-                                [default: verbose.log])"
-#endif
-#if !defined(ELPP_DISABLE_PERFORMANCE_TRACKING)
-R"(
+                                [default: verbose.log]
     --perflog=<file>            Enable performance logging and log to <file>.
-)"
-#endif
-""s;
+)"s;
 
 static auto kVersion = R"(AtLast: trAnsparenT deep LeArning Shared execuTion version 0.1)"s;
 
