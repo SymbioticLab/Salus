@@ -69,6 +69,21 @@ auto getOrDefault(const optional<C> &c, const typename C::key_type &k, const typ
     return it->second;
 }
 
+template<typename Container, typename Predicate>
+bool erase_if(Container &c, Predicate &&p)
+{
+    using std::begin;
+    using std::end;
+
+    auto itend = end(c);
+    auto it = std::remove_if(begin(c), itend, std::forward<Predicate>(p));
+    if (it == itend) {
+        return false;
+    }
+    c.erase(it, itend);
+    return true;
+}
+
 using boost::adaptors::reverse;
 
 } // namespace utils

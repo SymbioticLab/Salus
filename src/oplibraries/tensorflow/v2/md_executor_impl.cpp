@@ -28,6 +28,7 @@
 #include "oplibraries/tensorflow/v2/peropallocdevice.h"
 #include "oplibraries/tensorflow/v2/tfallocator.h"
 #include "utils/stringutils.h"
+#include "utils/containerutils.h"
 
 #include <boost/thread/lock_algorithms.hpp>
 #include <boost/iterator/indirect_iterator.hpp>
@@ -496,19 +497,13 @@ void ExecutorImpl::removeFromBufferTree(const Entry *entry, EntryVec *needUpdate
 
     utils::TGuard g(entry_mu_, "RemoveFromBufferTree");
 
-    auto it = std::remove_if(tree->roots.begin(), tree->roots.end(), matchRefs);
-    if (it != tree->roots.end()) {
-        tree->roots.erase(it);
+    if (utils::erase_if(tree->roots, matchRefs)) {
         return;
     }
     // the entry was not found in roots, so it must be in one of the subs
-    if (needUpdate->empty()) {
-        for (auto &p : tree->subs) {
-            auto &sub = p.second;
-            sub.erase(std::remove_if(sub.begin(), sub.end(), matchRefs));
-            if (!needUpdate->empty()) {
-                break;
-            }
+    for (auto &p : tree->subs) {
+        if (utils::erase_if(p.second, matchRefs)) {
+            break;
         }
     }
 }

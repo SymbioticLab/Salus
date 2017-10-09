@@ -520,6 +520,7 @@ tf::Status ExecutorState::PrepareInputs(const NodeItem &item, tf::OpKernel *kern
             auto tree = entry->alloc_tree;
             DCHECK(tree);
 
+            entry->in_use = true;
             locks.insert(&tree->buf_mu);
 
             boost::shared_lock<boost::upgrade_mutex> ul(tree->buf_mu);
@@ -683,7 +684,6 @@ tf::Status ExecutorState::PrepareInputs(const NodeItem &item, tf::OpKernel *kern
         VLOG(2) << "    Input " << i << " has data block at " << as_hex(inp->tensor->tensor_data().data());
         (*input_device_contexts)[i] = entry->device_context;
         (*input_alloc_attrs)[i] = entry->alloc_attr;
-        entry->in_use = true;
 
     } // for (int i = 0; i < item.num_inputs; ++i) {
     return tf::Status::OK();
