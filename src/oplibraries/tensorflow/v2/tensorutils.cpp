@@ -111,7 +111,7 @@ bool moveTensorTree(TensorBufferTree &tree, const std::shared_ptr<PerOpAllocDevi
                 LOG(ERROR) << "Error when paging: " << ok;
                 return false;
             }
-            newRoot = tf::remote::PagingHelper::bufferOf(*(entry->val.get()));
+            newRoot = tf::remote::PagingHelper::bufferOf(*entry->RefOrVal());
             firstEntry = entry;
 
             if (entry->ref) {
