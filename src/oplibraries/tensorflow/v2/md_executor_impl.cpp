@@ -468,6 +468,9 @@ void ExecutorImpl::updateBufferTree(Entry *entry, uint64_t ticket)
     DCHECK_EQ(tree->ticket, ticket);
     DCHECK_EQ(tree->root_buf, root_buf);
 
+    VLOG(2) << "Adding entry " << as_hex(entry) << " to tree " << tree
+            << " of buffer " << tree->root_buf << " with ticket " << ticket;
+
     if (root_buf == buf) {
         auto it = std::find(tree->roots.begin(), tree->roots.end(), entry);
         if (it == tree->roots.end()) {
@@ -491,6 +494,9 @@ void ExecutorImpl::removeFromBufferTree(const Entry *entry, EntryVec *needUpdate
 
     auto matchRefs = [needUpdate, entry] (auto e) {
         if (e == entry || (needUpdate && entry->ref && e->ref == entry->ref)) {
+            VLOG(2) << "Removing entry " << as_hex(e) << " from tree " << entry->alloc_tree
+                    << " of buffer " << entry->alloc_tree->root_buf
+                    << " with ticket " << entry->alloc_tree->ticket;
             e->alloc_tree = nullptr;
             if (needUpdate)
                 needUpdate->push_back(e);
