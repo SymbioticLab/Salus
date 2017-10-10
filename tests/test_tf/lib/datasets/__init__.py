@@ -4,7 +4,7 @@ import os
 import multiprocessing
 import tensorflow as tf
 
-from . import flowers
+from . import flowers, ptb_reader
 from .. import tfhelper
 
 slim = tf.contrib.slim
@@ -67,3 +67,14 @@ def flowers_data(batch_size, batch_num, height=256, width=256, is_train=True, nu
         images, labels = tf.train.batch([resized_image, label], batch_size=batch_size,
                                         capacity=1000 * batch_size, num_threads=num_readers)
         return images, labels, 5
+
+
+def ptb_data(config, eval_config):
+    data_dir = os.path.join(os.path.expanduser('~'), 'data', 'ptb', 'data')
+    raw_data = ptb_reader.ptb_raw_data(data_dir)
+    train_data, valid_data, test_data, _ = raw_data
+    return (
+        ptb_reader.PTBInput(config, train_data, "TrainInput"),
+        ptb_reader.PTBInput(eval_config, valid_data, "ValidInput"),
+        ptb_reader.PTBInput(eval_config, test_data, "TestInput"),
+    )
