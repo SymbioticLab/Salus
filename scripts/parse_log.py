@@ -180,8 +180,7 @@ ptn_mem_dealloc = re.compile(r"""TFAllocator\sdeallocating\smemory\sat\s(?P<addr
                                  size\s(?P<size>\d+)\s
                                  using\sallocator\s(?P<mem_type>\w+)@(?P<alloc_inst>\w+)""",
                              re.VERBOSE)
-ptn_paging_begin = re.compile(r"""Paging begin""")
-ptn_paging_end = re.compile(r"""Paging end""")
+ptn_progcnt = re.compile(r"""Progress counter for session (?P<sess>\w+): (?P<cnt>\d+)""")
 
 ptn_tf_vanilla_start = re.compile(r"""\w+ Kernel Compute start: seq=(?P<seq>\d+)""")
 ptn_tf_vanilla_done = re.compile(r"""\w+ Kernel Compute done: seq=(?P<seq>\d+)""")
@@ -349,24 +348,14 @@ def match_exec_content(content, entry):
             'block': block
         }
 
-    m = ptn_paging_begin.match(content)
+    m = ptn_progcnt.match(content)
     if m:
-        if len(last_paging_start) != 0:
-            raise ValueError('Concecutive paging start event, previous one: ', last_paging_start[-1])
-        last_paging_start.append(entry)
+        sess = m.group('sess')
+        cnt = int(m.group('cnt'))
         return {
-            'type': 'paging_begin'
-        }
-
-    m = ptn_paging_end.match(content)
-    if m:
-        if len(last_paging_start) == 0:
-            raise ValueError('Concecutive paging end event')
-        last_start = last_paging_start.pop()
-        return {
-            'type': 'paging_end',
-            'start': last_start.timestamp,
-            'end': entry.timestamp
+            'type': 'prog_cnt',
+            'sess': sess,
+            'cnt': cnt
         }
 
     return {}
@@ -732,3 +721,9 @@ def paging_stat(logs):
     ax = plt.hlines(df.index, dt.date2num(df.start), dt.date2num(df.end))
 
     return df, ax.figure
+
+
+def progress_counter(logs):
+    data = [l for l in logs if l.type == 'prog_cnt']
+    df = pd.DataFrame(data).drop(['type'], axis=1)
+    return df

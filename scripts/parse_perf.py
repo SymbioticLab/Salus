@@ -82,16 +82,11 @@ def match_exec_content(content, ctx):
 
 def perfcalls(logs):
     df = pd.DataFrame(logs)
-    df = df[df['type'] == 'func'].drop(['acquire', 'locked'])
 
     # Change from timedelta to us
     df['time'] = df['time'].astype(int) / 1e3
 
-    func = df[df['type'] == 'func']
-    mutex = df[df['type'] == 'mutex']
-
-    func = func.drop(['acquire', 'locked', 'type'], axis=1)
-    mutex = mutex.drop(['time', 'parent', 'type'], axis=1)
+    func = df[df['type'] == 'func'].drop(['acquire', 'locked', 'type'], axis=1)
 
     # for func
     grouped = func.groupby('name').agg({
@@ -101,4 +96,4 @@ def perfcalls(logs):
     grouped.columns = [x[-1] for x in grouped.columns.ravel()]
     grouped.sort_values(by=['sum', 'mean'], ascending=False)
 
-    return grouped, mutex
+    return grouped, func
