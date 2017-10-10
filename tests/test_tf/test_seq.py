@@ -15,6 +15,8 @@ from .lib.seq2seq.ptb.ptb_word_lm import get_config
 def run_seq_ptb(sess, config_name):
     config = get_config(config_name)
     eval_config = get_config(config_name)
+    config.max_max_epoch = 1
+    eval_config.max_max_epoch = 1
     eval_config.batch_size = 1
     eval_config.num_steps = 1
 
