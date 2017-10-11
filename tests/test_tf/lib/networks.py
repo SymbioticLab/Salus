@@ -5,3 +5,5 @@ from .vgg.vgg19 import Vgg19  # NOQA: F401
 from .vgg.vgg19_trainable import Vgg19 as Vgg19Trainable  # NOQA: F401
 
 from .seq2seq.ptb.ptb_word_lm import PTBModel  # NOQA: F401
+
+from .resnet import ResNet, ResNetHParams  # NOQA: F401

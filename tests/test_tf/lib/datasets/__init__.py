@@ -4,7 +4,7 @@ import os
 import multiprocessing
 import tensorflow as tf
 
-from . import flowers, ptb_reader
+from . import flowers, ptb_reader, cifar_input
 from .. import tfhelper
 
 slim = tf.contrib.slim
@@ -78,3 +78,17 @@ def ptb_data(config, eval_config):
         ptb_reader.PTBInput(eval_config, valid_data, "ValidInput"),
         ptb_reader.PTBInput(eval_config, test_data, "TestInput"),
     )
+
+
+def cifar10_data(batch_size, is_train=True):
+    data_path = os.path.join(os.path.expanduser('~'), 'data', 'cifar10-batches-bin', 'data_batch_*')
+    images, labels = cifar_input.build_input('cifar10', data_path, batch_size,
+                                             "train" if is_train else "eval")
+    return images, labels, 10
+
+
+def cifar100_data(batch_size, is_train=True):
+    data_path = os.path.join(os.path.expanduser('~'), 'data', 'cifar100-binary', 'train.bin')
+    images, labels = cifar_input.build_input('cifar100', data_path, batch_size,
+                                             "train" if is_train else "eval")
+    return images, labels, 100
