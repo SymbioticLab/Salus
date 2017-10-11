@@ -10,12 +10,13 @@ import tensorflow as tf
 @contextmanager
 def initialized_scope(sess):
     """Initialize and start queue runners for session"""
+    sess.run(initialize_op())
+
     coord = tf.train.Coordinator()
     queue_threads = tf.train.start_queue_runners(sess, coord)
     for qr in tf.get_collection(tf.GraphKeys.QUEUE_RUNNERS):
         print(qr.name)
 
-    sess.run(initialize_op())
     yield coord
 
     coord.request_stop()
