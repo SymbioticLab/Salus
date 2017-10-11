@@ -141,6 +141,10 @@ tf::Status ExecutorImpl::Initialize()
         const auto &frame_name = cf_info.frame_names[id];
         auto frame_info = EnsureFrameInfo(frame_name);
 
+        if (VLOG_IS_ON(3)) {
+            VLOG(3) << "Node " << id << " in graph@" << as_hex(graph_) << ": " << SummarizeNodeDef(n->def());
+        }
+
         const int num_in_edges = n->in_edges().size();
         bool client_terminated = false;
         // See if this node is a client terminated recv node
