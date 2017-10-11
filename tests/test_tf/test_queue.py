@@ -33,22 +33,14 @@ def run_queue(sess):
     batch_num = 10
     get_batch = queue.dequeue_many(100 / batch_num)
 
-    sess.run(tfhelper.initialize_op())
-    coord = tf.train.Coordinator()
-    queue_threads = tf.train.start_queue_runners(sess, coord)
-
-    print("started threads: ", queue_threads)
-
     preds = []
-    for i in range(batch_num):
-        if coord.should_stop():
-            break
-        val = sess.run(get_batch)
-        print("batch {}, got {}".format(i, val))
-        preds.append(val)
-
-    coord.request_stop()
-    coord.join(queue_threads)
+    with tfhelper.initialized_scope(sess) as coord:
+        for i in range(batch_num):
+            if coord.should_stop():
+                break
+            val = sess.run(get_batch)
+            print("batch {}, got {}".format(i, val))
+            preds.append(val)
 
     return preds
 

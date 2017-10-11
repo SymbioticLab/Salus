@@ -35,49 +35,40 @@ def run_vgg(vgg, sess, input_data, batch_size=100):
     correct_prediction = tf.equal(tf.argmax(vgg.prob, 1), tf.argmax(labels))
     accuracy = tf.reduce_mean(tf.cast(correct_prediction, tf.float32))
 
-    for qr in tf.get_collection(tf.GraphKeys.QUEUE_RUNNERS):
-        print(qr.name)
+    with tfhelper.initialized_scope(sess) as coord:
+        speeds = []
+        inbetween = []
+        last_end_time = 0
+        JCT = default_timer()
+        for i in range(5):
+            if coord.should_stop():
+                break
+            print("{}: Start running step {}".format(datetime.now(), i))
+            start_time = default_timer()
+            _, loss_value = sess.run([train_step, cross_entropy], feed_dict={train_mode: True})
+            end_time = default_timer()
 
-    sess.run(tfhelper.initialize_op())
-    coord = tf.train.Coordinator()
-    queue_threads = tf.train.start_queue_runners(sess, coord)
-    print('{} threads started for queue'.format(len(queue_threads)))
-    speeds = []
-    inbetween = []
-    last_end_time = 0
-    JCT = default_timer()
-    for i in range(5):
-        if coord.should_stop():
-            break
-        print("{}: Start running step {}".format(datetime.now(), i))
+            if last_end_time > 0:
+                inbetween.append(start_time - last_end_time)
+            last_end_time = end_time
+
+            duration = end_time - start_time
+            examples_per_sec = batch_size / duration
+            sec_per_batch = float(duration)
+            speeds.append(sec_per_batch)
+            fmt_str = '{}: step {}, loss = {:.2f} ({:.1f} examples/sec; {:.3f} sec/batch'
+            print(fmt_str.format(datetime.now(), i, loss_value, examples_per_sec, sec_per_batch))
+
+        print('Average %.3f sec/batch' % np.average(speeds))
+        print('Average %.6f sec spent between batches' % np.average(inbetween))
+        JCT = default_timer() - JCT
+        print('Training time is %.3f sec' % JCT)
+
+        print('{}: Start final eva'.format(datetime.now()))
         start_time = default_timer()
-        _, loss_value = sess.run([train_step, cross_entropy], feed_dict={train_mode: True})
-        end_time = default_timer()
-
-        if last_end_time > 0:
-            inbetween.append(start_time - last_end_time)
-        last_end_time = end_time
-
-        duration = end_time - start_time
-        examples_per_sec = batch_size / duration
-        sec_per_batch = float(duration)
-        speeds.append(sec_per_batch)
-        fmt_str = '{}: step {}, loss = {:.2f} ({:.1f} examples/sec; {:.3f} sec/batch'
-        print(fmt_str.format(datetime.now(), i, loss_value, examples_per_sec, sec_per_batch))
-
-    print('Average %.3f sec/batch' % np.average(speeds))
-    print('Average %.6f sec spent between batches' % np.average(inbetween))
-    JCT = default_timer() - JCT
-    print('Training time is %.3f sec' % JCT)
-
-    print('{}: Start final eva'.format(datetime.now()))
-    start_time = default_timer()
-    final_acc = sess.run(accuracy, feed_dict={train_mode: False})
-    duration = default_timer() - start_time
-    print('Final eval takes %.3f sec' % duration)
-
-    coord.request_stop()
-    coord.join(queue_threads)
+        final_acc = sess.run(accuracy, feed_dict={train_mode: False})
+        duration = default_timer() - start_time
+        print('Final eval takes %.3f sec' % duration)
 
     return final_acc
 
