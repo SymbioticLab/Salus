@@ -38,19 +38,22 @@ def run_seq_ptb(sess, config_name):
         with tf.variable_scope("Model", reuse=True, initializer=initializer):
             mtest = networks.PTBModel(is_training=False, config=eval_config, input_=test_input)
 
-    sess.run(tfhelper.initialize_op())
-    for i in range(config.max_max_epoch):
-        lr_decay = config.lr_decay ** max(i + 1 - config.max_epoch, 0.0)
-        m.assign_lr(sess, config.learning_rate * lr_decay)
+    with tfhelper.initialized_scope(sess) as coord:
+        for i in range(config.max_max_epoch):
+            if coord.should_stop():
+                break
 
-        print("Epoch: %d Learning rate: %.3f" % (i + 1, sess.run(m.lr)))
-        train_perplexity = m.run_epoch(sess, eval_op=m.train_op, verbose=True)
-        print("Epoch: %d Train Perplexity: %.3f" % (i + 1, train_perplexity))
-        valid_perplexity = mvalid.run_epoch(sess)
-        print("Epoch: %d Valid Perplexity: %.3f" % (i + 1, valid_perplexity))
+            lr_decay = config.lr_decay ** max(i + 1 - config.max_epoch, 0.0)
+            m.assign_lr(sess, config.learning_rate * lr_decay)
 
-    test_perplexity = mtest.run_epoch(sess)
-    print("Test Perplexity: %.3f" % test_perplexity)
+            print("Epoch: %d Learning rate: %.3f" % (i + 1, sess.run(m.lr)))
+            train_perplexity = m.run_epoch(sess, eval_op=m.train_op, verbose=True)
+            print("Epoch: %d Train Perplexity: %.3f" % (i + 1, train_perplexity))
+            valid_perplexity = mvalid.run_epoch(sess)
+            print("Epoch: %d Valid Perplexity: %.3f" % (i + 1, valid_perplexity))
+
+        test_perplexity = mtest.run_epoch(sess)
+        print("Test Perplexity: %.3f" % test_perplexity)
 
 
 configs = ['tiny', 'small', 'medium', 'large']
@@ -61,7 +64,7 @@ class SeqCaseBase(unittest.TestCase):
         return None
 
     def get_func_to_run(self, config_name):
-        return lambda: self._runner(tf.get_default_session(), config_name)
+        return lambda: self._runner()(tf.get_default_session(), config_name)
 
     @parameterized.expand(configs)
     def test_gpu(self, config_name):
