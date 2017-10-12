@@ -81,14 +81,14 @@ def ptb_data(config, eval_config):
 
 
 def cifar10_data(batch_size, is_train=True):
-    data_path = os.path.join(os.path.expanduser('~'), 'data', 'cifar10-batches-bin', 'data_batch_*')
+    data_path = os.path.join(os.path.expanduser('~'), 'data', 'cifar-10-batches-bin', 'data_batch_*')
     images, labels = cifar_input.build_input('cifar10', data_path, batch_size,
                                              "train" if is_train else "eval")
     return images, labels, 10
 
 
 def cifar100_data(batch_size, is_train=True):
-    data_path = os.path.join(os.path.expanduser('~'), 'data', 'cifar100-binary', 'train.bin')
+    data_path = os.path.join(os.path.expanduser('~'), 'data', 'cifar-100-binary', 'train.bin')
     images, labels = cifar_input.build_input('cifar100', data_path, batch_size,
                                              "train" if is_train else "eval")
     return images, labels, 100
