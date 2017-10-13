@@ -27,6 +27,7 @@
 
 #include <boost/lockfree/queue.hpp>
 
+#include <atomic>
 #include <vector>
 #include <memory>
 #include <thread>
@@ -42,8 +43,11 @@ class ServerWorker;
  */
 class ZmqServer
 {
-public:
     explicit ZmqServer(std::unique_ptr<RpcServerCore> &&logic);
+
+public:
+    static ZmqServer &instance();
+
 
     ~ZmqServer();
 
@@ -76,12 +80,17 @@ public:
 
 private:
     /**
+     * Handle signals
+     */
+    void handleSignals();
+
+    /**
      * Low level api for sending messages back to client.
      */
     void sendMessage(MultiPartMessage &&parts);
 
     void sendLoop();
-    void proxyRecvLoop();
+    void proxyRecvLoop(const std::string &feAddr);
 
     /**
      * Poll on items with check
@@ -95,13 +104,11 @@ private:
 
 private:
     // Shared by proxy&recv and send threads
-    constexpr static const char *m_baddr = "inproc://backend";
     zmq::context_t m_zmqCtx;
-    bool m_keepRunning;
+    std::atomic_bool m_keepRunning;
 
     // For the proxy&recv loop
-    zmq::socket_t m_frontend_sock;
-    zmq::socket_t m_backend_sock;
+    std::unique_ptr<std::thread> m_recvThread;
 
     std::unique_ptr<RpcServerCore> m_pLogic;
 

@@ -142,7 +142,7 @@ int main(int argc, char **argv)
 
     printConfiguration(args);
 
-    ZmqServer server(make_unique<RpcServerCore>());
+    auto &server = ZmqServer::instance();
 
     const auto &listen = args[kListenFlag].asString();
     LOG(INFO) << "Starting server listening at " << listen;

@@ -21,6 +21,7 @@
 
 #include "rpcservercore.h"
 #include "platform/logging.h"
+#include "platform/signals.h"
 #include "utils/protoutils.h"
 
 #include "protos.h"
@@ -31,16 +32,22 @@
 
 using namespace std::literals::chrono_literals;
 
+namespace {
+constexpr const char kBeAddr[] = "inproc://backend";
+} // namespace
+
+/*static*/ ZmqServer &ZmqServer::instance()
+{
+    static ZmqServer s(std::make_unique<RpcServerCore>());
+    return s;
+}
+
 ZmqServer::ZmqServer(std::unique_ptr<RpcServerCore> &&logic)
     : m_zmqCtx(1)
     , m_keepRunning(false)
-    , m_frontend_sock(m_zmqCtx, zmq::socket_type::router)
-    , m_backend_sock(m_zmqCtx, zmq::socket_type::pair)
     , m_pLogic(std::move(logic))
     , m_sendQueue(128)
 {
-    m_frontend_sock.setsockopt(ZMQ_ROUTER_MANDATORY, 1);
-    m_frontend_sock.setsockopt(ZMQ_ROUTER_HANDOVER, 1);
 }
 
 ZmqServer::~ZmqServer()
@@ -55,24 +62,10 @@ void ZmqServer::start(const std::string& address)
         return;
     }
 
-    try {
-        VLOG(1) << "Binding frontend socket to address: " << address;
-        m_frontend_sock.bind(address);
-
-        auto baddr = "inproc://backend";
-        VLOG(1) << "Binding backend socket to address: " << baddr;
-        m_backend_sock.bind(baddr);
-    } catch (zmq::error_t &err) {
-        LOG(FATAL) << "Error while binding sockets: " << err;
-        // re-throw to stop the process
-        throw;
-    }
-
     m_keepRunning = true;
-    m_sendThread = std::make_unique<std::thread>(std::bind(&ZmqServer::sendLoop, this));
+    m_recvThread = std::make_unique<std::thread>(std::bind(&ZmqServer::proxyRecvLoop, this, address));
 
-    // proxy and recving loop must be called in the same thread as constructor (because of fe and bd sockets)
-    proxyRecvLoop();
+    m_sendThread = std::make_unique<std::thread>(std::bind(&ZmqServer::sendLoop, this));
 }
 
 bool ZmqServer::pollWithCheck(const std::vector<zmq::pollitem_t> &items, long timeout)
@@ -96,9 +89,26 @@ bool ZmqServer::pollWithCheck(const std::vector<zmq::pollitem_t> &items, long ti
     return true;
 }
 
-void ZmqServer::proxyRecvLoop()
+void ZmqServer::proxyRecvLoop(const std::string &feAddr)
 {
     VLOG(1) << "Started recving and sending loop";
+    zmq::socket_t m_frontend_sock(m_zmqCtx, zmq::socket_type::router);
+    zmq::socket_t m_backend_sock(m_zmqCtx, zmq::socket_type::pair);
+    m_frontend_sock.setsockopt(ZMQ_ROUTER_MANDATORY, 1);
+    m_frontend_sock.setsockopt(ZMQ_ROUTER_HANDOVER, 1);
+
+    try {
+        VLOG(1) << "Binding frontend socket to address: " << feAddr;
+        m_frontend_sock.bind(feAddr);
+
+        VLOG(1) << "Binding backend socket to address: " << kBeAddr;
+        m_backend_sock.bind(kBeAddr);
+    } catch (zmq::error_t &err) {
+        LOG(FATAL) << "Error while binding sockets: " << err;
+        // re-throw to stop the process
+        throw;
+    }
+
     // set up pulling.
     // we are interested in POLLIN and POLLOUT on m_frontend_sock, and POLLIN out m_backend_sock.
     // messages received on m_frontend_sock are directly dispatched using m_pLogic,
@@ -297,7 +307,7 @@ void ZmqServer::sendMessage(MultiPartMessage &&parts)
 void ZmqServer::sendLoop()
 {
     zmq::socket_t sock(m_zmqCtx, zmq::socket_type::pair);
-    sock.connect(m_baddr);
+    sock.connect(kBeAddr);
     VLOG(2) << "Sending loop started";
 
     while (m_keepRunning) {
@@ -334,7 +344,33 @@ void ZmqServer::requestStop()
 
 void ZmqServer::join()
 {
+    // Handle SIGINT and SIGTERM
+    // so the user can stop the server from terminal
+    handleSignals();
+
     if (m_sendThread && m_sendThread->joinable()) {
         m_sendThread->join();
     }
+
+    if (m_recvThread && m_recvThread->joinable()) {
+        m_recvThread->join();
+    }
+
+    LOG(INFO) << "ZmqServer stopped";
+
+    // TODO:
+    // uninstall signal handlers
+}
+
+void ZmqServer::handleSignals()
+{
+    auto handler = [](int sig) {
+        auto &server = ZmqServer::instance();
+        // Flush and start a new line on stdout, so ^C won't mess up the output
+        std::cout << std::endl;
+        LOG(INFO) << "Stopping ZmqServer due to signal: " << signals::signalName(sig);
+        server.requestStop();
+    };
+    signals::installSignalHandler(SIGINT, handler);
+    signals::installSignalHandler(SIGTERM, handler);
 }
