@@ -7,6 +7,14 @@ from matplotlib.dates import SECONDLY, rrulewrapper, RRuleLocator, DateFormatter
 from matplotlib.ticker import MaxNLocator, FuncFormatter
 
 
+def cleanup_axis_timedelta(axis, formatter=None):
+    if formatter is None:
+        def formatter(x, pos):
+            return '{:.1f}ms'.format(x / 1e6)
+    axis.set_major_formatter(FuncFormatter(formatter))
+    return axis
+
+
 def cleanup_axis_datetime(axis):
     rule = rrulewrapper(SECONDLY, interval=1)
     loc = RRuleLocator(rule)

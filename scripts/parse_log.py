@@ -633,7 +633,8 @@ def resp_on_wire_time(logs):
     return ts, ax.figure
 
 
-def memory_usage(logs, iter_times=None, beginning=None):
+def memory_usage(logs, iter_times=None, beginning=None, mem_type=None,
+                 unified_ylabel=False, smoother=None, xformatter=None):
     if beginning is None:
         beginning = get_beginning(logs)
 
@@ -663,36 +664,63 @@ def memory_usage(logs, iter_times=None, beginning=None):
 
     df = pd.DataFrame(mem_activities)
 
+    if mem_type is not None:
+        df = df[df['mem_type'] == mem_type]
+
     if len(df) == 0:
         return df, None
 
     df = df.set_index('timestamp').sort_index()
 
+    # Save beginning
+    if beginning is None:
+        beginning = df.index[0]
+
     # Restrict x axis to iteration times
     if iter_times is not None:
         starts, ends = zip(*iter_times)
-        df = df.loc[:ends[-1]]
+        df = df.loc[starts[0]:ends[-1]]
 
     # Change to timedelta
-    df.index = df.index - df.index[0]
-    df.index = df.index.astype(int) / 1e9
+    df.index = df.index - beginning
+    df.index = df.index.astype(int)
 
-    fig, axs = plt.subplots(ncols=1, nrows=4, sharex=True)
+    nrows = len(df['mem_type'].unique())
+    fig, axs = plt.subplots(nrows=nrows, ncols=1, sharex=True, squeeze=False)
+    # Make axes into a 1D array
+    axs = axs.reshape(-1)
+
+    series = []
     for (name, group), ax in zip(df.groupby('mem_type'), axs):
-        group.cumsum().plot(ax=ax, title=name)
+        ss = group.cumsum()
+        series.append(ss)
+        if smoother:
+            ss = smoother(ss)
+        ss.plot(ax=ax, title=name)
         ax.grid('on')
-        ax.xaxis.label.set_visible(False)
         ax.legend().remove()
         pu.cleanup_axis_bytes(ax.yaxis)
+        if not unified_ylabel:
+            ax.set_ylabel('Memory Usage')
 
-    pu.cleanup_axis_datetime(fig.axes[-1].xaxis)
-    fig.axes[-1].autoscale(axis='x')
+    # Adjust x axis
+    pu.cleanup_axis_timedelta(axs[-1].xaxis, xformatter)
+    if unified_ylabel:
+        axs[-1].xaxis.label.set_visible(False)
+    else:
+        axs[-1].set_xlabel('Time (s)')
+    axs[-1].autoscale(axis='x')
+    xlim = axs[-1].get_xlim()
+    if xlim[0] < 0:
+        axs[-1].set_xlim(left=0)
 
     fig.tight_layout()
-    fig.text(0.5, 0.02, 'Time (s)', ha='center')
-    fig.text(0.02, 0.5, 'Memory Usage (bytes)', va='center', rotation='vertical')
-    fig.subplots_adjust(left=0.1, bottom=0.13)
-    return df, fig
+
+    if unified_ylabel:
+        fig.text(0.5, 0.02, 'Time (s)', ha='center')
+        fig.text(0.02, 0.5, 'Memory Usage (bytes)', va='center', rotation='vertical')
+        fig.subplots_adjust(left=0.1, bottom=0.13)
+    return df, series, fig
 
 
 def paging_stat(logs):

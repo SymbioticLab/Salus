@@ -3,36 +3,166 @@ from __future__ import print_function, absolute_import, division
 
 import os
 import sys
+from collections import namedtuple, defaultdict
+from functools import wraps
+
+import matplotlib.pyplot as plt
 
 import parse_log as pl
 import parse_nvvp as pn
 
 
-def process_case(name, save_dir='figures'):
-    os.makedirs(save_dir, exist_ok=True)
+ConfigT = namedtuple('ConfigT', 'save_dir, log_dir')
 
-    log_dir = os.path.join('logs', name)
+cases = defaultdict(list)
 
-    # Memory usage
-    logs = pl.load_file(os.path.join(log_dir, 'exec.output'))
-    iter_times = pn.parse_iterations(os.path.join(log_dir, 'mem-iter.log'))
-    df, fig = pl.memory_usage(logs, iter_times=iter_times)
-    fig.savefig(os.path.join(save_dir, name + '-memory' + '.pdf'), dpi=600)
-    with open(os.path.join(save_dir, name + '-memory.csv'), 'w') as f:
-        df.to_csv(f)
 
-    # Computation
-    reader = pn.load_file(os.path.join(log_dir, 'profile.sqlite'))
-    iter_times = pn.parse_iterations(os.path.join(log_dir, 'com-iter.log'))
-    df, fig = pn.active_warp_trend(reader, iter_times)
-    fig.savefig(os.path.join(save_dir, name + '-compute' + '.pdf'), dpi=600)
-    with open(os.path.join(save_dir, name + '-compute.csv'), 'w') as f:
-        df.to_csv(f)
+def plotter(name):
+    def plotter_decorator(func):
+        filename = func.__name__.lstrip('plot_').replace('_', '-')
+
+        @wraps(func)
+        def wrapped(config):
+            local_dir = os.path.join(config.log_dir, name)
+            log_file = os.path.join(local_dir, 'alloc.output')
+            iter_file = os.path.join(local_dir, 'mem-iter.output')
+            logs = pl.load_file(log_file)
+            iters = pn.parse_iterations(iter_file)
+            return func(config, local_dir, logs, iters)
+
+        cases[name].append((wrapped, filename))
+
+        return wrapped
+
+    return plotter_decorator
+
+
+@plotter('mnist25')
+def plot_mem_mnist25(config, local_dir, logs, iters):
+    def smoother(ss):
+        return ss.ewm(span=15).mean()
+
+    df, _, fig = pl.memory_usage(logs, iter_times=iters[1:11],
+                                 mem_type='GPU_0_bfc', smoother=smoother)
+    fig.axes[-1].set_title('Memory usage of CONV4 with batch size 25')
+    return fig
+
+
+@plotter('mnist50')
+def plot_mem_mnist50(config, local_dir, logs, iters):
+    def smoother(ss):
+        return ss.ewm(span=15).mean()
+
+    df, _, fig = pl.memory_usage(logs, iter_times=iters[1:11],
+                                 mem_type='GPU_0_bfc', smoother=smoother)
+    fig.axes[-1].set_title('Memory usage of CONV4 with batch size 50')
+    return fig
+
+
+@plotter('mnist100')
+def plot_mem_mnist100(config, local_dir, logs, iters):
+    def smoother(ss):
+        return ss.ewm(span=15).mean()
+
+    df, _, fig = pl.memory_usage(logs, iter_times=iters[1:11],
+                                 mem_type='GPU_0_bfc', smoother=smoother)
+    fig.axes[-1].set_title('Memory usage of CONV4 with batch size 100')
+    return fig
+
+
+@plotter('vgg25')
+def plot_mem_vgg25(config, local_dir, logs, iters):
+    def smoother(ss):
+        return ss
+        # return ss.ewm(span=15).mean()
+
+    df, _, fig = pl.memory_usage(logs, iter_times=iters[1:11],
+                                 mem_type='GPU_0_bfc', smoother=smoother)
+    fig.axes[-1].set_title('Memory usage of VGG16 with batch size 25')
+    return fig
+
+
+@plotter('vgg50')
+def plot_mem_vgg50(config, local_dir, logs, iters):
+    def smoother(ss):
+        return ss
+        # return ss.ewm(span=15).mean()
+
+    df, _, fig = pl.memory_usage(logs, iter_times=iters[1:11],
+                                 mem_type='GPU_0_bfc', smoother=smoother)
+    fig.axes[-1].set_title('Memory usage of VGG16 with batch size 50')
+    return fig
+
+
+@plotter('vgg100')
+def plot_mem_vgg100(config, local_dir, logs, iters):
+    def smoother(ss):
+        return ss
+        # return ss.ewm(span=15).mean()
+
+    df, _, fig = pl.memory_usage(logs, iter_times=iters[1:11],
+                                 mem_type='GPU_0_bfc', smoother=smoother)
+    fig.axes[-1].set_title('Memory usage of VGG16 with batch size 100')
+    return fig
+
+
+@plotter('res25')
+def plot_mem_res25(config, local_dir, logs, iters):
+    def smoother(ss):
+        return ss
+        # return ss.ewm(span=15).mean()
+
+    df, _, fig = pl.memory_usage(logs, iter_times=iters[1:11],
+                                 mem_type='GPU_0_bfc', smoother=smoother)
+    fig.axes[-1].set_title('Memory usage of ResNet with batch size 25')
+    return fig
+
+
+@plotter('res50')
+def plot_mem_res50(config, local_dir, logs, iters):
+    def smoother(ss):
+        return ss
+        # return ss.ewm(span=15).mean()
+
+    df, _, fig = pl.memory_usage(logs, iter_times=iters[1:11],
+                                 mem_type='GPU_0_bfc', smoother=smoother)
+    fig.axes[-1].set_title('Memory usage of ResNet with batch size 50')
+    return fig
+
+
+@plotter('res100')
+def plot_mem_res100(config, local_dir, logs, iters):
+    def smoother(ss):
+        return ss
+        # return ss.ewm(span=15).mean()
+
+    df, _, fig = pl.memory_usage(logs, iter_times=iters[1:11],
+                                 mem_type='GPU_0_bfc', smoother=smoother)
+    fig.axes[-1].set_title('Memory usage of ResNet with batch size 100')
+    return fig
+
+
+def main():
+    config = ConfigT(save_dir='figures', log_dir='logs/mem')
+
+    os.makedirs(config.save_dir, exist_ok=True)
+
+    args = sys.argv[1:]
+    showFigure = False
+    if len(args) >= 1 and args[0] == 'show':
+        showFigure = True
+        args = args[1:]
+
+    names = args if len(args) > 0 else cases.keys()
+    for name in names:
+        for f, filename in cases[name]:
+            print("Generating " + filename)
+            fig = f(config)
+            if showFigure:
+                plt.show()
+            else:
+                fig.savefig(os.path.join(config.save_dir, filename + '.pdf'), transparent=True)
 
 
 if __name__ == '__main__':
-    cases = ['vgg16-rpc-gpu', 'mnistconv-rpc-gpu', 'mnistlarge-rpc-gpu']
-    if len(sys.argv) > 1:
-        cases = sys.argv[1:]
-    for name in cases:
-        process_case(name)
+    main()
