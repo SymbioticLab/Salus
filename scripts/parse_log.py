@@ -162,6 +162,7 @@ ptn_recv_evenlop = re.compile(r"""Received \s request \s evenlop: \s
                                   seq=(?P<seq>\d+),.*""",
                               re.VERBOSE)
 ptn_disp_custom = re.compile(r"""Dispatching custom task (?P<req>[\w.]+) of seq (?P<seq>\d+)""")
+ptn_sess_create = re.compile(r"""Session (?P<sess>\w+) created with recvId (?P<recvid>.+)""")
 ptn_create_opkernel = re.compile(r"""Created OpKernel for seq (?P<seq>\d+)""")
 ptn_running = re.compile(r"""running(?P<async> async)? in thread \d+""")
 ptn_compute_done = re.compile(r"""OpKernel->Compute finished with status.*""")
@@ -358,6 +359,14 @@ def match_exec_content(content, entry):
             'cnt': cnt
         }
 
+    m = ptn_sess_create.match(content)
+    if m:
+        sess = m.group('sess')
+        return {
+            'type': 'sess_create',
+            'sess': sess
+        }
+
     return {}
 
 
@@ -464,6 +473,14 @@ def get_beginning(logs):
     for l in logs:
         if l.type == 'disp_custom' and l.req == 'tensorflow.CreateSessionRequest':
                 return l.timestamp
+
+
+def session_beginnings(logs):
+    sessstarts = {}
+    for l in logs:
+        if l.type == 'sess_create':
+            sessstarts[l.sess] = l.timestamp
+    return sessstarts
 
 
 def message_size(logs):
@@ -752,6 +769,16 @@ def paging_stat(logs):
 
 
 def progress_counter(logs):
-    data = [l for l in logs if l.type == 'prog_cnt']
-    df = pd.DataFrame(data).drop(['type'], axis=1)
-    return df
+    data = [{'session': l.sess, 'counter': l.cnt, 'timestamp': l.timestamp}
+            for l in logs if l.type == 'prog_cnt']
+    sessstarts = session_beginnings(logs)
+
+    df = pd.DataFrame(data)
+    fig, ax = plt.subplots()
+    for key, grp in df.groupby(['session']):
+        ax = grp.plot(ax=ax, kind='line', x='timestamp', y='counter', label=key)
+        if key in sessstarts:
+            pu.axvlines([sessstarts[key]], ax=ax, linestyle='--',
+                        color=ax.get_lines()[-1].get_color())
+
+    return df, fig

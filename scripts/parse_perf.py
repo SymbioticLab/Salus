@@ -97,3 +97,4 @@ def perfcalls(logs):
     grouped.sort_values(by=['sum', 'mean'], ascending=False)
 
     return grouped, func
+

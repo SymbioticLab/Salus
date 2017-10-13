@@ -15,10 +15,12 @@ def load_file(path):
 
 
 ptn_iter = re.compile(r"""(?P<timestamp>.+): step (\d+), loss .*; (?P<duration>[\d.]+) sec/batch""")
+ptn_sessstart = re.compile(r"""(?P<timestamp>.+): Session initialized""")
 
 
 def parse_iterations(path):
     iterations = []
+    sessstart = None
     with open(path) as f:
         for line in f:
             line = line.rstrip('\n')
@@ -28,7 +30,12 @@ def parse_iterations(path):
                 timestamp = datetime.strptime(m.group('timestamp'), '%Y-%m-%d %H:%M:%S.%f')
                 start = timestamp - timedelta(seconds=float(m.group('duration')))
                 iterations.append((start, timestamp))
-    return iterations
+            
+            m = ptn_sessstart.match(line)
+            if m:
+                timestamp = datetime.strptime(m.group('timestamp'), '%Y-%m-%d %H:%M:%S.%f')
+                sessstart = timestamp
+    return sessstart, iterations
 
 
 def active_warp_trend(reader, iter_times=None):

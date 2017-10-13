@@ -32,7 +32,7 @@ def plotter(name):
             log_file = os.path.join(local_dir, 'alloc.output')
             iter_file = os.path.join(local_dir, 'mem-iter.output')
             logs = pl.load_file(log_file)
-            iters = pn.parse_iterations(iter_file)
+            sessstart, iters = pn.parse_iterations(iter_file)
             return func(config, local_dir, logs, iters)
 
         cases[name].append((wrapped, filename))
