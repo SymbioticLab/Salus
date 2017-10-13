@@ -12,6 +12,7 @@ import tensorflow as tf
 from tensorflow.examples.tutorials.mnist import input_data
 
 from . import run_on_rpc_and_cpu, run_on_devices, run_on_sessions, assertAllClose
+from .lib import tfhelper
 
 
 def run_mnist_softmax(sess, mnist, batch_size=50):
@@ -81,26 +82,28 @@ def run_mnist_conv(sess, mnist, batch_size=50):
     train_step = tf.train.AdamOptimizer(1e-4).minimize(cross_entropy)
     correct_prediction = tf.equal(tf.argmax(y_fc2, 1), tf.argmax(y_, 1))
     accuracy = tf.reduce_mean(tf.cast(correct_prediction, tf.float32))
-    sess.run(tf.global_variables_initializer())
 
     batch_num = 20
     speeds = []
-    for i in range(batch_num):
-        batch = mnist.train.next_batch(batch_size)
-        print("{}: Start running step {}".format(datetime.now(), i))
-        start_time = default_timer()
-        sess.run(train_step, feed_dict={x: batch[0], y_: batch[1], keep_prob: 0.5})
-        duration = default_timer() - start_time
-        examples_per_sec = batch_size / duration
-        sec_per_batch = float(duration)
-        speeds.append(sec_per_batch)
-        loss_value = sess.run(cross_entropy, feed_dict={x: batch[0], y_: batch[1], keep_prob: 0.5})
+    with tfhelper.initialized_scope(sess) as coord:
+        for i in range(batch_num):
+            if coord.should_stop():
+                break
+            batch = mnist.train.next_batch(batch_size)
+            print("{}: Start running step {}".format(datetime.now(), i))
+            start_time = default_timer()
+            sess.run(train_step, feed_dict={x: batch[0], y_: batch[1], keep_prob: 0.5})
+            duration = default_timer() - start_time
+            examples_per_sec = batch_size / duration
+            sec_per_batch = float(duration)
+            speeds.append(sec_per_batch)
+            loss_value = sess.run(cross_entropy, feed_dict={x: batch[0], y_: batch[1], keep_prob: 0.5})
 
-        fmt_str = '{}: step {}, loss = {:.2f} ({:.1f} examples/sec; {:.3f} sec/batch'
-        print(fmt_str.format(datetime.now(), i, loss_value, examples_per_sec, sec_per_batch))
-    print('Average %.3f sec/batch' % np.average(speeds))
+            fmt_str = '{}: step {}, loss = {:.2f} ({:.1f} examples/sec; {:.3f} sec/batch'
+            print(fmt_str.format(datetime.now(), i, loss_value, examples_per_sec, sec_per_batch))
+        print('Average %.3f sec/batch' % np.average(speeds))
 
-    return sess.run(accuracy, feed_dict={x: mnist.test.images, y_: mnist.test.labels, keep_prob: 1.0})
+        return sess.run(accuracy, feed_dict={x: mnist.test.images, y_: mnist.test.labels, keep_prob: 1.0})
 
 
 def run_mnist_large(sess, mnist, batch_size=50):
