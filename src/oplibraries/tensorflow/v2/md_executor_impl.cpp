@@ -240,6 +240,11 @@ void ExecutorState::addNodeToRefiner(const TaggedNode &tn)
     tf::mutex_lock l(refinerMu_);
     auto node = tn.node;
 
+    if (node->type_string() == "Slice") {
+        VLOG(1) << "Skipping node " << node->name() << " with bugous shape_fn";
+        return;
+    }
+
     auto ok = refiner_.AddNode(node);
     if (!ok.ok()) {
         VLOG(3) << "Error when adding node " << node->name() << " to shape refiner: " << ok;
