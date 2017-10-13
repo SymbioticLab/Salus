@@ -22,6 +22,10 @@
 
 #include "utils/cpp17.h"
 
+#ifdef NDEBUG
+#define ELPP_DISABLE_DEBUG_LOGS
+#endif
+
 #include "easylogging++.h"
 
 #include <type_traits>
