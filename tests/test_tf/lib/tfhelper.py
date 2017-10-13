@@ -3,6 +3,7 @@ from __future__ import division
 from __future__ import print_function
 
 from contextlib import contextmanager
+from datetime import datetime
 
 import tensorflow as tf
 
@@ -16,6 +17,8 @@ def initialized_scope(sess):
     queue_threads = tf.train.start_queue_runners(sess, coord)
     for qr in tf.get_collection(tf.GraphKeys.QUEUE_RUNNERS):
         print(qr.name)
+
+    print("{}: Session initialized".format(datetime.now()))
 
     yield coord
 
