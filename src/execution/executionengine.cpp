@@ -81,6 +81,8 @@ ExecutionEngine::~ExecutionEngine()
     TIMED_FUNC(timerObj);
     // stop scheduling thread
     m_shouldExit = true;
+    // also unblock scheduling thread
+    m_note_has_work.notify();
     m_schedThread->join();
 
     // remove any pending new or delete session
