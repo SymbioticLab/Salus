@@ -158,6 +158,7 @@ std::future<void> ExecutionEngine::InserterImpl::enqueueOperation(std::unique_pt
     TIMED_FUNC(timerObj);
     auto opItem = std::make_shared<OperationItem>();
     opItem->op = std::move(task);
+    opItem->tQueued = std::chrono::steady_clock::now();
 
     m_engine.pushToSessionQueue(m_item, opItem);
 
@@ -380,7 +381,7 @@ size_t ExecutionEngine::maybeScheduleFrom(std::shared_ptr<SessionItem> item)
 
     auto size = queue.size();
 
-    VLOG(2) << "Scheduling all opItem in session " << item->sessHandle << ": queue size " << size;
+    VLOG(3) << "Scheduling all opItem in session " << item->sessHandle << ": queue size " << size;
 
     if (size == 0) {
         return 0;
@@ -388,7 +389,7 @@ size_t ExecutionEngine::maybeScheduleFrom(std::shared_ptr<SessionItem> item)
 
     // Try schedule the operation
     auto doSchedule = [this](std::shared_ptr<SessionItem> item, std::shared_ptr<OperationItem> &&opItem) {
-        VLOG(2) << "Scheduling opItem in session " << item->sessHandle << ": " << opItem->op->DebugString();
+        VLOG(3) << "Scheduling opItem in session " << item->sessHandle << ": " << opItem->op->DebugString();
         TIMED_SCOPE(timerInnerObj, "ExecutionEngine::maybeScheduleFrom::doSchedule");
 
         bool scheduled = false;
@@ -399,7 +400,7 @@ size_t ExecutionEngine::maybeScheduleFrom(std::shared_ptr<SessionItem> item)
             }
             spec = DeviceSpec(dt, 0);
             if (maybePreAllocateFor(*item, *opItem, spec)) {
-                VLOG(2) << "Task scheduled on " << spec.DebugString();
+                VLOG(3) << "Task scheduled on " << spec.DebugString();
                 scheduled = true;
                 break;
             }
@@ -413,7 +414,7 @@ size_t ExecutionEngine::maybeScheduleFrom(std::shared_ptr<SessionItem> item)
             }
             opItem->tScheduled = steady_clock::now();
 
-            VLOG(2) << "Adding to thread pool: opItem in session " << item->sessHandle
+            VLOG(3) << "Adding to thread pool: opItem in session " << item->sessHandle
                     << ": " << opItem->op->DebugString();
             q::with(m_qec->queue(), std::move(opItem)).then([item, this](std::shared_ptr<OperationItem> &&opItem){
                 TIMED_SCOPE(timerInnerObj, "ExecutionEngine::maybeScheduleFrom::doSchedule::run");
@@ -427,6 +428,9 @@ size_t ExecutionEngine::maybeScheduleFrom(std::shared_ptr<SessionItem> item)
                 };
                 cbs.done = [item, opItem, this]() {
                     // succeed
+                    VLOG(2) << "OpItem " << opItem->op->DebugString() << " queuing time: "
+                            << duration_cast<milliseconds>(opItem->tScheduled - opItem->tQueued).count()
+                            << "ms";
                     taskStopped(*item, *opItem);
                 };
                 cbs.memFailure = [item, opItem, this]() mutable {

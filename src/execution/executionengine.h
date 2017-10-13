@@ -199,6 +199,7 @@ private:
         std::unique_ptr<OperationTask> op;
 
         std::promise<void> promise;
+        std::chrono::time_point<std::chrono::steady_clock> tQueued;
         std::chrono::time_point<std::chrono::steady_clock> tScheduled;
     };
     friend class ResourceContext;
