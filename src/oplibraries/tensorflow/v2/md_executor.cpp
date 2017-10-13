@@ -389,21 +389,21 @@ void ExecutorState::Process(TaggedNode tagged_node, int64_t scheduled_usec)
         tagged_node = inline_ready.front();
         inline_ready.pop_front();
         auto node = tagged_node.node;
-        FrameState *input_frame = tagged_node.input_frame;
-        int64_t input_iter = tagged_node.input_iter;
-        const size_t id = node->id();
-        const NodeItem &item = *gview.node(id);
 
         VLOG(3) << "Get a new node from inline_ready queue";
         // TODO(misard) Replace with a finer-grain enabling flag once we
         // add better optional debugging support.
         if (vlog_ && VLOG_IS_ON(1)) {
+            FrameState *input_frame = tagged_node.input_frame;
+            int64_t input_iter = tagged_node.input_iter;
+            const NodeItem &item = *gview.node(node->id());
+
             tf::mutex_lock l(input_frame->mu);
             input_frame->GetIteration(input_iter)->mark_started(item.pending_id);
         }
 
         auto nodeTask = std::make_unique<ExecTask>(this, num_finished_ops_,
-                                                   tagged_node, ready, inline_ready, stats, params,
+                                                   tagged_node, inline_ready, stats, params,
                                                    scheduled_usec,
                                                    inputs, input_device_contexts, input_alloc_attrs,
                                                    completed, rendezvous_);

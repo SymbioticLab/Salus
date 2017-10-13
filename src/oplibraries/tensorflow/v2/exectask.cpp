@@ -37,7 +37,7 @@
 namespace tf = tensorflow;
 
 ExecTask::ExecTask(ExecutorState *state, utils::semaphore &num_finished_ops,
-                   ExecutorState::TaggedNode &node, ExecutorState::TaggedNodeSeq &ready,
+                   const ExecutorState::TaggedNode &node,
                    ExecutorState::TaggedNodeReadyQueue &inline_ready,
                    tf::NodeExecStats *stats, tf::OpKernelContext::Params &params,
                    int64_t &scheduled_usec,
@@ -49,7 +49,6 @@ ExecTask::ExecTask(ExecutorState *state, utils::semaphore &num_finished_ops,
     , kernel_is_async(false)
     , has_ref_input(false)
     , tagged_node(node)
-    , ready(ready)
     , inline_ready(inline_ready)
     , stats(stats)
     , params(params)

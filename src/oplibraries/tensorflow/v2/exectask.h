@@ -42,7 +42,7 @@ class ExecTask : public OperationTask
 {
 public:
     ExecTask(ExecutorState *state, utils::semaphore &num_finished_ops,
-             ExecutorState::TaggedNode &node, ExecutorState::TaggedNodeSeq &ready,
+             const ExecutorState::TaggedNode &node,
              ExecutorState::TaggedNodeReadyQueue &inline_ready,
              tf::NodeExecStats *stats, tf::OpKernelContext::Params &params,
              int64_t &scheduled_usec, TensorValueVec &inputs,
@@ -94,9 +94,10 @@ private:
     Entry * first_input = nullptr;
     BufferLockVec buflocks;
 
+    ExecutorState::TaggedNode tagged_node;
+    ExecutorState::TaggedNodeSeq ready;
+
     // Borrowed from ExecutorState
-    ExecutorState::TaggedNode &tagged_node;
-    ExecutorState::TaggedNodeSeq &ready;
     ExecutorState::TaggedNodeReadyQueue &inline_ready;
     tf::NodeExecStats *stats;
     tf::OpKernelContext::Params &params;
