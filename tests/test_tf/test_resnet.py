@@ -34,7 +34,7 @@ def run_resnet(sess, input_data, batch_size=100):
     with tfhelper.initialized_scope(sess) as coord:
         speeds = []
         JCT = default_timer()
-        for i in range(5):
+        for i in range(20):
             if coord.should_stop():
                 break
             print("{}: Start running step {}".format(datetime.now(), i))

@@ -24,7 +24,7 @@ def run_mnist_softmax(sess, mnist, batch_size=50):
     cross_entropy = tf.reduce_mean(
         tf.nn.softmax_cross_entropy_with_logits(labels=y_, logits=y))
     train_step = tf.train.GradientDescentOptimizer(0.5).minimize(cross_entropy)
-    for _ in range(50):
+    for _ in range(20):
         batch = mnist.train.next_batch(batch_size)
         sess.run(train_step, feed_dict={x: batch[0], y_: batch[1]})
     correct_prediction = tf.equal(tf.argmax(y, 1), tf.argmax(y_, 1))
@@ -82,7 +82,7 @@ def run_mnist_conv(sess, mnist, batch_size=50):
     accuracy = tf.reduce_mean(tf.cast(correct_prediction, tf.float32))
     sess.run(tf.global_variables_initializer())
 
-    batch_num = 50
+    batch_num = 20
     speeds = []
     for i in range(batch_num):
         batch = mnist.train.next_batch(batch_size)
@@ -165,7 +165,7 @@ def run_mnist_large(sess, mnist, batch_size=50):
     accuracy = tf.reduce_mean(tf.cast(correct_prediction, tf.float32))
     sess.run(tf.global_variables_initializer())
 
-    batch_num = 50
+    batch_num = 20
     speeds = []
     inbetween = []
     last_end_time = 0

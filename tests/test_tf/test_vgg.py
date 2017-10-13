@@ -40,7 +40,7 @@ def run_vgg(vgg, sess, input_data, batch_size=100):
         inbetween = []
         last_end_time = 0
         JCT = default_timer()
-        for i in range(5):
+        for i in range(20):
             if coord.should_stop():
                 break
             print("{}: Start running step {}".format(datetime.now(), i))
