@@ -64,24 +64,24 @@ class ResNetCaseBase(unittest.TestCase):
     def _get_func(self, batch_size):
         return None
 
-    @parameterized.expand([(25,), (50,), (100,)])
+    @parameterized.expand([(25,), (50,), (75,)])
     def test_gpu(self, batch_size):
         config = self._config(batch_size=batch_size)
         config.allow_soft_placement = True
         run_on_devices(self._get_func(batch_size), '/device:GPU:0', config=config)
 
-    @parameterized.expand([(25,), (50,), (100,)])
+    @parameterized.expand([(25,), (50,), (75,)])
     def test_cpu(self, batch_size):
         run_on_devices(self._get_func(batch_size), '/device:CPU:0',
                        config=self._config(batch_size=batch_size))
 
-    @parameterized.expand([(25,), (50,), (100,)])
+    @parameterized.expand([(25,), (50,), (75,)])
     def test_rpc(self, batch_size):
         run_on_sessions(self._get_func(batch_size),
                         'zrpc://tcp://127.0.0.1:5501',
                         config=self._config(batch_size=batch_size))
 
-    @parameterized.expand([(25,), (50,), (100,)])
+    @parameterized.expand([(25,), (50,), (75,)])
     def test_correctness(self, batch_size):
         config = self._config(batch_size=batch_size)
         config.allow_soft_placement = True
@@ -96,6 +96,7 @@ class TestResNetCifar10(ResNetCaseBase):
         memusages = {
             25: (6935520748 - 1661494764, 1661494764),
             50: (10211120620 - 1662531248, 1662531248),
+            75: (10211120620 - 1662531248, 1662531248),
             100: (11494955340, 1.67e9),
         }
         batch_size = kwargs.get('batch_size', 100)
@@ -120,6 +121,7 @@ class TestResNetFakeData(ResNetCaseBase):
         memusages = {
             25: (6935520748 - 1661494764, 1661494764),
             50: (10211120620 - 1662531248, 1662531248),
+            75: (10211120620 - 1662531248, 1662531248),
             100: (11494955340, 1.67e9),
         }
         batch_size = kwargs.get('batch_size', 100)

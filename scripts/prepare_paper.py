@@ -6,6 +6,11 @@ import sys
 from collections import namedtuple, defaultdict
 from functools import wraps
 
+try:
+  from pathlib import Path
+except ImportError:
+  from pathlib2 import Path  # python 2 backport
+
 import matplotlib.pyplot as plt
 
 import parse_log as pl
@@ -35,6 +40,39 @@ def plotter(name):
         return wrapped
 
     return plotter_decorator
+
+
+@plotter('conv25')
+def plot_mem_conv25(config, local_dir, logs, iters):
+    def smoother(ss):
+        return ss.ewm(span=15).mean()
+
+    df, _, fig = pl.memory_usage(logs, iter_times=iters[1:11],
+                                 mem_type='GPU_0_bfc', smoother=smoother)
+    fig.axes[-1].set_title('Memory usage of CONV2 with batch size 25')
+    return fig
+
+
+@plotter('conv50')
+def plot_mem_conv50(config, local_dir, logs, iters):
+    def smoother(ss):
+        return ss.ewm(span=15).mean()
+
+    df, _, fig = pl.memory_usage(logs, iter_times=iters[1:11],
+                                 mem_type='GPU_0_bfc', smoother=smoother)
+    fig.axes[-1].set_title('Memory usage of CONV2 with batch size 50')
+    return fig
+
+
+@plotter('conv100')
+def plot_mem_conv100(config, local_dir, logs, iters):
+    def smoother(ss):
+        return ss.ewm(span=15).mean()
+
+    df, _, fig = pl.memory_usage(logs, iter_times=iters[1:11],
+                                 mem_type='GPU_0_bfc', smoother=smoother)
+    fig.axes[-1].set_title('Memory usage of CONV2 with batch size 100')
+    return fig
 
 
 @plotter('mnist25')
@@ -130,22 +168,22 @@ def plot_mem_res50(config, local_dir, logs, iters):
     return fig
 
 
-@plotter('res100')
-def plot_mem_res100(config, local_dir, logs, iters):
+@plotter('res75')
+def plot_mem_res75(config, local_dir, logs, iters):
     def smoother(ss):
         return ss
         # return ss.ewm(span=15).mean()
 
     df, _, fig = pl.memory_usage(logs, iter_times=iters[1:11],
                                  mem_type='GPU_0_bfc', smoother=smoother)
-    fig.axes[-1].set_title('Memory usage of ResNet with batch size 100')
+    fig.axes[-1].set_title('Memory usage of ResNet with batch size 75')
     return fig
 
 
 def main():
-    config = ConfigT(save_dir='figures', log_dir='logs/mem')
+    config = ConfigT(save_dir='figures', log_dir='logs')
 
-    os.makedirs(config.save_dir, exist_ok=True)
+    Path(config.save_dir).mkdir(exist_ok=True)
 
     args = sys.argv[1:]
     showFigure = False
