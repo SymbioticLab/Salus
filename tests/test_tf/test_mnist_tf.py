@@ -27,6 +27,7 @@ def run_mnist_softmax(sess, mnist, batch_size=50):
     for _ in range(20):
         batch = mnist.train.next_batch(batch_size)
         sess.run(train_step, feed_dict={x: batch[0], y_: batch[1]})
+
     correct_prediction = tf.equal(tf.argmax(y, 1), tf.argmax(y_, 1))
     accuracy = tf.reduce_mean(tf.cast(correct_prediction, tf.float32))
     return sess.run(accuracy, feed_dict={x: mnist.test.images, y_: mnist.test.labels})
@@ -86,7 +87,7 @@ def run_mnist_conv(sess, mnist, batch_size=50):
     speeds = []
     for i in range(batch_num):
         batch = mnist.train.next_batch(batch_size)
-        print("Start running step {}".format(i))
+        print("{}: Start running step {}".format(datetime.now(), i))
         start_time = default_timer()
         sess.run(train_step, feed_dict={x: batch[0], y_: batch[1], keep_prob: 0.5})
         duration = default_timer() - start_time
@@ -172,7 +173,7 @@ def run_mnist_large(sess, mnist, batch_size=50):
     JCT = default_timer()
     for i in range(batch_num):
         batch = mnist.train.next_batch(batch_size)
-        print("Start running step {}".format(i))
+        print("{}: Start running step {}".format(datetime.now(), i))
         start_time = default_timer()
         _, loss_value = sess.run([train_step, cross_entropy],
                                  feed_dict={x: batch[0], y_: batch[1], keep_prob: 0.5})
