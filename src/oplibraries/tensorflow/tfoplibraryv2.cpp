@@ -292,11 +292,11 @@ void TFOpLibraryV2::handleCreateSession(const std::string &recvId, const executo
     if (!SessionResourceTracker::instance().admit(rm, ticket)) {
         LOG(WARNING) << "Rejecting session due to unsafe resource usage. Predicted usage: " << rm.DebugString()
                      << ", current usage: " << SessionResourceTracker::instance().DebugString();
-        cb(consumeResponse<tf::CreateSessionResponse>(nullptr, tf::errors::Internal("")));
+        cb(consumeResponse<tf::CreateSessionResponse>(nullptr,
+                                                      tf::errors::Internal("Session memory usage unsafe")));
         return;
     }
 
-    VLOG(2) << "Creating proxy object for recv id " << recvId;
     auto proxy = createProxy();
     auto preq = req.release();
     proxy->HandleCreateSession(preq,
@@ -304,6 +304,7 @@ void TFOpLibraryV2::handleCreateSession(const std::string &recvId, const executo
                                    std::unique_ptr<Proxy> proxy(pproxy);
                                    delete preq;
                                    if (status.ok()) {
+                                       VLOG(1) << "Session " << resp->session_handle() << " created with recvId " << recvId;
                                        auto ins = ExecutionEngine::instance().registerSession(resp->session_handle());
                                        proxy->setExecFactory([ins](auto params, auto graph, auto executor){
                                            return NewMultiDeviceExecutor(params, graph, ins, executor);
