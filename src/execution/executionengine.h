@@ -163,7 +163,7 @@ private:
     std::unordered_map<uint64_t, std::weak_ptr<SessionItem>> m_ticketOwners;
 
     // Paging
-    void doPaging();
+    bool doPaging();
 
     // Incoming kernels
     // Use a minimal linked list because the only operation we need is

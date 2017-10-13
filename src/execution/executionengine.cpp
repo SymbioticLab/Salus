@@ -313,8 +313,10 @@ void ExecutionEngine::scheduleLoop()
         bool needPaging = (noProgress && running_tasks == 0);
         if (needPaging) {
             TIMED_SCOPE(pagingObj, "paging");
-            doPaging();
-            continue;
+            if (doPaging()) {
+                // succeed, retry immediately
+                continue;
+            }
         }
 
         std::chrono::nanoseconds ns;
@@ -498,7 +500,7 @@ void ExecutionEngine::taskStopped(SessionItem &item, OperationItem &opItem)
     }
 }
 
-void ExecutionEngine::doPaging()
+bool ExecutionEngine::doPaging()
 {
     // Step 1: select candidate sessions
     std::vector<std::pair<
@@ -529,7 +531,7 @@ void ExecutionEngine::doPaging()
 
     if (candidates.size() <= 1) {
         LOG(ERROR) << "No candidates to do paging";
-        return;
+        return false;
     }
 
     if (VLOG_IS_ON(2)) {
@@ -566,7 +568,7 @@ void ExecutionEngine::doPaging()
             auto rctx = std::make_unique<ResourceContext>(sess, m_resMonitor);
             if (!rctx->initializeStaging({DeviceType::CPU, 0}, res)) {
                 LOG(ERROR) << "No enough CPU memory for paging. Required: " << res[cpuTag] << " bytes";
-                return;
+                return false;
             }
 
             VLOG(2) << "    request to page out ticket " << victim << " of usage " << usage;
@@ -576,7 +578,7 @@ void ExecutionEngine::doPaging()
             if (released > 0) {
                 // someone freed some memory on GPU, we are good to go.
                 VLOG(2) << "    released " << released << " bytes via paging";
-                return;
+                return true;
             }
             VLOG(2) << "    failed";
         }
@@ -591,6 +593,7 @@ void ExecutionEngine::doPaging()
     }
     LOG(ERROR) << "Dump resource monitor status: " << m_resMonitor.DebugString();
 
+    return false;
     // Step 3: TODO: force evict
 }
 
