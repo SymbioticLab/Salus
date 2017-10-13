@@ -71,9 +71,9 @@ def run_on_sessions(func, targets, *args, **kwargs):
                     res = func()
                     results.append(res)
                     retry = False
-            except:
+            except Exception as ex:
                 retry = True
-                print("Retrying due to error:")
+                print("Retrying due to error:", ex)
                 import traceback
                 traceback.print_exc()
         duration = default_timer() - start_time
