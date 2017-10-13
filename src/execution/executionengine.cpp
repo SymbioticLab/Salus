@@ -272,7 +272,7 @@ void ExecutionEngine::scheduleLoop()
 
         PERFORMANCE_CHECKPOINT_WITH_ID(schedIterObj, "after-snapshot");
 
-        // Sort sessions if needed. We assume m_sessions.size() is always less than 10,
+        // Sort sessions if needed. We assume m_sessions.size() is always no more than a few,
         // therefore sorting in every iteration is acceptable.
         if (sessionsChanged == 0) {
             m_sessions.sort([](const auto &lhs, const auto &rhs){
@@ -303,6 +303,12 @@ void ExecutionEngine::scheduleLoop()
             auto count = maybeScheduleFrom(item);
             scheduled += count;
             remainingCount -= count;
+            // make sure the first session (with least progress) is
+            // get scheduled solely, thus can keep up, without other
+            // sessions interfere
+            if (count > 0) {
+                break;
+            }
         }
 
         PERFORMANCE_CHECKPOINT_WITH_ID(schedIterObj, "after-schedule");
