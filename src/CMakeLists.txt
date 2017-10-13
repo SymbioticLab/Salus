@@ -24,7 +24,7 @@ set(SRC_LIST
     "utils/cpp17.cpp"
     "utils/debugging.cpp"
 
-    "executor.cpp"
+    "main.cpp"
 )
 
 add_subdirectory(platform)
