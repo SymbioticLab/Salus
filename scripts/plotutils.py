@@ -10,7 +10,7 @@ from matplotlib.ticker import MaxNLocator, FuncFormatter
 def cleanup_axis_timedelta(axis, formatter=None):
     if formatter is None:
         def formatter(x, pos):
-            return '{:.1f}ms'.format(x / 1e6)
+            return '{:.1f}'.format(x / 1e6)
     axis.set_major_formatter(FuncFormatter(formatter))
     return axis
 

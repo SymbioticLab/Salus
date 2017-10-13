@@ -49,7 +49,7 @@ def plot_mem_conv25(config, local_dir, logs, iters):
 
     df, _, fig = pl.memory_usage(logs, iter_times=iters[1:11],
                                  mem_type='GPU_0_bfc', smoother=smoother)
-    fig.axes[-1].set_title('Memory usage of CONV2 with batch size 25')
+    fig.axes[-1].set_title('Memory usage of LAYER4 with batch size 25')
     return fig
 
 
@@ -60,7 +60,7 @@ def plot_mem_conv50(config, local_dir, logs, iters):
 
     df, _, fig = pl.memory_usage(logs, iter_times=iters[1:11],
                                  mem_type='GPU_0_bfc', smoother=smoother)
-    fig.axes[-1].set_title('Memory usage of CONV2 with batch size 50')
+    fig.axes[-1].set_title('Memory usage of LAYER4 with batch size 50')
     return fig
 
 
@@ -71,7 +71,7 @@ def plot_mem_conv100(config, local_dir, logs, iters):
 
     df, _, fig = pl.memory_usage(logs, iter_times=iters[1:11],
                                  mem_type='GPU_0_bfc', smoother=smoother)
-    fig.axes[-1].set_title('Memory usage of CONV2 with batch size 100')
+    fig.axes[-1].set_title('Memory usage of LAYER4 with batch size 100')
     return fig
 
 
@@ -82,7 +82,7 @@ def plot_mem_mnist25(config, local_dir, logs, iters):
 
     df, _, fig = pl.memory_usage(logs, iter_times=iters[1:11],
                                  mem_type='GPU_0_bfc', smoother=smoother)
-    fig.axes[-1].set_title('Memory usage of CONV4 with batch size 25')
+    fig.axes[-1].set_title('Memory usage of LAYER6 with batch size 25')
     return fig
 
 
@@ -93,7 +93,7 @@ def plot_mem_mnist50(config, local_dir, logs, iters):
 
     df, _, fig = pl.memory_usage(logs, iter_times=iters[1:11],
                                  mem_type='GPU_0_bfc', smoother=smoother)
-    fig.axes[-1].set_title('Memory usage of CONV4 with batch size 50')
+    fig.axes[-1].set_title('Memory usage of LAYER6 with batch size 50')
     return fig
 
 
@@ -104,7 +104,7 @@ def plot_mem_mnist100(config, local_dir, logs, iters):
 
     df, _, fig = pl.memory_usage(logs, iter_times=iters[1:11],
                                  mem_type='GPU_0_bfc', smoother=smoother)
-    fig.axes[-1].set_title('Memory usage of CONV4 with batch size 100')
+    fig.axes[-1].set_title('Memory usage of LAYER6 with batch size 100')
     return fig
 
 

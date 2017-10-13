@@ -693,11 +693,6 @@ def memory_usage(logs, iter_times=None, beginning=None, mem_type=None,
     if beginning is None:
         beginning = df.index[0]
 
-    # Restrict x axis to iteration times
-    if iter_times is not None:
-        starts, ends = zip(*iter_times)
-        df = df.loc[starts[0]:ends[-1]]
-
     # Change to timedelta
     df.index = df.index - beginning
     df.index = df.index.astype(int)
@@ -710,6 +705,14 @@ def memory_usage(logs, iter_times=None, beginning=None, mem_type=None,
     series = []
     for (name, group), ax in zip(df.groupby('mem_type'), axs):
         ss = group.cumsum()
+
+        # Restrict x axis to iteration times, must be done after cumsum, otherwise there
+        # will be negative number
+        if iter_times is not None:
+            starts = iter_times[0][0] - beginning
+            ends = iter_times[-1][1] - beginning
+            ss = ss.loc[starts:ends]
+
         series.append(ss)
         if smoother:
             ss = smoother(ss)
@@ -725,7 +728,7 @@ def memory_usage(logs, iter_times=None, beginning=None, mem_type=None,
     if unified_ylabel:
         axs[-1].xaxis.label.set_visible(False)
     else:
-        axs[-1].set_xlabel('Time (s)')
+        axs[-1].set_xlabel('Time (ms)')
     axs[-1].autoscale(axis='x')
     xlim = axs[-1].get_xlim()
     if xlim[0] < 0:
