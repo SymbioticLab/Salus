@@ -89,6 +89,7 @@ class ResNetCaseBase(unittest.TestCase):
         self.assertEquals(actual, expected)
 
 
+@unittest.skip("Fake data is used as common dataset instead")
 class TestResNetCifar10(ResNetCaseBase):
     def _config(self, **kwargs):
         # FIXME: update memory usage
@@ -108,6 +109,32 @@ class TestResNetCifar10(ResNetCaseBase):
         def func():
             def input_data(*a, **kw):
                 return datasets.cifar10_data(*a, **kw)
+            sess = tf.get_default_session()
+            return run_resnet(sess, input_data, batch_size=batch_size)
+        return func
+
+
+class TestResNetFakeData(ResNetCaseBase):
+    def _config(self, **kwargs):
+        # FIXME: update memory usage
+        memusages = {
+            25: (6935520748 - 1661494764, 1661494764),
+            50: (10211120620 - 1662531248, 1662531248),
+            100: (11494955340, 1.67e9),
+        }
+        batch_size = kwargs.get('batch_size', 100)
+
+        config = tf.ConfigProto()
+        config.zmq_options.resource_map.temporary['MEMORY:GPU'] = memusages[batch_size][0]
+        config.zmq_options.resource_map.persistant['MEMORY:GPU'] = memusages[batch_size][1]
+        return config
+
+    def _get_func(self, batch_size):
+        def func():
+            def input_data(*a, **kw):
+                images, labels, num_classes = datasets.fake_data(*a, batch_num=50, height=224, width=224, num_classes=1000, **kw)
+                labels = tf.one_hot(labels, num_classes, axis=-1)
+                return images, labels, num_classes
             sess = tf.get_default_session()
             return run_resnet(sess, input_data, batch_size=batch_size)
         return func
