@@ -693,10 +693,6 @@ def memory_usage(logs, iter_times=None, beginning=None, mem_type=None,
     if beginning is None:
         beginning = df.index[0]
 
-    # Change to timedelta
-    df.index = df.index - beginning
-    df.index = df.index.astype(int)
-
     nrows = len(df['mem_type'].unique())
     fig, axs = plt.subplots(nrows=nrows, ncols=1, sharex=True, squeeze=False)
     # Make axes into a 1D array
@@ -709,9 +705,14 @@ def memory_usage(logs, iter_times=None, beginning=None, mem_type=None,
         # Restrict x axis to iteration times, must be done after cumsum, otherwise there
         # will be negative number
         if iter_times is not None:
-            starts = iter_times[0][0] - beginning
-            ends = iter_times[-1][1] - beginning
+            starts = iter_times[0][0]
+            ends = iter_times[-1][1]
             ss = ss.loc[starts:ends]
+
+        # Change to timedelta after iteration restriction.
+        # for some reason slicing doesn't work on Timedeltas
+        ss.index = ss.index - beginning
+        ss.index = ss.index.astype(int)
 
         series.append(ss)
         if smoother:
