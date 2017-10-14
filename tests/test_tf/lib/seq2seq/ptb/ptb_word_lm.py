@@ -208,6 +208,7 @@ class PTBModel(object):
         if eval_op is not None:
             fetches["eval_op"] = eval_op
 
+        speeds = []
         for step in range(self.input.epoch_size):
             feed_dict = {}
             local_start_time = default_timer()
@@ -222,13 +223,14 @@ class PTBModel(object):
             costs += cost
             iters += self.input.num_steps
 
+            dur = default_timer() - local_start_time
+            local_speed = self.input.num_steps * self.input.batch_size / dur
+            speeds.append(local_speed)
             if verbose:
-                dur = default_timer() - local_start_time
-                local_speed = self.input.num_steps * self.input.batch_size / dur
                 fmt_str = '{}: step {}, perplexity = {:.2f} ({:.1f} wps; {:.3f} sec/batch)'
                 print(fmt_str.format(datetime.now(), step, np.exp(costs / iters), local_speed, dur))
 
-        return np.exp(costs / iters)
+        return np.exp(costs / iters), speeds
 
 
 class SmallConfig(object):

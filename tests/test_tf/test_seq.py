@@ -2,6 +2,7 @@ from __future__ import print_function
 
 import unittest
 
+import numpy as np
 import tensorflow as tf
 
 from parameterized import parameterized
@@ -55,9 +56,10 @@ def run_seq_ptb(sess, config_name):
             m.assign_lr(sess, config.learning_rate * lr_decay)
 
             print("Epoch: %d Learning rate: %.3f" % (i + 1, sess.run(m.lr)))
-            train_perplexity = m.run_epoch(sess, eval_op=m.train_op, verbose=True)
+            train_perplexity, speeds = m.run_epoch(sess, eval_op=m.train_op, verbose=True)
+            print('Average %.3f sec/batch' % np.average(speeds))
             print("Epoch: %d Train Perplexity: %.3f" % (i + 1, train_perplexity))
-            valid_perplexity = mvalid.run_epoch(sess)
+            valid_perplexity, _ = mvalid.run_epoch(sess)
             print("Epoch: %d Valid Perplexity: %.3f" % (i + 1, valid_perplexity))
 
         test_perplexity = mtest.run_epoch(sess)
