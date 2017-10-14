@@ -14,7 +14,7 @@ def load_file(path):
     return NvvpReader(path, True)
 
 
-ptn_iter = re.compile(r"""(?P<timestamp>.+): step (\d+), loss .*; (?P<duration>[\d.]+) sec/batch""")
+ptn_iter = re.compile(r"""(?P<timestamp>.+): step (\d+), (loss|perplexity) .*; (?P<duration>[\d.]+) sec/batch\)?""")
 ptn_sessstart = re.compile(r"""(?P<timestamp>.+): Session initialized""")
 
 

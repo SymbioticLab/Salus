@@ -101,7 +101,7 @@ def run_mnist_conv(sess, mnist, batch_size=50):
             loss_value = sess.run(cross_entropy, feed_dict={x: batch[0], y_: batch[1], keep_prob: 0.5})
 
             losses.append(loss_value)
-            fmt_str = '{}: step {}, loss = {:.2f} ({:.1f} examples/sec; {:.3f} sec/batch'
+            fmt_str = '{}: step {}, loss = {:.2f} ({:.1f} examples/sec; {:.3f} sec/batch)'
             print(fmt_str.format(datetime.now(), i, loss_value, examples_per_sec, sec_per_batch))
         print('Average %.3f sec/batch' % np.average(speeds))
 
@@ -198,7 +198,7 @@ def run_mnist_large(sess, mnist, batch_size=50):
             speeds.append(sec_per_batch)
 
             losses.append(loss_value)
-            fmt_str = '{}: step {}, loss = {:.2f} ({:.1f} examples/sec; {:.3f} sec/batch'
+            fmt_str = '{}: step {}, loss = {:.2f} ({:.1f} examples/sec; {:.3f} sec/batch)'
             print(fmt_str.format(datetime.now(), i, loss_value, examples_per_sec, sec_per_batch))
         print('Average %.3f sec/batch' % np.average(speeds))
         print('Average %.6f sec spent between batches' % np.average(inbetween))

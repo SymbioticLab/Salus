@@ -56,7 +56,7 @@ def run_vgg(vgg, sess, input_data, batch_size=100):
             examples_per_sec = batch_size / duration
             sec_per_batch = float(duration)
             speeds.append(sec_per_batch)
-            fmt_str = '{}: step {}, loss = {:.2f} ({:.1f} examples/sec; {:.3f} sec/batch'
+            fmt_str = '{}: step {}, loss = {:.2f} ({:.1f} examples/sec; {:.3f} sec/batch)'
             print(fmt_str.format(datetime.now(), i, loss_value, examples_per_sec, sec_per_batch))
 
         print('Average %.3f sec/batch' % np.average(speeds))
