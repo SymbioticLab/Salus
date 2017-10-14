@@ -580,6 +580,7 @@ bool ExecutionEngine::doPaging()
                 LOG(ERROR) << "No enough CPU memory for paging. Required: " << res[cpuTag] << " bytes";
                 return false;
             }
+            AllocLog(INFO) << "Pre allocated " << *rctx << " for session=" << sess.sessHandle;
 
             VLOG(2) << "    request to page out ticket " << victim << " of usage " << usage;
             // request the session to do paging
