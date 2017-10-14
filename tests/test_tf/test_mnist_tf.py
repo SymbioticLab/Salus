@@ -85,6 +85,7 @@ def run_mnist_conv(sess, mnist, batch_size=50):
 
     batch_num = 20
     speeds = []
+    losses = []
     with tfhelper.initialized_scope(sess) as coord:
         for i in range(batch_num):
             if coord.should_stop():
@@ -99,11 +100,12 @@ def run_mnist_conv(sess, mnist, batch_size=50):
             speeds.append(sec_per_batch)
             loss_value = sess.run(cross_entropy, feed_dict={x: batch[0], y_: batch[1], keep_prob: 0.5})
 
+            losses.append(loss_value)
             fmt_str = '{}: step {}, loss = {:.2f} ({:.1f} examples/sec; {:.3f} sec/batch'
             print(fmt_str.format(datetime.now(), i, loss_value, examples_per_sec, sec_per_batch))
         print('Average %.3f sec/batch' % np.average(speeds))
 
-        return sess.run(accuracy, feed_dict={x: mnist.test.images, y_: mnist.test.labels, keep_prob: 1.0})
+        return losses
 
 
 def run_mnist_large(sess, mnist, batch_size=50):
@@ -172,6 +174,7 @@ def run_mnist_large(sess, mnist, batch_size=50):
     speeds = []
     inbetween = []
     last_end_time = 0
+    losses = []
     with tfhelper.initialized_scope(sess) as coord:
         JCT = default_timer()
         for i in range(batch_num):
@@ -194,6 +197,7 @@ def run_mnist_large(sess, mnist, batch_size=50):
             sec_per_batch = float(duration)
             speeds.append(sec_per_batch)
 
+            losses.append(loss_value)
             fmt_str = '{}: step {}, loss = {:.2f} ({:.1f} examples/sec; {:.3f} sec/batch'
             print(fmt_str.format(datetime.now(), i, loss_value, examples_per_sec, sec_per_batch))
         print('Average %.3f sec/batch' % np.average(speeds))
@@ -201,12 +205,7 @@ def run_mnist_large(sess, mnist, batch_size=50):
         JCT = default_timer() - JCT
         print('Training time is %.3f sec' % JCT)
 
-        print('Start final eva')
-        start_time = default_timer()
-        acc = sess.run(accuracy, feed_dict={x: mnist.test.images, y_: mnist.test.labels, keep_prob: 1.0})
-        duration = default_timer() - start_time
-        print('Final eval takes %.3f sec' % duration)
-        return acc
+    return losses
 
 
 class MnistConvBase(unittest.TestCase):
