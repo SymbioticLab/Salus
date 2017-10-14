@@ -26,6 +26,11 @@ def run_seq_ptb(sess, config_name):
     train_input, valid_input, test_input = datasets.ptb_data(config, eval_config)
     initializer = tf.random_uniform_initializer(-config.init_scale, config.init_scale)
 
+    # force to run only a few steps
+    train_input.epoch_size = 20
+    valid_input.epoch_size = 20
+    test_input.epoch_size = 20
+
     with tf.name_scope("Train"):
         with tf.variable_scope("Model", reuse=None, initializer=initializer):
             m = networks.PTBModel(is_training=True, config=config, input_=train_input)
@@ -88,6 +93,7 @@ class SeqCaseBase(unittest.TestCase):
         self.assertEquals(actual, expected)
 
 
+# @unittest.skip("Too slow")
 class TestSeqPtb(SeqCaseBase):
     def _runner(self):
         return run_seq_ptb

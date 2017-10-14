@@ -58,6 +58,7 @@ from __future__ import print_function
 
 import inspect
 from timeit import default_timer
+from datetime import datetime
 
 import numpy as np
 import tensorflow as tf
@@ -196,7 +197,6 @@ class PTBModel(object):
 
     def run_epoch(self, session, eval_op=None, verbose=False):
         """Runs the model on the given data."""
-        start_time = default_timer()
         costs = 0.0
         iters = 0
         state = session.run(self.initial_state)
@@ -210,6 +210,7 @@ class PTBModel(object):
 
         for step in range(self.input.epoch_size):
             feed_dict = {}
+            local_start_time = default_timer()
             for i, (c, h) in enumerate(self.initial_state):
                 feed_dict[c] = state[i].c
                 feed_dict[h] = state[i].h
@@ -221,11 +222,11 @@ class PTBModel(object):
             costs += cost
             iters += self.input.num_steps
 
-            if verbose and step % (self.input.epoch_size // 10) == 10:
-                speed = iters * self.input.batch_size / (default_timer() - start_time)
-                print("%.3f perplexity: %.3f speed: %.0f wps" % (step * 1.0 / self.input.epoch_size,
-                                                                 np.exp(costs / iters),
-                                                                 speed))
+            if verbose:
+                dur = default_timer() - local_start_time
+                local_speed = self.input.num_steps * self.input.batch_size / dur
+                fmt_str = '{}: step {}, perplexity = {:.2f} ({:.1f} wps; {:.3f} sec/batch)'
+                print(fmt_str.format(datetime.now(), step, np.exp(costs / iters), local_speed, dur))
 
         return np.exp(costs / iters)
 
