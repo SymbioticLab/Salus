@@ -3,6 +3,7 @@ from __future__ import print_function, absolute_import, division
 
 import os
 import sys
+import argparse
 from collections import namedtuple, defaultdict
 from functools import wraps
 
@@ -180,23 +181,72 @@ def plot_mem_res75(config, local_dir, logs, iters):
     return fig
 
 
+@plotter('ptbT')
+def plot_mem_ptbT(config, local_dir, logs, iters):
+    def smoother(ss):
+        return ss
+
+    df, _, fig = pl.memory_usage(logs, iter_times=iters[0:10],
+                                 mem_type='GPU_0_bfc', smoother=smoother)
+    fig.axes[-1].set_title('Memory usage of Seq2Seq on PTB with tiny config')
+    return fig
+
+
+@plotter('ptbS')
+def plot_mem_ptbS(config, local_dir, logs, iters):
+    def smoother(ss):
+        return ss
+
+    df, _, fig = pl.memory_usage(logs, iter_times=iters[0:10],
+                                 mem_type='GPU_0_bfc', smoother=smoother)
+    fig.axes[-1].set_title('Memory usage of Seq2Seq on PTB with small config')
+    return fig
+
+
+@plotter('ptbM')
+def plot_mem_ptbM(config, local_dir, logs, iters):
+    def smoother(ss):
+        return ss
+
+    df, _, fig = pl.memory_usage(logs, iter_times=iters[0:10],
+                                 mem_type='GPU_0_bfc', smoother=smoother)
+    fig.axes[-1].set_title('Memory usage of Seq2Seq on PTB with medium config')
+    return fig
+
+
+@plotter('ptbL')
+def plot_mem_ptbL(config, local_dir, logs, iters):
+    def smoother(ss):
+        return ss
+
+    df, _, fig = pl.memory_usage(logs, iter_times=iters[0:10],
+                                 mem_type='GPU_0_bfc', smoother=smoother)
+    fig.axes[-1].set_title('Memory usage of Seq2Seq on PTB with large config')
+    return fig
+
+
 def main():
-    config = ConfigT(save_dir='figures', log_dir='logs')
+    parser = argparse.ArgumentParser()
+    parser.add_argument('cases', nargs='*', metavar='CASE',
+                        help='Case names to generate figures',
+                        default=cases.keys())
+    parser.add_argument('--log_dir',
+                        help='Base directory containing logs',
+                        default='logs')
+    parser.add_argument('--save_dir',
+                        help='Directory to generate outputs',
+                        default='figures')
+    parser.add_argument('--show', action='store_true', default=False,
+                        help='Show figure instead of generate images')
+    config = parser.parse_args()
 
     Path(config.save_dir).mkdir(exist_ok=True)
 
-    args = sys.argv[1:]
-    showFigure = False
-    if len(args) >= 1 and args[0] == 'show':
-        showFigure = True
-        args = args[1:]
-
-    names = args if len(args) > 0 else cases.keys()
-    for name in names:
+    for name in config.cases:
         for f, filename in cases[name]:
             print("Generating " + filename)
             fig = f(config)
-            if showFigure:
+            if config.show:
                 plt.show()
             else:
                 fig.savefig(os.path.join(config.save_dir, filename + '.pdf'), transparent=True)
