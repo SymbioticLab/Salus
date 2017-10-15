@@ -173,13 +173,18 @@ ptn_resp_sent = re.compile(r"""Response\sproto\sobject\shave\ssize\s\d+\swith\se
                            re.VERBOSE)
 ptn_fwd_msg = re.compile(r"""Forwarding message part: zmq::message_t\(len=(?P<size>\d+),.*""")
 
+ptn_mem_pre = re.compile(r"""Pre \s allocated \s AllocationTicket\((?P<ticket>\d+),
+                             .+session=(?P<sess>\w+).*$""",
+                         re.VERBOSE)
 ptn_mem_alloc = re.compile(r"""TFAllocator\s.+\s(?P<size>\d+)\sbytes\sof\smemory\sat\s
                                (?P<addr>\w+)\s.*\susing\sallocator\s
-                               (?P<mem_type>\w+)@(?P<alloc_inst>\w+)""",
+                               (?P<mem_type>\w+)@(?P<alloc_inst>\w+)\s
+                               with \s AllocationTicket\((?P<ticket>\d+).+""",
                            re.VERBOSE)
 ptn_mem_dealloc = re.compile(r"""TFAllocator\sdeallocating\smemory\sat\s(?P<addr>\w+)\s
                                  size\s(?P<size>\d+)\s
-                                 using\sallocator\s(?P<mem_type>\w+)@(?P<alloc_inst>\w+)""",
+                                 using\sallocator\s(?P<mem_type>\w+)@(?P<alloc_inst>\w+)\s
+                                 with \s AllocationTicket\((?P<ticket>\d+).+""",
                              re.VERBOSE)
 ptn_progcnt = re.compile(r"""Progress counter for session (?P<sess>\w+): (?P<cnt>\d+)""")
 
@@ -313,11 +318,13 @@ def match_exec_content(content, entry):
         size = int(m.group('size'))
         mem_type = m.group('mem_type')
         alloc_inst = m.group('alloc_inst')
+        ticket = int(m.group('ticket'))
         block = {
             'size': size,
             'addr': addr,
             'mem_type': mem_type,
-            'alloc_inst': alloc_inst
+            'alloc_inst': alloc_inst,
+            'ticket': ticket
         }
         if addr in blocks:
             print('WARNING: overwriting existing mem block: ', addr)
@@ -342,11 +349,22 @@ def match_exec_content(content, entry):
             if size != int(m.group('size')):
                 print('WARNING: size differ: actual {}, rememered {}'.format(m.group('size'), size))
                 size = int(m.group('size'))
+            ticket = block['ticket']
+            if ticket != int(m.group('ticket')):
+                print('WARNING: ticket differ: actual {}, remembered {}'.format(m.group('ticket'), ticket))
         return {
             'type': 'mem_dealloc',
             'addr': addr,
             'size': size,
             'block': block
+        }
+    
+    m = ptn_mem_pre.match(content)
+    if m:
+        return {
+            'type': 'mem_pre',
+            'ticket': int(m.group('ticket')),
+            'sess': m.group('sess')
         }
 
     m = ptn_progcnt.match(content)
@@ -651,9 +669,20 @@ def resp_on_wire_time(logs):
 
 
 def memory_usage(logs, iter_times=None, beginning=None, mem_type=None,
-                 unified_ylabel=False, smoother=None, xformatter=None):
+                 unified_ylabel=False, smoother=None, xformatter=None, per_sess=False):
     if beginning is None:
         beginning = get_beginning(logs)
+
+    # Prepare ticket -> session map
+    ticket2sess = {}
+    for l in logs:
+        if l.type != 'mem_pre':
+            continue
+        if l.ticket not in ticket2sess:
+            ticket2sess[l.ticket] = l.sess
+        elif l.sess != ticket2sess[l.ticket]:
+            print('WARNING: ticket {} reused: previous {}, now: {}'.format(l.ticket,
+                                                                           ticket2sess[l.ticket], l.sess))
 
     mem_usages = [l for l in logs if l.type == 'mem_alloc' or l.type == 'mem_dealloc']
 
@@ -667,14 +696,16 @@ def memory_usage(logs, iter_times=None, beginning=None, mem_type=None,
                 'timestamp': m.timestamp,
                 'size': m.size,
                 'mem_type': m.block['mem_type'],
-                'alloc_inst': m.block['alloc_inst']
+                'alloc_inst': m.block['alloc_inst'],
+                'session': ticket2sess[m.block['ticket']]
             })
         elif m.type == 'mem_dealloc':
             mem_activities.append({
                 'timestamp': m.timestamp,
                 'size': -m.size,
                 'mem_type': m.block['mem_type'],
-                'alloc_inst': m.block['alloc_inst']
+                'alloc_inst': m.block['alloc_inst'],
+                'session': ticket2sess[m.block['ticket']]
             })
         else:
             raise ValueError("Unexpected value: ", m)
@@ -702,6 +733,13 @@ def memory_usage(logs, iter_times=None, beginning=None, mem_type=None,
     for (name, group), ax in zip(df.groupby('mem_type'), axs):
         ss = group.cumsum()
 
+        if per_sess:
+            sessionUsages = {}
+            for k, gg in group.groupby('session'):
+                sessionUsages[k] = gg['size'].cumsum()
+
+            ss = pd.DataFrame(sessionUsages).fillna(method='ffill').fillna(0)
+
         # Restrict x axis to iteration times, must be done after cumsum, otherwise there
         # will be negative number
         if iter_times is not None:
@@ -717,9 +755,14 @@ def memory_usage(logs, iter_times=None, beginning=None, mem_type=None,
         series.append(ss)
         if smoother:
             ss = smoother(ss)
-        ss.plot(ax=ax, title=name)
-        ax.grid('on')
-        ax.legend().remove()
+        
+        if per_sess:
+            ss.plot.area(ax=ax, title=name)
+        else:
+            ss.plot(ax=ax, title=name)
+            ax.grid('on')
+            ax.legend().remove()
+
         pu.cleanup_axis_bytes(ax.yaxis)
         if not unified_ylabel:
             ax.set_ylabel('Memory Usage')
