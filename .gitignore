@@ -24,6 +24,7 @@ spack_packages
 # Data files in test
 MNIST_data
 tests/*.output
+tests/verbose.log
 
 # Scripts
 scripts/**
