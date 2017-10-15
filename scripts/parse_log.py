@@ -738,7 +738,7 @@ def memory_usage(logs, iter_times=None, beginning=None, mem_type=None,
 
             ss = pd.DataFrame(sessionUsages).fillna(method='ffill').fillna(0)
         else:
-            ss = group.cumsum()
+            ss = group['size'].cumsum()
 
         # Restrict x axis to iteration times, must be done after cumsum, otherwise there
         # will be negative number
