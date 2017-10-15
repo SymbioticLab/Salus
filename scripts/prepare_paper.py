@@ -2,7 +2,6 @@
 from __future__ import print_function, absolute_import, division
 
 import os
-import sys
 import argparse
 from collections import namedtuple, defaultdict
 from functools import wraps
@@ -17,8 +16,6 @@ import matplotlib.pyplot as plt
 import parse_log as pl
 import parse_nvvp as pn
 
-
-ConfigT = namedtuple('ConfigT', 'save_dir, log_dir')
 
 cases = defaultdict(list)
 
@@ -223,6 +220,11 @@ def plot_mem_ptbL(config, local_dir, logs, iters):
                                  mem_type='GPU_0_bfc', smoother=smoother)
     fig.axes[-1].set_title('Memory usage of Seq2Seq on PTB with large config')
     return fig
+
+
+@plotter('mix6')
+def plot_mem_mix6(config, local_dir, logs, iters):
+    pass
 
 
 def main():

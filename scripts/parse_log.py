@@ -731,14 +731,14 @@ def memory_usage(logs, iter_times=None, beginning=None, mem_type=None,
 
     series = []
     for (name, group), ax in zip(df.groupby('mem_type'), axs):
-        ss = group.cumsum()
-
         if per_sess:
             sessionUsages = {}
             for k, gg in group.groupby('session'):
                 sessionUsages[k] = gg['size'].cumsum()
 
             ss = pd.DataFrame(sessionUsages).fillna(method='ffill').fillna(0)
+        else:
+            ss = group.cumsum()
 
         # Restrict x axis to iteration times, must be done after cumsum, otherwise there
         # will be negative number
@@ -755,7 +755,7 @@ def memory_usage(logs, iter_times=None, beginning=None, mem_type=None,
         series.append(ss)
         if smoother:
             ss = smoother(ss)
-        
+
         if per_sess:
             ss.plot.area(ax=ax, title=name)
         else:
