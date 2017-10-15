@@ -46,7 +46,7 @@ elseif ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "MSVC")
 endif()
 
 message(STATUS "Using configuration: ${CMAKE_BUILD_TYPE}")
-if(${CMAKE_BUILD_TYPE} STREQUAL Debug OR ${CMAKE_BUILD_TYPE} STREQUAL RelWithDebugInfo)
+if(${CMAKE_BUILD_TYPE} STREQUAL Debug OR ${CMAKE_BUILD_TYPE} STREQUAL RelWithDebInfo)
     add_compile_options_with_check("-ggdb")
     # See bug: https://gcc.gnu.org/bugzilla/show_bug.cgi?id=51333
     # add_compile_options_with_check("-fkeep-inline-functions")
