@@ -3,7 +3,7 @@ from __future__ import print_function, absolute_import, division
 
 import os
 import argparse
-from collections import namedtuple, defaultdict
+from collections import defaultdict
 from functools import wraps
 
 try:

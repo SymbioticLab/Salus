@@ -14,7 +14,9 @@ def load_file(path):
     return NvvpReader(path, True)
 
 
-ptn_iter = re.compile(r"""(?P<timestamp>.+): step (\d+), (loss|perplexity) .*; (?P<duration>[\d.]+) sec/batch\)?""")
+ptn_iter = re.compile(r"""(?P<timestamp>.+): \s step \s (\d+),\s
+                          (loss|perplexity) .*;\s
+                          (?P<duration>[\d.]+) \s sec/batch\)?""", re.VERBOSE)
 ptn_sessstart = re.compile(r"""(?P<timestamp>.+): Session initialized""")
 
 
@@ -30,7 +32,7 @@ def parse_iterations(path):
                 timestamp = datetime.strptime(m.group('timestamp'), '%Y-%m-%d %H:%M:%S.%f')
                 start = timestamp - timedelta(seconds=float(m.group('duration')))
                 iterations.append((start, timestamp))
-            
+
             m = ptn_sessstart.match(line)
             if m:
                 timestamp = datetime.strptime(m.group('timestamp'), '%Y-%m-%d %H:%M:%S.%f')
