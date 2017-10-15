@@ -358,7 +358,7 @@ def match_exec_content(content, entry):
             'size': size,
             'block': block
         }
-    
+
     m = ptn_mem_pre.match(content)
     if m:
         return {
@@ -688,7 +688,7 @@ def memory_usage(logs, iter_times=None, beginning=None, mem_type=None,
 
     mem_activities = []
     for m in mem_usages:
-        if m.addr == '0x0':
+        if m.addr == '0x0' or m.addr == '0':
             continue
 
         if m.type == 'mem_alloc':
