@@ -757,7 +757,7 @@ def memory_usage(logs, iter_times=None, beginning=None, mem_type=None,
             ss = smoother(ss)
 
         if per_sess:
-            ss.plot.area(ax=ax, title=name)
+            ss.plot.area(ax=ax, title=name, linewidth=0)
         else:
             ss.plot(ax=ax, title=name)
             ax.grid('on')
