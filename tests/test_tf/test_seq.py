@@ -73,6 +73,9 @@ class SeqCaseBase(unittest.TestCase):
     def _runner(self):
         return None
 
+    def _config(self, config_name):
+        return None
+
     def get_func_to_run(self, config_name):
         return lambda: self._runner()(tf.get_default_session(), config_name)
 
@@ -87,11 +90,13 @@ class SeqCaseBase(unittest.TestCase):
 
     @parameterized.expand(configs)
     def test_rpc(self, config_name):
-        run_on_sessions(self.get_func_to_run(config_name), 'zrpc://tcp://127.0.0.1:5501')
+        run_on_sessions(self.get_func_to_run(config_name), 'zrpc://tcp://127.0.0.1:5501',
+                        config=self._config(config_name))
 
     @parameterized.expand(configs)
     def test_correctness(self, config_name):
-        actual, expected = run_on_rpc_and_cpu(self.get_func_to_run(config_name))
+        actual, expected = run_on_rpc_and_cpu(self.get_func_to_run(config_name),
+                                              config=self._config(config_name))
         self.assertEquals(actual, expected)
 
 
@@ -99,6 +104,22 @@ class SeqCaseBase(unittest.TestCase):
 class TestSeqPtb(SeqCaseBase):
     def _runner(self):
         return run_seq_ptb
+
+    def _config(self, config_name):
+        KB = 1024
+        MB = 1024 * KB
+        GB = 1024 * MB
+        memusages = {
+            'tiny': (1.9 * MB, 200 * KB),
+            'small': (79.2 * MB, 18 * MB),
+            'medium': (1.01 * GB, 80 * MB),
+            'large': (5.05 * GB, 343.3 * MB),
+        }
+
+        config = tf.ConfigProto()
+        config.zmq_options.resource_map.temporary['MEMORY:GPU'] = memusages[config_name][0]
+        config.zmq_options.resource_map.persistant['MEMORY:GPU'] = memusages[config_name][1]
+        return config
 
 
 del SeqCaseBase

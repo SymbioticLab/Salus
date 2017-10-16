@@ -778,6 +778,10 @@ def memory_usage(logs, iter_times=None, beginning=None, mem_type=None,
     if xlim[0] < 0:
         axs[-1].set_xlim(left=0)
 
+    def format_coord(x, y):
+        return 'x={:.4f}, y={:.4f}'.format(x, y)
+    axs[-1].format_coord = format_coord
+
     fig.tight_layout()
 
     if unified_ylabel:

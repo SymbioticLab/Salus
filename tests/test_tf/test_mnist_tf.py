@@ -259,16 +259,31 @@ class TestMnistConv(MnistConvBase):
     def _runner(self):
         return run_mnist_conv
 
+    def _config(self, **kwargs):
+        MB = 1024 * 1024
+        memusages = {
+            25: (51.7 * MB - 38 * MB, 38 * MB),
+            50: (64.8 * MB - 38 * MB, 38 * MB),
+            100: (89 * MB - 38 * MB, 38 * MB),
+        }
+        batch_size = kwargs.get('batch_size', 50)
+
+        config = tf.ConfigProto()
+        config.zmq_options.resource_map.temporary['MEMORY:GPU'] = memusages[batch_size][0]
+        config.zmq_options.resource_map.persistant['MEMORY:GPU'] = memusages[batch_size][1]
+        return config
+
 
 class TestMnistLarge(MnistConvBase):
     def _runner(self):
         return run_mnist_large
 
     def _config(self, **kwargs):
+        MB = 1024 * 1024
         memusages = {
-            25: (5715962884 - 23415216, 23415216),
-            50: (5715962884 - 23494616, 23494616),
-            100: (5715962884 - 23653416, 23653416),
+            25: (39 * MB - 23.5 * MB, 23.5 * MB),
+            50: (54 * MB - 23.5 * MB, 23.5 * MB),
+            100: (72 * MB - 23.5 * MB, 26 * MB),
         }
         batch_size = kwargs.get('batch_size', 50)
 

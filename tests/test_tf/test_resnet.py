@@ -117,12 +117,11 @@ class TestResNetCifar10(ResNetCaseBase):
 
 class TestResNetFakeData(ResNetCaseBase):
     def _config(self, **kwargs):
-        # FIXME: update memory usage
+        MB = 1024 * 1024
         memusages = {
-            25: (6935520748 - 1661494764, 1661494764),
-            50: (10211120620 - 1662531248, 1662531248),
-            75: (10211120620 - 1662531248, 1662531248),
-            100: (11494955340, 1.67e9),
+            25: (5123864571 - 38.1 * MB, 38.1 * MB),
+            50: (10063719070 - 38.1 * MB, 8 * MB),
+            75: (14 * 1024 * MB - 8 * MB, 8 * MB),
         }
         batch_size = kwargs.get('batch_size', 100)
 
