@@ -225,7 +225,7 @@ class PTBModel(object):
 
             dur = default_timer() - local_start_time
             local_speed = self.input.num_steps * self.input.batch_size / dur
-            speeds.append(local_speed)
+            speeds.append(dur)
             if verbose:
                 fmt_str = '{}: step {}, perplexity = {:.2f} ({:.1f} wps; {:.3f} sec/batch)'
                 print(fmt_str.format(datetime.now(), step, np.exp(costs / iters), local_speed, dur))
