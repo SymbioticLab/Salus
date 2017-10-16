@@ -62,7 +62,7 @@ def run_seq_ptb(sess, config_name):
             valid_perplexity, _ = mvalid.run_epoch(sess)
             print("Epoch: %d Valid Perplexity: %.3f" % (i + 1, valid_perplexity))
 
-        test_perplexity = mtest.run_epoch(sess)
+        test_perplexity, _ = mtest.run_epoch(sess)
         print("Test Perplexity: %.3f" % test_perplexity)
 
 
