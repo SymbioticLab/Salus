@@ -39,28 +39,25 @@ namespace tf = tensorflow;
 ExecTask::ExecTask(ExecutorState *state, utils::semaphore &num_finished_ops,
                    const ExecutorState::TaggedNode &node,
                    ExecutorState::TaggedNodeReadyQueue &inline_ready,
-                   tf::NodeExecStats *stats, tf::OpKernelContext::Params &params,
-                   int64_t &scheduled_usec,
-                   TensorValueVec &inputs, DeviceContextVec &input_device_contexts,
-                   AllocatorAttributeVec &input_alloc_attrs, bool &completed, tf::Rendezvous *rendez,
-                   int maxFailures)
+                   tf::NodeExecStats *stats, const tf::OpKernelContext::Params &initial_params,
+                   bool &completed, tf::Rendezvous *rendez, int maxFailures)
     : deleteKernel(state->impl_->params_.delete_kernel)
     , maxFailures(maxFailures)
     , kernel_is_async(false)
     , has_ref_input(false)
     , tagged_node(node)
+    , params(initial_params)
     , inline_ready(inline_ready)
     , stats(stats)
-    , params(params)
-    , scheduled_usec(scheduled_usec)
-    , inputs(inputs)
-    , input_device_contexts(input_device_contexts)
-    , input_alloc_attrs(input_alloc_attrs)
     , completed(completed)
     , rendez(rendez)
     , num_finished_ops(num_finished_ops)
     , m_state(state)
 {
+    params.inputs = &inputs;
+    params.input_device_contexts = &input_device_contexts;
+    params.input_alloc_attrs = &input_alloc_attrs;
+
     tf::DeviceTypeVector tftypes;
     auto ok = tf::SupportedDeviceTypesForNode({tf::DEVICE_GPU, tf::DEVICE_CPU},
                                               tagged_node.node->def(), &tftypes);
@@ -299,7 +296,7 @@ void ExecTask::run(Callbacks cbs)
         params.track_allocations = true;
         stats = new tf::NodeExecStats;
         stats->set_node_name(node->name());
-        nodestats::SetScheduled(stats, scheduled_usec);
+        nodestats::SetScheduled(stats, nodestats::NowInUsec());
         nodestats::SetAllStart(stats);
     }
 
@@ -355,90 +352,92 @@ void ExecTask::run(Callbacks cbs)
             DCHECK(async != nullptr);
             launched_asynchronously = true;
 
-            auto pstate = new ExecutorState::AsyncState(params, tagged_node, &item, first_input, stats);
+            // Ensure OpKernelContext constructor will make a new eigen GPU device if
+            // necessary.
+            params.eigen_gpu_device = nullptr; // Force allocation
+
+            pctx = std::make_unique<tf::OpKernelContext>(&params, item.num_outputs);
 
             // `done` should be called last as `this` would be deleted in it.
-            auto asyncDone = [this, pstate, cbs, ditem = ditem, execState = m_state]() {
-                auto state = std::unique_ptr<ExecutorState::AsyncState>(pstate);
+            auto asyncDone = [this, cbs, &item]() {
                 auto &device = ditem.device;
-                auto stats = state->stats;
-                auto first_input = state->first_input;
 
                 // Inspect return state for retrying on memory failure
-                if (maybeMemoryFailure(state->ctx.status(), cbs.memFailure)) {
+                if (maybeMemoryFailure(pctx->status(), cbs.memFailure)) {
                     return;
                 }
 
-                VLOG(2) << "Async kernel done: " << SummarizeNodeDef(state->item->node->def());
+                VLOG(2) << "Async kernel done: " << SummarizeNodeDef(tagged_node.node->def());
                 if (stats)
                     nodestats::SetOpEnd(stats);
                 ExecutorState::EntryVector outputs;
-                auto s = execState->ProcessOutputs(*state->item, &state->ctx, device, &outputs, stats);
+                auto s = m_state->ProcessOutputs(item, pctx.get(), device, &outputs, stats);
                 if (stats)
-                    nodestats::SetMemory(stats, &state->ctx);
+                    nodestats::SetMemory(stats, pctx.get());
                 // Update ref entry tickets
                 updateRefEntryTickets(reffedEntries);
                 // Clears inputs.
-                execState->ClearInputs(first_input, state->item->num_inputs, buflocks);
+                m_state->ClearInputs(first_input, item.num_inputs, buflocks);
                 // mark completed
-                auto input_frame = state->tagged_node.input_frame;
-                const int64_t input_iter = state->tagged_node.input_iter;
-                const int id = state->tagged_node.node->id();
-                execState->MaybeMarkCompleted(input_frame, input_iter, id);
+                auto input_frame = tagged_node.input_frame;
+                const int64_t input_iter = tagged_node.input_iter;
+                const int id = tagged_node.node->id();
+                m_state->MaybeMarkCompleted(input_frame, input_iter, id);
                 // propagate outputs
                 ExecutorState::TaggedNodeSeq ready;
                 if (s.ok()) {
-                    execState->PropagateOutputs(state->tagged_node, state->item, &outputs, &ready);
+                    m_state->PropagateOutputs(tagged_node, &item, &outputs, &ready);
                 }
                 outputs.clear();
                 // record tensor access
                 if (s.ok() && ditem.device_record_tensor_access) {
                     // Get the list of all tensors accessed during the execution
                     tf::TensorReferenceVector accessed;
-                    state->ctx.retrieve_accessed_tensors(&accessed);
+                    pctx->retrieve_accessed_tensors(&accessed);
                     if (stats)
                         nodestats::SetReferencedTensors(stats, accessed);
                     // callee takes ownership of the vector
-                    device->ConsumeListOfAccessedTensors(state->ctx.op_device_context(), accessed);
+                    device->ConsumeListOfAccessedTensors(pctx->op_device_context(), accessed);
                 }
 
-                auto completed = execState->NodeDone(s, state->item->node, device.get(), state->params.rendezvous,
-                                                     ready, stats, nullptr);
+                auto completed = m_state->NodeDone(s, tagged_node.node, device.get(), params.rendezvous,
+                                                   ready, stats, nullptr);
 
                 num_finished_ops.notify();
                 if (completed) {
-                    execState->Finish();
+                    m_state->Finish();
                 }
+                // `this` may be deleted in done
                 cbs.done();
             };
             if (stats)
                 nodestats::SetOpStart(stats);
-            ditem.device->ComputeAsync(async, &pstate->ctx, std::move(asyncDone));
+            ditem.device->ComputeAsync(async, pctx.get(), std::move(asyncDone));
         } else {
             // Synchronous computes.
             VLOG(2) << "Launch sync kernel";
-            tf::OpKernelContext ctx(&params, item.num_outputs);
+            pctx = std::make_unique<tf::OpKernelContext>(&params, item.num_outputs);
             if (stats)
                 nodestats::SetOpStart(stats);
             DCHECK_NOTNULL(op_kernel);
-            ditem.device->Compute(op_kernel, &ctx);
+            ditem.device->Compute(op_kernel, pctx.get());
             if (stats)
                 nodestats::SetOpEnd(stats);
 
             // Inspect return state for retrying on memory failure
-            if (maybeMemoryFailure(ctx.status(), cbs.memFailure)) {
+            if (maybeMemoryFailure(pctx->status(), cbs.memFailure)) {
                 return;
             }
 
             VLOG(2) << "Sync ProcessOutputs";
-            s = m_state->ProcessOutputs(item, &ctx, ditem.device, &outputs, stats);
+            s = m_state->ProcessOutputs(item, pctx.get(), ditem.device, &outputs, stats);
             if (s.ok() && ditem.device_record_tensor_access) {
                 // Get the list of all tensors accessed during the execution
-                ctx.retrieve_accessed_tensors(&accessed_tensors);
-                device_context = ctx.op_device_context();
+                pctx->retrieve_accessed_tensors(&accessed_tensors);
+                device_context = pctx->op_device_context();
             }
             if (stats)
-                nodestats::SetMemory(stats, &ctx);
+                nodestats::SetMemory(stats, pctx.get());
         }
     }
 
@@ -458,9 +457,6 @@ void ExecTask::run(Callbacks cbs)
                 nodestats::SetReferencedTensors(stats, accessed_tensors);
             // device_context is set above in synchronous computes
             ditem.device->ConsumeListOfAccessedTensors(device_context, accessed_tensors);
-        }
-        if (stats) {
-            scheduled_usec = nodestats::NowInUsec();
         }
         // Postprocess.
         afterRun(s, cbs);

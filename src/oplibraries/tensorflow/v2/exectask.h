@@ -44,10 +44,7 @@ public:
     ExecTask(ExecutorState *state, utils::semaphore &num_finished_ops,
              const ExecutorState::TaggedNode &node,
              ExecutorState::TaggedNodeReadyQueue &inline_ready,
-             tf::NodeExecStats *stats, tf::OpKernelContext::Params &params,
-             int64_t &scheduled_usec, TensorValueVec &inputs,
-             DeviceContextVec &input_device_contexts,
-             AllocatorAttributeVec &input_alloc_attrs,
+             tf::NodeExecStats *stats, const tf::OpKernelContext::Params &initial_params,
              bool &completed, tf::Rendezvous *rendez, int maxFailures = 2);
 
     bool prepare(std::unique_ptr<ResourceContext> &&rctx) override;
@@ -97,14 +94,17 @@ private:
     ExecutorState::TaggedNode tagged_node;
     ExecutorState::TaggedNodeSeq ready;
 
+    TensorValueVec inputs;
+    DeviceContextVec input_device_contexts;
+    AllocatorAttributeVec input_alloc_attrs;
+
+    // params must out-live pctx
+    tf::OpKernelContext::Params params;
+    std::unique_ptr<tf::OpKernelContext> pctx;
+
     // Borrowed from ExecutorState
     ExecutorState::TaggedNodeReadyQueue &inline_ready;
     tf::NodeExecStats *stats;
-    tf::OpKernelContext::Params &params;
-    int64_t &scheduled_usec;
-    TensorValueVec &inputs;
-    DeviceContextVec &input_device_contexts;
-    AllocatorAttributeVec &input_alloc_attrs;
     bool &completed;
     tf::Rendezvous *rendez;
     utils::semaphore &num_finished_ops;

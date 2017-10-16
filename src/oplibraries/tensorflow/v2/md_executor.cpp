@@ -360,15 +360,13 @@ void ExecutorState::Process(TaggedNode tagged_node, int64_t scheduled_usec)
 {
     TIMED_FUNC(timerObj);
 
+    UNUSED(scheduled_usec);
+
     const GraphView &gview = impl_->gview_;
     TaggedNodeSeq ready;
     TaggedNodeReadyQueue inline_ready;
 
     // Parameters passed to OpKernel::Compute.
-    TensorValueVec inputs;
-    DeviceContextVec input_device_contexts;
-    AllocatorAttributeVec input_alloc_attrs;
-
     tf::OpKernelContext::Params params;
     params.step_id = step_id_;
     params.session_state = session_state_;
@@ -376,9 +374,7 @@ void ExecutorState::Process(TaggedNode tagged_node, int64_t scheduled_usec)
     params.cancellation_manager = cancellation_manager_;
     params.call_frame = call_frame_;
     params.step_container = step_container_;
-    params.inputs = &inputs;
-    params.input_device_contexts = &input_device_contexts;
-    params.input_alloc_attrs = &input_alloc_attrs;
+
     params.runner = &runner_;
     params.resource_manager = impl_->params_.resourceMgr;
 
@@ -404,8 +400,6 @@ void ExecutorState::Process(TaggedNode tagged_node, int64_t scheduled_usec)
 
         auto nodeTask = std::make_unique<ExecTask>(this, num_finished_ops_,
                                                    tagged_node, inline_ready, stats, params,
-                                                   scheduled_usec,
-                                                   inputs, input_device_contexts, input_alloc_attrs,
                                                    completed, rendezvous_);
 
         num_emitted_ops_ += 1;
