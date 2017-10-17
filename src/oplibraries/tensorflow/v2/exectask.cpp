@@ -38,18 +38,15 @@ namespace tf = tensorflow;
 
 ExecTask::ExecTask(ExecutorState *state, utils::semaphore &num_finished_ops,
                    const ExecutorState::TaggedNode &node,
-                   ExecutorState::TaggedNodeReadyQueue &inline_ready,
                    tf::NodeExecStats *stats, const tf::OpKernelContext::Params &initial_params,
-                   bool &completed, tf::Rendezvous *rendez, int maxFailures)
+                   tf::Rendezvous *rendez, int maxFailures)
     : deleteKernel(state->impl_->params_.delete_kernel)
     , maxFailures(maxFailures)
     , kernel_is_async(false)
     , has_ref_input(false)
     , tagged_node(node)
     , params(initial_params)
-    , inline_ready(inline_ready)
     , stats(stats)
-    , completed(completed)
     , rendez(rendez)
     , num_finished_ops(num_finished_ops)
     , m_state(state)
@@ -306,13 +303,10 @@ void ExecTask::run(Callbacks cbs)
     first_input = input_tensors + item.input_start;
 
     ExecutorState::EntryVector outputs; // for use of sync compute
-    tf::TensorReferenceVector accessed_tensors;
-    tf::DeviceContext *device_context = nullptr;
 
     // Only execute this node if it is not dead or it is a send/recv
     // transfer node. For transfer nodes, we need to propagate the "dead"
     // bit even when the node is dead.
-    bool launched_asynchronously = false;
     if (tagged_node.is_dead && !IsTransferNode(node)) {
         outputs.resize(item.num_outputs);
     } else {
@@ -350,69 +344,19 @@ void ExecTask::run(Callbacks cbs)
             VLOG(2) << "Launch Async kernel";
             auto async = op_kernel->AsAsync();
             DCHECK(async != nullptr);
-            launched_asynchronously = true;
 
             // Ensure OpKernelContext constructor will make a new eigen GPU device if
             // necessary.
             params.eigen_gpu_device = nullptr; // Force allocation
-
             pctx = std::make_unique<tf::OpKernelContext>(&params, item.num_outputs);
 
-            // `done` should be called last as `this` would be deleted in it.
-            auto asyncDone = [this, cbs, &item]() {
-                auto &device = ditem.device;
-
-                // Inspect return state for retrying on memory failure
-                if (maybeMemoryFailure(pctx->status(), cbs.memFailure)) {
-                    return;
-                }
-
-                VLOG(2) << "Async kernel done: " << SummarizeNodeDef(tagged_node.node->def());
-                if (stats)
-                    nodestats::SetOpEnd(stats);
-                ExecutorState::EntryVector outputs;
-                auto s = m_state->ProcessOutputs(item, pctx.get(), device, &outputs, stats);
-                if (stats)
-                    nodestats::SetMemory(stats, pctx.get());
-                // Update ref entry tickets
-                updateRefEntryTickets(reffedEntries);
-                // Clears inputs.
-                m_state->ClearInputs(first_input, item.num_inputs, buflocks);
-                // mark completed
-                auto input_frame = tagged_node.input_frame;
-                const int64_t input_iter = tagged_node.input_iter;
-                const int id = tagged_node.node->id();
-                m_state->MaybeMarkCompleted(input_frame, input_iter, id);
-                // propagate outputs
-                ExecutorState::TaggedNodeSeq ready;
-                if (s.ok()) {
-                    m_state->PropagateOutputs(tagged_node, &item, &outputs, &ready);
-                }
-                outputs.clear();
-                // record tensor access
-                if (s.ok() && ditem.device_record_tensor_access) {
-                    // Get the list of all tensors accessed during the execution
-                    tf::TensorReferenceVector accessed;
-                    pctx->retrieve_accessed_tensors(&accessed);
-                    if (stats)
-                        nodestats::SetReferencedTensors(stats, accessed);
-                    // callee takes ownership of the vector
-                    device->ConsumeListOfAccessedTensors(pctx->op_device_context(), accessed);
-                }
-
-                auto completed = m_state->NodeDone(s, tagged_node.node, device.get(), params.rendezvous,
-                                                   ready, stats, nullptr);
-
-                num_finished_ops.notify();
-                if (completed) {
-                    m_state->Finish();
-                }
-                // `this` may be deleted in done
-                cbs.done();
-            };
             if (stats)
                 nodestats::SetOpStart(stats);
-            ditem.device->ComputeAsync(async, pctx.get(), std::move(asyncDone));
+            ditem.device->ComputeAsync(async, pctx.get(), [this, cbs, &item]() {
+                VLOG(2) << "Async Kernel done: " << SummarizeNodeDef(tagged_node.node->def());
+                afterCompute(cbs, item);
+            });
+            cbs.launched();
         } else {
             // Synchronous computes.
             VLOG(2) << "Launch sync kernel";
@@ -421,49 +365,64 @@ void ExecTask::run(Callbacks cbs)
                 nodestats::SetOpStart(stats);
             DCHECK_NOTNULL(op_kernel);
             ditem.device->Compute(op_kernel, pctx.get());
-            if (stats)
-                nodestats::SetOpEnd(stats);
 
-            // Inspect return state for retrying on memory failure
-            if (maybeMemoryFailure(pctx->status(), cbs.memFailure)) {
-                return;
-            }
+            cbs.launched();
+            VLOG(2) << "Kernel done: " << SummarizeNodeDef(tagged_node.node->def());
+            afterCompute(cbs, item);
+        } // if (kernel_is_async)
+    } // if (tagged_node.is_dead || IsTransferNode(tagged_node.node))
+}
 
-            VLOG(2) << "Sync ProcessOutputs";
-            s = m_state->ProcessOutputs(item, pctx.get(), ditem.device, &outputs, stats);
-            if (s.ok() && ditem.device_record_tensor_access) {
-                // Get the list of all tensors accessed during the execution
-                pctx->retrieve_accessed_tensors(&accessed_tensors);
-                device_context = pctx->op_device_context();
-            }
-            if (stats)
-                nodestats::SetMemory(stats, pctx.get());
-        }
+void ExecTask::afterCompute(const Callbacks &cbs, const tf::remote::NodeItem &item)
+{
+    // `cbs.done` should be called last as `this` would be deleted in it.
+    auto &device = ditem.device;
+
+    // Inspect return state for retrying on memory failure
+    if (maybeMemoryFailure(pctx->status(), cbs.memFailure)) {
+        return;
     }
 
-    if (!launched_asynchronously) {
-        // Update ref entry tickets
-        updateRefEntryTickets(reffedEntries);
-        // Clears inputs.
-        m_state->ClearInputs(first_input, item.num_inputs, buflocks);
-        m_state->MaybeMarkCompleted(input_frame, input_iter, id);
-        // Propagates outputs.
-        if (s.ok()) {
-            m_state->PropagateOutputs(tagged_node, &item, &outputs, &ready);
-        }
-        outputs.clear();
-        if (!accessed_tensors.empty()) {
-            if (stats)
-                nodestats::SetReferencedTensors(stats, accessed_tensors);
-            // device_context is set above in synchronous computes
-            ditem.device->ConsumeListOfAccessedTensors(device_context, accessed_tensors);
-        }
-        // Postprocess.
-        afterRun(s, cbs);
-        VLOG(2) << "Postprocess completed: " << completed;
-    } else {
-        cbs.launched();
+    if (stats)
+        nodestats::SetOpEnd(stats);
+
+    ExecutorState::EntryVector outputs;
+    auto s = m_state->ProcessOutputs(item, pctx.get(), device, &outputs, stats);
+    if (stats)
+        nodestats::SetMemory(stats, pctx.get());
+
+    // Update ref entry tickets
+    updateRefEntryTickets(reffedEntries);
+
+    // Clears inputs.
+    m_state->ClearInputs(first_input, item.num_inputs, buflocks);
+
+    // Mark completed
+    auto input_frame = tagged_node.input_frame;
+    const int64_t input_iter = tagged_node.input_iter;
+    const int id = tagged_node.node->id();
+    m_state->MaybeMarkCompleted(input_frame, input_iter, id);
+
+    // propagate outputs
+    if (s.ok()) {
+        m_state->PropagateOutputs(tagged_node, &item, &outputs, &ready);
     }
+    outputs.clear();
+
+    // record tensor access
+    if (s.ok() && ditem.device_record_tensor_access) {
+        // Get the list of all tensors accessed during the execution
+        tf::TensorReferenceVector accessed;
+        pctx->retrieve_accessed_tensors(&accessed);
+        if (stats)
+            nodestats::SetReferencedTensors(stats, accessed);
+        // callee takes ownership of the vector
+        device->ConsumeListOfAccessedTensors(pctx->op_device_context(), accessed);
+    }
+
+    // Post process
+    // call node done and cbs.done
+    afterRun(s, cbs);
 }
 
 void ExecTask::updateRefEntryTickets(const std::vector<Entry*> &entries)
@@ -504,10 +463,16 @@ void ExecTask::updateRefEntryTickets(const std::vector<Entry*> &entries)
 void ExecTask::afterRun(const tf::Status &s, const Callbacks &cbs)
 {
     assert(ditem.device);
-    completed = m_state->NodeDone(s, tagged_node.node, ditem.device.get(), params.rendezvous,
-                                  ready, stats, &inline_ready);
+    auto completed = m_state->NodeDone(s, tagged_node.node, ditem.device.get(), params.rendezvous,
+                                       ready, stats, nullptr);
+
     num_finished_ops.notify();
-    cbs.launched();
+
+    if (completed) {
+        // `m_state` may be deleted in Finish
+        m_state->Finish();
+    }
+    // `this` may be deleted in done
     cbs.done();
 }
 

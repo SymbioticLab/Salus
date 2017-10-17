@@ -379,7 +379,6 @@ void ExecutorState::Process(TaggedNode tagged_node, int64_t scheduled_usec)
     params.resource_manager = impl_->params_.resourceMgr;
 
     tf::NodeExecStats *stats = nullptr;
-    bool completed = false;
     inline_ready.push_back(tagged_node);
     while (!inline_ready.empty()) {
         tagged_node = inline_ready.front();
@@ -398,9 +397,8 @@ void ExecutorState::Process(TaggedNode tagged_node, int64_t scheduled_usec)
             input_frame->GetIteration(input_iter)->mark_started(item.pending_id);
         }
 
-        auto nodeTask = std::make_unique<ExecTask>(this, num_finished_ops_,
-                                                   tagged_node, inline_ready, stats, params,
-                                                   completed, rendezvous_);
+        auto nodeTask = std::make_unique<ExecTask>(this, num_finished_ops_, tagged_node,
+                                                   stats, params, rendezvous_);
 
         num_emitted_ops_ += 1;
 
@@ -414,9 +412,6 @@ void ExecutorState::Process(TaggedNode tagged_node, int64_t scheduled_usec)
     } // while !inline_ready.empty()
 
     VLOG(3) << "inline ready queue empty";
-    // This thread of computation is done if completed = true.
-    if (completed)
-        Finish();
 }
 
 tf::Status ExecutorState::SetupKernel(TaggedNode node, const ExecutorImpl::DeviceItem &ditem,

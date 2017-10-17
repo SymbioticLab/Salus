@@ -43,9 +43,8 @@ class ExecTask : public OperationTask
 public:
     ExecTask(ExecutorState *state, utils::semaphore &num_finished_ops,
              const ExecutorState::TaggedNode &node,
-             ExecutorState::TaggedNodeReadyQueue &inline_ready,
              tf::NodeExecStats *stats, const tf::OpKernelContext::Params &initial_params,
-             bool &completed, tf::Rendezvous *rendez, int maxFailures = 2);
+             tf::Rendezvous *rendez, int maxFailures = 2);
 
     bool prepare(std::unique_ptr<ResourceContext> &&rctx) override;
 
@@ -67,6 +66,8 @@ public:
 
 private:
     bool maybeMemoryFailure(const tf::Status &s, DoneCallback memFailure);
+
+    void afterCompute(const Callbacks &cbs, const tf::remote::NodeItem &item);
 
     void afterRun(const tf::Status &s, const Callbacks &cbs);
 
@@ -103,9 +104,7 @@ private:
     std::unique_ptr<tf::OpKernelContext> pctx;
 
     // Borrowed from ExecutorState
-    ExecutorState::TaggedNodeReadyQueue &inline_ready;
     tf::NodeExecStats *stats;
-    bool &completed;
     tf::Rendezvous *rendez;
     utils::semaphore &num_finished_ops;
 
