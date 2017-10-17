@@ -352,7 +352,7 @@ void ExecutorState::RunAsync(tf::Executor::DoneCallback done)
         root_frame_->iterations[0]->outstanding_ops = ready.size();
         done_cb_ = done;
         // Schedule to run all the ready ops in thread pool.
-        ScheduleReady(ready, nullptr);
+        ScheduleReady(ready);
     }
 }
 
@@ -363,10 +363,10 @@ void ExecutorState::Process(TaggedNode tagged_node, int64_t scheduled_usec)
     UNUSED(scheduled_usec);
 
     const GraphView &gview = impl_->gview_;
-    TaggedNodeSeq ready;
-    TaggedNodeReadyQueue inline_ready;
+    tf::NodeExecStats *stats = nullptr;
+    auto node = tagged_node.node;
 
-    // Parameters passed to OpKernel::Compute.
+    // Initial parameters passed to OpKernel::Compute.
     tf::OpKernelContext::Params params;
     params.step_id = step_id_;
     params.session_state = session_state_;
@@ -378,40 +378,23 @@ void ExecutorState::Process(TaggedNode tagged_node, int64_t scheduled_usec)
     params.runner = &runner_;
     params.resource_manager = impl_->params_.resourceMgr;
 
-    tf::NodeExecStats *stats = nullptr;
-    inline_ready.push_back(tagged_node);
-    while (!inline_ready.empty()) {
-        tagged_node = inline_ready.front();
-        inline_ready.pop_front();
-        auto node = tagged_node.node;
+    // TODO(misard) Replace with a finer-grain enabling flag once we
+    // add better optional debugging support.
+    if (vlog_ && VLOG_IS_ON(1)) {
+        FrameState *input_frame = tagged_node.input_frame;
+        int64_t input_iter = tagged_node.input_iter;
+        const NodeItem &item = *gview.node(node->id());
 
-        VLOG(3) << "Get a new node from inline_ready queue";
-        // TODO(misard) Replace with a finer-grain enabling flag once we
-        // add better optional debugging support.
-        if (vlog_ && VLOG_IS_ON(1)) {
-            FrameState *input_frame = tagged_node.input_frame;
-            int64_t input_iter = tagged_node.input_iter;
-            const NodeItem &item = *gview.node(node->id());
+        tf::mutex_lock l(input_frame->mu);
+        input_frame->GetIteration(input_iter)->mark_started(item.pending_id);
+    }
 
-            tf::mutex_lock l(input_frame->mu);
-            input_frame->GetIteration(input_iter)->mark_started(item.pending_id);
-        }
+    auto nodeTask = std::make_unique<ExecTask>(this, num_finished_ops_, tagged_node,
+                                                stats, params, rendezvous_);
 
-        auto nodeTask = std::make_unique<ExecTask>(this, num_finished_ops_, tagged_node,
-                                                   stats, params, rendezvous_);
+    num_emitted_ops_ += 1;
 
-        num_emitted_ops_ += 1;
-
-        auto fu = impl_->inserter_->enqueueOperation(std::move(nodeTask));
-
-        try {
-            fu.get();
-        } catch (std::future_error &err) {
-            LOG(ERROR) << "Opkernel " << node->name() << " failed to run: " << err.what();
-        }
-    } // while !inline_ready.empty()
-
-    VLOG(3) << "inline ready queue empty";
+    impl_->inserter_->enqueueOperation(std::move(nodeTask));
 }
 
 tf::Status ExecutorState::SetupKernel(TaggedNode node, const ExecutorImpl::DeviceItem &ditem,
@@ -962,7 +945,7 @@ void ExecutorState::PropagateOutputs(const TaggedNode &tagged_node, const NodeIt
 
 bool ExecutorState::NodeDone(const tf::Status &s, const tf::Node *node, const tf::Device *device,
                              tf::Rendezvous *rendezvous, const TaggedNodeSeq &ready,
-                             tf::NodeExecStats *stats, TaggedNodeReadyQueue *inline_ready)
+                             tf::NodeExecStats *stats)
 {
     TIMED_FUNC(timerObj);
 
@@ -1018,13 +1001,13 @@ bool ExecutorState::NodeDone(const tf::Status &s, const tf::Node *node, const tf
 
     // Schedule the ready nodes in 'ready'.
     if (s.ok()) {
-        ScheduleReady(ready, inline_ready);
+        ScheduleReady(ready);
     }
     VLOG(2) << "NodeDone completed: " << completed;
     return completed;
 }
 
-void ExecutorState::ScheduleReady(const TaggedNodeSeq &ready, TaggedNodeReadyQueue *inline_ready)
+void ExecutorState::ScheduleReady(const TaggedNodeSeq &ready)
 {
     TIMED_FUNC(timerObj);
 
@@ -1044,43 +1027,13 @@ void ExecutorState::ScheduleReady(const TaggedNodeSeq &ready, TaggedNodeReadyQue
         addNodeToRefiner(tn);
     }
 
-    if (inline_ready == nullptr) {
-        // Schedule to run all the ready ops in thread pool.
-        VLOG(2) << "Schedule to run all the ready ops in thread pool.";
-        for (auto &tagged_node : ready) {
-            VLOG(3) << "Schedule to run the ready op: " << tagged_node.node->name();
-            runner_([=]() { Process(tagged_node, scheduled_usec); });
-        }
-        VLOG(3) << "All ops in ready queue sent to thread pool";
-        return;
-    }
-    auto &gview = impl_->gview_;
-    const TaggedNode *curr_expensive_node = nullptr;
+    // Schedule to run all the ready ops in thread pool.
+    VLOG(2) << "Schedule to run all the ready ops in thread pool.";
     for (auto &tagged_node : ready) {
-        const NodeItem &item = *gview.node(tagged_node.node->id());
-        VLOG(3) << "Visit node in ScheduleReady" << item.node->name();
-        if (tagged_node.is_dead || !item.kernel_is_expensive) {
-            // Inline this inexpensive node.
-            inline_ready->push_back(tagged_node);
-        } else {
-            if (curr_expensive_node) {
-                // Dispatch to another thread since there is plenty of work to
-                // do for this thread.
-                runner_(std::bind(&ExecutorState::Process, this, *curr_expensive_node, scheduled_usec));
-            }
-            curr_expensive_node = &tagged_node;
-        }
+        VLOG(3) << "Schedule to run the ready op: " << tagged_node.node->name();
+        runner_([=]() { Process(tagged_node, scheduled_usec); });
     }
-    if (curr_expensive_node) {
-        if (inline_ready->empty()) {
-            // Tail recursion optimization
-            inline_ready->push_back(*curr_expensive_node);
-        } else {
-            // There are inline nodes to run already. We dispatch this expensive
-            // node to other thread.
-            runner_(std::bind(&ExecutorState::Process, this, *curr_expensive_node, scheduled_usec));
-        }
-    }
+    VLOG(3) << "All ops in ready queue sent to thread pool";
 }
 
 const tf::Tensor *ExecutorState::GetTensorValueForDump(const Entry &input)

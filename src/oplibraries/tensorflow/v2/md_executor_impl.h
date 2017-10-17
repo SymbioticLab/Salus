@@ -487,59 +487,6 @@ private:
         }
     };
 
-    // A drop-in replacement for std::deque<TaggedNode>.  We typically don't
-    // have that many nodes in the ready queue, so we just use a vector and
-    // don't free up memory from the queue as we consume nodes.
-    class TaggedNodeReadyQueue
-    {
-    public:
-        TaggedNodeReadyQueue()
-            : front_index_(0)
-        {
-        }
-
-        void push_back(TaggedNode node)
-        {
-            ready_.push_back(node);
-        }
-        TaggedNode front() const
-        {
-            DCHECK_LT(front_index_, ready_.size());
-            return ready_[front_index_];
-        }
-        void pop_front()
-        {
-            DCHECK_LT(front_index_, ready_.size());
-            front_index_++;
-            if ((front_index_ == ready_.size()) || (front_index_ > 16384)) {
-                if (front_index_ == ready_.size()) {
-                    ready_.clear();
-                } else {
-                    // Lots of unused entries at beginning of vector: move everything down
-                    // to start of vector.
-                    ready_.erase(ready_.begin(), ready_.begin() + front_index_);
-                }
-                front_index_ = 0;
-            }
-        }
-        bool empty() const
-        {
-            return ready_.empty();
-        }
-        const TaggedNode *begin() const
-        {
-            return ready_.begin() + front_index_;
-        }
-        const TaggedNode *end() const
-        {
-            return ready_.end();
-        }
-
-    private:
-        gtl::InlinedVector<TaggedNode, 16> ready_;
-        size_t front_index_;
-    };
-
     struct AsyncState;
 
     const bool vlog_; // true if VLOG_IS_ON(1). Used to check vlog cheaply.
@@ -656,11 +603,10 @@ private:
     // execution has completed.
     bool NodeDone(const tf::Status &s, const tf::Node *node, const tf::Device *device,
                   tf::Rendezvous *rendezvous, const TaggedNodeSeq &ready,
-                  tf::NodeExecStats *stats, TaggedNodeReadyQueue *inline_ready);
+                  tf::NodeExecStats *stats);
 
-    // Schedule all the expensive nodes in 'ready', and put all the inexpensive
-    // nodes in 'ready' into 'inline_ready'.
-    void ScheduleReady(const TaggedNodeSeq &ready, TaggedNodeReadyQueue *inline_ready);
+    // Schedule all the expensive nodes in 'ready'
+    void ScheduleReady(const TaggedNodeSeq &ready);
 
     // For debugging/logging only.
     inline void MaybeMarkCompleted(FrameState *frame, int64_t iter, int64_t node_id)

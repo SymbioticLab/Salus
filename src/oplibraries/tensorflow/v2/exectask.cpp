@@ -464,7 +464,7 @@ void ExecTask::afterRun(const tf::Status &s, const Callbacks &cbs)
 {
     assert(ditem.device);
     auto completed = m_state->NodeDone(s, tagged_node.node, ditem.device.get(), params.rendezvous,
-                                       ready, stats, nullptr);
+                                       ready, stats);
 
     num_finished_ops.notify();
 
