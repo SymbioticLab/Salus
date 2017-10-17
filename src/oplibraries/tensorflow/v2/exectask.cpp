@@ -469,12 +469,14 @@ void ExecTask::afterRun(const tf::Status &s, const Callbacks &cbs)
 
     num_finished_ops.notify();
 
+    // `this` may be deleted in done
+    cbs.done();
+
+    // Do this after cbs.done, because m_state may be accessed in cbs.done
     if (completed) {
         // `m_state` may be deleted in Finish
         m_state->Finish();
     }
-    // `this` may be deleted in done
-    cbs.done();
 }
 
 bool ExecTask::maybeMemoryFailure(const tf::Status &s, DoneCallback memFailure)

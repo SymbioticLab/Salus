@@ -567,8 +567,8 @@ private:
     // a child frame is done.
     void CleanupFramesIterations(FrameState *frame, int64_t iter, TaggedNodeSeq *ready);
 
-    // Process a ready node in current thread.
-    void Process(TaggedNode node, int64_t scheduled_usec);
+    // Process a ready node and submit to execution engine in current thread.
+    void Process(TaggedNode node);
 
     // Instantiate the op kernel for node.
     tf::Status SetupKernel(TaggedNode node, const ExecutorImpl::DeviceItem &ditem, tf::OpKernel **op_kernel);

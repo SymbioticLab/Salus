@@ -356,14 +356,9 @@ void ExecutorState::RunAsync(tf::Executor::DoneCallback done)
     }
 }
 
-void ExecutorState::Process(TaggedNode tagged_node, int64_t scheduled_usec)
+void ExecutorState::Process(TaggedNode tagged_node)
 {
     TIMED_FUNC(timerObj);
-
-    UNUSED(scheduled_usec);
-
-    const GraphView &gview = impl_->gview_;
-    auto node = tagged_node.node;
 
     // Initial parameters passed to OpKernel::Compute.
     tf::OpKernelContext::Params params;
@@ -382,14 +377,13 @@ void ExecutorState::Process(TaggedNode tagged_node, int64_t scheduled_usec)
     if (vlog_ && VLOG_IS_ON(1)) {
         FrameState *input_frame = tagged_node.input_frame;
         int64_t input_iter = tagged_node.input_iter;
-        const NodeItem &item = *gview.node(node->id());
+        const NodeItem &item = *impl_->gview_.node(tagged_node.node->id());
 
         tf::mutex_lock l(input_frame->mu);
         input_frame->GetIteration(input_iter)->mark_started(item.pending_id);
     }
 
-    auto nodeTask = std::make_unique<ExecTask>(this, num_finished_ops_, tagged_node,
-                                               params, rendezvous_);
+    auto nodeTask = std::make_unique<ExecTask>(this, num_finished_ops_, tagged_node, params, rendezvous_);
 
     num_emitted_ops_ += 1;
 
@@ -1016,11 +1010,6 @@ void ExecutorState::ScheduleReady(const TaggedNodeSeq &ready)
     }
     VLOG(2) << "ScheduleReady";
 
-    int64_t scheduled_usec = 0;
-    if (stats_collector_) {
-        scheduled_usec = nodestats::NowInUsec();
-    }
-
     // Infer shape
     for (auto &tn : ready) {
         addNodeToRefiner(tn);
@@ -1030,7 +1019,7 @@ void ExecutorState::ScheduleReady(const TaggedNodeSeq &ready)
     VLOG(2) << "Schedule to run all the ready ops in thread pool.";
     for (auto &tagged_node : ready) {
         VLOG(3) << "Schedule to run the ready op: " << tagged_node.node->name();
-        runner_([=]() { Process(tagged_node, scheduled_usec); });
+        runner_([=]() { Process(tagged_node); });
     }
     VLOG(3) << "All ops in ready queue sent to thread pool";
 }
