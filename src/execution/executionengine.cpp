@@ -508,7 +508,9 @@ size_t ExecutionEngine::maybeScheduleFrom(PSessionItem item)
 
         for (auto &fu : futures) {
             auto poi = fu.get();
-            queue.emplace_back(std::move(poi));
+            if (poi) {
+                queue.emplace_back(std::move(poi));
+            }
         }
 
         scheduled = size - queue.size();
