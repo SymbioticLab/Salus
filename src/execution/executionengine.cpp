@@ -153,18 +153,14 @@ void ExecutionEngine::deleteSession(std::shared_ptr<SessionItem> item)
     m_note_has_work.notify();
 }
 
-std::future<void> ExecutionEngine::InserterImpl::enqueueOperation(std::unique_ptr<OperationTask> &&task)
+void ExecutionEngine::InserterImpl::enqueueOperation(std::unique_ptr<OperationTask> &&task)
 {
     TIMED_FUNC(timerObj);
     auto opItem = std::make_shared<OperationItem>();
     opItem->op = std::move(task);
     opItem->tQueued = std::chrono::steady_clock::now();
 
-    m_engine.pushToSessionQueue(m_item, opItem);
-
-    DCHECK(opItem);
-
-    return opItem->promise.get_future();
+    m_engine.pushToSessionQueue(m_item, std::move(opItem));
 }
 
 void ExecutionEngine::InserterImpl::registerPagingCallbacks(PagingCallbacks &&pcb)
@@ -423,9 +419,6 @@ size_t ExecutionEngine::maybeScheduleFrom(std::shared_ptr<SessionItem> item)
                 DCHECK(item);
                 DCHECK(opItem);
 
-                cbs.launched = [opItem]() {
-                    opItem->promise.set_value();
-                };
                 cbs.done = [item, opItem, this]() {
                     // succeed
                     VLOG(2) << "OpItem " << opItem->op->DebugString() << " queuing time: "

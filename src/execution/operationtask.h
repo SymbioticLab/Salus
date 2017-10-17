@@ -33,7 +33,6 @@ public:
     using DoneCallback = std::function<void(void)>;
     struct Callbacks
     {
-        DoneCallback launched;
         DoneCallback done;
         DoneCallback memFailure;
     };

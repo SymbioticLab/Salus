@@ -37,7 +37,6 @@
 #include <atomic>
 #include <unordered_set>
 #include <unordered_map>
-#include <future>
 #include <chrono>
 
 class OperationTask;
@@ -78,7 +77,7 @@ public:
 
         ~InserterImpl();
 
-        std::future<void> enqueueOperation(std::unique_ptr<OperationTask> &&task);
+        void enqueueOperation(std::unique_ptr<OperationTask> &&task);
 
         void registerPagingCallbacks(PagingCallbacks &&pcb);
 
@@ -198,7 +197,6 @@ private:
     {
         std::unique_ptr<OperationTask> op;
 
-        std::promise<void> promise;
         std::chrono::time_point<std::chrono::steady_clock> tQueued;
         std::chrono::time_point<std::chrono::steady_clock> tScheduled;
     };

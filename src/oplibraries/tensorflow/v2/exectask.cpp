@@ -356,7 +356,6 @@ void ExecTask::run(Callbacks cbs)
                 VLOG(2) << "Async Kernel done: " << SummarizeNodeDef(tagged_node.node->def());
                 afterCompute(cbs, item);
             });
-            cbs.launched();
         } else {
             // Synchronous computes.
             VLOG(2) << "Launch sync kernel";
@@ -366,7 +365,6 @@ void ExecTask::run(Callbacks cbs)
             DCHECK_NOTNULL(op_kernel);
             ditem.device->Compute(op_kernel, pctx.get());
 
-            cbs.launched();
             VLOG(2) << "Kernel done: " << SummarizeNodeDef(tagged_node.node->def());
             afterCompute(cbs, item);
         } // if (kernel_is_async)
