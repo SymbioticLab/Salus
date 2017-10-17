@@ -1019,10 +1019,7 @@ void ExecutorState::ScheduleReady(const TaggedNodeSeq &ready)
     VLOG(2) << "Schedule to run all the ready ops in thread pool.";
     for (auto &tagged_node : ready) {
         VLOG(3) << "Schedule to run the ready op: " << tagged_node.node->name();
-//         runner_([=]() { Process(tagged_node); });
-        ExecutionEngine::instance().runClosure([=]() {
-            Process(tagged_node);
-        });
+        runner_([=]() { Process(tagged_node); });
     }
     VLOG(3) << "All ops in ready queue sent to thread pool";
 }

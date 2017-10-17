@@ -89,12 +89,6 @@ public:
 
     Inserter registerSession(const std::string &sessHandle);
 
-    template<typename Closure>
-    auto runClosure(Closure closure)
-    {
-        return q::with(m_qec->queue()).then(closure);
-    }
-
     template<typename ResponseType>
     q::promise<std::unique_ptr<ResponseType>> enqueue(PTask &&task)
     {
