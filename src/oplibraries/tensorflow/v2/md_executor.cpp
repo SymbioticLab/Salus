@@ -363,7 +363,6 @@ void ExecutorState::Process(TaggedNode tagged_node, int64_t scheduled_usec)
     UNUSED(scheduled_usec);
 
     const GraphView &gview = impl_->gview_;
-    tf::NodeExecStats *stats = nullptr;
     auto node = tagged_node.node;
 
     // Initial parameters passed to OpKernel::Compute.
@@ -390,7 +389,7 @@ void ExecutorState::Process(TaggedNode tagged_node, int64_t scheduled_usec)
     }
 
     auto nodeTask = std::make_unique<ExecTask>(this, num_finished_ops_, tagged_node,
-                                                stats, params, rendezvous_);
+                                               params, rendezvous_);
 
     num_emitted_ops_ += 1;
 

@@ -38,7 +38,7 @@ namespace tf = tensorflow;
 
 ExecTask::ExecTask(ExecutorState *state, utils::semaphore &num_finished_ops,
                    const ExecutorState::TaggedNode &node,
-                   tf::NodeExecStats *stats, const tf::OpKernelContext::Params &initial_params,
+                   const tf::OpKernelContext::Params &initial_params,
                    tf::Rendezvous *rendez, int maxFailures)
     : deleteKernel(state->impl_->params_.delete_kernel)
     , maxFailures(maxFailures)
@@ -46,7 +46,7 @@ ExecTask::ExecTask(ExecutorState *state, utils::semaphore &num_finished_ops,
     , has_ref_input(false)
     , tagged_node(node)
     , params(initial_params)
-    , stats(stats)
+    , stats(nullptr)
     , rendez(rendez)
     , num_finished_ops(num_finished_ops)
     , m_state(state)
@@ -287,7 +287,6 @@ void ExecTask::run(Callbacks cbs)
     params.op_device_context = m_state->FindDeviceContext(id, ditem.device.get());
 
     params.track_allocations = false;
-    stats = nullptr;
     if (m_state->stats_collector_ && !tagged_node.is_dead) {
         // track allocations if and only if we are collecting statistics
         params.track_allocations = true;
@@ -297,100 +296,104 @@ void ExecTask::run(Callbacks cbs)
         nodestats::SetAllStart(stats);
     }
 
-    VLOG(2) << "Process node: " << SummarizeNodeDef(node->def()) << ditem.device->resourceContext();
+    VLOG(2) << "Process node: " << SummarizeNodeDef(node->def()) << " " << ditem.device->resourceContext();
 
     auto input_tensors = m_state->GetInputTensors(input_frame, input_iter);
     first_input = input_tensors + item.input_start;
-
-    ExecutorState::EntryVector outputs; // for use of sync compute
 
     // Only execute this node if it is not dead or it is a send/recv
     // transfer node. For transfer nodes, we need to propagate the "dead"
     // bit even when the node is dead.
     if (tagged_node.is_dead && !IsTransferNode(node)) {
-        outputs.resize(item.num_outputs);
-    } else {
-        // Prepares inputs.
-        bool is_input_dead = false;
-        s = m_state->PrepareInputs(item, op_kernel, ditem.device, params.op_device_context,
-                        first_input, &inputs, &buflocks,
-                        &input_device_contexts, &input_alloc_attrs,
-                        &is_input_dead);
-        if (!s.ok()) {
-            // Clear inputs.
-            m_state->ClearInputs(first_input, item.num_inputs, buflocks);
-            m_state->MaybeMarkCompleted(input_frame, input_iter, id);
-            afterRun(s, cbs);
-            return;
-        }
-
-        // Remember tickets for reffed inputs, they may be modified by the op
-        reffedEntries.clear();
-        for (auto entry = first_input; entry != first_input + item.num_inputs; ++entry) {
-            if (entry->ref) {
-                has_ref_input = true;
-                reffedEntries.push_back(entry);
-            }
-        }
-
-        // Set up compute params.
-        params.op_kernel = op_kernel;
-        params.frame_iter = tf::FrameAndIter(input_frame->frame_id, input_iter);
-        params.is_input_dead = is_input_dead;
-        params.output_attr_array = item.output_attrs();
-
-        if (kernel_is_async) {
-            // Asynchronous computes.
-            VLOG(2) << "Launch Async kernel";
-            auto async = op_kernel->AsAsync();
-            DCHECK(async != nullptr);
-
-            // Ensure OpKernelContext constructor will make a new eigen GPU device if
-            // necessary.
-            params.eigen_gpu_device = nullptr; // Force allocation
-            pctx = std::make_unique<tf::OpKernelContext>(&params, item.num_outputs);
-
-            if (stats)
-                nodestats::SetOpStart(stats);
-            ditem.device->ComputeAsync(async, pctx.get(), [this, cbs, &item]() {
-                VLOG(2) << "Async Kernel done: " << SummarizeNodeDef(tagged_node.node->def());
-                afterCompute(cbs, item);
-            });
-        } else {
-            // Synchronous computes.
-            VLOG(2) << "Launch sync kernel";
-            pctx = std::make_unique<tf::OpKernelContext>(&params, item.num_outputs);
-            if (stats)
-                nodestats::SetOpStart(stats);
-            DCHECK_NOTNULL(op_kernel);
-            ditem.device->Compute(op_kernel, pctx.get());
-
-            VLOG(2) << "Kernel done: " << SummarizeNodeDef(tagged_node.node->def());
-            afterCompute(cbs, item);
-        } // if (kernel_is_async)
-    } // if (tagged_node.is_dead || IsTransferNode(tagged_node.node))
-}
-
-void ExecTask::afterCompute(const Callbacks &cbs, const tf::remote::NodeItem &item)
-{
-    // `cbs.done` should be called last as `this` would be deleted in it.
-    auto &device = ditem.device;
-
-    // Inspect return state for retrying on memory failure
-    if (maybeMemoryFailure(pctx->status(), cbs.memFailure)) {
+        afterCompute(true, cbs, item);
         return;
     }
 
-    if (stats)
-        nodestats::SetOpEnd(stats);
+    // Prepares inputs.
+    bool is_input_dead = false;
+    s = m_state->PrepareInputs(item, op_kernel, ditem.device, params.op_device_context,
+                    first_input, &inputs, &buflocks,
+                    &input_device_contexts, &input_alloc_attrs,
+                    &is_input_dead);
+    if (!s.ok()) {
+        // Clear inputs.
+        m_state->ClearInputs(first_input, item.num_inputs, buflocks);
+        m_state->MaybeMarkCompleted(input_frame, input_iter, id);
+        afterRun(s, cbs);
+        return;
+    }
 
+    // Remember tickets for reffed inputs, they may be modified by the op
+    reffedEntries.clear();
+    for (auto entry = first_input; entry != first_input + item.num_inputs; ++entry) {
+        if (entry->ref) {
+            has_ref_input = true;
+            reffedEntries.push_back(entry);
+        }
+    }
+
+    // Set up compute params.
+    params.op_kernel = op_kernel;
+    params.frame_iter = tf::FrameAndIter(input_frame->frame_id, input_iter);
+    params.is_input_dead = is_input_dead;
+    params.output_attr_array = item.output_attrs();
+
+    if (kernel_is_async) {
+        // Asynchronous computes.
+        VLOG(2) << "Launch Async kernel";
+        auto async = op_kernel->AsAsync();
+        DCHECK(async != nullptr);
+
+        // Ensure OpKernelContext constructor will make a new eigen GPU device if
+        // necessary.
+        params.eigen_gpu_device = nullptr; // Force allocation
+        pctx = std::make_unique<tf::OpKernelContext>(&params, item.num_outputs);
+
+        if (stats)
+            nodestats::SetOpStart(stats);
+        ditem.device->ComputeAsync(async, pctx.get(), [this, cbs, &item]() {
+            VLOG(2) << "Async Kernel done: " << SummarizeNodeDef(tagged_node.node->def());
+            afterCompute(false, cbs, item);
+        });
+    } else {
+        // Synchronous computes.
+        VLOG(2) << "Launch sync kernel";
+        pctx = std::make_unique<tf::OpKernelContext>(&params, item.num_outputs);
+        if (stats)
+            nodestats::SetOpStart(stats);
+        DCHECK_NOTNULL(op_kernel);
+        ditem.device->Compute(op_kernel, pctx.get());
+
+        VLOG(2) << "Kernel done: " << SummarizeNodeDef(tagged_node.node->def());
+        afterCompute(false, cbs, item);
+    } // if (kernel_is_async)
+}
+
+void ExecTask::afterCompute(bool is_dead, const Callbacks &cbs, const tf::remote::NodeItem &item)
+{
+    // `cbs.done` should be called last as `this` would be deleted in it.
+    auto &device = ditem.device;
     ExecutorState::EntryVector outputs;
-    auto s = m_state->ProcessOutputs(item, pctx.get(), device, &outputs, stats);
-    if (stats)
-        nodestats::SetMemory(stats, pctx.get());
+    tf::Status s;
 
-    // Update ref entry tickets
-    updateRefEntryTickets(reffedEntries);
+    if (is_dead) {
+        outputs.resize(item.num_outputs);
+    } else {
+        // Inspect return state for retrying on memory failure
+        if (maybeMemoryFailure(pctx->status(), cbs.memFailure)) {
+            return;
+        }
+
+        if (stats)
+            nodestats::SetOpEnd(stats);
+
+        s = m_state->ProcessOutputs(item, pctx.get(), device, &outputs, stats);
+        // Update ref entry tickets
+        updateRefEntryTickets(reffedEntries);
+
+        if (stats)
+            nodestats::SetMemory(stats, pctx.get());
+    }
 
     // Clears inputs.
     m_state->ClearInputs(first_input, item.num_inputs, buflocks);
@@ -408,7 +411,7 @@ void ExecTask::afterCompute(const Callbacks &cbs, const tf::remote::NodeItem &it
     outputs.clear();
 
     // record tensor access
-    if (s.ok() && ditem.device_record_tensor_access) {
+    if (s.ok() && !is_dead && ditem.device_record_tensor_access) {
         // Get the list of all tensors accessed during the execution
         tf::TensorReferenceVector accessed;
         pctx->retrieve_accessed_tensors(&accessed);
