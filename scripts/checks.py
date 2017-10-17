@@ -2,7 +2,21 @@ from collections import defaultdict
 import re
 
 
-def main(path='/tmp/workspacev.output'):
+def check_threadpool(path):
+    pat = re.compile(r'Threadpool (?P<evt>start|end) to run seq (?P<seq>\d+)')
+    with open(path) as f:
+        lines = f.readlines()
+    evts = [pat.search(line).groups() for line in lines if pat.search(line)]
+    r = set()
+    for evt, seq in evts:
+        if evt == 'start':
+            r.add(seq)
+        else:
+            r.remove(seq)
+    return r
+
+
+def check_pending_ops(path):
     kernels = defaultdict(int)
     ptn_st = re.compile(r'''Process node: (?P<node>[^ \[]+) ''')
     ptn_ed = re.compile("Propagate outputs for node: (?P<node>.+)")
@@ -21,7 +35,3 @@ def main(path='/tmp/workspacev.output'):
     remaining = [(k, v) for k, v in kernels.items() if v != 0]
     print(remaining)
     return remaining
-
-
-if __name__ == '__main__':
-    main()
