@@ -205,7 +205,7 @@ std::unique_ptr<TFOpLibraryV2::Proxy> TFOpLibraryV2::createProxy()
 TFOpLibraryV2::Proxy *TFOpLibraryV2::getProxy(const std::string &sessHandle)
 {
     std::lock_guard<std::mutex> g(m_mu);
-    auto &p = m_proxies[sessHandle];
+    auto &p = m_proxies[sessHandle].proxy;
     if (!p) {
         if (sessHandle.empty()) {
             // special case for a default session proxy to handle requests without session_handle
@@ -223,15 +223,15 @@ const std::string &TFOpLibraryV2::sessionFromRecvId(const std::string &recvId)
     return m_lastSession[recvId];
 }
 
-std::unique_ptr<TFOpLibraryV2::Proxy> TFOpLibraryV2::deregisterProxy(const std::string &recvId,
-                                                                     const std::string &sessHandle)
+TFOpLibraryV2::ProxyAndInserter TFOpLibraryV2::deregisterProxy(const std::string &recvId,
+                                                               const std::string &sessHandle)
 {
     std::lock_guard<std::mutex> g(m_mu);
     m_lastSession.erase(recvId);
     auto it = m_proxies.find(sessHandle);
     if (it == m_proxies.end()) {
         LOG(WARNING) << "No proxy object found to deregister for session " << sessHandle;
-        return nullptr;
+        return {};
     }
     auto p = std::move(it->second);
     m_proxies.erase(it);
@@ -239,16 +239,19 @@ std::unique_ptr<TFOpLibraryV2::Proxy> TFOpLibraryV2::deregisterProxy(const std::
 }
 
 void TFOpLibraryV2::registerProxy(const std::string &recvId, const std::string &sessHandle,
-                                  std::unique_ptr<TFOpLibraryV2::Proxy> &&proxy)
+                                  std::unique_ptr<TFOpLibraryV2::Proxy> &&proxy,
+                                  ExecutionEngine::Inserter inserter)
 {
     std::lock_guard<std::mutex> g(m_mu);
-    m_lastSession[recvId] = recvId;
-    auto &p = m_proxies[sessHandle];
-    if (p) {
-        LOG(WARNING) << "Overwriting an existing proxy registered for session " << sessHandle << ": " << as_hex(p);
-        p.reset();
+    m_lastSession[recvId] = sessHandle;
+    auto &pi = m_proxies[sessHandle];
+    if (pi.proxy) {
+        LOG(WARNING) << "Overwriting an existing proxy registered for session "
+                     << sessHandle << ": " << as_hex(pi.proxy);
+        pi.proxy.reset();
     }
-    p = std::move(proxy);
+    pi.proxy = std::move(proxy);
+    pi.inserter = std::move(inserter);
     if (m_proxies.size() > m_maxOpenSessions) {
         m_maxOpenSessions = m_proxies.size();
     }
@@ -310,7 +313,8 @@ void TFOpLibraryV2::handleCreateSession(const std::string &recvId, const executo
                                            return NewMultiDeviceExecutor(params, graph, ins, executor);
                                        });
                                        SessionResourceTracker::instance().acceptAdmission(ticket, resp->session_handle());
-                                       registerProxy(recvId, resp->session_handle(), std::move(proxy));
+                                       registerProxy(recvId, resp->session_handle(),
+                                                     std::move(proxy), std::move(ins));
                                    } else {
                                        SessionResourceTracker::instance().free(ticket);
                                    }
@@ -329,18 +333,21 @@ void TFOpLibraryV2::handleCloseSession(const std::string &recvId, const executor
         return;
     }
 
-    auto proxy = deregisterProxy(recvId, req->session_handle());
-    if (!proxy) {
+    auto pi = deregisterProxy(recvId, req->session_handle());
+    if (!pi.proxy) {
         cb(consumeResponse<tf::CloseSessionResponse>(nullptr, tf::errors::Internal(
                                                                   "No session object found to close")));
         return;
     }
 
     auto preq = req.release();
-    auto pproxy = proxy.release();
-    pproxy->HandleCloseSession(preq, [cb, preq, pproxy](auto resp, auto status) {
+    auto pproxy = pi.proxy.release();
+    pproxy->HandleCloseSession(preq,
+                               [cb, preq, pproxy, ins = std::move(pi.inserter)](auto resp, auto status) {
         std::unique_ptr<tf::CloseSessionRequest> req(preq);
-        std::unique_ptr<Proxy> proxy(pproxy);
+        ins->registerSessionCleanupCallback([pproxy](){
+            std::unique_ptr<Proxy> proxy(pproxy);
+        });
         SessionResourceTracker::instance().free(req->session_handle());
         cb(consumeResponse(resp, status));
     });

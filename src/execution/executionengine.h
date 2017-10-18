@@ -81,6 +81,8 @@ public:
 
         void registerPagingCallbacks(PagingCallbacks &&pcb);
 
+        void registerSessionCleanupCallback(std::function<void()> cb);
+
     private:
         std::shared_ptr<SessionItem> m_item;
         ExecutionEngine &m_engine;
@@ -173,6 +175,7 @@ private:
     {
         // also protected by mu (may be accessed both in schedule thread and close session thread)
         PagingCallbacks pagingCb;
+        std::function<void()> cleanupCb;
 
         std::string sessHandle;
         KernelQueue queue;
@@ -190,7 +193,6 @@ private:
         explicit SessionItem(const std::string &handle) : sessHandle(handle) {}
 
         ~SessionItem();
-
     };
     void pushToSessionQueue(std::shared_ptr<SessionItem> item, std::shared_ptr<OperationItem> opItem);
 

@@ -171,6 +171,12 @@ void ExecutionEngine::InserterImpl::registerPagingCallbacks(PagingCallbacks &&pc
     m_item->pagingCb = std::move(pcb);
 }
 
+void ExecutionEngine::InserterImpl::registerSessionCleanupCallback(std::function<void()> cb)
+{
+    utils::Guard g(m_item->mu);
+    m_item->cleanupCb = std::move(cb);
+}
+
 void ExecutionEngine::pushToSessionQueue(std::shared_ptr<SessionItem> item, std::shared_ptr<OperationItem> opItem)
 {
     TIMED_FUNC(timerObj);
@@ -346,6 +352,15 @@ ExecutionEngine::SessionItem::~SessionItem()
     TIMED_FUNC(timerObj);
     bgQueue.clear();
     queue.clear();
+
+    std::function<void()> cb;
+    {
+        utils::Guard g(mu);
+        cb = std::move(cleanupCb);
+    }
+    if (cb) {
+        cb();
+    }
 }
 
 bool ExecutionEngine::maybePreAllocateFor(SessionItem &item, OperationItem &opItem, const DeviceSpec &spec)

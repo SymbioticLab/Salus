@@ -20,6 +20,7 @@
 #define TFOPLIBRARYV2_H
 
 #include "oplibraries/ioplibrary.h"
+#include "execution/executionengine.h"
 
 #include <atomic>
 #include <memory>
@@ -60,11 +61,17 @@ public:
 
 private:
     using Proxy = tensorflow::remote::TFSessionProxy;
+    struct ProxyAndInserter
+    {
+        std::unique_ptr<Proxy> proxy;
+        ExecutionEngine::Inserter inserter;
+    };
 
     std::unique_ptr<Proxy> createProxy();
     Proxy *getProxy(const std::string &sessHandle);
-    std::unique_ptr<Proxy> deregisterProxy(const std::string &recvId, const std::string &sessHandle);
-    void registerProxy(const std::string &recvId, const std::string &sessHandle, std::unique_ptr<Proxy> &&proxy);
+    ProxyAndInserter deregisterProxy(const std::string &recvId, const std::string &sessHandle);
+    void registerProxy(const std::string &recvId, const std::string &sessHandle,
+                       std::unique_ptr<Proxy> &&proxy, ExecutionEngine::Inserter inserter);
 
     const std::string &sessionFromRecvId(const std::string &recvId);
 
@@ -72,7 +79,7 @@ private:
     void handleCloseSession(const std::string &recvId, const executor::CustomRequest&, ITask::DoneCallback);
 
     std::mutex m_mu;
-    std::unordered_map<std::string, std::unique_ptr<Proxy>> m_proxies;
+    std::unordered_map<std::string, ProxyAndInserter> m_proxies;
 
     std::unique_ptr<tensorflow::remote::TFOpLibraryProxy> m_proxy;
 
