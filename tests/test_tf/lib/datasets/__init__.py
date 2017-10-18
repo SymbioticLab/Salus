@@ -22,10 +22,8 @@ def fake_data(batch_size, batch_num, is_train=True, height=256, width=256, num_c
                                               dtype=tf.int32),
                             name='ground_truth', trainable=False)
 
-        image_queue = tf.train.input_producer(tf.expand_dims(image, 0),
-                                              num_epochs=batch_num * batch_size)
-        label_queue = tf.train.input_producer(tf.expand_dims(label, 0),
-                                              num_epochs=batch_num * batch_size)
+        image_queue = tf.train.input_producer(tf.expand_dims(image, 0))
+        label_queue = tf.train.input_producer(tf.expand_dims(label, 0))
 
         images = image_queue.dequeue_many(batch_size, name='images')
         labels = label_queue.dequeue_many(batch_size, name='labels')
