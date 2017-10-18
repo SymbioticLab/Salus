@@ -118,6 +118,7 @@ bool ExecTask::prepare(std::unique_ptr<ResourceContext> &&rctx)
 
     // First check if we already created the kernel on some device
     op_kernel = nullptr;
+    owns_kernel = true;
     std::string devName;
     auto ok = m_state->impl_->params_.find_kernel(tagged_node.node->def(), &devName, &op_kernel);
 
@@ -136,6 +137,8 @@ bool ExecTask::prepare(std::unique_ptr<ResourceContext> &&rctx)
             done = false;
         }
         // We are on the same device, good.
+        // this is a cached kernel.
+        owns_kernel = false;
     } else if (!ok.ok()) {
         LOG(ERROR) << "Failed to find kernel with status " << ok << " for Node: " << tagged_node.node->name();
         statusInPrepare.Update(ok);
@@ -150,6 +153,8 @@ bool ExecTask::prepare(std::unique_ptr<ResourceContext> &&rctx)
             statusInPrepare.Update(s);
             done = true;
         }
+        // HACK:
+        owns_kernel = !ditem.function_library->IsStateful(op_kernel->type_string());
     }
 
     if (!done) {
@@ -596,7 +601,7 @@ ResourceContext &ExecTask::resourceContext() const
 ExecTask::~ExecTask()
 {
     // At this time m_state may already be deleted.
-    if (op_kernel) {
+    if (owns_kernel && op_kernel) {
         DCHECK(ditem.function_library);
         deleteKernel(op_kernel, ditem.function_library.get());
     }
