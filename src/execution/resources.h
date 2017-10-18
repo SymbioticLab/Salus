@@ -125,6 +125,10 @@ public:
 
     ~SessionResourceTracker() = default;
 
+    void setDisabled(bool val);
+
+    bool disabled() const;
+
     // Take the session
     bool admit(const ResourceMap &cap, uint64_t &ticket);
 
@@ -142,6 +146,8 @@ public:
 
 private:
     mutable std::mutex m_mu;
+
+    bool m_disabled = false;
 
     uint64_t m_tickets = 0;
 

@@ -240,6 +240,18 @@ SessionResourceTracker::SessionResourceTracker(const Resources &cap)
     }
 }
 
+void SessionResourceTracker::setDisabled(bool val)
+{
+    Guard g(m_mu);
+    m_disabled = val;
+}
+
+bool SessionResourceTracker::disabled() const
+{
+    Guard g(m_mu);
+    return m_disabled;
+}
+
 // If it is safe to admit this session, given its persistant and temporary memory usage.
 bool SessionResourceTracker::canAdmitUnsafe(const ResourceMap &cap) const
 {
@@ -261,6 +273,10 @@ bool SessionResourceTracker::canAdmitUnsafe(const ResourceMap &cap) const
 bool SessionResourceTracker::admit(const ResourceMap &cap, uint64_t &ticket)
 {
     Guard g(m_mu);
+
+    if (m_disabled) {
+        return true;
+    }
 
     if (!canAdmitUnsafe(cap)) {
         return false;
@@ -285,12 +301,18 @@ bool SessionResourceTracker::admit(const ResourceMap &cap, uint64_t &ticket)
 void SessionResourceTracker::acceptAdmission(uint64_t ticket, const std::string &sessHandle)
 {
     Guard g(m_mu);
+    if (m_disabled) {
+        return;
+    }
+
     m_sessToTicket[sessHandle] = ticket;
     m_sessions[ticket].persistantHandle = sessHandle;
 }
 
 utils::optional<ResourceMap> SessionResourceTracker::usage(const std::string &sessHandle) const
 {
+    Guard g(m_mu);
+
     utils::optional<ResourceMap> res;
     auto it = m_sessToTicket.find(sessHandle);
     if (it == m_sessToTicket.end()) {
@@ -329,6 +351,10 @@ void SessionResourceTracker::free(uint64_t ticket)
 {
     AllocLog(INFO) << "Free session resource: ticket=" << ticket;
     Guard g(m_mu);
+    if (m_disabled) {
+        return;
+    }
+
     freeUnsafe(ticket);
 }
 
@@ -336,6 +362,10 @@ void SessionResourceTracker::free(const std::string &sessHandle)
 {
     AllocLog(INFO) << "Free session resource: session=" << sessHandle;
     Guard g(m_mu);
+
+    if (m_disabled) {
+        return;
+    }
 
     auto it = m_sessToTicket.find(sessHandle);
     if (it == m_sessToTicket.end()) {
@@ -348,6 +378,8 @@ void SessionResourceTracker::free(const std::string &sessHandle)
 
 std::string SessionResourceTracker::DebugString() const
 {
+    Guard g(m_mu);
+
     std::ostringstream oss;
 
     oss << "SessionResourceTracker" << std::endl;

@@ -1,11 +1,11 @@
-#include "oplibraries/ioplibrary.h"
+#include "execution/resources.h"
+#include "execution/executionengine.h"
 #include "rpcserver/zmqserver.h"
-#include "rpcserver/rpcservercore.h"
 #include "platform/logging.h"
 #include "utils/cpp17.h"
 #include "utils/macros.h"
 
-#include "docopt.h"
+#include <docopt.h>
 
 #include <iostream>
 #include <memory>
@@ -18,6 +18,8 @@ using namespace std::string_literals;
 
 namespace {
 static auto kListenFlag = "--listen";
+static auto kDisableFairness = "--disable-fairness";
+static auto kDisableAdmissionControl = "--disable-adc";
 static auto kLogConfFlag = "--logconf";
 static auto kVerboseFlag = "--verbose";
 static auto kVModuleFlag = "--vmodule";
@@ -39,6 +41,8 @@ Options:
     -l <endpoint>, --listen=<endpoint>
                                 Listen on ZeroMQ endpoint <endpoint>.
                                 [default: tcp://*:5501]
+    --disable-fairness          Disable fair sharing in scheduling.
+    --disable-adc               Disable admission control.
     --logconf <file>            Path to log configuration file. Note that
                                 settings in this file takes precedence over
                                 other command line arguments.
@@ -111,7 +115,18 @@ void initializeLogging(std::map<std::string, docopt::value> &args)
     });
 }
 
-void printConfiguration(std::map<std::string, docopt::value> &)
+void configureExecution(std::map<std::string, docopt::value> &args)
+{
+    if (args[kDisableAdmissionControl]) {
+        SessionResourceTracker::instance().setDisabled(true);
+    }
+
+    if (args[kDisableFairness]) {
+        ExecutionEngine::instance().setUseFairnessCounter(false);
+    }
+}
+
+void printConfiguration(std::map<std::string, docopt::value> &args)
 {
 #if defined(NDEBUG)
     LOG(INFO) << "Running in Release mode";
@@ -132,6 +147,8 @@ void printConfiguration(std::map<std::string, docopt::value> &)
         const auto &conf = el::Loggers::getLogger(logging::kAllocTag)->typedConfigurations();
         LOG(INFO) << "Allocation logging: " << (conf->enabled(el::Level::Info) ? "enabled" : "disabled");
     }
+    LOG(INFO) << "Admission control: " << (args[kDisableAdmissionControl] ? "off" : "on");
+    LOG(INFO) << "Scheduling policy :" << (args[kDisableFairness] ? "efficiency" : "fairness");
 }
 
 int main(int argc, char **argv)
@@ -139,6 +156,8 @@ int main(int argc, char **argv)
     auto args = parseArguments(argc, argv);
 
     initializeLogging(args);
+
+    configureExecution(args);
 
     printConfiguration(args);
 

@@ -136,6 +136,14 @@ public:
         return q::with(m_qec->queue(), t);
     }
 
+    bool useFairnessCounter() const {
+        return m_useFairnessCounter;
+    }
+
+    void setUseFairnessCounter(bool val) {
+        m_useFairnessCounter = val;
+    }
+
 protected:
     bool schedule(ITask *t);
 
@@ -143,6 +151,9 @@ protected:
 
 private:
     ExecutionEngine();
+
+    // scheduler parameters
+    bool m_useFairnessCounter = true;
 
     std::atomic<bool> m_shouldExit = {false};
     std::unique_ptr<std::thread> m_schedThread;
@@ -201,9 +212,12 @@ private:
         std::unique_ptr<OperationTask> op;
 
         std::chrono::time_point<std::chrono::steady_clock> tQueued;
+        std::chrono::time_point<std::chrono::steady_clock> tInspected;
         std::chrono::time_point<std::chrono::steady_clock> tScheduled;
+        std::chrono::time_point<std::chrono::steady_clock> tRunning;
     };
     friend class ResourceContext;
+    friend void reportBreakdown(const std::shared_ptr<OperationItem> &opItem);
 
     using SessionList = std::list<std::shared_ptr<SessionItem>>;
     using SessionSet = std::unordered_set<std::shared_ptr<SessionItem>>;

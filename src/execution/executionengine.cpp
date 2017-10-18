@@ -55,6 +55,20 @@ inline void logScheduleFailure(const Resources &usage, const ResourceMonitor &re
 
 } // namespace
 
+inline void reportBreakdown(const std::shared_ptr<ExecutionEngine::OperationItem> &opItem)
+{
+    auto now = steady_clock::now();
+    auto queuing = duration_cast<milliseconds>(opItem->tInspected - opItem->tQueued).count();
+    auto prepare = duration_cast<milliseconds>(opItem->tRunning - opItem->tInspected).count();
+    auto running = duration_cast<milliseconds>(now - opItem->tRunning).count();
+
+    VLOG(1) << "OpItem " << opItem->op->DebugString()
+            << " failure " << opItem->op->failedTimes()
+            << " queuing time " << queuing << " ms"
+            << " preparation time " << prepare << " ms"
+            << " running time " << running << " ms";
+}
+
 ExecutionEngine &ExecutionEngine::instance()
 {
     static ExecutionEngine eng;
@@ -278,7 +292,7 @@ void ExecutionEngine::scheduleLoop()
 
         // Sort sessions if needed. We assume m_sessions.size() is always no more than a few,
         // therefore sorting in every iteration is acceptable.
-        if (sessionsChanged == 0) {
+        if (sessionsChanged == 0 && m_useFairnessCounter) {
             m_sessions.sort([](const auto &lhs, const auto &rhs){
                 return lhs->unifiedResSnapshot < rhs->unifiedResSnapshot;
             });
@@ -310,7 +324,7 @@ void ExecutionEngine::scheduleLoop()
             // make sure the first session (with least progress) is
             // get scheduled solely, thus can keep up, without other
             // sessions interfere
-            if (count > 0) {
+            if (count > 0 && m_useFairnessCounter) {
                 break;
             }
         }
@@ -404,6 +418,7 @@ size_t ExecutionEngine::maybeScheduleFrom(std::shared_ptr<SessionItem> item)
         VLOG(3) << "Scheduling opItem in session " << item->sessHandle << ": " << opItem->op->DebugString();
         TIMED_SCOPE(timerInnerObj, "ExecutionEngine::maybeScheduleFrom::doSchedule");
 
+        opItem->tInspected = steady_clock::now();
         bool scheduled = false;
         DeviceSpec spec;
         for (auto dt : opItem->op->supportedDeviceTypes()) {
@@ -436,10 +451,8 @@ size_t ExecutionEngine::maybeScheduleFrom(std::shared_ptr<SessionItem> item)
                 DCHECK(opItem);
 
                 cbs.done = [item, opItem, this]() {
+                    reportBreakdown(opItem);
                     // succeed
-                    VLOG(2) << "OpItem " << opItem->op->DebugString() << " queuing time: "
-                            << duration_cast<milliseconds>(opItem->tScheduled - opItem->tQueued).count()
-                            << "ms";
                     taskStopped(*item, *opItem);
                 };
                 cbs.memFailure = [item, opItem, this]() mutable {
@@ -450,6 +463,7 @@ size_t ExecutionEngine::maybeScheduleFrom(std::shared_ptr<SessionItem> item)
                 };
 
                 VLOG(2) << "Running opItem in session " << item->sessHandle << ": " << opItem->op->DebugString();
+                opItem->tRunning = steady_clock::now();
                 opItem->op->run(cbs);
             });
         } else {
