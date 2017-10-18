@@ -41,9 +41,8 @@ class DeviceMgr;
 // The caller keeps the ownership of "device".
 // The returned executor takes the ownership of "graph".
 // Otherwise, returns an error status.
-tensorflow::Status NewMultiDeviceExecutor(const tensorflow::MultiDeviceExecutorParams& params,
-                                          const tensorflow::Graph* graph,
-                                          ExecutionEngine::Inserter ins,
-                                          tensorflow::Executor** executor);
+tensorflow::Status NewMultiDeviceExecutor(const tf::MultiDeviceExecutorParams& params,
+                                          const tf::Graph* graph, ExecutionEngine::Inserter ins,
+                                          tf::Executor **executor);
 
 #endif  // OPLIBRARIES_TENSORFLOW_MULTI_DEVICE_EXECUTOR_H_
