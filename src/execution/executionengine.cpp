@@ -167,6 +167,7 @@ void ExecutionEngine::InserterImpl::registerPagingCallbacks(PagingCallbacks &&pc
 {
     TIMED_FUNC(timerObj);
 
+    utils::Guard g(m_item->mu);
     m_item->pagingCb = std::move(pcb);
 }
 
@@ -558,6 +559,15 @@ bool ExecutionEngine::doPaging()
             victims = m_resMonitor.sortVictim(sess.tickets);
         }
 
+        // we will be doing paging on this session. Lock it's input queue lock
+        // also prevents the executor from clearing the paging callbacks.
+        // This should not create deadlock as nothing could finish at this time,
+        // thus no new tasks could be submitted.
+        utils::Guard g(sess.mu);
+        if (!sess.pagingCb) {
+            continue;
+        }
+
         VLOG(2) << "Visiting session: " << sess.sessHandle;
 
         for (auto &p : victims) {
@@ -577,7 +587,6 @@ bool ExecutionEngine::doPaging()
 
             VLOG(2) << "    request to page out ticket " << victim << " of usage " << usage;
             // request the session to do paging
-            DCHECK(sess.pagingCb);
             auto released = sess.pagingCb.volunteer(victim, std::move(rctx));
             if (released > 0) {
                 // someone freed some memory on GPU, we are good to go.

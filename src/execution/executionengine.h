@@ -171,11 +171,12 @@ private:
     // as iteration.
     struct SessionItem
     {
+        // also protected by mu (may be accessed both in schedule thread and close session thread)
+        PagingCallbacks pagingCb;
+
         std::string sessHandle;
         KernelQueue queue;
         std::mutex mu;
-
-        PagingCallbacks pagingCb;
 
         // Only accessed by main scheduling thread
         UnsafeQueue bgQueue;
