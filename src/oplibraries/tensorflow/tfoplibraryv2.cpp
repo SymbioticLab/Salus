@@ -222,14 +222,13 @@ void TFOpLibraryV2::registerProxy(const std::string &recvId, const std::string &
 {
     std::lock_guard<std::mutex> g(m_mu);
     m_lastSession[recvId] = sessHandle;
-    auto &pi = m_proxies[sessHandle];
-    if (pi.proxy) {
-        LOG(WARNING) << "Overwriting an existing proxy registered for session "
-                     << sessHandle << ": " << as_hex(pi.proxy);
-        pi.proxy.reset();
+    auto &[p, ins] = m_proxies[sessHandle];
+    if (p) {
+        LOG(WARNING) << "Overwriting an existing proxy registered for session " << sessHandle << ": " << as_hex(p);
+        p.reset();
     }
-    pi.proxy = std::move(proxy);
-    pi.inserter = std::move(inserter);
+    p = std::move(proxy);
+    ins = std::move(inserter);
     if (m_proxies.size() > m_maxOpenSessions) {
         m_maxOpenSessions = m_proxies.size();
     }
@@ -308,17 +307,16 @@ void TFOpLibraryV2::handleCloseSession(const std::string &recvId, const executor
         return;
     }
 
-    auto pi = deregisterProxy(recvId, req->session_handle());
-    if (!pi.proxy) {
+    auto [proxy, ins] = deregisterProxy(recvId, req->session_handle());
+    if (!proxy) {
         cb(consumeResponse<tf::CloseSessionResponse>(nullptr, tf::errors::Internal(
                                                                   "No session object found to close")));
         return;
     }
 
     auto preq = req.release();
-    auto pproxy = pi.proxy.release();
-    pproxy->HandleCloseSession(preq,
-                               [cb, preq, pproxy, ins = std::move(pi.inserter)](auto resp, auto status) {
+    auto pproxy = proxy.release();
+    pproxy->HandleCloseSession(preq, [cb, preq, pproxy, ins = std::move(ins)](auto resp, auto status) {
         std::unique_ptr<tf::CloseSessionRequest> req(preq);
         ins->deleteSession([pproxy](){
             std::unique_ptr<Proxy> proxy(pproxy);
