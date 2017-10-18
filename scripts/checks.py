@@ -35,3 +35,35 @@ def check_pending_ops(path):
     remaining = [(k, v) for k, v in kernels.items() if v != 0]
     print(remaining)
     return remaining
+
+
+def check_kernel_create(path):
+    kernels = {}
+    ptn_create = re.compile(r'''Created kernel: (?P<kernel>\w+) (?P<op>.+)''')
+    ptn_find = re.compile(r'''Found cached kernel: (?P<kernel>\w+) (?P<op>.+)''')
+    ptn_delete = re.compile(r'''Deleted kernel: (?P<kernel>\w+) (?P<op>.+)''')
+    with open(path) as f:
+        for line in f:
+            line = line.rstrip('\n')
+
+            m = ptn_create.search(line)
+            if m:
+                kernels[m.group('kernel')] = m.group('op')
+            
+            m = ptn_find.search(line)
+            if m:
+                addr = m.group('kernel')
+                if addr not in kernels:
+                    raise ValueError('Found nonexist kernel: ', addr, m.group('op'))
+                if kernels[addr] != m.group('op'):
+                    raise ValueError('Found kernel changed op: ', addr, kernels[addr], m.group('op'))
+            
+            m = ptn_delete.search(line)
+            if m:
+                addr = m.group('kernel')
+                if addr not in kernels:
+                    raise ValueError('Delete nonexist kernel: ', addr, m.group('op'))
+                if kernels[addr] != m.group('op'):
+                    raise ValueError('Delete kernel changed op: ', addr, kernels[addr], m.group('op'))
+                del kernels[addr]
+    return kernels
