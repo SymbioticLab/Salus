@@ -148,7 +148,7 @@ void printConfiguration(std::map<std::string, docopt::value> &args)
         LOG(INFO) << "Allocation logging: " << (conf->enabled(el::Level::Info) ? "enabled" : "disabled");
     }
     LOG(INFO) << "Admission control: " << (args[kDisableAdmissionControl] ? "off" : "on");
-    LOG(INFO) << "Scheduling policy :" << (args[kDisableFairness] ? "efficiency" : "fairness");
+    LOG(INFO) << "Scheduling policy: " << (args[kDisableFairness] ? "efficiency" : "fairness");
 }
 
 int main(int argc, char **argv)
