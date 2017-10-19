@@ -1,6 +1,6 @@
 #! /bin/bash
 set -e
-BUILD_TYPES=(Debug Release RelWithDebInfo)
+BUILD_TYPES=(Debug Release)
 
 # Configure
 for build_type in ${BUILD_TYPES[@]}; do
