@@ -28,24 +28,15 @@ def run_seq_ptb(sess, config_name):
     initializer = tf.random_uniform_initializer(-config.init_scale, config.init_scale)
 
     # force to run only a few steps
-    train_input.epoch_size = 20
-    valid_input.epoch_size = 20
-    test_input.epoch_size = 20
+    train_input.epoch_size = tfhelper.iteration_num_from_env()
+    valid_input.epoch_size = train_input.epoch_size
+    test_input.epoch_size = train_input.epoch_size
 
     with tf.name_scope("Train"):
         with tf.variable_scope("Model", reuse=None, initializer=initializer):
             m = networks.PTBModel(is_training=True, config=config, input_=train_input)
         tf.summary.scalar("Training Loss", m.cost)
         tf.summary.scalar("Learning Rate", m.lr)
-
-    with tf.name_scope("Valid"):
-        with tf.variable_scope("Model", reuse=True, initializer=initializer):
-            mvalid = networks.PTBModel(is_training=False, config=eval_config, input_=valid_input)
-        tf.summary.scalar("Validation Loss", mvalid.cost)
-
-    with tf.name_scope("Test"):
-        with tf.variable_scope("Model", reuse=True, initializer=initializer):
-            mtest = networks.PTBModel(is_training=False, config=eval_config, input_=test_input)
 
     with tfhelper.initialized_scope(sess) as coord:
         for i in range(config.max_max_epoch):
@@ -57,13 +48,11 @@ def run_seq_ptb(sess, config_name):
 
             print("Epoch: %d Learning rate: %.3f" % (i + 1, sess.run(m.lr)))
             train_perplexity, speeds = m.run_epoch(sess, eval_op=m.train_op, verbose=True)
-            print('Average %.3f sec/batch' % np.average(speeds))
             print("Epoch: %d Train Perplexity: %.3f" % (i + 1, train_perplexity))
-            valid_perplexity, _ = mvalid.run_epoch(sess)
-            print("Epoch: %d Valid Perplexity: %.3f" % (i + 1, valid_perplexity))
-
-        test_perplexity, _ = mtest.run_epoch(sess)
-        print("Test Perplexity: %.3f" % test_perplexity)
+            print('Average: %.3f sec/batch' % np.average(speeds))
+            if len(speeds) > 1:
+                print('First iteration: %.3f sec/batch' % speeds[0])
+                print('Average excluding first iteration: %.3f sec/batch' % np.average(speeds[1:]))
 
 
 configs = ['tiny', 'small', 'medium', 'large']

@@ -32,25 +32,19 @@ def run_vgg(vgg, sess, input_data, batch_size=100):
 
     # vgg.prob: [batch_size, 1000]
     # labels: [batch_size,]
-    correct_prediction = tf.equal(tf.argmax(vgg.prob, 1), tf.argmax(labels))
-    accuracy = tf.reduce_mean(tf.cast(correct_prediction, tf.float32))
 
     with tfhelper.initialized_scope(sess) as coord:
         speeds = []
-        inbetween = []
-        last_end_time = 0
+        losses = []
         JCT = default_timer()
-        for i in range(20):
+        for i in range(tfhelper.iteration_num_from_env()):
             if coord.should_stop():
                 break
             print("{}: Start running step {}".format(datetime.now(), i))
             start_time = default_timer()
             _, loss_value = sess.run([train_step, cross_entropy], feed_dict={train_mode: True})
             end_time = default_timer()
-
-            if last_end_time > 0:
-                inbetween.append(start_time - last_end_time)
-            last_end_time = end_time
+            losses.append(loss_value)
 
             duration = end_time - start_time
             examples_per_sec = batch_size / duration
@@ -59,18 +53,14 @@ def run_vgg(vgg, sess, input_data, batch_size=100):
             fmt_str = '{}: step {}, loss = {:.2f} ({:.1f} examples/sec; {:.3f} sec/batch)'
             print(fmt_str.format(datetime.now(), i, loss_value, examples_per_sec, sec_per_batch))
 
-        print('Average %.3f sec/batch' % np.average(speeds))
-        print('Average %.6f sec spent between batches' % np.average(inbetween))
         JCT = default_timer() - JCT
         print('Training time is %.3f sec' % JCT)
+        print('Average: %.3f sec/batch' % np.average(speeds))
+        if len(speeds) > 1:
+            print('First iteration: %.3f sec/batch' % speeds[0])
+            print('Average excluding first iteration: %.3f sec/batch' % np.average(speeds[1:]))
 
-        print('{}: Start final eva'.format(datetime.now()))
-        start_time = default_timer()
-        final_acc = sess.run(accuracy, feed_dict={train_mode: False})
-        duration = default_timer() - start_time
-        print('Final eval takes %.3f sec' % duration)
-
-    return final_acc
+    return losses
 
 
 class VGGCaseBase(unittest.TestCase):

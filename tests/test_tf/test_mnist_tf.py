@@ -25,7 +25,7 @@ def run_mnist_softmax(sess, mnist, batch_size=50):
     cross_entropy = tf.reduce_mean(
         tf.nn.softmax_cross_entropy_with_logits(labels=y_, logits=y))
     train_step = tf.train.GradientDescentOptimizer(0.5).minimize(cross_entropy)
-    for _ in range(20):
+    for _ in range(tfhelper.iteration_num_from_env()):
         batch = mnist.train.next_batch(batch_size)
         sess.run(train_step, feed_dict={x: batch[0], y_: batch[1]})
 
@@ -80,30 +80,34 @@ def run_mnist_conv(sess, mnist, batch_size=50):
     cross_entropy = tf.reduce_mean(
         tf.nn.softmax_cross_entropy_with_logits(labels=y_, logits=y_fc2))
     train_step = tf.train.AdamOptimizer(1e-4).minimize(cross_entropy)
-    correct_prediction = tf.equal(tf.argmax(y_fc2, 1), tf.argmax(y_, 1))
-    accuracy = tf.reduce_mean(tf.cast(correct_prediction, tf.float32))
 
-    batch_num = 20
     speeds = []
     losses = []
     with tfhelper.initialized_scope(sess) as coord:
-        for i in range(batch_num):
+        for i in range(tfhelper.iteration_num_from_env()):
             if coord.should_stop():
                 break
             batch = mnist.train.next_batch(batch_size)
             print("{}: Start running step {}".format(datetime.now(), i))
             start_time = default_timer()
-            sess.run(train_step, feed_dict={x: batch[0], y_: batch[1], keep_prob: 0.5})
+            sess.run(train_step, feed_dict={
+                     x: batch[0], y_: batch[1], keep_prob: 0.5})
             duration = default_timer() - start_time
             examples_per_sec = batch_size / duration
             sec_per_batch = float(duration)
             speeds.append(sec_per_batch)
-            loss_value = sess.run(cross_entropy, feed_dict={x: batch[0], y_: batch[1], keep_prob: 0.5})
+            loss_value = sess.run(cross_entropy, feed_dict={
+                                  x: batch[0], y_: batch[1], keep_prob: 0.5})
 
             losses.append(loss_value)
             fmt_str = '{}: step {}, loss = {:.2f} ({:.1f} examples/sec; {:.3f} sec/batch)'
-            print(fmt_str.format(datetime.now(), i, loss_value, examples_per_sec, sec_per_batch))
-        print('Average %.3f sec/batch' % np.average(speeds))
+            print(fmt_str.format(datetime.now(), i,
+                                 loss_value, examples_per_sec, sec_per_batch))
+        print('Average: %.3f sec/batch' % np.average(speeds))
+        if len(speeds) > 1:
+            print('First iteration: %.3f sec/batch' % speeds[0])
+            print('Average excluding first iteration: %.3f sec/batch' %
+                  np.average(speeds[1:]))
 
         return losses
 
@@ -167,17 +171,14 @@ def run_mnist_large(sess, mnist, batch_size=50):
     cross_entropy = tf.reduce_mean(
         tf.nn.softmax_cross_entropy_with_logits(labels=y_, logits=y_fc2))
     train_step = tf.train.AdamOptimizer(1e-4).minimize(cross_entropy)
-    correct_prediction = tf.equal(tf.argmax(y_fc2, 1), tf.argmax(y_, 1))
-    accuracy = tf.reduce_mean(tf.cast(correct_prediction, tf.float32))
 
-    batch_num = 20
     speeds = []
     inbetween = []
     last_end_time = 0
     losses = []
     with tfhelper.initialized_scope(sess) as coord:
         JCT = default_timer()
-        for i in range(batch_num):
+        for i in range(tfhelper.iteration_num_from_env()):
             if coord.should_stop():
                 break
 
@@ -185,7 +186,7 @@ def run_mnist_large(sess, mnist, batch_size=50):
             print("{}: Start running step {}".format(datetime.now(), i))
             start_time = default_timer()
             _, loss_value = sess.run([train_step, cross_entropy],
-                                    feed_dict={x: batch[0], y_: batch[1], keep_prob: 0.5})
+                                     feed_dict={x: batch[0], y_: batch[1], keep_prob: 0.5})
             end_time = default_timer()
 
             if last_end_time > 0:
@@ -199,11 +200,15 @@ def run_mnist_large(sess, mnist, batch_size=50):
 
             losses.append(loss_value)
             fmt_str = '{}: step {}, loss = {:.2f} ({:.1f} examples/sec; {:.3f} sec/batch)'
-            print(fmt_str.format(datetime.now(), i, loss_value, examples_per_sec, sec_per_batch))
-        print('Average %.3f sec/batch' % np.average(speeds))
-        print('Average %.6f sec spent between batches' % np.average(inbetween))
+            print(fmt_str.format(datetime.now(), i,
+                                 loss_value, examples_per_sec, sec_per_batch))
         JCT = default_timer() - JCT
         print('Training time is %.3f sec' % JCT)
+        print('Average: %.3f sec/batch' % np.average(speeds))
+        if len(speeds) > 1:
+            print('First iteration: %.3f sec/batch' % speeds[0])
+            print('Average excluding first iteration: %.3f sec/batch' %
+                  np.average(speeds[1:]))
 
     return losses
 
@@ -222,7 +227,8 @@ class MnistConvBase(unittest.TestCase):
             sess = tf.get_default_session()
             return self._runner()(sess, mnist, batch_size=batch_size)
 
-        run_on_devices(func, '/device:GPU:0', config=self._config(batch_size=batch_size))
+        run_on_devices(func, '/device:GPU:0',
+                       config=self._config(batch_size=batch_size))
 
     def test_cpu(self):
         def func():
@@ -238,7 +244,8 @@ class MnistConvBase(unittest.TestCase):
             mnist = input_data.read_data_sets('MNIST_data', one_hot=True)
             sess = tf.get_default_session()
             return self._runner()(sess, mnist, batch_size=batch_size)
-        run_on_sessions(func, 'zrpc://tcp://127.0.0.1:5501', config=self._config(batch_size=batch_size))
+        run_on_sessions(func, 'zrpc://tcp://127.0.0.1:5501',
+                        config=self._config(batch_size=batch_size))
 
     def test_correctness(self):
         def func():

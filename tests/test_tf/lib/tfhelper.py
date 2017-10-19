@@ -4,8 +4,18 @@ from __future__ import print_function
 
 from contextlib import contextmanager
 from datetime import datetime
+import os
 
 import tensorflow as tf
+
+
+def iteration_num_from_env(default=20):
+    """Get iteration number from environment variable EXEC_ITER_NUMBER"""
+    try:
+        num = int(os.environ['EXEC_ITER_NUMBER'])
+        return num
+    except ValueError:
+        return default
 
 
 @contextmanager

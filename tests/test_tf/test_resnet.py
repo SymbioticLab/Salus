@@ -34,7 +34,7 @@ def run_resnet(sess, input_data, batch_size=100):
     with tfhelper.initialized_scope(sess) as coord:
         speeds = []
         JCT = default_timer()
-        for i in range(20):
+        for i in range(tfhelper.iteration_num_from_env()):
             if coord.should_stop():
                 break
             print("{}: Start running step {}".format(datetime.now(), i))
@@ -50,9 +50,12 @@ def run_resnet(sess, input_data, batch_size=100):
             print(fmt_str.format(datetime.now(), i, loss_value, examples_per_sec, sec_per_batch))
             losses.append(loss_value)
 
-        print('Average %.3f sec/batch' % np.average(speeds))
         JCT = default_timer() - JCT
         print('Training time is %.3f sec' % JCT)
+        print('Average: %.3f sec/batch' % np.average(speeds))
+        if len(speeds) > 1:
+            print('First iteration: %.3f sec/batch' % speeds[0])
+            print('Average excluding first iteration: %.3f sec/batch' % np.average(speeds[1:]))
 
     return losses
 
