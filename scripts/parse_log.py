@@ -519,14 +519,12 @@ def message_size(logs):
     fig, axs = plt.subplots(ncols=2)
 
     ax = sns.distplot(rs, hist=True, kde=False, ax=axs[0])
-    ax.grid(True)
     ax.set_xlabel('Size (byte)')
     ax.set_ylabel('Count')
     ax.set_yscale('log')
     ax.set_title('Message size of {} received messages'.format(len(rs)))
 
     ax = sns.distplot(ss, hist=True, kde=False, ax=axs[1])
-    ax.grid(True)
     ax.set_xlabel('Size (byte)')
     ax.set_ylabel('Count')
     ax.set_yscale('log')
@@ -549,7 +547,6 @@ def scheduling_time(logs):
     print(ts.quantile([.25, .75, .90, .999, .9999]))
 
     ax = sns.distplot(ts, hist=True, kde=False)
-    ax.grid(True)
     ax.set_xlabel('Preparation time (s)')
     ax.set_ylabel('Count')
     ax.set_yscale('log')
@@ -571,7 +568,6 @@ def compute_time(logs):
     print(ts.quantile([.25, .75, .90, .999, .9999]))
 
     ax = sns.distplot(ts, hist=True, kde=False)
-    ax.grid(True)
     ax.set_xlabel('Compute time (s)')
     ax.set_ylabel('Count')
     ax.set_yscale('log')
@@ -593,7 +589,6 @@ def process_time(logs):
     print(ts.quantile([.25, .75, .90, .999, .9999]))
 
     ax = sns.distplot(ts, hist=True, kde=False)
-    ax.grid(True)
     ax.set_xlabel('Post process time (s)')
     ax.set_ylabel('Count')
     ax.set_yscale('log')
@@ -615,7 +610,6 @@ def roundtrip_time(logs):
     print(ts.quantile([.25, .75, .90, .999, .9999]))
 
     ax = sns.distplot(ts, hist=True, kde=False)
-    ax.grid(True)
     ax.set_xlabel('Round-trip time (s)')
     ax.set_ylabel('Count')
     ax.set_yscale('log')
@@ -636,7 +630,6 @@ def req_on_wire_time(logs):
     print(ts.quantile([.25, .75, .90, .999, .9999]))
 
     ax = sns.distplot(ts, hist=True, kde=False)
-    ax.grid(True)
     ax.set_xlabel('Transmission time (s)')
     ax.set_ylabel('Count')
     ax.set_yscale('log')
@@ -658,7 +651,6 @@ def resp_on_wire_time(logs):
     print(ts.quantile([.25, .75, .90, .999, .9999]))
 
     ax = sns.distplot(ts, hist=True, kde=False)
-    ax.grid(True)
     ax.set_xlabel('Transmission time (s)')
     ax.set_ylabel('Count')
     ax.set_yscale('log')
@@ -757,10 +749,9 @@ def memory_usage(logs, iter_times=None, beginning=None, mem_type=None,
             ss = smoother(ss)
 
         if per_sess:
-            ss.plot.area(ax=ax, title=name, linewidth=0)
+            ss.plot.area(ax=ax, linewidth=0)
         else:
-            ss.plot(ax=ax, title=name)
-            ax.grid('on')
+            ss.plot(ax=ax)
             ax.legend().remove()
 
         pu.cleanup_axis_bytes(ax.yaxis)
