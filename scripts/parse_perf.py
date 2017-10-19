@@ -21,6 +21,13 @@ ptn_mu = re.compile(r"""Mutex \s (?P<name>\w+)@(?P<inst>[\dxa-fA-F]+)
                         .+acquiring \s (?P<acq>\d+)us
                         .+locking \s (?P<lck>\d+)us""",
                     re.VERBOSE)
+ptn_overhead = re.compile(r'''OpItem .+\bname=(?P<name>[^,]+),
+                              .+\bsession=(?P<sess>\w+),
+                              .+\bfailures=(?P<failures>\d+)
+                              .+\bqueuing \s time \s (?P<queuing>[\d.]+)
+                              .+\bpreparation \s time \s (?P<preptime>[\d.]+)
+                              .+\brunning \s time \s (?P<running>[\d.]+).+''',
+                          re.VERBOSE)
 
 
 def initialize():
@@ -76,6 +83,18 @@ def match_exec_content(content, ctx):
             'locked': timedelta(microseconds=int(m.group('lck'))),
             'type': 'mutex'
         }
+    
+    m = ptn_overhead.match(content)
+    if m:
+        return {
+            'type': 'overhead',
+            'op': m.group('name'),
+            'sess': m.group('sess'),
+            'failures': int(m.group('failures')),
+            'queuing': float(m.group('queuing')),
+            'preptime': float(m.group('preptime')),
+            'running': float(m.group('running')),
+        }
 
     return None
 
@@ -98,3 +117,17 @@ def perfcalls(logs):
 
     return grouped, func
 
+
+def overhead_breakdown(logs):
+    data = [l for l in logs if l['type'] == 'overhead']
+    df = pd.DataFrame(data).drop('type', axis=1)
+
+    operations = ['sum', 'mean', 'min', 'median', 'max']
+    grouped = df.groupby('sess').agg({
+        'failures': operations,
+        'queuing': operations,
+        'preptime': operations,
+        'running': operations
+    })
+    grouped.columns = ['_'.join(x) for x in grouped.columns.ravel()]
+    return grouped, df
