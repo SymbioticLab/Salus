@@ -4,7 +4,7 @@ import numpy as np
 
 import matplotlib.pyplot as plt
 from matplotlib.dates import SECONDLY, rrulewrapper, RRuleLocator, DateFormatter
-from matplotlib.ticker import MaxNLocator, FuncFormatter
+from matplotlib.ticker import MultipleLocator, MaxNLocator, FuncFormatter, AutoMinorLocator
 
 
 SYMBOLS = {
@@ -55,8 +55,10 @@ def bytes2human(n, format='%(value).1f %(symbol)s', symbols='customary'):
       '9.76562 K'
     """
     n = int(n)
+    sign = ''
     if n < 0:
-        raise ValueError("n < 0")
+        sign = '-'
+        n = -n
     symbols = SYMBOLS[symbols]
     prefix = {}
     for i, s in enumerate(symbols[1:]):
@@ -64,8 +66,8 @@ def bytes2human(n, format='%(value).1f %(symbol)s', symbols='customary'):
     for symbol in reversed(symbols[1:]):
         if n >= prefix[symbol]:
             value = float(n) / prefix[symbol]
-            return format % locals()
-    return format % dict(symbol=symbols[0], value=n)
+            return sign + format % locals()
+    return sign + format % dict(symbol=symbols[0], value=n)
 
 
 def human2bytes(s):
@@ -120,7 +122,20 @@ def human2bytes(s):
 
 
 def cleanup_axis_bytes(axis):
-    axis.set_major_locator(MaxNLocator(steps=[1, 2, 4, 6, 8, 10]))
+    # axis.set_major_locator(MaxNLocator(steps=[1, 2, 4, 6, 8, 10]))
+    dmin, dmax = axis.get_data_interval()
+    interval = dmax - dmin
+    scale = 0
+    while interval > (1024 ** scale):
+        scale += 1
+    scale -= 1
+    base = 1024 ** scale
+    while interval // base > 5:
+        base += 1024 ** scale
+    locator = MultipleLocator(base=base)
+
+    axis.set_major_locator(locator)
+    axis.set_minor_locator(AutoMinorLocator(2))
     axis.set_major_formatter(FuncFormatter(lambda x, pos: bytes2human(x)))
     return axis
 
@@ -128,7 +143,8 @@ def cleanup_axis_bytes(axis):
 def cleanup_axis_timedelta(axis, formatter=None):
     if formatter is None:
         def formatter(x, pos):
-            return '{:.1f}'.format(x / 1e6)
+            return '{:.0f}'.format(x / 1e6)
+    axis.set_major_locator(MaxNLocator(nbins=4, min_n_ticks=2))
     axis.set_major_formatter(FuncFormatter(formatter))
     return axis
 
