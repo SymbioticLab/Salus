@@ -32,7 +32,9 @@ def plotter(name):
             iter_file = os.path.join(local_dir, 'mem-iter.output')
             logs = pl.load_file(log_file)
             sessstart, iters = pn.parse_iterations(iter_file)
-            return func(config, local_dir, logs, iters)
+            fig = func(config, local_dir, logs, iters)
+            fig.set_size_inches(2.35, 2.35, forward=True)
+            return fig
 
         cases[name].append((wrapped, filename))
 
@@ -234,7 +236,7 @@ def main():
     rc = {
         'font.family': 'Times New Roman',
         'font.weight': 'book',
-        'font.size': 8,
+        'font.size': 10,
         'axes.spines.top': False,
         'axes.spines.right': False,
         'figure.figsize': (3.45, 3.45),

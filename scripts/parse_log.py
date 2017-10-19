@@ -759,15 +759,14 @@ def memory_usage(logs, iter_times=None, beginning=None, mem_type=None,
             ax.set_ylabel('Memory Usage')
 
     # Adjust x axis
-    pu.cleanup_axis_timedelta(axs[-1].xaxis, xformatter)
     if unified_ylabel:
         axs[-1].xaxis.label.set_visible(False)
     else:
         axs[-1].set_xlabel('Time (ms)')
     axs[-1].autoscale(axis='x')
-    xlim = axs[-1].get_xlim()
-    if xlim[0] < 0:
-        axs[-1].set_xlim(left=0)
+    # xlim = axs[-1].get_xlim()
+    axs[-1].set_xlim(left=0)
+    pu.cleanup_axis_timedelta(axs[-1].xaxis, xformatter)
 
     def format_coord(x, y):
         return 'x={:.4f}, y={:.4f}'.format(x, y)
