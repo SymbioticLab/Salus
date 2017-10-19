@@ -74,6 +74,7 @@ class SeqCaseBase(unittest.TestCase):
                        config=tf.ConfigProto(allow_soft_placement=True))
 
     @parameterized.expand(configs)
+    @unittest.skip("No need to run on CPU")
     def test_cpu(self, config_name):
         run_on_devices(self.get_func_to_run(config_name), '/device:CPU:0')
 

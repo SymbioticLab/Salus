@@ -82,6 +82,7 @@ class VGGCaseBase(unittest.TestCase):
         config.allow_soft_placement = True
         run_on_devices(func, '/device:GPU:0', config=config)
 
+    @unittest.skip("No need to run on CPU")
     def test_cpu(self):
         def func():
             def input_data(*a, **kw):

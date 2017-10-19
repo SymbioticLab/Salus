@@ -230,6 +230,7 @@ class MnistConvBase(unittest.TestCase):
         run_on_devices(func, '/device:GPU:0',
                        config=self._config(batch_size=batch_size))
 
+    @unittest.skip("No need to run on CPU")
     def test_cpu(self):
         def func():
             mnist = input_data.read_data_sets('MNIST_data', one_hot=True)

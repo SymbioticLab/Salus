@@ -74,6 +74,7 @@ class ResNetCaseBase(unittest.TestCase):
         run_on_devices(self._get_func(batch_size), '/device:GPU:0', config=config)
 
     @parameterized.expand([(25,), (50,), (75,)])
+    @unittest.skip("No need to run on CPU")
     def test_cpu(self, batch_size):
         run_on_devices(self._get_func(batch_size), '/device:CPU:0',
                        config=self._config(batch_size=batch_size))
