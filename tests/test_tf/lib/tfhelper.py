@@ -12,7 +12,7 @@ import tensorflow as tf
 def iteration_num_from_env(default=20):
     """Get iteration number from environment variable EXEC_ITER_NUMBER"""
     try:
-        num = int(os.environ['EXEC_ITER_NUMBER'])
+        num = int(os.getenv('EXEC_ITER_NUMBER', default=''))
         return num
     except ValueError:
         return default
