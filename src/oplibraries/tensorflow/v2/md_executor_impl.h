@@ -44,7 +44,8 @@ using TensorValueVec = gtl::InlinedVector<tf::TensorValue, 4>;
 using AllocatorAttributeVec = gtl::InlinedVector<tf::AllocatorAttributes, 4>;
 using DeviceContextVec = gtl::InlinedVector<tf::DeviceContext *, 4>;
 using EntryVec = gtl::InlinedVector<Entry *, 4>;
-using BufferLockVec = gtl::InlinedVector<boost::shared_lock<boost::upgrade_mutex>, 4>;
+//using BufferLockVec = gtl::InlinedVector<boost::shared_lock<boost::upgrade_mutex>, 4>;
+using BufferLockVec = std::vector<boost::shared_lock<boost::upgrade_mutex>>;
 using BufferMutexSet = std::unordered_set<boost::upgrade_mutex*>;
 
 namespace nodestats {

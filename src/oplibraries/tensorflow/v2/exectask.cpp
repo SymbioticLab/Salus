@@ -63,17 +63,29 @@ ExecTask::ExecTask(ExecutorState *state, utils::semaphore &num_finished_ops,
                    << tagged_node.node->name() << ": " << ok;
     }
 
+    VLOG(1) << "Op " << tagged_node.node->def() << " supports device:";
     supportedTypes.reserve(tftypes.size());
     for (auto tft : tftypes) {
         if (tft == tf::DEVICE_CPU) {
             supportedTypes.push_back(DeviceType::CPU);
+            VLOG(1) << "    CPU";
         } else if (tft == tf::DEVICE_GPU) {
             supportedTypes.push_back(DeviceType::GPU);
+            VLOG(1) << "    GPU";
         } else {
             LOG(ERROR) << "Unknown tf device type: " << tft.type();
         }
     }
 
+    auto device = tagged_node.node->def().device();
+    if (!device.empty()) {
+        supportedTypes.clear();
+        if (device.find("cpu") != std::string::npos) {
+            supportedTypes.push_back(DeviceType::CPU);
+        } else {
+            supportedTypes.push_back(DeviceType::GPU);
+        }
+    }
     // pre compute estimated usage
     for (auto t : supportedTypes) {
         estimatedUsage(t);
