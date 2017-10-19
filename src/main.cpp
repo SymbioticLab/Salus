@@ -117,13 +117,9 @@ void initializeLogging(std::map<std::string, docopt::value> &args)
 
 void configureExecution(std::map<std::string, docopt::value> &args)
 {
-    if (args[kDisableAdmissionControl]) {
-        SessionResourceTracker::instance().setDisabled(true);
-    }
+    SessionResourceTracker::instance().setDisabled(!args[kDisableAdmissionControl]);
 
-    if (args[kDisableFairness]) {
-        ExecutionEngine::instance().setUseFairnessCounter(false);
-    }
+    ExecutionEngine::instance().setUseFairnessCounter(!args[kDisableFairness]);
 }
 
 void printConfiguration(std::map<std::string, docopt::value> &args)
