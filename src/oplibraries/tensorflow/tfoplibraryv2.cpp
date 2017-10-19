@@ -350,7 +350,7 @@ void TFOpLibraryV2::handleCloseSession(const std::string &recvId, const executor
     pproxy->HandleCloseSession(preq,
                                [cb, preq, pproxy, ins = std::move(pi.inserter)](auto resp, auto status) {
         std::unique_ptr<tf::CloseSessionRequest> req(preq);
-        ins->registerSessionCleanupCallback([pproxy](){
+        ins->deleteSession([pproxy](){
             std::unique_ptr<Proxy> proxy(pproxy);
         });
         SessionResourceTracker::instance().free(req->session_handle());

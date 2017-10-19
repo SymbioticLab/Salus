@@ -81,7 +81,7 @@ public:
 
         void registerPagingCallbacks(PagingCallbacks &&pcb);
 
-        void registerSessionCleanupCallback(std::function<void()> cb);
+        void deleteSession(std::function<void()> cb);
 
     private:
         std::shared_ptr<SessionItem> m_item;

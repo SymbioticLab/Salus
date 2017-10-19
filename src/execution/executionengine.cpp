@@ -185,10 +185,13 @@ void ExecutionEngine::InserterImpl::registerPagingCallbacks(PagingCallbacks &&pc
     m_item->pagingCb = std::move(pcb);
 }
 
-void ExecutionEngine::InserterImpl::registerSessionCleanupCallback(std::function<void()> cb)
+void ExecutionEngine::InserterImpl::deleteSession(std::function<void()> cb)
 {
-    utils::Guard g(m_item->mu);
-    m_item->cleanupCb = std::move(cb);
+    {
+        utils::Guard g(m_item->mu);
+        m_item->cleanupCb = std::move(cb);
+    }
+    m_engine.deleteSession(std::move(m_item));
 }
 
 void ExecutionEngine::pushToSessionQueue(std::shared_ptr<SessionItem> item, std::shared_ptr<OperationItem> opItem)
