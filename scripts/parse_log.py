@@ -661,9 +661,12 @@ def resp_on_wire_time(logs):
 
 
 def memory_usage(logs, iter_times=None, beginning=None, mem_type=None,
-                 unified_ylabel=False, smoother=None, xformatter=None, per_sess=False):
+                 unified_ylabel=False, smoother=None, xformatter=None, per_sess=False, show_avg=None):
     if beginning is None:
         beginning = get_beginning(logs)
+
+    if show_avg is None:
+        show_avg = not per_sess
 
     # Prepare ticket -> session map
     ticket2sess = {}
@@ -722,6 +725,7 @@ def memory_usage(logs, iter_times=None, beginning=None, mem_type=None,
     axs = axs.reshape(-1)
 
     series = []
+    pending_avg = []
     for (name, group), ax in zip(df.groupby('mem_type'), axs):
         if per_sess:
             sessionUsages = {}
@@ -738,6 +742,10 @@ def memory_usage(logs, iter_times=None, beginning=None, mem_type=None,
             starts = iter_times[0][0]
             ends = iter_times[-1][1]
             ss = ss.loc[starts:ends]
+
+        if show_avg:
+            ss2 = ss.resample('100us').interpolate(method='time')
+            pending_avg.append((ss2.mean(), ax))
 
         # Change to timedelta after iteration restriction.
         # for some reason slicing doesn't work on Timedeltas
@@ -767,6 +775,11 @@ def memory_usage(logs, iter_times=None, beginning=None, mem_type=None,
     # xlim = axs[-1].get_xlim()
     axs[-1].set_xlim(left=0)
     pu.cleanup_axis_timedelta(axs[-1].xaxis, xformatter)
+
+    # Draw avg line after adjust xaxis
+    if show_avg:
+        for d, ax in pending_avg:
+            pu.axhlines(d, linestyle='--', ax=ax)
 
     def format_coord(x, y):
         return 'x={:.4f}, y={:.4f}'.format(x, y)

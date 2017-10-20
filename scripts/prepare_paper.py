@@ -232,19 +232,22 @@ def main():
     Path(config.save_dir).mkdir(exist_ok=True)
 
     # configure matplotlib style
-    plt.style.use('seaborn-paper')
-    rc = {
-        'font.family': 'Times New Roman',
-        'font.weight': 'book',
-        'font.size': 10,
-        'axes.spines.top': False,
-        'axes.spines.right': False,
-        'figure.figsize': (3.45, 3.45),
-        'figure.dpi': 600,
-        'figure.autolayout': True,
-        'savefig.transparent': True,
-    }
-    mpl.rcParams.update(rc)
+    if config.show:
+        plt.style.use('seaborn')
+    else:
+        plt.style.use('seaborn-paper')
+        rc = {
+            'font.family': 'Times New Roman',
+            'font.weight': 'book',
+            'font.size': 10,
+            'axes.spines.top': False,
+            'axes.spines.right': False,
+            'figure.figsize': (3.45, 3.45),
+            'figure.dpi': 600,
+            'figure.autolayout': True,
+            'savefig.transparent': True,
+        }
+        mpl.rcParams.update(rc)
 
     for name in config.cases:
         for f, filename in cases[name]:
