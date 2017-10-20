@@ -143,8 +143,8 @@ void printConfiguration(std::map<std::string, docopt::value> &args)
         const auto &conf = el::Loggers::getLogger(logging::kAllocTag)->typedConfigurations();
         LOG(INFO) << "Allocation logging: " << (conf->enabled(el::Level::Info) ? "enabled" : "disabled");
     }
-    LOG(INFO) << "Admission control: " << (args[kDisableAdmissionControl] ? "off" : "on");
-    LOG(INFO) << "Scheduling policy: " << (args[kDisableFairness] ? "efficiency" : "fairness");
+    LOG(INFO) << "Admission control: " << (SessionResourceTracker::instance().disabled() ? "off" : "on");
+    LOG(INFO) << "Scheduling policy: " << (ExecutionEngine::instance().useFairnessCounter() ? "efficiency" : "fairness");
 }
 
 int main(int argc, char **argv)
