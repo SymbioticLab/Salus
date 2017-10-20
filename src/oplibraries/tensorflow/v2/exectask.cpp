@@ -171,9 +171,6 @@ Resources ExecTask::estimatedUsage(const DeviceSpec& dev)
         const auto &sessHandle = m_state->impl_->params_.session;
         auto rm = SessionResourceTracker::instance().usage(sessHandle);
         if (rm) {
-            // Merge together
-            resources::merge(rm->temporary, rm->persistant);
-
             auto f = failureTimes;
             if (f > maxFailures) {
                 LOG(WARNING) << "Failure time exceeds maximum: " << f << " max " << maxFailures;
