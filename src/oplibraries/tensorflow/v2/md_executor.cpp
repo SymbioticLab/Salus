@@ -78,7 +78,7 @@ ExecutorImpl::ExecutorImpl(const tf::MultiDeviceExecutorParams &p, const tf::Gra
 
     using namespace std::placeholders;
     inserter_->registerPagingCallbacks({
-        std::bind(&ExecutorImpl::forceEvicted, this, _1, _2),
+        std::bind(&ExecutorImpl::forceEvicted, this),
         std::bind(&ExecutorImpl::handlePagingRequest, this, _1, _2),
     });
 }
@@ -306,6 +306,12 @@ ExecutorState::ExecutorState(const tf::Executor::Args &args, ExecutorImpl *impl)
     , num_outstanding_ops_(0)
     , num_emitted_ops_(0)
 {
+    // Insert ourself into active list
+    {
+        utils::Guard g(impl->entry_mu_);
+        impl->active_states_.insert(this);
+    }
+
     // We start the entire execution in iteration 0 of the root frame
     // so let us create the root frame and the state for iteration 0.
     // We assume root_frame_->frame_name.empty().
@@ -323,6 +329,13 @@ ExecutorState::ExecutorState(const tf::Executor::Args &args, ExecutorImpl *impl)
 
 ExecutorState::~ExecutorState()
 {
+    // Remove ourself into active list
+    {
+        inDeletion_ = true;
+        utils::Guard g(impl_->entry_mu_);
+        impl_->active_states_.erase(this);
+    }
+
     for (auto name_frame : outstanding_frames_) {
         delete name_frame.second;
     }
@@ -937,6 +950,28 @@ void ExecutorState::PropagateOutputs(const TaggedNode &tagged_node, const NodeIt
             CleanupFramesIterations(parent_frame, parent_iter, ready);
             VLOG(3) << "Cleanup frame iterations finished";
         }
+    }
+}
+
+void ExecutorState::ForceInterrupt(const tf::Status &s)
+{
+    // Some error happened. This thread of computation is done.
+    {
+        VLOG(3) << "Try get lock for error handle";
+        tf::mutex_lock l(mu_);
+        VLOG(2) << "Error handle";
+        if (status_.ok()) {
+            status_ = s;
+        }
+    }
+
+    VLOG(3) << "StartAbort: " << s;
+    if (rendezvous_) {
+        rendezvous_->StartAbort(s);
+    }
+
+    if (cancellation_manager_) {
+        cancellation_manager_->StartCancel();
     }
 }
 

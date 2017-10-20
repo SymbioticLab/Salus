@@ -491,7 +491,7 @@ void ExecTask::afterRun(const tf::Status &s, const Callbacks &cbs)
     }
 }
 
-bool ExecTask::maybeMemoryFailure(const tf::Status &s, DoneCallback memFailure)
+bool ExecTask::maybeMemoryFailure(const tf::Status &s, MemFailCallback memFailure)
 {
     if (s.code() == tf::error::RESOURCE_EXHAUSTED) {
         // we didn't implement rollback. So this can only happen for non ref input ops
@@ -501,12 +501,12 @@ bool ExecTask::maybeMemoryFailure(const tf::Status &s, DoneCallback memFailure)
         buflocks.clear();
 
         ++failureTimes;
-        if (memFailure) {
-            memFailure();
+        if (memFailure && memFailure()) {
+            return true;
         }
-
-        return true;
     }
+    // This is either not a OOM error, or the scheduler is not willing to handle it,
+    // just go through normal handling
     return false;
 }
 

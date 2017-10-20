@@ -65,7 +65,7 @@ public:
     ResourceContext &resourceContext() const override;
 
 private:
-    bool maybeMemoryFailure(const tf::Status &s, DoneCallback memFailure);
+    bool maybeMemoryFailure(const tf::Status &s, MemFailCallback memFailure);
 
     void afterCompute(bool is_dead, const Callbacks &cbs, const tf::remote::NodeItem &item);
 

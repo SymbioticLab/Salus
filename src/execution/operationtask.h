@@ -31,10 +31,11 @@ class OperationTask
 {
 public:
     using DoneCallback = std::function<void(void)>;
+    using MemFailCallback = std::function<bool(void)>;
     struct Callbacks
     {
         DoneCallback done;
-        DoneCallback memFailure;
+        MemFailCallback memFailure;
     };
 
     virtual ~OperationTask();

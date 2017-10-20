@@ -74,6 +74,7 @@ bool SetTimelineLabel(tf::NodeExecStats *node_stats, const tf::Node* node);
 } // namespace nodestats
 
 class PerOpAllocDevice;
+class ExecutorState;
 class ExecutorImpl : public tf::Executor
 {
 public:
@@ -90,7 +91,7 @@ private:
     friend class ExecTask;
 
     size_t handlePagingRequest(uint64_t oldTicket, std::unique_ptr<ResourceContext> &&rctx);
-    void forceEvicted(uint64_t ticket, void *addr);
+    void forceEvicted();
 
     /**
      * Remove entry from it's associated buffer tree.
@@ -168,6 +169,7 @@ private:
         boost::intrusive::constant_time_size<false>
     > buffer_trees_;
     std::unordered_multimap<uint64_t, TensorBufferTree*> active_buffers_;
+    std::unordered_set<ExecutorState*> active_states_;
 
     // Root nodes (with no in edges) that should form the initial ready queue
     std::vector<const tf::Node *> root_nodes_;
@@ -197,6 +199,9 @@ public:
     ~ExecutorState();
 
     void RunAsync(tf::Executor::DoneCallback done);
+
+    // Something wrong happened.
+    void ForceInterrupt(const tf::Status &s);
 
 private:
     friend class ExecTask;
@@ -491,6 +496,7 @@ private:
     struct AsyncState;
 
     const bool vlog_; // true if VLOG_IS_ON(1). Used to check vlog cheaply.
+    bool inDeletion_ = false; // true if the state is in destructor, queried by executor
 
     tf::ShapeRefiner refiner_;
     std::unordered_map<std::string, tf::PartialTensorShape> sendShapes_;

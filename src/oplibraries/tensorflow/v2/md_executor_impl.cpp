@@ -391,11 +391,12 @@ size_t ExecutorImpl::handlePagingRequest(uint64_t oldTicket, std::unique_ptr<Res
     return totalReleased;
 }
 
-void ExecutorImpl::forceEvicted(uint64_t ticket, void *addr)
+void ExecutorImpl::forceEvicted()
 {
-    UNUSED(ticket);
-    UNUSED(addr);
-    // TODO: handle when addr was force evicted.
+    utils::Guard g(entry_mu_);
+    for (auto state : active_states_) {
+        state->ForceInterrupt(tf::errors::ResourceExhausted("Forcely killed due to paging"));
+    }
 }
 
 std::unique_ptr<PerOpAllocDevice> ExecutorImpl::CreatePerOpAllocDevice(tf::Device *dev)

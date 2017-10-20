@@ -338,12 +338,18 @@ void ExecutionEngine::scheduleLoop()
         bool noProgress = remainingCount > 0 && scheduled == 0;
         int64_t running_tasks = m_noPagingRunningTasks;
         bool needPaging = (noProgress && running_tasks == 0);
-        if (needPaging) {
+        if (needPaging && m_sessions.size() > 1) {
             TIMED_SCOPE(pagingObj, "paging");
             if (doPaging()) {
                 // succeed, retry immediately
                 continue;
             }
+        } else if (needPaging) {
+            // The single session uses too much memory, we continue without failure retry
+            // to let it fail the normal way.
+            DCHECK_EQ(m_sessions.size(), 1);
+            m_sessions.front()->protectOOM = false;
+            continue;
         }
 
         std::chrono::nanoseconds ns;
@@ -459,10 +465,15 @@ size_t ExecutionEngine::maybeScheduleFrom(std::shared_ptr<SessionItem> item)
                     taskStopped(*item, *opItem);
                 };
                 cbs.memFailure = [item, opItem, this]() mutable {
+                    if (!item->protectOOM) {
+                        return false;
+                    }
+
                     taskStopped(*item, *opItem);
-                    // failed due to OOM. Push back to queue
+                    // failed due to OOM. Push back to queue and retry later
                     VLOG(1) << "Puting back OOM failed task: " << opItem->op->DebugString();
                     pushToSessionQueue(item, std::move(opItem));
+                    return true;
                 };
 
                 VLOG(2) << "Running opItem in session " << item->sessHandle << ": " << opItem->op->DebugString();
@@ -566,7 +577,7 @@ bool ExecutionEngine::doPaging()
     // no need to erase the first elem, as it's a O(n) operation on vector
 
     if (candidates.size() <= 1) {
-        LOG(ERROR) << "No candidates to do paging";
+        LOG(ERROR) << "Out of memory for one session";
         return false;
     }
 
@@ -638,8 +649,25 @@ bool ExecutionEngine::doPaging()
     }
     LOG(ERROR) << "Dump resource monitor status: " << m_resMonitor.DebugString();
 
+    // Forcely kill one session
+    for (size_t i = 1; i != candidates.size(); ++i) {
+        SessionItem &sess = candidates[i].second;
+
+
+        utils::Guard g(sess.mu);
+        if (!sess.pagingCb) {
+            continue;
+        }
+
+        // Don't retry anymore for OOM kernels in this session
+        sess.protectOOM = false;
+
+        VLOG(2) << "Force evict session: " << sess.sessHandle;
+        sess.pagingCb.forceEvicted();
+        return true;
+    }
+    LOG(ERROR) << "Nothing to force evict";
     return false;
-    // Step 3: TODO: force evict
 }
 
 ResourceContext::ResourceContext(const ResourceContext &other, const DeviceSpec &spec)

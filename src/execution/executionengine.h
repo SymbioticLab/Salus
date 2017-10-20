@@ -60,7 +60,7 @@ public:
 
     struct PagingCallbacks
     {
-        std::function<void(uint64_t, void*)> forceEvicted;
+        std::function<void()> forceEvicted;
         std::function<size_t(uint64_t, std::unique_ptr<ResourceContext>&&)> volunteer;
 
         operator bool() const {
@@ -197,6 +197,7 @@ private:
         uint64_t unifiedResSnapshot;
 
         // Accessed by multiple scheduling thread
+        std::atomic_bool protectOOM = {true};
         std::atomic_uint_fast64_t unifiedRes = {0};
         std::unordered_set<uint64_t> tickets;
         std::mutex tickets_mu;
