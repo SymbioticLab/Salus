@@ -2,6 +2,7 @@ from __future__ import print_function, division, absolute_import
 
 from contextlib import contextmanager
 
+import time
 from timeit import default_timer
 
 import numpy as np
@@ -76,6 +77,7 @@ def run_on_sessions(func, targets, *args, **kwargs):
                 print("Retrying due to error:", ex)
                 import traceback
                 traceback.print_exc()
+                time.sleep(1)
         duration = default_timer() - start_time
         print("JCT: {:.3f} s".format(duration))
 
