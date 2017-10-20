@@ -122,7 +122,7 @@ void configureExecution(std::map<std::string, docopt::value> &args)
     ExecutionEngine::instance().setUseFairnessCounter(!args[kDisableFairness]);
 }
 
-void printConfiguration(std::map<std::string, docopt::value> &args)
+void printConfiguration(std::map<std::string, docopt::value> &)
 {
 #if defined(NDEBUG)
     LOG(INFO) << "Running in Release mode";
