@@ -58,6 +58,8 @@ public:
     virtual bool allowConcurrentPaging() const = 0;
 
     virtual void run(Callbacks cbs) = 0;
+
+    virtual void cancel() = 0;
 };
 
 #endif // OPEARTIONTASK_H

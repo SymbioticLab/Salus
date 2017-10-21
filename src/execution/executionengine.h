@@ -50,8 +50,11 @@ class ExecutionEngine
     struct SessionItem;
     struct OperationItem;
 
-    using KernelQueue = std::list<std::shared_ptr<OperationItem>>;
-    using UnsafeQueue = std::list<std::shared_ptr<OperationItem>>;
+    using PSessionItem = std::shared_ptr<SessionItem>;
+    using POpItem = std::shared_ptr<OperationItem>;
+
+    using KernelQueue = std::list<POpItem>;
+    using UnsafeQueue = std::list<POpItem>;
 
 public:
     static ExecutionEngine &instance();
@@ -73,7 +76,7 @@ public:
         InserterImpl(InserterImpl &&other)
             : InserterImpl(std::move(other.m_item), other.m_engine)
         { }
-        InserterImpl(const std::shared_ptr<SessionItem> &item, ExecutionEngine &engine) : m_item(item), m_engine(engine) {}
+        InserterImpl(const PSessionItem &item, ExecutionEngine &engine) : m_item(item), m_engine(engine) {}
 
         ~InserterImpl();
 
@@ -84,7 +87,7 @@ public:
         void deleteSession(std::function<void()> cb);
 
     private:
-        std::shared_ptr<SessionItem> m_item;
+        PSessionItem m_item;
         ExecutionEngine &m_engine;
     };
     using Inserter = std::shared_ptr<InserterImpl>;
@@ -161,7 +164,7 @@ private:
     bool shouldWaitForAWhile(size_t scheduled, std::chrono::nanoseconds &ns);
 
     // Task life cycle
-    size_t maybeScheduleFrom(std::shared_ptr<SessionItem> item);
+    size_t maybeScheduleFrom(PSessionItem item);
     bool maybePreAllocateFor(SessionItem &item, OperationItem &opItem, const DeviceSpec &spec);
 
     void taskStopped(SessionItem &item, OperationItem &opItem);
@@ -178,10 +181,6 @@ private:
     bool doPaging();
 
     // Incoming kernels
-    // Use a minimal linked list because the only operation we need is
-    // iterate through the whole list, insert at end, and delete.
-    // Insert and delete rarely happens, and delete is handled in the same thread
-    // as iteration.
     struct SessionItem
     {
         // also protected by mu (may be accessed both in schedule thread and close session thread)
@@ -195,6 +194,7 @@ private:
         // Only accessed by main scheduling thread
         UnsafeQueue bgQueue;
         uint64_t unifiedResSnapshot;
+        bool forceEvicted = false;
 
         // Accessed by multiple scheduling thread
         std::atomic_bool protectOOM = {true};
@@ -206,7 +206,7 @@ private:
 
         ~SessionItem();
     };
-    void pushToSessionQueue(std::shared_ptr<SessionItem> item, std::shared_ptr<OperationItem> opItem);
+    void pushToSessionQueue(PSessionItem item, POpItem opItem);
 
     struct OperationItem
     {
@@ -218,10 +218,10 @@ private:
         std::chrono::time_point<std::chrono::steady_clock> tRunning;
     };
     friend class ResourceContext;
-    friend void reportBreakdown(const std::shared_ptr<OperationItem> &opItem);
+    friend void reportBreakdown(const POpItem &opItem);
 
-    using SessionList = std::list<std::shared_ptr<SessionItem>>;
-    using SessionSet = std::unordered_set<std::shared_ptr<SessionItem>>;
+    using SessionList = std::list<PSessionItem>;
+    using SessionSet = std::unordered_set<PSessionItem>;
 
     SessionList m_newSessions;
     std::mutex m_newMu;
@@ -230,10 +230,14 @@ private:
     std::mutex m_delMu;
 
     utils::notification m_note_has_work;
+    // Use a minimal linked list because the only operation we need is
+    // iterate through the whole list, insert at end, and delete.
+    // Insert and delete rarely happens, and delete is handled in the same thread
+    // as iteration.
     SessionList m_sessions;
 
-    void insertSession(std::shared_ptr<SessionItem> item);
-    void deleteSession(std::shared_ptr<SessionItem> item);
+    void insertSession(PSessionItem item);
+    void deleteSession(PSessionItem item);
 
     // Backend thread pool
     using qExecutionContext = q::specific_execution_context_ptr<q::threadpool>;

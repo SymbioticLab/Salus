@@ -50,6 +50,8 @@ public:
 
     void run(Callbacks cbs) override;
 
+    void cancel() override;
+
     int failedTimes() const override { return failureTimes; }
 
     Resources estimatedUsage(const DeviceSpec &dev) override;

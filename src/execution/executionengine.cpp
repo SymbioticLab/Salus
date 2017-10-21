@@ -55,7 +55,7 @@ inline void logScheduleFailure(const Resources &usage, const ResourceMonitor &re
 
 } // namespace
 
-inline void reportBreakdown(const std::shared_ptr<ExecutionEngine::OperationItem> &opItem)
+inline void reportBreakdown(const ExecutionEngine::POpItem &opItem)
 {
     auto now = steady_clock::now();
     auto queuing = duration_cast<milliseconds>(opItem->tInspected - opItem->tQueued).count();
@@ -147,7 +147,7 @@ ExecutionEngine::Inserter ExecutionEngine::registerSession(const std::string &se
     return std::make_shared<InserterImpl>(std::move(item), *this);
 }
 
-void ExecutionEngine::insertSession(std::shared_ptr<SessionItem> item)
+void ExecutionEngine::insertSession(PSessionItem item)
 {
     TIMED_FUNC(timerObj);
     {
@@ -157,7 +157,7 @@ void ExecutionEngine::insertSession(std::shared_ptr<SessionItem> item)
     m_note_has_work.notify();
 }
 
-void ExecutionEngine::deleteSession(std::shared_ptr<SessionItem> item)
+void ExecutionEngine::deleteSession(PSessionItem item)
 {
     TIMED_FUNC(timerObj);
     {
@@ -194,7 +194,7 @@ void ExecutionEngine::InserterImpl::deleteSession(std::function<void()> cb)
     m_engine.deleteSession(std::move(m_item));
 }
 
-void ExecutionEngine::pushToSessionQueue(std::shared_ptr<SessionItem> item, std::shared_ptr<OperationItem> opItem)
+void ExecutionEngine::pushToSessionQueue(PSessionItem item, POpItem opItem)
 {
     TIMED_FUNC(timerObj);
     {
@@ -408,7 +408,7 @@ bool ExecutionEngine::maybePreAllocateFor(SessionItem &item, OperationItem &opIt
     return true;
 }
 
-size_t ExecutionEngine::maybeScheduleFrom(std::shared_ptr<SessionItem> item)
+size_t ExecutionEngine::maybeScheduleFrom(PSessionItem item)
 {
     TIMED_FUNC(timerObj);
 
@@ -422,8 +422,16 @@ size_t ExecutionEngine::maybeScheduleFrom(std::shared_ptr<SessionItem> item)
         return 0;
     }
 
+    // Capture the value in schedule thread, avoid multiple threads accessing this
+    bool cancelled = item->forceEvicted;
+
     // Try schedule the operation
-    auto doSchedule = [this](std::shared_ptr<SessionItem> item, std::shared_ptr<OperationItem> &&opItem) {
+    auto doSchedule = [this, cancelled](PSessionItem item, POpItem &&opItem) -> POpItem {
+        if (cancelled) {
+            opItem->op->cancel();
+            return nullptr;
+        }
+
         VLOG(3) << "Scheduling opItem in session " << item->sessHandle << ": " << opItem->op->DebugString();
         TIMED_SCOPE(timerInnerObj, "ExecutionEngine::maybeScheduleFrom::doSchedule");
 
@@ -452,7 +460,7 @@ size_t ExecutionEngine::maybeScheduleFrom(std::shared_ptr<SessionItem> item)
 
             VLOG(3) << "Adding to thread pool: opItem in session " << item->sessHandle
                     << ": " << opItem->op->DebugString();
-            q::with(m_qec->queue(), std::move(opItem)).then([item, this](std::shared_ptr<OperationItem> &&opItem){
+            q::with(m_qec->queue(), std::move(opItem)).then([item, this](POpItem &&opItem){
                 TIMED_SCOPE(timerInnerObj, "ExecutionEngine::maybeScheduleFrom::doSchedule::run");
                 OperationTask::Callbacks cbs;
 
@@ -489,7 +497,7 @@ size_t ExecutionEngine::maybeScheduleFrom(std::shared_ptr<SessionItem> item)
     // Do all schedule in queue in parallel
     UnsafeQueue stage;
     stage.swap(queue);
-    std::vector<q::promise<std::shared_ptr<OperationItem>>> promises;
+    std::vector<q::promise<POpItem>> promises;
     for (auto &opItem : stage) {
         auto p = q::with(m_qec->queue(), item, std::move(opItem)).then(doSchedule);
         promises.emplace_back(std::move(p));
@@ -501,7 +509,7 @@ size_t ExecutionEngine::maybeScheduleFrom(std::shared_ptr<SessionItem> item)
     auto it = std::back_inserter(queue);
     utils::notification n;
     q::all(std::move(promises), m_qec->queue())
-    .then([it, &n](std::vector<std::shared_ptr<OperationItem>> &&remain) mutable {
+    .then([it, &n](std::vector<POpItem> &&remain) mutable {
         for (auto &poi : remain) {
             if (poi) {
                 it = std::move(poi);
@@ -661,6 +669,7 @@ bool ExecutionEngine::doPaging()
 
         // Don't retry anymore for OOM kernels in this session
         sess.protectOOM = false;
+        sess.forceEvicted = true;
 
         VLOG(2) << "Force evict session: " << sess.sessHandle;
         sess.pagingCb.forceEvicted();

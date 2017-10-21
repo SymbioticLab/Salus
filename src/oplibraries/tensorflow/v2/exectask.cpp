@@ -175,6 +175,8 @@ Resources ExecTask::estimatedUsage(const DeviceSpec& dev)
             if (f > maxFailures) {
                 LOG(WARNING) << "Failure time exceeds maximum: " << f << " max " << maxFailures;
                 f = maxFailures;
+                LOG(WARNING) << "Estimated usage this time: "
+                             << resources::DebugString(rm->temporary, "    ");
             }
             uint64_t scale = 1 << (maxFailures - f);
             resources::scale(rm->temporary, 1.0 / scale);
@@ -261,6 +263,27 @@ std::string ExecTask::DebugString()
         << ", session=" << m_state->impl_->params_.session
         << ", failures=" << failureTimes << ")";
     return oss.str();
+}
+
+void ExecTask::cancel()
+{
+    auto input_frame = tagged_node.input_frame;
+    int64_t input_iter = tagged_node.input_iter;
+    const size_t id = tagged_node.node->id();
+
+    m_state->MaybeMarkCompleted(input_frame, input_iter, id);
+
+    auto s = tf::errors::Cancelled("Cancelled");
+    // cancel may be called before prepare, so no device
+    auto completed = m_state->NodeDone(s, nullptr, nullptr, params.rendezvous, ready, nullptr);
+
+    num_finished_ops.notify();
+
+    // Do this after cbs.done, because m_state may be accessed in cbs.done
+    if (completed) {
+        // `m_state` may be deleted in Finish
+        m_state->Finish();
+    }
 }
 
 void ExecTask::run(Callbacks cbs)
