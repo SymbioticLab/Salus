@@ -8,7 +8,12 @@ from operator import attrgetter
 try:
     from pathlib import Path
 except ImportError:
-    from pathlib2 import Path  # python 2 backport
+    from pathlib2 import Path  # pythontry:
+
+try:
+    from subprocess import DEVNULL  # py3k
+except ImportError:
+    DEVNULL = open(os.devnull, 'wb')  # 2 backport
 
 
 class Workload(object):
@@ -20,7 +25,7 @@ class Workload(object):
         self.cmd = d['cmd']
 
         self.env = os.environ.copy()
-        self.env['EXEC_ITER_NUMBER'] = d['ENV']
+        self.env['EXEC_ITER_NUMBER'] = d['env']
         self.env['TF_CPP_MIN_LOG_LEVEL'] = '4'
         self.env['CUDA_VISIBLE_DEVICES'] = '0,1'
 
@@ -43,7 +48,7 @@ class Workload(object):
 
 def load_workloads(config):
     workloads = []
-    with open(config.workloads, newline='') as f:
+    with open(config.workloads, 'rb') as f:
         reader = csv.reader(f)
         for row in reader:
             print(row)
@@ -107,7 +112,7 @@ def main():
     Path(config.save_dir).mkdir(exist_ok=True)
     workloads = load_workloads(config)
 
-    run(workloads, config.case)
+    run(workloads, config)
 
 
 if __name__ == '__main__':
