@@ -218,7 +218,7 @@ Resources ExecTask::estimatedUsage(const DeviceSpec& dev)
     if (!mtypeStatus.ok()) {
         LOG(WARNING) << "Kernel not found on device " << dev << ", resource estimation may be inaccurate.";
     }
-    assert(ditem.device);
+    DCHECK(ditem.device);
 
     ResourceTag devTag{ResourceType::MEMORY, dev};
     ResourceTag cpuTag{ResourceType::MEMORY, dev};
@@ -298,8 +298,8 @@ void ExecTask::run(Callbacks cbs)
     // clear early
     params.rendezvous = nullptr;
 
-    assert(op_kernel);
-    assert(ditem.device);
+    DCHECK(op_kernel);
+    DCHECK(ditem.device);
 
     // Start run
     auto s = gview.SetAllocAttrForNode(node, ditem.device.get(), op_kernel);
@@ -495,7 +495,7 @@ void ExecTask::updateRefEntryTickets(const std::vector<Entry*> &entries)
 
 void ExecTask::afterRun(const tf::Status &s, const Callbacks &cbs)
 {
-    assert(ditem.device);
+    DCHECK(ditem.device);
     auto completed = m_state->NodeDone(s, tagged_node.node, ditem.device.get(), params.rendezvous,
                                        ready, stats);
 
@@ -515,7 +515,7 @@ bool ExecTask::maybeMemoryFailure(const tf::Status &s, MemFailCallback memFailur
 {
     if (s.code() == tf::error::RESOURCE_EXHAUSTED) {
         // we didn't implement rollback. So this can only happen for non ref input ops
-        assert(!has_ref_input);
+        DCHECK(!has_ref_input);
 
         // also release locks
         buflocks.clear();
@@ -532,15 +532,15 @@ bool ExecTask::maybeMemoryFailure(const tf::Status &s, MemFailCallback memFailur
 
 ResourceContext &ExecTask::resourceContext() const
 {
-    assert(ditem.device);
+    DCHECK(ditem.device);
     return ditem.device->resourceContext();
 }
 
 ExecTask::~ExecTask()
 {
     // At this time m_state may already be deleted.
-    assert(ditem.function_library);
     if (op_kernel) {
+        DCHECK(ditem.function_library);
         deleteKernel(op_kernel, ditem.function_library.get());
     }
 }
