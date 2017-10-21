@@ -42,6 +42,14 @@ struct TensorBufferTree
 
     std::vector<Entry*> roots;
     std::unordered_map<tf::TensorBuffer*, std::vector<Entry*>> subs;
+
+    bool empty() const {
+        size_t size = 0;
+        for (auto &sub : subs) {
+            size += sub.second.size();
+        }
+        return roots.empty() && size == 0;
+    }
 };
 
 /**

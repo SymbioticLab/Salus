@@ -98,8 +98,9 @@ private:
      * If needUpdate is not nullptr, then other entries that is reference
      * to this entry is also removed, and added to needUpdate, including this
      * entry.
+     * @returns true if the tree is deleted after the removal
      */
-    void removeFromBufferTree(const Entry *entry, EntryVec *needUpdate);
+    bool removeFromBufferTree(Entry *entry, EntryVec *needUpdate);
     void updateBufferTree(Entry *entry, uint64_t ticket);
 
     struct DeviceItem

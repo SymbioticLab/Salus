@@ -364,6 +364,8 @@ size_t ExecutorImpl::handlePagingRequest(uint64_t oldTicket, std::unique_ptr<Res
 
     for (auto &part : parts) {
         DCHECK(!part->paged_out);
+        DCHECK(!part->empty());
+
         if (!part->root_buf) {
             // We use empty root_buf as a dumy tree for
             // uninitialized tensors, although it's unlikely
@@ -501,9 +503,10 @@ void ExecutorImpl::updateBufferTree(Entry *entry, uint64_t ticket)
     }
 }
 
-void ExecutorImpl::removeFromBufferTree(const Entry *entry, EntryVec *needUpdate)
+bool ExecutorImpl::removeFromBufferTree(Entry *entry, EntryVec *needUpdate)
 {
     TIMED_FUNC(timerObj);
+    DCHECK(entry);
 
     auto tree = entry->alloc_tree;
     DCHECK(tree);
@@ -523,13 +526,37 @@ void ExecutorImpl::removeFromBufferTree(const Entry *entry, EntryVec *needUpdate
 
     utils::TGuard g(entry_mu_, "RemoveFromBufferTree");
 
+    bool removed = false;
     if (utils::erase_if(tree->roots, matchRefs)) {
-        return;
+        removed = true;
     }
     // the entry was not found in roots, so it must be in one of the subs
-    for (auto &p : tree->subs) {
-        if (utils::erase_if(p.second, matchRefs)) {
-            break;
+    for (auto it = tree->subs.begin(), itend = tree->subs.end();
+         !removed && it != itend; ++it) {
+
+        if (utils::erase_if(it->second, matchRefs)) {
+            removed = true;
         }
     }
+    DCHECK(removed) << "Tree doesn't contain the entry";
+
+    if (tree->empty()) {
+        if (VLOG_IS_ON(1) && !tree->root_buf->RefCountIsOne()) {
+            VLOG(1) << "Deleting buffer tree@" << as_hex(tree) << " when it's root_buf@"
+                    << as_hex(tree->root_buf) << " still has "
+                    << tf::remote::PagingHelper::refCountOf(*tree->root_buf) << "references";
+        }
+        auto range = active_buffers_.equal_range(tree->ticket);
+        for (auto it = range.first; it != range.second; ++it) {
+            if (it->second == entry->alloc_tree) {
+                active_buffers_.erase(it);
+                break;
+            }
+        }
+        // tree will auto unlink from it's container buffer_trees_
+        tree->root_buf = nullptr;
+        delete tree;
+        return true;
+    }
+    return false;
 }
