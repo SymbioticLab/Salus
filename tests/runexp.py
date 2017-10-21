@@ -1,6 +1,6 @@
 #! /usr/bin/env python
 import os
-from subprocess import Popen, DEVNULL
+from subprocess import Popen
 import csv
 import argparse
 from operator import attrgetter
@@ -31,7 +31,7 @@ class Workload(object):
     def runAsync(self):
         self.outputfile = open(self.outputpath, 'w')
         self.proc = Popen(self.cmd, env=self.env, stdout=self.outputfile,
-                          stdin=DEVNULL, stderr=DEVNULL)
+                          stdin=os.devnull, stderr=os.devnull)
         return self.proc
 
     def wait(self):
@@ -72,7 +72,7 @@ def runServer(config):
     serverP = Popen([
         'src/executor',
         '--logconf', '../disable.config'
-    ], env=env, stderr=DEVNULL, stdin=DEVNULL, stdout=DEVNULL)
+    ], env=env, stderr=os.devnull, stdin=os.devnull, stdout=os.devnull)
     return serverP
 
 
