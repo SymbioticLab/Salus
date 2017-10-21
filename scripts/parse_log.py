@@ -782,7 +782,7 @@ def memory_usage(logs, iter_times=None, beginning=None, mem_type=None,
             pu.axhlines(d, linestyle='--', ax=ax)
 
     def format_coord(x, y):
-        return 'x={:.4f}, y={:.4f}'.format(x, y)
+        return 'x={:.4f}, y={:.1f} MB'.format(x, y / 1024 / 1024)
     axs[-1].format_coord = format_coord
 
     fig.tight_layout()

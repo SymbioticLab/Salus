@@ -43,7 +43,7 @@ def plotter(name):
     return plotter_decorator
 
 
-@plotter('conv25')
+# @plotter('conv25')
 def plot_mem_conv25(config, local_dir, logs, iters):
     def smoother(ss):
         return ss.ewm(span=15).mean()
@@ -53,7 +53,7 @@ def plot_mem_conv25(config, local_dir, logs, iters):
     return fig
 
 
-@plotter('conv50')
+# @plotter('conv50')
 def plot_mem_conv50(config, local_dir, logs, iters):
     def smoother(ss):
         return ss.ewm(span=15).mean()
@@ -63,7 +63,7 @@ def plot_mem_conv50(config, local_dir, logs, iters):
     return fig
 
 
-@plotter('conv100')
+# @plotter('conv100')
 def plot_mem_conv100(config, local_dir, logs, iters):
     def smoother(ss):
         return ss.ewm(span=15).mean()
@@ -73,7 +73,7 @@ def plot_mem_conv100(config, local_dir, logs, iters):
     return fig
 
 
-@plotter('mnist25')
+# @plotter('mnist25')
 def plot_mem_mnist25(config, local_dir, logs, iters):
     def smoother(ss):
         return ss.ewm(span=15).mean()
@@ -83,7 +83,7 @@ def plot_mem_mnist25(config, local_dir, logs, iters):
     return fig
 
 
-@plotter('mnist50')
+# @plotter('mnist50')
 def plot_mem_mnist50(config, local_dir, logs, iters):
     def smoother(ss):
         return ss.ewm(span=15).mean()
@@ -93,7 +93,7 @@ def plot_mem_mnist50(config, local_dir, logs, iters):
     return fig
 
 
-@plotter('mnist100')
+# @plotter('mnist100')
 def plot_mem_mnist100(config, local_dir, logs, iters):
     def smoother(ss):
         return ss.ewm(span=15).mean()
@@ -103,8 +103,8 @@ def plot_mem_mnist100(config, local_dir, logs, iters):
     return fig
 
 
-@plotter('vgg25')
-def plot_mem_vgg25(config, local_dir, logs, iters):
+@plotter('vgg11_25')
+def plot_mem_vgg11_25(config, local_dir, logs, iters):
     def smoother(ss):
         return ss
         # return ss.ewm(span=15).mean()
@@ -114,8 +114,8 @@ def plot_mem_vgg25(config, local_dir, logs, iters):
     return fig
 
 
-@plotter('vgg50')
-def plot_mem_vgg50(config, local_dir, logs, iters):
+@plotter('vgg11_50')
+def plot_mem_vgg11_50(config, local_dir, logs, iters):
     def smoother(ss):
         return ss
         # return ss.ewm(span=15).mean()
@@ -125,8 +125,8 @@ def plot_mem_vgg50(config, local_dir, logs, iters):
     return fig
 
 
-@plotter('vgg100')
-def plot_mem_vgg100(config, local_dir, logs, iters):
+@plotter('vgg11_100')
+def plot_mem_vgg11_100(config, local_dir, logs, iters):
     def smoother(ss):
         return ss
         # return ss.ewm(span=15).mean()
@@ -136,8 +136,8 @@ def plot_mem_vgg100(config, local_dir, logs, iters):
     return fig
 
 
-@plotter('res25')
-def plot_mem_res25(config, local_dir, logs, iters):
+@plotter('vgg16_25')
+def plot_mem_vgg16_25(config, local_dir, logs, iters):
     def smoother(ss):
         return ss
         # return ss.ewm(span=15).mean()
@@ -147,7 +147,326 @@ def plot_mem_res25(config, local_dir, logs, iters):
     return fig
 
 
-@plotter('res50')
+@plotter('vgg16_50')
+def plot_mem_vgg16_50(config, local_dir, logs, iters):
+    def smoother(ss):
+        return ss
+        # return ss.ewm(span=15).mean()
+
+    df, _, fig = pl.memory_usage(logs, iter_times=iters[0:10],
+                                 mem_type='GPU_0_bfc', smoother=smoother)
+    return fig
+
+
+@plotter('vgg16_100')
+def plot_mem_vgg16_100(config, local_dir, logs, iters):
+    def smoother(ss):
+        return ss
+        # return ss.ewm(span=15).mean()
+
+    df, _, fig = pl.memory_usage(logs, iter_times=iters[0:10],
+                                 mem_type='GPU_0_bfc', smoother=smoother)
+    return fig
+
+
+@plotter('vgg19_25')
+def plot_mem_vgg19_25(config, local_dir, logs, iters):
+    def smoother(ss):
+        return ss
+        # return ss.ewm(span=15).mean()
+
+    df, _, fig = pl.memory_usage(logs, iter_times=iters[0:10],
+                                 mem_type='GPU_0_bfc', smoother=smoother)
+    return fig
+
+
+@plotter('vgg19_50')
+def plot_mem_vgg19_50(config, local_dir, logs, iters):
+    def smoother(ss):
+        return ss
+        # return ss.ewm(span=15).mean()
+
+    df, _, fig = pl.memory_usage(logs, iter_times=iters[0:10],
+                                 mem_type='GPU_0_bfc', smoother=smoother)
+    return fig
+
+
+@plotter('vgg19_100')
+def plot_mem_vgg19_100(config, local_dir, logs, iters):
+    def smoother(ss):
+        return ss
+        # return ss.ewm(span=15).mean()
+
+    df, _, fig = pl.memory_usage(logs, iter_times=iters[0:10],
+                                 mem_type='GPU_0_bfc', smoother=smoother)
+    return fig
+
+
+@plotter('inception4_75')
+def plot_mem_inception4_75(config, local_dir, logs, iters):
+    def smoother(ss):
+        return ss
+        # return ss.ewm(span=15).mean()
+
+    df, _, fig = pl.memory_usage(logs, iter_times=iters[0:10],
+                                 mem_type='GPU_0_bfc', smoother=smoother)
+    return fig
+
+
+@plotter('inception4_50')
+def plot_mem_inception4_50(config, local_dir, logs, iters):
+    def smoother(ss):
+        return ss
+        # return ss.ewm(span=15).mean()
+
+    df, _, fig = pl.memory_usage(logs, iter_times=iters[0:10],
+                                 mem_type='GPU_0_bfc', smoother=smoother)
+    return fig
+
+
+@plotter('inception4_25')
+def plot_mem_inception4_25(config, local_dir, logs, iters):
+    def smoother(ss):
+        return ss
+        # return ss.ewm(span=15).mean()
+
+    df, _, fig = pl.memory_usage(logs, iter_times=iters[0:10],
+                                 mem_type='GPU_0_bfc', smoother=smoother)
+    return fig
+
+
+@plotter('inception3_100')
+def plot_mem_inception3_100(config, local_dir, logs, iters):
+    def smoother(ss):
+        return ss
+        # return ss.ewm(span=15).mean()
+
+    df, _, fig = pl.memory_usage(logs, iter_times=iters[0:10],
+                                 mem_type='GPU_0_bfc', smoother=smoother)
+    return fig
+
+
+@plotter('inception3_50')
+def plot_mem_inception3_50(config, local_dir, logs, iters):
+    def smoother(ss):
+        return ss
+        # return ss.ewm(span=15).mean()
+
+    df, _, fig = pl.memory_usage(logs, iter_times=iters[0:10],
+                                 mem_type='GPU_0_bfc', smoother=smoother)
+    return fig
+
+
+@plotter('inception3_25')
+def plot_mem_inception3_25(config, local_dir, logs, iters):
+    def smoother(ss):
+        return ss
+        # return ss.ewm(span=15).mean()
+
+    df, _, fig = pl.memory_usage(logs, iter_times=iters[0:10],
+                                 mem_type='GPU_0_bfc', smoother=smoother)
+    return fig
+
+
+@plotter('overfeat_100')
+def plot_mem_overfeat_100(config, local_dir, logs, iters):
+    def smoother(ss):
+        return ss
+        # return ss.ewm(span=15).mean()
+
+    df, _, fig = pl.memory_usage(logs, iter_times=iters[0:10],
+                                 mem_type='GPU_0_bfc', smoother=smoother)
+    return fig
+
+
+@plotter('overfeat_50')
+def plot_mem_overfeat_50(config, local_dir, logs, iters):
+    def smoother(ss):
+        return ss
+        # return ss.ewm(span=15).mean()
+
+    df, _, fig = pl.memory_usage(logs, iter_times=iters[0:10],
+                                 mem_type='GPU_0_bfc', smoother=smoother)
+    return fig
+
+
+@plotter('overfeat_25')
+def plot_mem_overfeat_25(config, local_dir, logs, iters):
+    def smoother(ss):
+        return ss
+        # return ss.ewm(span=15).mean()
+
+    df, _, fig = pl.memory_usage(logs, iter_times=iters[0:10],
+                                 mem_type='GPU_0_bfc', smoother=smoother)
+    return fig
+
+
+@plotter('alexnet_100')
+def plot_mem_alexnet_100(config, local_dir, logs, iters):
+    def smoother(ss):
+        return ss
+        # return ss.ewm(span=15).mean()
+
+    df, _, fig = pl.memory_usage(logs, iter_times=iters[0:10],
+                                 mem_type='GPU_0_bfc', smoother=smoother)
+    return fig
+
+
+@plotter('alexnet_50')
+def plot_mem_alexnet_50(config, local_dir, logs, iters):
+    def smoother(ss):
+        return ss
+        # return ss.ewm(span=15).mean()
+
+    df, _, fig = pl.memory_usage(logs, iter_times=iters[0:10],
+                                 mem_type='GPU_0_bfc', smoother=smoother)
+    return fig
+
+
+@plotter('alexnet_25')
+def plot_mem_alexnet_25(config, local_dir, logs, iters):
+    def smoother(ss):
+        return ss
+        # return ss.ewm(span=15).mean()
+
+    df, _, fig = pl.memory_usage(logs, iter_times=iters[0:10],
+                                 mem_type='GPU_0_bfc', smoother=smoother)
+    return fig
+
+
+@plotter('googlenet_100')
+def plot_mem_googlenet_100(config, local_dir, logs, iters):
+    def smoother(ss):
+        return ss
+        # return ss.ewm(span=15).mean()
+
+    df, _, fig = pl.memory_usage(logs, iter_times=iters[0:10],
+                                 mem_type='GPU_0_bfc', smoother=smoother)
+    return fig
+
+
+@plotter('googlenet_50')
+def plot_mem_googlenet_50(config, local_dir, logs, iters):
+    def smoother(ss):
+        return ss
+        # return ss.ewm(span=15).mean()
+
+    df, _, fig = pl.memory_usage(logs, iter_times=iters[0:10],
+                                 mem_type='GPU_0_bfc', smoother=smoother)
+    return fig
+
+
+@plotter('googlenet_25')
+def plot_mem_googlenet_25(config, local_dir, logs, iters):
+    def smoother(ss):
+        return ss
+        # return ss.ewm(span=15).mean()
+
+    df, _, fig = pl.memory_usage(logs, iter_times=iters[0:10],
+                                 mem_type='GPU_0_bfc', smoother=smoother)
+    return fig
+
+
+@plotter('resnet152_75')
+def plot_mem_resnet152_75(config, local_dir, logs, iters):
+    def smoother(ss):
+        return ss
+        # return ss.ewm(span=15).mean()
+
+    df, _, fig = pl.memory_usage(logs, iter_times=iters[0:10],
+                                 mem_type='GPU_0_bfc', smoother=smoother)
+    return fig
+
+
+@plotter('resnet152_50')
+def plot_mem_resnet152_50(config, local_dir, logs, iters):
+    def smoother(ss):
+        return ss
+        # return ss.ewm(span=15).mean()
+
+    df, _, fig = pl.memory_usage(logs, iter_times=iters[0:10],
+                                 mem_type='GPU_0_bfc', smoother=smoother)
+    return fig
+
+
+@plotter('resnet152_25')
+def plot_mem_resnet152_25(config, local_dir, logs, iters):
+    def smoother(ss):
+        return ss
+        # return ss.ewm(span=15).mean()
+
+    df, _, fig = pl.memory_usage(logs, iter_times=iters[0:10],
+                                 mem_type='GPU_0_bfc', smoother=smoother)
+    return fig
+
+
+@plotter('resnet101_75')
+def plot_mem_resnet101_75(config, local_dir, logs, iters):
+    def smoother(ss):
+        return ss
+        # return ss.ewm(span=15).mean()
+
+    df, _, fig = pl.memory_usage(logs, iter_times=iters[0:10],
+                                 mem_type='GPU_0_bfc', smoother=smoother)
+    return fig
+
+
+@plotter('resnet101_50')
+def plot_mem_resnet101_50(config, local_dir, logs, iters):
+    def smoother(ss):
+        return ss
+        # return ss.ewm(span=15).mean()
+
+    df, _, fig = pl.memory_usage(logs, iter_times=iters[0:10],
+                                 mem_type='GPU_0_bfc', smoother=smoother)
+    return fig
+
+
+@plotter('resnet101_25')
+def plot_mem_resnet101_25(config, local_dir, logs, iters):
+    def smoother(ss):
+        return ss
+        # return ss.ewm(span=15).mean()
+
+    df, _, fig = pl.memory_usage(logs, iter_times=iters[0:10],
+                                 mem_type='GPU_0_bfc', smoother=smoother)
+    return fig
+
+
+@plotter('resnet50_75')
+def plot_mem_resnet50_75(config, local_dir, logs, iters):
+    def smoother(ss):
+        return ss
+        # return ss.ewm(span=15).mean()
+
+    df, _, fig = pl.memory_usage(logs, iter_times=iters[0:10],
+                                 mem_type='GPU_0_bfc', smoother=smoother)
+    return fig
+
+
+@plotter('resnet50_50')
+def plot_mem_resnet50_50(config, local_dir, logs, iters):
+    def smoother(ss):
+        return ss
+        # return ss.ewm(span=15).mean()
+
+    df, _, fig = pl.memory_usage(logs, iter_times=iters[0:10],
+                                 mem_type='GPU_0_bfc', smoother=smoother)
+    return fig
+
+
+@plotter('resnet50_25')
+def plot_mem_resnet50_25(config, local_dir, logs, iters):
+    def smoother(ss):
+        return ss
+        # return ss.ewm(span=15).mean()
+
+    df, _, fig = pl.memory_usage(logs, iter_times=iters[0:10],
+                                 mem_type='GPU_0_bfc', smoother=smoother)
+    return fig
+
+
+# @plotter('res50')
 def plot_mem_res50(config, local_dir, logs, iters):
     def smoother(ss):
         return ss
@@ -158,7 +477,7 @@ def plot_mem_res50(config, local_dir, logs, iters):
     return fig
 
 
-@plotter('res75')
+# @plotter('res75')
 def plot_mem_res75(config, local_dir, logs, iters):
     def smoother(ss):
         return ss
@@ -169,7 +488,7 @@ def plot_mem_res75(config, local_dir, logs, iters):
     return fig
 
 
-@plotter('ptbT')
+# @plotter('ptbT')
 def plot_mem_ptbT(config, local_dir, logs, iters):
     def smoother(ss):
         return ss
@@ -179,7 +498,7 @@ def plot_mem_ptbT(config, local_dir, logs, iters):
     return fig
 
 
-@plotter('ptbS')
+# @plotter('ptbS')
 def plot_mem_ptbS(config, local_dir, logs, iters):
     def smoother(ss):
         return ss
@@ -189,7 +508,7 @@ def plot_mem_ptbS(config, local_dir, logs, iters):
     return fig
 
 
-@plotter('ptbM')
+# @plotter('ptbM')
 def plot_mem_ptbM(config, local_dir, logs, iters):
     def smoother(ss):
         return ss
@@ -199,7 +518,7 @@ def plot_mem_ptbM(config, local_dir, logs, iters):
     return fig
 
 
-@plotter('ptbL')
+# @plotter('ptbL')
 def plot_mem_ptbL(config, local_dir, logs, iters):
     def smoother(ss):
         return ss
@@ -209,7 +528,7 @@ def plot_mem_ptbL(config, local_dir, logs, iters):
     return fig
 
 
-@plotter('mix6')
+# @plotter('mix6')
 def plot_mem_mix6(config, local_dir, logs, iters):
     pass
 
@@ -254,9 +573,11 @@ def main():
             print("Generating " + filename)
             fig = f(config)
             if config.show:
+                fig.set_size_inches(6, 6, forward=True)
                 plt.show()
             else:
                 fig.savefig(os.path.join(config.save_dir, filename + '.pdf'), transparent=True)
+            plt.close(fig)
 
 
 if __name__ == '__main__':
