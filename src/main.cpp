@@ -117,9 +117,13 @@ void initializeLogging(std::map<std::string, docopt::value> &args)
 
 void configureExecution(std::map<std::string, docopt::value> &args)
 {
-    SessionResourceTracker::instance().setDisabled(!args[kDisableAdmissionControl]);
+    const auto &argDisableAdmissionControl = args[kDisableAdmissionControl];
+    const auto &argDisableFairness = args[kDisableFairness];
+    auto disableAdmissionControl = argDisableAdmissionControl ? argDisableAdmissionControl.asBool() : false;
+    auto disableFairness = argDisableFairness ? argDisableFairness.asBool() : false;
 
-    ExecutionEngine::instance().setUseFairnessCounter(!args[kDisableFairness]);
+    SessionResourceTracker::instance().setDisabled(disableAdmissionControl);
+    ExecutionEngine::instance().setUseFairnessCounter(!disableFairness);
 }
 
 void printConfiguration(std::map<std::string, docopt::value> &)
@@ -144,7 +148,7 @@ void printConfiguration(std::map<std::string, docopt::value> &)
         LOG(INFO) << "Allocation logging: " << (conf->enabled(el::Level::Info) ? "enabled" : "disabled");
     }
     LOG(INFO) << "Admission control: " << (SessionResourceTracker::instance().disabled() ? "off" : "on");
-    LOG(INFO) << "Scheduling policy: " << (ExecutionEngine::instance().useFairnessCounter() ? "efficiency" : "fairness");
+    LOG(INFO) << "Scheduling policy: " << (ExecutionEngine::instance().useFairnessCounter() ? "fairness" : "efficiency");
 }
 
 int main(int argc, char **argv)
