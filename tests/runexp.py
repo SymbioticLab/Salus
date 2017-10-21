@@ -36,7 +36,7 @@ class Workload(object):
     def runAsync(self):
         self.outputfile = open(self.outputpath, 'w')
         self.proc = Popen(self.cmd, env=self.env, stdout=self.outputfile,
-                          stdin=os.devnull, stderr=os.devnull)
+                          stdin=DEVNULL, stderr=DEVNULL)
         return self.proc
 
     def wait(self):
@@ -77,7 +77,7 @@ def runServer(config):
     serverP = Popen([
         'src/executor',
         '--logconf', '../disable.config'
-    ], env=env, stderr=os.devnull, stdin=os.devnull, stdout=os.devnull)
+    ], env=env, stderr=DEVNULL, stdin=DEVNULL, stdout=DEVNULL)
     return serverP
 
 
