@@ -158,6 +158,20 @@ class TestVgg11(VGGCaseBase):
     def _vgg(self):
         return networks.Vgg11Trainable()
 
+    def _config(self, **kwargs):
+        MB = 1024 * 1024
+        memusages = {
+            25: ((6615.1 - 1584.5) * MB, 1584.5 * MB),
+            50: ((9738.1 - 1583.9) * MB, 1583.9 * MB),
+            100: ((12809.6 - 1587.2) * MB, 1587.2 * MB),
+        }
+        batch_size = kwargs.get('batch_size', 100)
+
+        config = tf.ConfigProto()
+        config.zmq_options.resource_map.temporary['MEMORY:GPU'] = memusages[batch_size][0]
+        config.zmq_options.resource_map.persistant['MEMORY:GPU'] = memusages[batch_size][1]
+        return config
+
 
 class TestVgg16(VGGCaseBase):
     def _vgg(self):
@@ -180,6 +194,20 @@ class TestVgg16(VGGCaseBase):
 class TestVgg19(VGGCaseBase):
     def _vgg(self):
         return networks.Vgg19Trainable()
+
+    def _config(self, **kwargs):
+        MB = 1024 * 1024
+        memusages = {
+            25: ((6614.3 - 1583.9) * MB, 1583.9 * MB),
+            50: ((9738.2 - 1585.6) * MB, 1585.6 * MB),
+            100: ((12549.7 - 1585.8) * MB, 1585.8 * MB),
+        }
+        batch_size = kwargs.get('batch_size', 100)
+
+        config = tf.ConfigProto()
+        config.zmq_options.resource_map.temporary['MEMORY:GPU'] = memusages[batch_size][0]
+        config.zmq_options.resource_map.persistant['MEMORY:GPU'] = memusages[batch_size][1]
+        return config
 
 
 del VGGCaseBase
