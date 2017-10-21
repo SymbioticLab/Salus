@@ -74,10 +74,12 @@ def runServer(config):
     env = os.environ.copy()
     env['CUDA_VISIBLE_DEVICES'] = '2,3'
     env['TF_CPP_MIN_LOG_LEVEL'] = '4'
+
+    build_dir = os.path.abspath(config.build_dir)
     serverP = Popen([
-        'src/executor',
+        os.path.join(build_dir, 'src', 'executor'),
         '--logconf',
-        '../build/disable.config'
+        os.path.join(build_dir, 'disable.config')
     ], env=env, stderr=DEVNULL, stdin=DEVNULL, stdout=DEVNULL)
     return serverP
 
@@ -104,6 +106,7 @@ def run(workloads, config):
 
 def main():
     parser = argparse.ArgumentParser()
+    parser.add_argument('--build_dir', help='Build directory', default='../build')
     parser.add_argument('--save_dir', help='Output directory', default='output')
     parser.add_argument('workloads', help='Path to the CSV containing workload info')
     parser.add_argument('case', help='Which case to run', choices=casekey.keys())
