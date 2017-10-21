@@ -73,10 +73,11 @@ casekey = {
 def runServer(config):
     env = os.environ.copy()
     env['CUDA_VISIBLE_DEVICES'] = '2,3'
-    env['TF_CPP_MIN_LOG_LEVEL'] = 4
+    env['TF_CPP_MIN_LOG_LEVEL'] = '4'
     serverP = Popen([
         'src/executor',
-        '--logconf', '../disable.config'
+        '--logconf',
+        '../build/disable.config'
     ], env=env, stderr=DEVNULL, stdin=DEVNULL, stdout=DEVNULL)
     return serverP
 
