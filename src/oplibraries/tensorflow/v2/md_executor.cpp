@@ -956,6 +956,7 @@ void ExecutorState::PropagateOutputs(const TaggedNode &tagged_node, const NodeIt
 
 void ExecutorState::ForceInterrupt(const tf::Status &s)
 {
+    forceInterrupted = true;
     // Some error happened. This thread of computation is done.
     {
         VLOG(3) << "Try get lock for error handle";
@@ -974,8 +975,6 @@ void ExecutorState::ForceInterrupt(const tf::Status &s)
     if (cancellation_manager_) {
         cancellation_manager_->StartCancel();
     }
-
-    forceInterrupted = true;
 }
 
 bool ExecutorState::NodeDone(const tf::Status &s, const tf::Node *node, const tf::Device *device,
