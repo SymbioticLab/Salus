@@ -661,7 +661,6 @@ bool ExecutionEngine::doPaging()
     for (size_t i = 1; i != candidates.size(); ++i) {
         SessionItem &sess = candidates[i].second;
 
-
         utils::Guard g(sess.mu);
         if (!sess.pagingCb) {
             continue;

@@ -397,6 +397,7 @@ void ExecutorImpl::forceEvicted()
     for (auto state : active_states_) {
         state->ForceInterrupt(tf::errors::ResourceExhausted("Forcely killed due to paging"));
     }
+    active_states_.clear();
 }
 
 std::unique_ptr<PerOpAllocDevice> ExecutorImpl::CreatePerOpAllocDevice(tf::Device *dev)

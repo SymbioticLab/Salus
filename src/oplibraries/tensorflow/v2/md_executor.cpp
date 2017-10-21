@@ -329,9 +329,10 @@ ExecutorState::ExecutorState(const tf::Executor::Args &args, ExecutorImpl *impl)
 
 ExecutorState::~ExecutorState()
 {
-    // Remove ourself into active list
-    {
-        inDeletion_ = true;
+    // Remove ourself into active list only if this is not caused by
+    // force interupption. In that case the ExecutorImpl takes care
+    // of clearing active_states_
+    if (!forceInterrupted) {
         utils::Guard g(impl_->entry_mu_);
         impl_->active_states_.erase(this);
     }
@@ -973,6 +974,8 @@ void ExecutorState::ForceInterrupt(const tf::Status &s)
     if (cancellation_manager_) {
         cancellation_manager_->StartCancel();
     }
+
+    forceInterrupted = true;
 }
 
 bool ExecutorState::NodeDone(const tf::Status &s, const tf::Node *node, const tf::Device *device,

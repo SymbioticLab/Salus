@@ -496,7 +496,7 @@ private:
     struct AsyncState;
 
     const bool vlog_; // true if VLOG_IS_ON(1). Used to check vlog cheaply.
-    bool inDeletion_ = false; // true if the state is in destructor, queried by executor
+    bool forceInterrupted = false;
 
     tf::ShapeRefiner refiner_;
     std::unordered_map<std::string, tf::PartialTensorShape> sendShapes_;
