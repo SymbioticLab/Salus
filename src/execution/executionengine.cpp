@@ -424,6 +424,9 @@ size_t ExecutionEngine::maybeScheduleFrom(PSessionItem item)
 
     // Exam if queue front has been waiting for a long time
     if (item->holWaiting > m_schedParam.maxHolWaiting) {
+        VLOG(1) << "In session " << item->sessHandle
+                << ": HOL waiting exceeds maximum: " << item->holWaiting << " (max="
+                << m_schedParam.maxHolWaiting << ")";
         return 0;
     }
 
@@ -527,7 +530,10 @@ size_t ExecutionEngine::maybeScheduleFrom(PSessionItem item)
     auto scheduled = size - queue.size();
 
     // update queue head waiting
-    if (queue.front()->hash() == item->queueHeadHash) {
+    if (queue.empty()) {
+        item->queueHeadHash = 0;
+        item->holWaiting = 0;
+    } else if (queue.front()->hash() == item->queueHeadHash) {
         item->holWaiting += scheduled;
     } else {
         item->queueHeadHash = queue.front()->hash();

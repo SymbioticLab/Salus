@@ -207,7 +207,7 @@ private:
         bool forceEvicted = false;
 
         uint64_t holWaiting = 0;
-        uint64_t queueHeadHash;
+        uint64_t queueHeadHash = 0;
 
         // Accessed by multiple scheduling thread
         std::atomic_bool protectOOM = {true};
