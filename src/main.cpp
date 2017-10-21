@@ -18,6 +18,7 @@ using namespace std::string_literals;
 
 namespace {
 static auto kListenFlag = "--listen";
+static auto kMaxHolWaiting = "--max-hol-waiting";
 static auto kDisableFairness = "--disable-fairness";
 static auto kDisableAdmissionControl = "--disable-adc";
 static auto kLogConfFlag = "--logconf";
@@ -41,8 +42,10 @@ Options:
     -l <endpoint>, --listen=<endpoint>
                                 Listen on ZeroMQ endpoint <endpoint>.
                                 [default: tcp://*:5501]
-    --disable-fairness          Disable fair sharing in scheduling.
     --disable-adc               Disable admission control.
+    --disable-fairness          Disable fair sharing in scheduling.
+    --max-hol-waiting=<num>     Maximum number of task allowed go before queue head
+                                in scheduling. [default: 50]
     --logconf <file>            Path to log configuration file. Note that
                                 settings in this file takes precedence over
                                 other command line arguments.
@@ -121,9 +124,13 @@ void configureExecution(std::map<std::string, docopt::value> &args)
     const auto &argDisableFairness = args[kDisableFairness];
     auto disableAdmissionControl = argDisableAdmissionControl ? argDisableAdmissionControl.asBool() : false;
     auto disableFairness = argDisableFairness ? argDisableFairness.asBool() : false;
+    uint64_t maxQueueHeadWaiting = args[kMaxHolWaiting].asLong();
 
     SessionResourceTracker::instance().setDisabled(disableAdmissionControl);
-    ExecutionEngine::instance().setUseFairnessCounter(!disableFairness);
+    ExecutionEngine::instance().setSchedulingParam({
+        disableFairness,
+        maxQueueHeadWaiting
+    });
 }
 
 void printConfiguration(std::map<std::string, docopt::value> &)
@@ -148,7 +155,10 @@ void printConfiguration(std::map<std::string, docopt::value> &)
         LOG(INFO) << "Allocation logging: " << (conf->enabled(el::Level::Info) ? "enabled" : "disabled");
     }
     LOG(INFO) << "Admission control: " << (SessionResourceTracker::instance().disabled() ? "off" : "on");
-    LOG(INFO) << "Scheduling policy: " << (ExecutionEngine::instance().useFairnessCounter() ? "fairness" : "efficiency");
+    LOG(INFO) << "Scheduling parameters:";
+    auto &param = ExecutionEngine::instance().schedulingParam();
+    LOG(INFO) << "    Policy: " << (param.useFairnessCounter ? "fairness" : "efficiency");
+    LOG(INFO) << "    MaxQueueHeadWaiting: " << param.maxHolWaiting;
 }
 
 int main(int argc, char **argv)

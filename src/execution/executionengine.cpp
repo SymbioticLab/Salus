@@ -295,7 +295,7 @@ void ExecutionEngine::scheduleLoop()
 
         // Sort sessions if needed. We assume m_sessions.size() is always no more than a few,
         // therefore sorting in every iteration is acceptable.
-        if (sessionsChanged == 0 && m_useFairnessCounter) {
+        if (sessionsChanged == 0 && m_schedParam.useFairnessCounter) {
             m_sessions.sort([](const auto &lhs, const auto &rhs){
                 return lhs->unifiedResSnapshot < rhs->unifiedResSnapshot;
             });
@@ -327,7 +327,7 @@ void ExecutionEngine::scheduleLoop()
             // make sure the first session (with least progress) is
             // get scheduled solely, thus can keep up, without other
             // sessions interfere
-            if (count > 0 && m_useFairnessCounter) {
+            if (count > 0 && m_schedParam.useFairnessCounter) {
                 break;
             }
         }
@@ -419,6 +419,11 @@ size_t ExecutionEngine::maybeScheduleFrom(PSessionItem item)
     VLOG(3) << "Scheduling all opItem in session " << item->sessHandle << ": queue size " << size;
 
     if (size == 0) {
+        return 0;
+    }
+
+    // Exam if queue front has been waiting for a long time
+    if (item->holWaiting > m_schedParam.maxHolWaiting) {
         return 0;
     }
 
@@ -519,7 +524,17 @@ size_t ExecutionEngine::maybeScheduleFrom(PSessionItem item)
     });
     n.wait();
 
-    return size - queue.size();
+    auto scheduled = size - queue.size();
+
+    // update queue head waiting
+    if (queue.front()->hash() == item->queueHeadHash) {
+        item->holWaiting += scheduled;
+    } else {
+        item->queueHeadHash = queue.front()->hash();
+        item->holWaiting = 0;
+    }
+
+    return scheduled;
 }
 
 void ExecutionEngine::taskStopped(SessionItem &item, OperationItem &opItem)

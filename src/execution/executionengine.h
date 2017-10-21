@@ -42,6 +42,16 @@
 class OperationTask;
 class ResourceContext;
 
+struct SchedulingParam
+{
+    bool useFairnessCounter = true;
+    /**
+     * Maximum head-of-line waiting tasks allowed before refuse to schedule
+     * later tasks
+     */
+    uint64_t maxHolWaiting = 50;
+};
+
 /**
  * @todo write docs
  */
@@ -139,12 +149,12 @@ public:
         return q::with(m_qec->queue(), t);
     }
 
-    bool useFairnessCounter() const {
-        return m_useFairnessCounter;
+    void setSchedulingParam(const SchedulingParam &param) {
+        m_schedParam = param;
     }
 
-    void setUseFairnessCounter(bool val) {
-        m_useFairnessCounter = val;
+    const SchedulingParam &schedulingParam() const {
+        return m_schedParam;
     }
 
 protected:
@@ -156,7 +166,7 @@ private:
     ExecutionEngine();
 
     // scheduler parameters
-    bool m_useFairnessCounter = true;
+    SchedulingParam m_schedParam;
 
     std::atomic<bool> m_shouldExit = {false};
     std::unique_ptr<std::thread> m_schedThread;
@@ -196,6 +206,9 @@ private:
         uint64_t unifiedResSnapshot;
         bool forceEvicted = false;
 
+        uint64_t holWaiting = 0;
+        uint64_t queueHeadHash;
+
         // Accessed by multiple scheduling thread
         std::atomic_bool protectOOM = {true};
         std::atomic_uint_fast64_t unifiedRes = {0};
@@ -211,6 +224,8 @@ private:
     struct OperationItem
     {
         std::unique_ptr<OperationTask> op;
+
+        uint64_t hash() const { return reinterpret_cast<uint64_t>(this); }
 
         std::chrono::time_point<std::chrono::steady_clock> tQueued;
         std::chrono::time_point<std::chrono::steady_clock> tInspected;
