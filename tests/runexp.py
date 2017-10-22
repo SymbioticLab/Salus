@@ -103,7 +103,7 @@ def run(workloads, config):
     running = []
     for w in torun:
         if len(running) < config.concurrent_jobs:
-            print('Starting: {}'.format(w.name))
+            print('Starting: {} ({} jobs running)'.format(w.name, len(running)))
             running.append((w.runAsync(), w.name))
             continue
         # Wait for something to finish
@@ -113,6 +113,7 @@ def run(workloads, config):
                 if p.poll():
                     print('Done: {}'.format(name))
                     return False
+                return True
 
             running[:] = [x for x in running if stillRunning(x)]
             time.sleep(.25)
