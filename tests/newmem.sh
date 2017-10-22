@@ -3,7 +3,7 @@
 export CUDA_VISIBLE_DEVICES=0,1
 
 EXECUTOR=../build/Release/src/executor
-BENCHMARKDIR=$HOME/buildbed/benchmarks/scripts/tf_cnn_benchmarks
+BENCHMARKDIR=$HOME/buildbed/tf_benchmarks/scripts/tf_cnn_benchmarks
 
 do_mem() {
     local OUTPUTDIR=$(realpath $1)

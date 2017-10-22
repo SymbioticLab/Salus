@@ -3,13 +3,13 @@
 export CUDA_VISIBLE_DEVICES=0,1
 
 EXECUTOR=../build/Release/src/executor
-BENCHMARKDIR=$HOME/buildbed/benchmarks/scripts/tf_cnn_benchmarks
+BENCHMARKDIR=$HOME/buildbed/tf_benchmarks/scripts/tf_cnn_benchmarks
 
 run_case() {
-    local model=${1}
-    local batch_size=${2}
-    local outputfile=${3}
-    local num_batches=${4:-20}
+    local model=${2}
+    local batch_size=${3}
+    local outputfile=${4}
+    local num_batches=${5:-20}
 
     local pid=0
     echo "Running $model of batch size $batch_size for $num_batches iterations"
@@ -20,10 +20,8 @@ run_case() {
                                 --model=$model \
                                 --batch_size=$batch_size \
                                 > "$outputfile" &
-    #| tee $OUTPUTDIR/mem-iter.output
-    pid=$!
+    eval "$1=$!"
     popd
-    return pid
 }
 
 do_area() {
@@ -37,8 +35,9 @@ do_area() {
 
     local workload_pids=()
     while (( "$#" )); do
-        run_case $1 $2 "$OUTPUTDIR/$1_$2.output"
-        workload_pids+=("$!")
+        local wpid
+        run_case wpid $1 $2 "$OUTPUTDIR/$1_$2.output"
+        workload_pids+=("$wpid")
         shift 2
     done
 

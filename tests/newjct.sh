@@ -3,16 +3,16 @@
 export CUDA_VISIBLE_DEVICES=0,1
 
 EXECUTOR=../build/Release/src/executor
+BENCHMARKDIR=$HOME/buildbed/tf_benchmarks/scripts/tf_cnn_benchmarks
 LOGDIR=templogs
 
 run_case() {
-    local model=${1}
-    local batch_size=${2}
-    local outputfile=${3}
-    local executor=${4:-salus}
-    local num_batches=${5:-20}
+    local model=${2}
+    local batch_size=${3}
+    local outputfile=${4}
+    local executor=${5:-salus}
+    local num_batches=${6:-20}
 
-    local pid=0
     echo "Running $model of batch size $batch_size for $num_batches iterations"
     pushd $BENCHMARKDIR > /dev/null
     python tf_cnn_benchmarks.py --display_every=1 --local_parameter_device=cpu --num_gpus=1 \
@@ -23,11 +23,9 @@ run_case() {
                                 --batch_size=$batch_size \
                                 > "$outputfile" &
     #| tee $OUTPUTDIR/mem-iter.output
-    pid=$!
+    eval "$1=$!"
     popd
-    return pid
 }
-
 
 do_jct() {
     local model=${1}
@@ -41,19 +39,21 @@ do_jct() {
     env CUDA_VISIBLE_DEVICES=2,3 TF_CPP_MIN_LOG_LEVEL=4 $EXECUTOR --logconf ../build/disable.config &
     local pid=$!
 
+    local wpid=''
+
     echo -n "    Warm up RPC: "
-    run_case $model $batch_size "/tmp/rpc.output" "salus"
-    wait $!
+    run_case wpid $model $batch_size "/tmp/rpc.output" "salus"
+    wait $wpid
     mv /tmp/rpc.output $OUTPUTDIR
 
     echo -n "    Running RPC: "
-    run_case $model $batch_size "/tmp/rpc.output" "salus"
-    wait $!
+    run_case wpid $model $batch_size "/tmp/rpc.output" "salus"
+    wait $wpid
     mv /tmp/rpc.output $OUTPUTDIR
 
     echo -n "    Running GPU: "
-    run_case $model $batch_size "/tmp/gpu.output" "gpu"
-    wait $!
+    run_case wpid $model $batch_size "/tmp/gpu.output" "gpu"
+    wait $wpid
     mv /tmp/gpu.output $OUTPUTDIR
 
     kill $pid
