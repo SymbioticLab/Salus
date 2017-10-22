@@ -246,6 +246,6 @@ tf::Status moveTensor(Entry &entry, const std::shared_ptr<PerOpAllocDevice> &dst
                       tf::DeviceContext *dstCtx, const tf::AllocatorAttributes &attr,
                       const std::string &name = "");
 
-bool moveTensorTree(TensorBufferTree &, const std::shared_ptr<PerOpAllocDevice> &dstDevice);
+tf::Status moveTensorTree(TensorBufferTree &, const std::shared_ptr<PerOpAllocDevice> &dstDevice);
 
 #endif // TENSORUTILS_H

@@ -379,7 +379,8 @@ size_t ExecutorImpl::handlePagingRequest(uint64_t oldTicket, std::unique_ptr<Res
         utils::ScopedUnref<tf::TensorBuffer> su(oldRoot);
 
         auto size = oldRoot->size();
-        if (moveTensorTree(*part, item.device)) {
+        auto ok = moveTensorTree(*part, item.device);
+        if (ok.ok()) {
             DCHECK(oldRoot->RefCountIsOne());
             VLOG(2) << "Releasing old root buffer " << as_hex(oldRoot)
                     << " with data block at " << as_hex(oldRoot->data())
@@ -387,6 +388,8 @@ size_t ExecutorImpl::handlePagingRequest(uint64_t oldTicket, std::unique_ptr<Res
 
             totalReleased += size;
             part->paged_out = true;
+        } else {
+            LOG(ERROR) << "Failed to moveTensorTree when paging ticket " << oldTicket << ": " << ok;
         }
     }
 
