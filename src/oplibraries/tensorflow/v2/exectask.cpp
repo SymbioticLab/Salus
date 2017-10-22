@@ -359,12 +359,12 @@ void ExecTask::run(Callbacks cbs)
                     &input_device_contexts, &input_alloc_attrs,
                     &is_input_dead);
     if (!s.ok()) {
-        // Clear inputs.
-        m_state->ClearInputs(first_input, item.num_inputs, buflocks);
         // Inspect return state for retrying on memory failure
         if (maybeMemoryFailure(s, cbs.memFailure)) {
             return;
         }
+        // Clear inputs.
+        m_state->ClearInputs(first_input, item.num_inputs, buflocks);
         afterRun(s, cbs);
         return;
     }
