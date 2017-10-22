@@ -541,7 +541,7 @@ bool ExecutorImpl::removeFromBufferTree(Entry *entry, EntryVec *needUpdate)
     DCHECK(removed) << "Tree doesn't contain the entry";
 
     if (tree->empty()) {
-        if (VLOG_IS_ON(1) && !tree->root_buf->RefCountIsOne()) {
+        if (VLOG_IS_ON(1) && tree->root_buf && !tree->root_buf->RefCountIsOne()) {
             VLOG(1) << "Deleting buffer tree@" << as_hex(tree) << " when it's root_buf@"
                     << as_hex(tree->root_buf) << " still has "
                     << tf::remote::PagingHelper::refCountOf(*tree->root_buf) << "references";
