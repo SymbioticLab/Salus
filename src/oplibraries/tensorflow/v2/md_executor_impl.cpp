@@ -318,7 +318,7 @@ size_t ExecutorImpl::handlePagingRequest(uint64_t oldTicket, std::unique_ptr<Res
         while (it != range.second) {
             auto &tree = it->second;
             DCHECK(tree);
-            if (!tree->paged_out && tree->root_buf) {
+            if (!tree->paged_out && !tree->empty() && tree->root_buf && tree->root_buf->mark == 0xdeadbeef) {
                 // candidate
                 reflocks.insert(&tree->buf_mu);
                 parts.push_back(tree);
@@ -546,6 +546,10 @@ bool ExecutorImpl::removeFromBufferTree(Entry *entry, EntryVec *needUpdate)
     DCHECK(removed) << "Tree doesn't contain the entry";
 
     if (tree->empty()) {
+        tree->root_buf = nullptr;
+    }
+    // if (tree->empty() {
+    if (false) {
         if (VLOG_IS_ON(1) && tree->root_buf && !tree->root_buf->RefCountIsOne()) {
             VLOG(1) << "Deleting buffer tree@" << as_hex(tree) << " when it's root_buf@"
                     << as_hex(tree->root_buf) << " still has "

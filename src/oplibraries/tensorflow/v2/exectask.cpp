@@ -542,7 +542,7 @@ bool ExecTask::maybeMemoryFailure(const tf::Status &s, MemFailCallback memFailur
 {
     if (s.code() == tf::error::RESOURCE_EXHAUSTED) {
         // we didn't implement rollback. So this can only happen for non ref input ops
-        DCHECK(!has_ref_input);
+        //DCHECK(!has_ref_input);
 
         // also release locks
         buflocks.clear();
