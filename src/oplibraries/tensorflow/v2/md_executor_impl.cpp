@@ -512,7 +512,9 @@ bool ExecutorImpl::removeFromBufferTree(Entry *entry, EntryVec *needUpdate)
     DCHECK(entry);
 
     auto tree = entry->alloc_tree;
-    DCHECK(tree);
+    if (!tree) {
+        return false;
+    }
 
     auto matchRefs = [needUpdate, entry] (auto e) {
         if (e == entry || (needUpdate && entry->ref && e->ref == entry->ref)) {
