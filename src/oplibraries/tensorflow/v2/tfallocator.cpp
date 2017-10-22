@@ -202,10 +202,14 @@ void *PerOpAllocator::AllocateRaw(size_t alignment, size_t num_bytes)
         return nullptr;
     }
 
-    if (ptr) {
-        recordSize(ptr, num_bytes);
-        Ref();
+
+    recordSize(ptr, num_bytes);
+
+    if (!ptr) {
+        return ptr;
     }
+
+    Ref();
 
     AllocLog(INFO) << "TFAllocator allocated " << num_bytes
                    << " bytes of memory at " << as_hex(ptr) << " with alignment " << alignment
@@ -238,10 +242,13 @@ void* PerOpAllocator::AllocateRaw(size_t alignment, size_t num_bytes, const tens
         return nullptr;
     }
 
-    if (ptr) {
-        recordSize(ptr, num_bytes);
-        Ref();
+    recordSize(ptr, num_bytes);
+
+    if (!ptr) {
+        return ptr;
     }
+
+    Ref();
 
     AllocLog(INFO) << "TFAllocator called for attributes " << attr << " of " << num_bytes
                    << " bytes of memory at " << as_hex(ptr) << " with alignment " << alignment
@@ -283,7 +290,9 @@ bool PerOpAllocator::ShouldAllocateEmptyTensors()
 void PerOpAllocator::recordSize(void *ptr, size_t size)
 {
     utils::Guard g(m_mu);
-    m_allocated[ptr] = size;
+    m_lastFailedAllocSize = size;
+    if (ptr)
+        m_allocated[ptr] = size;
 }
 
 size_t PerOpAllocator::findSize(void *ptr)

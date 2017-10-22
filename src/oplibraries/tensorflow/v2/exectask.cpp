@@ -88,7 +88,7 @@ ExecTask::ExecTask(ExecutorState *state, utils::semaphore &num_finished_ops,
     }
     // pre compute estimated usage
     for (auto t : supportedTypes) {
-        estimatedUsage(t);
+        inferUsage(t);
     }
 }
 
@@ -168,6 +168,15 @@ Resources ExecTask::estimatedUsage(const DeviceSpec& dev)
 {
     // Short-cut if this task has failed before
     if (failureTimes > 0) {
+        if (!failedAlloc.empty()) {
+            // we don't care if operator[] inserts a new element or not.
+            // it it does insert a new element, this means no estimation is available
+            // anyway.
+            auto usage = cachedUsage[dev];
+            resources::merge(usage, failedAlloc);
+            return usage;
+        }
+
         const auto &sessHandle = m_state->impl_->params_.session;
         auto rm = SessionResourceTracker::instance().usage(sessHandle);
         if (rm) {
@@ -192,10 +201,14 @@ Resources ExecTask::estimatedUsage(const DeviceSpec& dev)
 
     // Fast path from cache
     auto it = cachedUsage.find(dev);
-    if (it != cachedUsage.end()) {
-        return it->second;
+    if (it == cachedUsage.end()) {
+        inferUsage(dev);
     }
+    return cachedUsage[dev];
+}
 
+void ExecTask::inferUsage(const DeviceSpec &dev)
+{
     // Slow path to calculate the usage
     auto &res = cachedUsage[dev];
 
@@ -203,7 +216,7 @@ Resources ExecTask::estimatedUsage(const DeviceSpec& dev)
     auto ctx = m_state->shapeForNode(node);
     if (!ctx) {
         LOG(WARNING) << "Shape information not available for node: " << node->name();
-        return res;
+        return;
     }
 
     ExecutorImpl::DeviceItem ditem;
@@ -252,8 +265,6 @@ Resources ExecTask::estimatedUsage(const DeviceSpec& dev)
             res[devTag] += subtotal;
         }
     }
-
-    return res;
 }
 
 std::string ExecTask::DebugString()
@@ -521,6 +532,10 @@ bool ExecTask::maybeMemoryFailure(const tf::Status &s, MemFailCallback memFailur
         buflocks.clear();
 
         ++failureTimes;
+
+        DCHECK(ditem.device);
+        resources::merge(failedAlloc, ditem.device->failedResourceRequest());
+
         if (memFailure && memFailure()) {
             return true;
         }

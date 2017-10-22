@@ -26,6 +26,7 @@
  */
 #include "oplibraries/tensorflow/tensorflow_headers.h"
 
+#include "execution/resources.h"
 #include "utils/pointerutils.h"
 #include "utils/macros.h"
 
@@ -45,6 +46,8 @@ public:
     tf::Device *underlayingDevice() const {
         return m_wrapped;
     }
+
+    Resources failedResourceRequest() const;
 
     tf::Allocator* GetAllocator(tf::AllocatorAttributes attr) override;
 
@@ -78,7 +81,7 @@ private:
     tf::Device *m_wrapped;
     std::shared_ptr<ResourceContext> m_rctx;
 
-    std::mutex m_mu;
+    mutable std::mutex m_mu;
     struct AA {
         tf::Allocator *alloc;
         tf::AllocatorAttributes attr;

@@ -146,3 +146,14 @@ tf::Allocator *PerOpAllocDevice::wrapAllocator(tf::Allocator *alloc, const tf::A
     m_wrappedAllocators.emplace(key, std::move(a));
     return pa;
 }
+
+Resources PerOpAllocDevice::failedResourceRequest() const
+{
+    Resources res;
+    utils::Guard g(m_mu);
+    for (auto &p : m_wrappedAllocators) {
+        auto alloc = p.second.get();
+        res[{ResourceType::MEMORY, alloc->resourceContext().spec()}] += alloc->lastFailedAllocSize();
+    }
+    return res;
+}

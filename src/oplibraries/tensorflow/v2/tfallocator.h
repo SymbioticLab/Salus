@@ -68,7 +68,7 @@ public:
 
     std::string Name() override;
     void *AllocateRaw(size_t alignment, size_t num_bytes) override;
-    void* AllocateRaw(size_t alignment, size_t num_bytes,
+    void *AllocateRaw(size_t alignment, size_t num_bytes,
                       const tensorflow::AllocationAttributes& allocation_attr) override;
 
     void DeallocateRaw(void *ptr) override;
@@ -82,6 +82,8 @@ public:
 
     const ResourceContext &resourceContext() const { return *m_rctx; }
 
+    size_t lastFailedAllocSize() const { return m_lastFailedAllocSize; }
+
 private:
     void recordSize(void *ptr, size_t size);
     size_t findSize(void *ptr);
@@ -92,6 +94,8 @@ private:
 
     std::mutex m_mu;
     std::unordered_map<void*, size_t> m_allocated;
+
+    size_t m_lastFailedAllocSize = 0;
 
     TF_DISALLOW_COPY_AND_ASSIGN(PerOpAllocator);
 };

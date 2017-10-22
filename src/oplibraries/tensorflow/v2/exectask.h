@@ -67,6 +67,8 @@ public:
     ResourceContext &resourceContext() const override;
 
 private:
+    void inferUsage(const DeviceSpec &dev);
+
     bool maybeMemoryFailure(const tf::Status &s, MemFailCallback memFailure);
 
     void afterCompute(bool is_dead, const Callbacks &cbs, const tf::remote::NodeItem &item);
@@ -85,6 +87,7 @@ private:
 
     int failureTimes = 0;
     int maxFailures;
+    Resources failedAlloc;
 
     tf::OpKernel *op_kernel = nullptr;
     bool kernel_is_async;
