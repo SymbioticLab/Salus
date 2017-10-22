@@ -23,7 +23,7 @@ class Workload(object):
         self.name = d['name']
         self.jct = float(d['jct'])
         self.mem = float(d['mem'])
-        self.cmd = shlex.split(d['cmd'])
+        self.cmd = ['stdbuf', '-o0', '-e0', '--'] + shlex.split(d['cmd'])
 
         self.env = os.environ.copy()
         self.env['EXEC_ITER_NUMBER'] = d['env']
