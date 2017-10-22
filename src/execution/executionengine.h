@@ -177,7 +177,7 @@ private:
     size_t maybeScheduleFrom(PSessionItem item);
     bool maybePreAllocateFor(SessionItem &item, OperationItem &opItem, const DeviceSpec &spec);
 
-    void taskStopped(SessionItem &item, OperationItem &opItem);
+    void taskStopped(SessionItem &item, OperationItem &opItem, bool failed);
 
     // Bookkeeping
     ResourceMonitor m_resMonitor;

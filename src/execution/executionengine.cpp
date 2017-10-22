@@ -470,14 +470,14 @@ size_t ExecutionEngine::maybeScheduleFrom(PSessionItem item)
                 cbs.done = [item, opItem, this]() {
                     reportBreakdown(opItem);
                     // succeed
-                    taskStopped(*item, *opItem);
+                    taskStopped(*item, *opItem, false);
                 };
                 cbs.memFailure = [item, opItem, this]() mutable {
                     if (!item->protectOOM) {
                         return false;
                     }
 
-                    taskStopped(*item, *opItem);
+                    taskStopped(*item, *opItem, true);
                     // failed due to OOM. Push back to queue and retry later
                     VLOG(1) << "Puting back OOM failed task: " << opItem->op->DebugString();
                     pushToSessionQueue(item, std::move(opItem));
@@ -551,7 +551,7 @@ size_t ExecutionEngine::maybeScheduleFrom(PSessionItem item)
     return scheduled;
 }
 
-void ExecutionEngine::taskStopped(SessionItem &item, OperationItem &opItem)
+void ExecutionEngine::taskStopped(SessionItem &item, OperationItem &opItem, bool failed)
 {
     UNUSED(item);
 
@@ -562,21 +562,23 @@ void ExecutionEngine::taskStopped(SessionItem &item, OperationItem &opItem)
 
     // For now only count memory usage, and simply add up memory usages on different
     // devices.
-    // TODO: find better formula to do this
-    auto memUsage = m_resMonitor.queryUsage(rctx.ticket());
-    uint64_t unifiedRes = 0;
-    if (memUsage) {
-        for (auto &p : *memUsage) {
-            if (p.first.type != ResourceType::MEMORY) {
-                continue;
+    if (!failed) {
+        // TODO: find better formula to do this
+        auto memUsage = m_resMonitor.queryUsage(rctx.ticket());
+        uint64_t unifiedRes = 0;
+        if (memUsage) {
+            for (auto &p : *memUsage) {
+                if (p.first.type != ResourceType::MEMORY) {
+                    continue;
+                }
+                unifiedRes += p.second;
             }
-            unifiedRes += p.second;
+        } else {
+            unifiedRes = 1;
         }
-    } else {
-        unifiedRes = 1;
+        unifiedRes *= dur;
+        item.unifiedRes += unifiedRes;
     }
-    unifiedRes *= dur;
-    item.unifiedRes += unifiedRes;
 
     m_runningTasks -= 1;
     if (!opItem.op->allowConcurrentPaging()) {
