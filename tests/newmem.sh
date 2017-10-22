@@ -30,13 +30,13 @@ do_mem ../scripts/logs/vgg11_25 vgg11 25
 do_mem ../scripts/logs/vgg11_50 vgg11 50
 do_mem ../scripts/logs/vgg11_100 vgg11 100
 
-do_mem ../scripts/logs/vgg16_25 vgg11 25
-do_mem ../scripts/logs/vgg16_50 vgg11 50
-do_mem ../scripts/logs/vgg16_100 vgg11 100
+do_mem ../scripts/logs/vgg16_25 vgg16 25
+do_mem ../scripts/logs/vgg16_50 vgg16 50
+do_mem ../scripts/logs/vgg16_100 vgg16 100
 
-do_mem ../scripts/logs/vgg19_25 vgg11 25
-do_mem ../scripts/logs/vgg19_50 vgg11 50
-do_mem ../scripts/logs/vgg19_100 vgg11 100
+do_mem ../scripts/logs/vgg19_25 vgg19 25
+do_mem ../scripts/logs/vgg19_50 vgg19 50
+do_mem ../scripts/logs/vgg19_100 vgg19 100
 
 exit
 
