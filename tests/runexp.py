@@ -5,6 +5,7 @@ import csv
 import argparse
 from operator import attrgetter
 import shlex
+import time
 
 try:
     from pathlib import Path
@@ -99,8 +100,22 @@ def run(workloads, config):
 
     serverP = runServer(config)
 
+    running = []
     for w in torun:
-        w.runAsync()
+        if len(running) < config.concurrent_jobs:
+            print('Starting: {}'.format(w.name))
+            running.append((w.runAsync(), w.name))
+            continue
+        # Wait for something to finish
+        while len(running) >= config.concurrent_jobs:
+            def stillRunning(x):
+                p, name = x
+                if p.poll():
+                    print('Done: {}'.format(name))
+                    return False
+
+            running[:] = [x for x in running if stillRunning(x)]
+            time.sleep(.25)
 
     for w in torun:
         w.wait()
@@ -112,10 +127,13 @@ def run(workloads, config):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--hide_server_output', help='Hide server output', default=False, action='store_true')
-    parser.add_argument('--server_log_config', help='Log configuration to use for executor server', default='disable.config')
+    parser.add_argument('--concurrent_jobs', help='Maximum concurrent running jobs', type=int, default=4)
+    parser.add_argument('--server_log_config', help='Log configuration to use for executor server',
+                        default='disable.config')
     parser.add_argument('--build_dir', help='Build directory', default='../build')
     parser.add_argument('--save_dir', help='Output directory, default to the same name as case')
-    parser.add_argument('--workload_limit', help='Only run this number of workloads. If 0, means no limit', type=int, default=0)
+    parser.add_argument('--workload_limit', help='Only run this number of workloads. If 0, means no limit',
+                        type=int, default=0)
     parser.add_argument('workloads', help='Path to the CSV containing workload info')
     parser.add_argument('case', help='Which case to run', choices=casekey.keys())
 
