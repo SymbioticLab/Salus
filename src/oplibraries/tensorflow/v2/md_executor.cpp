@@ -523,8 +523,7 @@ tf::Status ExecutorState::PrepareInputs(const NodeItem &item, tf::OpKernel *kern
                     auto ok = moveTensorTree(*tree, device);
                     if (!ok.ok()) {
                         LOG(ERROR) << "Error when moving paged out entry back: " << ok;
-                        return tf::errors::Internal("Error when moving paged out entry back",
-                                                    ok.error_message());
+                        return ok;
                     }
                     // TODO: set paged_out early and use lockless atomic flag here
                     tree->paged_out = false;

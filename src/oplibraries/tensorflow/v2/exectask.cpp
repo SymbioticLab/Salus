@@ -361,7 +361,10 @@ void ExecTask::run(Callbacks cbs)
     if (!s.ok()) {
         // Clear inputs.
         m_state->ClearInputs(first_input, item.num_inputs, buflocks);
-        m_state->MaybeMarkCompleted(input_frame, input_iter, id);
+        // Inspect return state for retrying on memory failure
+        if (maybeMemoryFailure(s, cbs.memFailure)) {
+            return;
+        }
         afterRun(s, cbs);
         return;
     }

@@ -36,6 +36,10 @@ tensorflow::Status moveTensor(Entry &entry, const std::shared_ptr<PerOpAllocDevi
 
     tf::Tensor copy(dstDevice->GetAllocator(attr), input->dtype(), input->shape());
 
+    if (!copy.IsInitialized()) {
+        return tf::errors::ResourceExhausted("");
+    }
+
     if (!dstCtx) {
         // Copied from OpKernelContext::op_device_context
         auto dev_info = dstDevice->tensorflow_gpu_device_info();
@@ -58,6 +62,7 @@ tensorflow::Status moveTensor(Entry &entry, const std::shared_ptr<PerOpAllocDevi
     n.WaitForNotification();
 
     if (!ok.ok()) {
+        LOG(ERROR) << "Error when moving tensor: " << ok;
         return ok;
     }
 
