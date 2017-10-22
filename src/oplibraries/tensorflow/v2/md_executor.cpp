@@ -481,6 +481,7 @@ tf::Status ExecutorState::PrepareInputs(const NodeItem &item, tf::OpKernel *kern
                                         AllocatorAttributeVec *input_alloc_attrs, bool *is_input_dead)
 {
     TIMED_FUNC(timerObj);
+    DCHECK(buflocks);
 
     auto node = item.node;
     VLOG(2) << "Preparing " << item.num_inputs << " inputs for node " << node->name();
@@ -646,6 +647,13 @@ tf::Status ExecutorState::PrepareInputs(const NodeItem &item, tf::OpKernel *kern
                 return ok;
             }
 
+            // Unlock buflock because the buffre tree may be deleted
+            for (auto it = buflocks->begin(); it != buflocks->end(); ++it) {
+                if (it->mutex() == &entry->alloc_tree->buf_mu) {
+                    buflocks->erase(it);
+                    break;
+                }
+            }
             // Update active entries as needed
             EntryVec needUpdate;
             impl_->removeFromBufferTree(entry, &needUpdate);
