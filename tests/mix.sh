@@ -31,7 +31,7 @@ for (( i = 0; i < ${#cmds[@]} ; i++ )); do
     cmd=${cmds[$i]}
     printf "\n**** Running: ${cmd} *****\n\n"
     # Run each command in array
-    eval "${cmd}"
+    eval "stdbuf -o0 -e0 -- ${cmd}"
 done
 wait
 
