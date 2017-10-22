@@ -48,13 +48,13 @@ do_area() {
     mv /tmp/alloc.output $OUTPUTDIR/alloc.output
 }
 
-do_area ../scripts/logs/area \
+do_area ../scripts/logs/area_res \
         resnet50 25 \
         resnet50 50 \
         resnet50 75 \
         resnet101 25
 
-do_area ../scripts/logs/area \
+do_area ../scripts/logs/area_vgg \
         vgg11 25 \
         vgg11 50 \
         vgg11 100 \
