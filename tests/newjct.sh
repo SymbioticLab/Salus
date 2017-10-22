@@ -24,7 +24,7 @@ run_case() {
                                 > "$outputfile" &
     #| tee $OUTPUTDIR/mem-iter.output
     eval "$1=$!"
-    popd
+    popd > /dev/null
 }
 
 do_jct() {

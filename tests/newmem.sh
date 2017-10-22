@@ -18,7 +18,7 @@ do_mem() {
                                 --num_batches=20 \
                                 --model=$2 --batch_size=$3 > $OUTPUTDIR/mem-iter.output
     #| tee $OUTPUTDIR/mem-iter.output
-    popd
+    popd > /dev/null
     kill $pid
     wait $pid
     mv /tmp/alloc.output $OUTPUTDIR/alloc.output

@@ -21,7 +21,7 @@ run_case() {
                                 --batch_size=$batch_size \
                                 > "$outputfile" &
     eval "$1=$!"
-    popd
+    popd > /dev/null
 }
 
 do_area() {
@@ -57,5 +57,5 @@ do_area ../scripts/logs/area \
 do_area ../scripts/logs/area \
         vgg11 25 \
         vgg11 50 \
-        vgg11 75 \
+        vgg11 100 \
         vgg19 25
