@@ -166,6 +166,14 @@ bool ExecTask::allowConcurrentPaging() const
 
 Resources ExecTask::estimatedUsage(const DeviceSpec& dev)
 {
+    // First see if we have usage for this node in session
+    // but only if we haven't failed before, otherwise,
+    // the session cached usage maybe be just a lucky case
+    auto usage = m_state->impl_->cachedUsageForNode(tagged_node.node->name());
+    if (usage && failureTimes == 0) {
+        return *usage;
+    }
+
     // Short-cut if this task has failed before
     if (failureTimes > 0) {
         if (!failedAlloc.empty()) {
@@ -510,6 +518,11 @@ void ExecTask::updateRefEntryTickets(const std::vector<Entry*> &entries)
 void ExecTask::afterRun(const tf::Status &s, const Callbacks &cbs)
 {
     DCHECK(ditem.device);
+    if (s.ok()) {
+        // save succeed estimation
+        auto usage = estimatedUsage(ditem.device->resourceContext().spec());
+        m_state->impl_->saveSucceedUsageForNode(tagged_node.node->name(), usage);
+    }
     auto completed = m_state->NodeDone(s, tagged_node.node, ditem.device.get(), params.rendezvous,
                                        ready, stats);
 

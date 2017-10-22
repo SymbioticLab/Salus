@@ -30,6 +30,7 @@
 
 #include "execution/executionengine.h"
 #include "utils/threadutils.h"
+#include "utils/containerutils.h"
 
 #include <boost/intrusive/list.hpp>
 
@@ -102,6 +103,18 @@ private:
      */
     bool removeFromBufferTree(Entry *entry, EntryVec *needUpdate);
     void updateBufferTree(Entry *entry, uint64_t ticket);
+
+    void saveSucceedUsageForNode(const std::string &name, const Resources &res) {
+        utils::Guard g(usage_mu_);
+        if (!resources::contains(cachedUsages_[name], res)) {
+            cachedUsages_[name] = res;
+        }
+    }
+
+    utils::optional<Resources> cachedUsageForNode(const std::string &name) {
+        utils::Guard g(usage_mu_);
+        return utils::optionalGet(cachedUsages_, name);
+    }
 
     struct DeviceItem
     {
@@ -182,6 +195,10 @@ private:
     // TODO(yuanbyu): We could cache it along with the graph so to avoid
     // the overhead of constructing it for each executor instance.
     gtl::FlatMap<std::string, FrameInfo *, tf::HashStr> frame_info_;
+
+    // Known succeed node resource usage
+    std::unordered_map<std::string, Resources> cachedUsages_;
+    std::mutex usage_mu_;
 
     TF_DISALLOW_COPY_AND_ASSIGN(ExecutorImpl);
 };
@@ -493,8 +510,6 @@ private:
             is_dead = dead;
         }
     };
-
-    struct AsyncState;
 
     const bool vlog_; // true if VLOG_IS_ON(1). Used to check vlog cheaply.
     bool forceInterrupted = false;
