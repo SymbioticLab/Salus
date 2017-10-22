@@ -12,7 +12,7 @@ do_mem() {
     echo "Running $2 of batch size $3"
 
     env CUDA_VISIBLE_DEVICES=2,3 TF_CPP_MIN_LOG_LEVEL=4 $EXECUTOR --logconf ../build/alloc.config &
-    pid=$!
+    local pid=$!
     pushd $BENCHMARKDIR > /dev/null
     python tf_cnn_benchmarks.py --display_every=1 --local_parameter_device=cpu --num_gpus=1 --variable_update=parameter_server --nodistortions \
                                 --num_batches=20 \
@@ -25,6 +25,20 @@ do_mem() {
 }
 
 rm -f /tmp/err.output /tmp/alloc.output
+
+do_mem ../scripts/logs/vgg11_25 vgg11 25
+do_mem ../scripts/logs/vgg11_50 vgg11 50
+do_mem ../scripts/logs/vgg11_100 vgg11 100
+
+do_mem ../scripts/logs/vgg16_25 vgg11 25
+do_mem ../scripts/logs/vgg16_50 vgg11 50
+do_mem ../scripts/logs/vgg16_100 vgg11 100
+
+do_mem ../scripts/logs/vgg19_25 vgg11 25
+do_mem ../scripts/logs/vgg19_50 vgg11 50
+do_mem ../scripts/logs/vgg19_100 vgg11 100
+
+exit
 
 do_mem ../scripts/logs/resnet50_25 resnet50 25
 do_mem ../scripts/logs/resnet50_50 resnet50 50
