@@ -422,14 +422,6 @@ size_t ExecutionEngine::maybeScheduleFrom(PSessionItem item)
         return 0;
     }
 
-    // Exam if queue front has been waiting for a long time
-    if (item->holWaiting > m_schedParam.maxHolWaiting) {
-        VLOG(1) << "In session " << item->sessHandle
-                << ": HOL waiting exceeds maximum: " << item->holWaiting << " (max="
-                << m_schedParam.maxHolWaiting << ")";
-        return 0;
-    }
-
     // Capture the value in schedule thread, avoid multiple threads accessing this
     bool cancelled = item->forceEvicted;
 
@@ -502,32 +494,48 @@ size_t ExecutionEngine::maybeScheduleFrom(PSessionItem item)
         return opItem;
     };
 
-    // Do all schedule in queue in parallel
-    UnsafeQueue stage;
-    stage.swap(queue);
-    std::vector<q::promise<POpItem>> promises;
-    for (auto &opItem : stage) {
-        auto p = q::with(m_qec->queue(), item, std::move(opItem)).then(doSchedule);
-        promises.emplace_back(std::move(p));
-    }
+    // Exam if queue front has been waiting for a long time
+    int scheduled = 0;
 
-    DCHECK(queue.empty());
-    VLOG(2) << "All opItem in session " << item->sessHandle << " exaimed";
-
-    auto it = std::back_inserter(queue);
-    utils::notification n;
-    q::all(std::move(promises), m_qec->queue())
-    .then([it, &n](std::vector<POpItem> &&remain) mutable {
-        for (auto &poi : remain) {
-            if (poi) {
-                it = std::move(poi);
-            }
+    if (item->holWaiting > m_schedParam.maxHolWaiting) {
+        VLOG(1) << "In session " << item->sessHandle
+                << ": HOL waiting exceeds maximum: " << item->holWaiting << " (max="
+                << m_schedParam.maxHolWaiting << ")";
+        // Only try to schedule head in this case
+        auto &head = queue.front();
+        head = doSchedule(item, std::move(head));
+        if (!head) {
+            queue.pop_front();
+            scheduled += 1;
         }
-        n.notify();
-    });
-    n.wait();
+    } else {
+        // Do all schedule in queue in parallel
+        UnsafeQueue stage;
+        stage.swap(queue);
 
-    auto scheduled = size - queue.size();
+        std::vector<q::promise<POpItem>> promises;
+        for (auto &opItem : stage) {
+            auto p = q::with(m_qec->queue(), item, std::move(opItem)).then(doSchedule);
+            promises.emplace_back(std::move(p));
+        }
+
+        VLOG(2) << "All opItem in session " << item->sessHandle << " exaimed";
+
+        auto it = std::back_inserter(queue);
+        utils::notification n;
+        q::all(std::move(promises), m_qec->queue())
+        .then([it, &n](std::vector<POpItem> &&remain) mutable {
+            for (auto &poi : remain) {
+                if (poi) {
+                    it = std::move(poi);
+                }
+            }
+            n.notify();
+        });
+        n.wait();
+
+        scheduled = size - queue.size();
+    }
 
     // update queue head waiting
     if (queue.empty()) {
