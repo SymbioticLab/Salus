@@ -36,9 +36,9 @@ class Workload(object):
         self.proc = None
 
     def runAsync(self):
+        print("Running '{}' > {}".format(' '.join(self.cmd), self.outputpath))
         self.outputfile = open(self.outputpath, 'w')
-        self.proc = Popen(self.cmd, env=self.env, stdout=self.outputfile,
-                          stdin=DEVNULL, stderr=DEVNULL)
+        self.proc = Popen(self.cmd, env=self.env, stdout=self.outputfile, stdin=DEVNULL)
         return self.proc
 
     def wait(self):
@@ -84,6 +84,7 @@ def runServer(config):
 
     serverP = Popen([
         os.path.join(build_dir, 'Release', 'src', 'executor'),
+        '--disable-fairness',
         '--logconf',
         os.path.join(build_dir, config.server_log_config)
     ], env=env, stdin=DEVNULL, stdout=stdout, stderr=stderr)
@@ -100,25 +101,30 @@ def run(workloads, config):
 
     serverP = runServer(config)
 
+    started = []
     running = []
     for w in torun:
         if len(running) < config.concurrent_jobs:
             print('Starting: {} ({} jobs running)'.format(w.name, len(running)))
+            started.append(w)
             running.append((w.runAsync(), w.name))
             continue
         # Wait for something to finish
-        while len(running) >= config.concurrent_jobs:
+        while len(running) >= config.concurrent_jobs and not serverP.poll():
             def stillRunning(x):
                 p, name = x
-                if p.poll():
-                    print('Done: {}'.format(name))
+                if p.poll() is not None:
+                    print('Done: {} (ret {})'.format(name, p.returncode))
                     return False
                 return True
 
             running[:] = [x for x in running if stillRunning(x)]
             time.sleep(.25)
+        if serverP.poll():
+            print('Error: server died: {}'.format(serverP.returncode))
+            break
 
-    for w in torun:
+    for w in started:
         w.wait()
 
     serverP.terminate()
