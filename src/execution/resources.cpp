@@ -133,6 +133,9 @@ bool contains(const Resources &avail, const Resources &req)
         if (it == aend && val != 0) {
             return false;
         }
+        if (it == aend) {
+            continue;
+        }
         if (val > it->second) {
             return false;
         }
