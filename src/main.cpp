@@ -128,7 +128,7 @@ void configureExecution(std::map<std::string, docopt::value> &args)
 
     SessionResourceTracker::instance().setDisabled(disableAdmissionControl);
     ExecutionEngine::instance().setSchedulingParam({
-        disableFairness,
+        !disableFairness, /* useFairnessCounter */
         maxQueueHeadWaiting
     });
 }
