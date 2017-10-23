@@ -707,11 +707,11 @@ def memory_usage(logs, iter_times=None, beginning=None, mem_type=None,
 
     df = pd.DataFrame(mem_activities)
 
-    if mem_type is not None:
-        df = df[df['mem_type'] == mem_type]
-
     if len(df) == 0:
         return df, None
+
+    if mem_type is not None:
+        df = df[df['mem_type'] == mem_type]
 
     df = df.set_index('timestamp').sort_index()
 

@@ -90,11 +90,11 @@ def ipc_trend(reader, iter_times=None):
         avg = val / (dur / 1e6)
         data.append({
             'timestamp': start,
-            'active_warps': avg
+            'ipc': avg
         })
         data.append({
             'timestamp': end,
-            'active_warps': -avg
+            'ipc': -avg
         })
 
     df = pd.DataFrame(data).set_index('timestamp').sort_index()
