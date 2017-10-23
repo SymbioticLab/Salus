@@ -79,6 +79,7 @@ void initialize(const Params &params)
     Loggers::addFlag(LoggingFlag::ColoredTerminalOutput);
     Loggers::addFlag(LoggingFlag::FixedTimeFormat);
     Loggers::addFlag(LoggingFlag::AllowVerboseIfModuleNotSpecified);
+    Loggers::addFlag(LoggingFlag::DisablePerformanceTrackingCheckpointComparison);
 
     Helpers::installCustomFormatSpecifier(el::CustomFormatSpecifier("%tid", logging::thread_id));
 

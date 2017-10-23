@@ -20,6 +20,7 @@
 #include "executionengine.h"
 
 #include "execution/operationtask.h"
+#include "platform/logging.h"
 #include "utils/macros.h"
 #include "utils/envutils.h"
 #include "utils/threadutils.h"
@@ -306,12 +307,19 @@ void ExecutionEngine::scheduleLoop()
             // make sure the first session (with least progress) is
             // get scheduled solely, thus can keep up, without other
             // sessions interfere
+            CLOG(INFO, logging::kPerfTag) << "Session stat: " << item->sessHandle
+                                          << " pending: " << item->bgQueue.size()
+                                          << " scheduled: " << count
+                                          << " counter: " << item->unifiedResSnapshot;
             if (count > 0 && m_schedParam.useFairnessCounter) {
                 break;
             }
         }
+        CLOG(INFO, logging::kPerfTag) << "Scheduler stat: "
+                                      << " running: " << m_runningTasks
+                                      << " noPageRunning: " << m_noPagingRunningTasks;
 
-        PERFORMANCE_CHECKPOINT_WITH_ID(schedIterObj, "after-schedule");
+        PERFORMANCE_CHECKPOINT_WITH_ID(schedIterObj, "without-paging");
 
         // Update conditions and check if we need paging
         bool noProgress = remainingCount > 0 && scheduled == 0;
@@ -331,7 +339,8 @@ void ExecutionEngine::scheduleLoop()
             continue;
         }
 
-        TIMED_SCOPE(schedWaitingObj, "sched-waiting");
+        PERFORMANCE_CHECKPOINT_WITH_ID(schedIterObj, "without-wait");
+
         std::chrono::nanoseconds ns;
         if (shouldWaitForAWhile(scheduled, ns)) {
             // no progress for a long time.
