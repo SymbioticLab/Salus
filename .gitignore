@@ -23,8 +23,10 @@ spack_packages
 
 # Data files in test
 MNIST_data
+tests/*
 tests/*.output
 tests/verbose.log
+!tests/test_tf/*
 
 # Scripts
 scripts/**
