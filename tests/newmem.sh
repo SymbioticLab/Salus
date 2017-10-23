@@ -4,6 +4,7 @@ export CUDA_VISIBLE_DEVICES=0,1
 
 EXECUTOR=../build/Release/src/executor
 BENCHMARKDIR=$HOME/buildbed/tf_benchmarks/scripts/tf_cnn_benchmarks
+LOGDIR=templogs
 
 do_mem() {
     local OUTPUTDIR=$(realpath $1)
@@ -26,48 +27,48 @@ do_mem() {
 
 rm -f /tmp/err.output /tmp/alloc.output
 
-do_mem ../scripts/logs/vgg11_25 vgg11 25
-do_mem ../scripts/logs/vgg11_50 vgg11 50
-do_mem ../scripts/logs/vgg11_100 vgg11 100
+do_mem $LOGDIR/vgg11_25 vgg11 25
+do_mem $LOGDIR/vgg11_50 vgg11 50
+do_mem $LOGDIR/vgg11_100 vgg11 100
 
-do_mem ../scripts/logs/vgg16_25 vgg16 25
-do_mem ../scripts/logs/vgg16_50 vgg16 50
-do_mem ../scripts/logs/vgg16_100 vgg16 100
+do_mem $LOGDIR/vgg16_25 vgg16 25
+do_mem $LOGDIR/vgg16_50 vgg16 50
+do_mem $LOGDIR/vgg16_100 vgg16 100
 
-do_mem ../scripts/logs/vgg19_25 vgg19 25
-do_mem ../scripts/logs/vgg19_50 vgg19 50
-do_mem ../scripts/logs/vgg19_100 vgg19 100
+do_mem $LOGDIR/vgg19_25 vgg19 25
+do_mem $LOGDIR/vgg19_50 vgg19 50
+do_mem $LOGDIR/vgg19_100 vgg19 100
 
 exit
 
-do_mem ../scripts/logs/resnet50_25 resnet50 25
-do_mem ../scripts/logs/resnet50_50 resnet50 50
-do_mem ../scripts/logs/resnet50_75 resnet50 75
+do_mem $LOGDIR/resnet50_25 resnet50 25
+do_mem $LOGDIR/resnet50_50 resnet50 50
+do_mem $LOGDIR/resnet50_75 resnet50 75
 
-do_mem ../scripts/logs/resnet101_25 resnet101 25
-do_mem ../scripts/logs/resnet101_50 resnet101 50
-do_mem ../scripts/logs/resnet101_75 resnet101 75
+do_mem $LOGDIR/resnet101_25 resnet101 25
+do_mem $LOGDIR/resnet101_50 resnet101 50
+do_mem $LOGDIR/resnet101_75 resnet101 75
 
-do_mem ../scripts/logs/resnet152_25 resnet152 25
-do_mem ../scripts/logs/resnet152_50 resnet152 50
-do_mem ../scripts/logs/resnet152_75 resnet152 75
+do_mem $LOGDIR/resnet152_25 resnet152 25
+do_mem $LOGDIR/resnet152_50 resnet152 50
+do_mem $LOGDIR/resnet152_75 resnet152 75
 
-do_mem ../scripts/logs/googlenet_25 googlenet 25
-do_mem ../scripts/logs/googlenet_50 googlenet 50
-do_mem ../scripts/logs/googlenet_100 googlenet 100
+do_mem $LOGDIR/googlenet_25 googlenet 25
+do_mem $LOGDIR/googlenet_50 googlenet 50
+do_mem $LOGDIR/googlenet_100 googlenet 100
 
-do_mem ../scripts/logs/alexnet_25 alexnet 25
-do_mem ../scripts/logs/alexnet_50 alexnet 50
-do_mem ../scripts/logs/alexnet_100 alexnet 100
+do_mem $LOGDIR/alexnet_25 alexnet 25
+do_mem $LOGDIR/alexnet_50 alexnet 50
+do_mem $LOGDIR/alexnet_100 alexnet 100
 
-do_mem ../scripts/logs/overfeat_25 overfeat 25
-do_mem ../scripts/logs/overfeat_50 overfeat 50
-do_mem ../scripts/logs/overfeat_100 overfeat 100
+do_mem $LOGDIR/overfeat_25 overfeat 25
+do_mem $LOGDIR/overfeat_50 overfeat 50
+do_mem $LOGDIR/overfeat_100 overfeat 100
 
-do_mem ../scripts/logs/inception3_25 inception3 25
-do_mem ../scripts/logs/inception3_50 inception3 50
-do_mem ../scripts/logs/inception3_100 inception3 100
+do_mem $LOGDIR/inception3_25 inception3 25
+do_mem $LOGDIR/inception3_50 inception3 50
+do_mem $LOGDIR/inception3_100 inception3 100
 
-do_mem ../scripts/logs/inception4_25 inception4 25
-do_mem ../scripts/logs/inception4_50 inception4 50
-do_mem ../scripts/logs/inception4_75 inception4 75
+do_mem $LOGDIR/inception4_25 inception4 25
+do_mem $LOGDIR/inception4_50 inception4 50
+do_mem $LOGDIR/inception4_75 inception4 75

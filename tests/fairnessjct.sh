@@ -29,10 +29,10 @@ do_area() {
     local OUTPUTDIR=$1
     shift
     mkdir -p "$OUTPUTDIR"
-    OUTPUTDIR=$(realpath "$OUTPUTDIR")
+    OUTPUTDIR=$(realpath $OUTPUTDIR)
 
     rm -f /tmp/err.output /tmp/alloc.output
-    env CUDA_VISIBLE_DEVICES=2,3 TF_CPP_MIN_LOG_LEVEL=4 $EXECUTOR --logconf ../build/alloc.config &
+    env CUDA_VISIBLE_DEVICES=2,3 TF_CPP_MIN_LOG_LEVEL=4 $EXECUTOR --logconf ../build/disable.config &
     local pid=$!
 
     local workload_pids=()
@@ -41,7 +41,6 @@ do_area() {
         run_case wpid $1 $2 "$OUTPUTDIR/$1_$2_${3}iter.${#workload_pids[@]}.output" $3
         workload_pids+=("$wpid")
         shift 3
-        sleep 10
     done
 
     wait ${workload_pids[@]}
@@ -51,17 +50,17 @@ do_area() {
     mv /tmp/alloc.output $OUTPUTDIR/alloc.output
 }
 
-do_area ../scripts/logs/area_3res_sleep10 \
-        resnet50 50 265 \
-        resnet50 50 265 \
-        resnet50 50 265
-
-exit
-
-do_area ../scripts/logs/area_3of \
+do_area ../scripts/logs/makespan_3of \
         overfeat 50 424 \
         overfeat 50 424 \
         overfeat 50 424
+
+exit
+
+do_area ../scripts/logs/area_3res \
+        resnet50 50 265 \
+        resnet50 50 265 \
+        resnet50 50 265
 
 exit
 
