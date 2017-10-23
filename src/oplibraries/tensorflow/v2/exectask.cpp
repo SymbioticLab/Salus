@@ -63,15 +63,15 @@ ExecTask::ExecTask(ExecutorState *state, utils::semaphore &num_finished_ops,
                    << tagged_node.node->name() << ": " << ok;
     }
 
-    VLOG(1) << "Op " << tagged_node.node->def() << " supports device:";
+    VLOG(2) << "Op " << tagged_node.node->def() << " supports device:";
     supportedTypes.reserve(tftypes.size());
     for (auto tft : tftypes) {
         if (tft == tf::DEVICE_CPU) {
             supportedTypes.push_back(DeviceType::CPU);
-            VLOG(1) << "    CPU";
+            VLOG(2) << "    CPU";
         } else if (tft == tf::DEVICE_GPU) {
             supportedTypes.push_back(DeviceType::GPU);
-            VLOG(1) << "    GPU";
+            VLOG(2) << "    GPU";
         } else {
             LOG(ERROR) << "Unknown tf device type: " << tft.type();
         }

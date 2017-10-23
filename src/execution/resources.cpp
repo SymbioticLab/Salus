@@ -479,7 +479,7 @@ bool ResourceMonitor::allocateUnsafe(uint64_t ticket, const Resources &res)
         LOG(ERROR) << "Unknown ticket: " << ticket;
     }
 
-    VLOG(1) << "Try allocating from global avail for ticket: " << ticket;
+    VLOG(2) << "Try allocating from global avail for ticket: " << ticket;
 
     removeZeros(remaining);
 

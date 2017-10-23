@@ -416,7 +416,7 @@ tf::Status ExecutorState::SetupKernel(TaggedNode node, const ExecutorImpl::Devic
     auto &ndef = node.node->def();
 
     tf::OpKernel *kernel = nullptr;
-    VLOG(1) << "Creating a kernel for device: " << ditem.device->name();
+    VLOG(2) << "Creating a kernel for device: " << ditem.device->name();
     auto ok = impl_->params_.create_kernel(ndef, ditem.function_library.get(), &kernel);
     if (!ok.ok()) {
         *op_kernel = nullptr;
@@ -719,7 +719,7 @@ tf::Status ExecutorState::ProcessOutputs(const NodeItem &item, tf::OpKernelConte
         s.Update(impl_->params_.node_outputs_cb(item.node->name(), -1, nullptr, false, ctx));
     }
 
-    VLOG(1) << "Process " << item.num_outputs << " outputs for node " << node->name();
+    VLOG(2) << "Process " << item.num_outputs << " outputs for node " << node->name();
     for (int i = 0; i < item.num_outputs; ++i) {
         auto val = ctx->release_output(i);
         if (*ctx->is_output_dead() || val.tensor == nullptr) {
@@ -1082,16 +1082,16 @@ void ExecutorState::DumpPendingNodeState(const int node_id, const Entry *input_v
             return;
         }
     }
-    VLOG(1) << "    Pending Node: " << node.DebugString();
+    VLOG(2) << "    Pending Node: " << node.DebugString();
     for (int i = 0; i < node.num_inputs(); ++i) {
         auto &input = input_vector[input_base + i];
         auto *tensor = GetTensorValueForDump(input);
         if (tensor->IsInitialized()) {
-            VLOG(1) << "      Input " << i
+            VLOG(2) << "      Input " << i
                     << ": Tensor<type: " << DataTypeString(tensor->dtype())
                     << " shape: " << tensor->shape().DebugString() << ">";
         } else {
-            VLOG(1) << "      Input " << i << ": not present";
+            VLOG(2) << "      Input " << i << ": not present";
         }
     }
 }
@@ -1100,17 +1100,17 @@ void ExecutorState::DumpActiveNodeState(const int node_id, const Entry *input_ve
 {
     auto &node_item = *impl_->gview_.node(node_id);
     auto &node = *node_item.node;
-    VLOG(1) << "    Active Node: " << node.DebugString();
+    VLOG(2) << "    Active Node: " << node.DebugString();
     const int input_base = node_item.input_start;
     for (int i = 0; i < node.num_inputs(); ++i) {
         auto &input = input_vector[input_base + i];
         auto *tensor = GetTensorValueForDump(input);
         if (tensor->IsInitialized()) {
-            VLOG(1) << "      Input " << i
+            VLOG(2) << "      Input " << i
                     << ": Tensor<type: " << DataTypeString(tensor->dtype())
                     << " shape: " << tensor->shape().DebugString() << ">";
         } else {
-            VLOG(1) << "      Input " << i << ": not present";
+            VLOG(2) << "      Input " << i << ": not present";
         }
     }
 }
@@ -1142,27 +1142,27 @@ void ExecutorState::DumpIterationState(const FrameState *frame, IterationState *
         auto &input = iteration->input_tensors[i];
         auto *tensor = GetTensorValueForDump(input);
         if (tensor->IsInitialized()) {
-            VLOG(1) << "      Input " << i
+            VLOG(2) << "      Input " << i
                     << ": Tensor<type: " << DataTypeString(tensor->dtype())
                     << " shape: " << tensor->shape().DebugString()
                     << " bytes: " << tensor->TotalBytes() << ">";
             total_bytes += tensor->TotalBytes();
         }
     }
-    VLOG(1) << "    Total bytes " << total_bytes;
+    VLOG(2) << "    Total bytes " << total_bytes;
 }
 
 void ExecutorState::DumpState()
 {
     tf::mutex_lock l(mu_);
     if (!dumped_on_error_) {
-        VLOG(1) << "Dumping state";
+        VLOG(2) << "Dumping state";
         for (auto &frame : outstanding_frames_) {
-            VLOG(1) << frame.first;
+            VLOG(2) << frame.first;
             FrameState *frame_state = frame.second;
             tf::mutex_lock frame_lock(frame_state->mu);
             for (IterationState *iteration : frame_state->iterations) {
-                VLOG(1) << "  Iteration:";
+                VLOG(2) << "  Iteration:";
                 DumpIterationState(frame_state, iteration);
             }
         }
@@ -1514,7 +1514,7 @@ bool ExecutorState::FrameState::CleanupIterations(const GraphView *gview, int64_
             auto &entry = iterState->input_tensors[i];
             if (entry.alloc_tree) {
                 DCHECK(entry.has_value);
-                VLOG(1) << "Removing entry from buffer tree when it is deleted: " << as_hex(&entry);
+                VLOG(2) << "Removing entry from buffer tree when it is deleted: " << as_hex(&entry);
                 executor->removeFromBufferTree(&entry, nullptr);
             }
         }

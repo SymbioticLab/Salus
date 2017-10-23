@@ -235,13 +235,11 @@ void ExecutorState::fetchRecvShape(const tf::Node *n)
 
 void ExecutorState::addNodeToRefiner(const TaggedNode &tn)
 {
-    TIMED_FUNC(timerObj);
-
     tf::mutex_lock l(refinerMu_);
     auto node = tn.node;
 
     if (node->type_string() == "Slice") {
-        VLOG(1) << "Skipping node " << node->name() << " with bugous shape_fn";
+        VLOG(2) << "Skipping node " << node->name() << " with bugous shape_fn";
         return;
     }
 
@@ -289,8 +287,6 @@ void ExecutorState::addNodeToRefiner(const TaggedNode &tn)
 
 size_t ExecutorImpl::handlePagingRequest(uint64_t oldTicket, std::unique_ptr<ResourceContext> &&rctx)
 {
-    TIMED_FUNC(timerObj);
-
     // There may be multiple tensor entries that uses this ticket,
     // and potentially share the storage.
     // We want to move one complete set of tensors that are sharing buffer.
@@ -407,7 +403,7 @@ void ExecutorImpl::forceEvicted()
 
 std::unique_ptr<PerOpAllocDevice> ExecutorImpl::CreatePerOpAllocDevice(tf::Device *dev)
 {
-    TIMED_FUNC(timerObj);
+    TIMED_FUNC_IF(timerObj, VLOG_IS_ON(1));
 
     // TODO: impliment a free list
     return std::make_unique<PerOpAllocDevice>(dev);
@@ -415,7 +411,7 @@ std::unique_ptr<PerOpAllocDevice> ExecutorImpl::CreatePerOpAllocDevice(tf::Devic
 
 tf::Status ExecutorImpl::LookupDevice(const DeviceSpec &spec, DeviceItem *item)
 {
-    TIMED_FUNC(timerObj);
+    TIMED_FUNC_IF(timerObj, VLOG_IS_ON(1));
 
     std::string name;
     switch (spec.type) {
@@ -456,7 +452,7 @@ tf::Status ExecutorImpl::LookupDevice(const DeviceSpec &spec, DeviceItem *item)
  */
 void ExecutorImpl::updateBufferTree(Entry *entry, uint64_t ticket)
 {
-    TIMED_FUNC(timerObj);
+    TIMED_FUNC_IF(timerObj, VLOG_IS_ON(1));
 
     DCHECK(entry);
     DCHECK(entry->has_value);
@@ -508,7 +504,7 @@ void ExecutorImpl::updateBufferTree(Entry *entry, uint64_t ticket)
 
 bool ExecutorImpl::removeFromBufferTree(Entry *entry, EntryVec *needUpdate)
 {
-    TIMED_FUNC(timerObj);
+    TIMED_FUNC_IF(timerObj, VLOG_IS_ON(1));
     DCHECK(entry);
 
     auto tree = entry->alloc_tree;
@@ -551,7 +547,7 @@ bool ExecutorImpl::removeFromBufferTree(Entry *entry, EntryVec *needUpdate)
     // if (tree->empty() {
     if (false) {
         if (VLOG_IS_ON(1) && tree->root_buf && !tree->root_buf->RefCountIsOne()) {
-            VLOG(1) << "Deleting buffer tree@" << as_hex(tree) << " when it's root_buf@"
+            VLOG(2) << "Deleting buffer tree@" << as_hex(tree) << " when it's root_buf@"
                     << as_hex(tree->root_buf) << " still has "
                     << tf::remote::PagingHelper::refCountOf(*tree->root_buf) << "references";
         }

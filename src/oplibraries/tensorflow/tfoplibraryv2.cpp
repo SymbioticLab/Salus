@@ -191,7 +191,7 @@ PTask TFOpLibraryV2::createCustomTask(ZmqServer::Sender sender, const zrpc::Even
         return nullptr;
     }
 
-    VLOG(1) << "Dispatching custom task " << it->first << " of seq " << evenlop.seq();
+    VLOG(2) << "Dispatching custom task " << it->first << " of seq " << evenlop.seq();
     return make_async_lambda_task([sender = std::move(sender), recvId, req, it](auto cb) mutable {
         it->second(std::move(sender), recvId, req, cb);
     });
@@ -312,7 +312,7 @@ void TFOpLibraryV2::handleCreateSession(const std::string &recvId, const executo
                                    std::unique_ptr<Proxy> proxy(pproxy);
                                    delete preq;
                                    if (status.ok()) {
-                                       VLOG(1) << "Session " << resp->session_handle() << " created with recvId " << recvId;
+                                       VLOG(2) << "Session " << resp->session_handle() << " created with recvId " << recvId;
                                        auto ins = ExecutionEngine::instance().registerSession(resp->session_handle());
                                        proxy->setExecFactory([ins](auto params, auto graph, auto executor){
                                            return NewMultiDeviceExecutor(params, graph, ins, executor);

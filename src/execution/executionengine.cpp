@@ -39,17 +39,15 @@ using namespace std::chrono_literals;
 namespace {
 inline void logScheduleFailure(const Resources &usage, const ResourceMonitor &resMon)
 {
-    TIMED_FUNC(timerObj);
-
     UNUSED(usage);
     UNUSED(resMon);
 
 #ifndef NDEBUG
-    VLOG(1) << "Try to allocate resource failed. Requested: " << resources::DebugString(usage);
+    VLOG(2) << "Try to allocate resource failed. Requested: " << resources::DebugString(usage);
     // Don't call resMon.DebugString directly in log line, as logging acquires lock, and
     // may causing deadlock.
     const auto &str = resMon.DebugString();
-    VLOG(1) << "Available: " << str;
+    VLOG(2) << "Available: " << str;
 #endif
 }
 
@@ -62,7 +60,7 @@ inline void reportBreakdown(const ExecutionEngine::POpItem &opItem)
     auto prepare = duration_cast<milliseconds>(opItem->tRunning - opItem->tInspected).count();
     auto running = duration_cast<milliseconds>(now - opItem->tRunning).count();
 
-    VLOG(1) << "OpItem " << opItem->op->DebugString()
+    VLOG(2) << "OpItem " << opItem->op->DebugString()
             << " failure " << opItem->op->failedTimes()
             << " queuing time " << queuing << " ms"
             << " preparation time " << prepare << " ms"
@@ -72,7 +70,6 @@ inline void reportBreakdown(const ExecutionEngine::POpItem &opItem)
 ExecutionEngine &ExecutionEngine::instance()
 {
     static ExecutionEngine eng;
-    TIMED_FUNC(timerObj);
     return eng;
 }
 
@@ -85,14 +82,12 @@ ExecutionEngine::ExecutionEngine()
                                                            // is not connected to any event dispatcher
                                                            q::make_shared<q::queue>(0)))
 {
-    TIMED_FUNC(timerObj);
     // Start scheduling thread
     m_schedThread = std::make_unique<std::thread>(std::bind(&ExecutionEngine::scheduleLoop, this));
 }
 
 ExecutionEngine::~ExecutionEngine()
 {
-    TIMED_FUNC(timerObj);
     // stop scheduling thread
     m_shouldExit = true;
     // also unblock scheduling thread
@@ -108,9 +103,8 @@ ExecutionEngine::~ExecutionEngine()
 namespace {
 bool useGPU()
 {
-    TIMED_FUNC(timerObj);
     auto use = utils::fromEnvVar("EXEC_SCHED_USE_GPU", true);
-    VLOG(1) << "Scheduling using: " << (use ? "GPU,CPU" : "CPU");
+    VLOG(2) << "Scheduling using: " << (use ? "GPU,CPU" : "CPU");
     return use;
 }
 
@@ -118,13 +112,11 @@ bool useGPU()
 
 bool ExecutionEngine::schedule(ITask *t)
 {
-    TIMED_FUNC(timerObj);
     return trySchedule(t, DeviceType::CPU);
 }
 
 bool ExecutionEngine::trySchedule(ITask *t, const DeviceSpec &dev)
 {
-    TIMED_FUNC(timerObj);
     auto expectedDev = dev;
     if (t->prepare(expectedDev)) {
         return true;
@@ -139,8 +131,6 @@ bool ExecutionEngine::trySchedule(ITask *t, const DeviceSpec &dev)
 
 ExecutionEngine::Inserter ExecutionEngine::registerSession(const std::string &sessHandle)
 {
-    TIMED_FUNC(timerObj);
-
     auto item = std::make_shared<SessionItem>(sessHandle);
     insertSession(item);
 
@@ -149,7 +139,6 @@ ExecutionEngine::Inserter ExecutionEngine::registerSession(const std::string &se
 
 void ExecutionEngine::insertSession(PSessionItem item)
 {
-    TIMED_FUNC(timerObj);
     {
         std::lock_guard<std::mutex> g(m_newMu);
         m_newSessions.emplace_back(std::move(item));
@@ -159,7 +148,6 @@ void ExecutionEngine::insertSession(PSessionItem item)
 
 void ExecutionEngine::deleteSession(PSessionItem item)
 {
-    TIMED_FUNC(timerObj);
     {
         std::lock_guard<std::mutex> g(m_delMu);
         m_deletedSessions.emplace(std::move(item));
@@ -169,7 +157,6 @@ void ExecutionEngine::deleteSession(PSessionItem item)
 
 void ExecutionEngine::InserterImpl::enqueueOperation(std::unique_ptr<OperationTask> &&task)
 {
-    TIMED_FUNC(timerObj);
     auto opItem = std::make_shared<OperationItem>();
     opItem->op = std::move(task);
     opItem->tQueued = std::chrono::steady_clock::now();
@@ -179,8 +166,6 @@ void ExecutionEngine::InserterImpl::enqueueOperation(std::unique_ptr<OperationTa
 
 void ExecutionEngine::InserterImpl::registerPagingCallbacks(PagingCallbacks &&pcb)
 {
-    TIMED_FUNC(timerObj);
-
     utils::Guard g(m_item->mu);
     m_item->pagingCb = std::move(pcb);
 }
@@ -196,7 +181,6 @@ void ExecutionEngine::InserterImpl::deleteSession(std::function<void()> cb)
 
 void ExecutionEngine::pushToSessionQueue(PSessionItem item, POpItem opItem)
 {
-    TIMED_FUNC(timerObj);
     {
         utils::Guard g(item->mu);
         item->queue.push_back(opItem);
@@ -206,14 +190,12 @@ void ExecutionEngine::pushToSessionQueue(PSessionItem item, POpItem opItem)
 
 ExecutionEngine::InserterImpl::~InserterImpl()
 {
-    TIMED_FUNC(timerObj);
     if (m_item)
         m_engine.deleteSession(m_item);
 }
 
 bool ExecutionEngine::shouldWaitForAWhile(size_t scheduled, nanoseconds &ns)
 {
-    TIMED_FUNC(timerObj);
     static auto last = steady_clock::now();
     static auto sleep = 10ms;
 
@@ -226,7 +208,7 @@ bool ExecutionEngine::shouldWaitForAWhile(size_t scheduled, nanoseconds &ns)
 
     auto idle = now - last;
     if (idle > 20ms) {
-        VLOG(1) << "No progress for " << duration_cast<milliseconds>(idle).count()
+        VLOG(2) << "No progress for " << duration_cast<milliseconds>(idle).count()
                 << "ms, sleep for " << duration_cast<milliseconds>(sleep).count() << "ms";
         ns = sleep;
         sleep *= 2;
@@ -237,7 +219,6 @@ bool ExecutionEngine::shouldWaitForAWhile(size_t scheduled, nanoseconds &ns)
 
 void ExecutionEngine::scheduleLoop()
 {
-    TIMED_FUNC(timerObj);
     m_resMonitor.initializeLimits();
 
     m_runningTasks = 0;
@@ -246,13 +227,10 @@ void ExecutionEngine::scheduleLoop()
     while (!m_shouldExit) {
         TIMED_SCOPE(schedIterObj, "sched-iter");
 
-        int sessionsChanged = 0;
         // Fisrt check if there's any pending deletions
         SessionSet del;
         {
             utils::Guard g(m_delMu);
-
-            sessionsChanged += m_deletedSessions.size();
 
             using std::swap;
             swap(del, m_deletedSessions);
@@ -260,6 +238,7 @@ void ExecutionEngine::scheduleLoop()
         }
 
         // Append any new sessions
+        int sessionsChanged = 0;
         {
             utils::Guard g(m_newMu);
 
@@ -352,6 +331,7 @@ void ExecutionEngine::scheduleLoop()
             continue;
         }
 
+        TIMED_SCOPE(schedWaitingObj, "sched-waiting");
         std::chrono::nanoseconds ns;
         if (shouldWaitForAWhile(scheduled, ns)) {
             // no progress for a long time.
@@ -361,7 +341,7 @@ void ExecutionEngine::scheduleLoop()
         }
 
         if (!remainingCount) {
-            VLOG(1) << "Wait on m_note_has_work";
+            VLOG(2) << "Wait on m_note_has_work";
             m_note_has_work.wait();
         }
     }
@@ -372,7 +352,6 @@ void ExecutionEngine::scheduleLoop()
 
 ExecutionEngine::SessionItem::~SessionItem()
 {
-    TIMED_FUNC(timerObj);
     bgQueue.clear();
     queue.clear();
 
@@ -388,8 +367,6 @@ ExecutionEngine::SessionItem::~SessionItem()
 
 bool ExecutionEngine::maybePreAllocateFor(SessionItem &item, OperationItem &opItem, const DeviceSpec &spec)
 {
-    TIMED_FUNC(timerObj);
-
     auto usage = opItem.op->estimatedUsage(spec);
 
     auto rctx = std::make_unique<ResourceContext>(item, m_resMonitor);
@@ -410,8 +387,6 @@ bool ExecutionEngine::maybePreAllocateFor(SessionItem &item, OperationItem &opIt
 
 size_t ExecutionEngine::maybeScheduleFrom(PSessionItem item)
 {
-    TIMED_FUNC(timerObj);
-
     auto &queue = item->bgQueue;
 
     auto size = queue.size();
@@ -479,7 +454,7 @@ size_t ExecutionEngine::maybeScheduleFrom(PSessionItem item)
 
                     taskStopped(*item, *opItem, true);
                     // failed due to OOM. Push back to queue and retry later
-                    VLOG(1) << "Puting back OOM failed task: " << opItem->op->DebugString();
+                    VLOG(2) << "Puting back OOM failed task: " << opItem->op->DebugString();
                     pushToSessionQueue(item, std::move(opItem));
                     return true;
                 };
@@ -498,7 +473,7 @@ size_t ExecutionEngine::maybeScheduleFrom(PSessionItem item)
     int scheduled = 0;
 
     if (item->holWaiting > m_schedParam.maxHolWaiting) {
-        VLOG(1) << "In session " << item->sessHandle
+        VLOG(2) << "In session " << item->sessHandle
                 << ": HOL waiting exceeds maximum: " << item->holWaiting << " (max="
                 << m_schedParam.maxHolWaiting << ")";
         // Only try to schedule head in this case

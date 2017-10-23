@@ -91,17 +91,17 @@ bool ZmqServer::pollWithCheck(const std::vector<zmq::pollitem_t> &items, long ti
 
 void ZmqServer::proxyRecvLoop(const std::string &feAddr)
 {
-    VLOG(1) << "Started recving and sending loop";
+    VLOG(2) << "Started recving and sending loop";
     zmq::socket_t m_frontend_sock(m_zmqCtx, zmq::socket_type::router);
     zmq::socket_t m_backend_sock(m_zmqCtx, zmq::socket_type::pair);
     m_frontend_sock.setsockopt(ZMQ_ROUTER_MANDATORY, 1);
     m_frontend_sock.setsockopt(ZMQ_ROUTER_HANDOVER, 1);
 
     try {
-        VLOG(1) << "Binding frontend socket to address: " << feAddr;
+        VLOG(2) << "Binding frontend socket to address: " << feAddr;
         m_frontend_sock.bind(feAddr);
 
-        VLOG(1) << "Binding backend socket to address: " << kBeAddr;
+        VLOG(2) << "Binding backend socket to address: " << kBeAddr;
         m_backend_sock.bind(kBeAddr);
     } catch (zmq::error_t &err) {
         LOG(FATAL) << "Error while binding sockets: " << err;
@@ -135,7 +135,7 @@ void ZmqServer::proxyRecvLoop(const std::string &feAddr)
         }
         // something happened, so we poll w/o waiting on all_events
         // to set events in all_events
-        VLOG(1) << "Non-blocking poll on all events";
+        VLOG(2) << "Non-blocking poll on all events";
         if (!pollWithCheck(all_events, 0)) {
             break;
         }
@@ -160,7 +160,7 @@ void ZmqServer::proxyRecvLoop(const std::string &feAddr)
 
         // forward any send message
         if (needSendOut && canSendOut) {
-            VLOG(1) << "Forwarding message out";
+            VLOG(2) << "Forwarding message out";
             zmq::message_t msg;
             bool more = false;
             while (true) {
@@ -195,7 +195,7 @@ void ZmqServer::dispatch(zmq::socket_t &sock)
     zmq::message_t evenlop;
     zmq::message_t body;
     try {
-        VLOG(1) << "==============================================================";
+        VLOG(2) << "==============================================================";
         // First receive all identity frames added by ZMQ_ROUTER socket
         identities->emplace_back();
         sock.recv(&identities->back());
@@ -232,7 +232,7 @@ void ZmqServer::dispatch(zmq::socket_t &sock)
         LOG(ERROR) << "Skipped one iteration due to malformatted request evenlop received.";
         return;
     }
-    VLOG(1) << "Received request evenlop: " << *pEvenlop;
+    VLOG(2) << "Received request evenlop: " << *pEvenlop;
 
     // step 1. replace the first frame in identity with the requested identity and make a sender
     if (!pEvenlop->recvidentity().empty()) {
@@ -246,7 +246,7 @@ void ZmqServer::dispatch(zmq::socket_t &sock)
         LOG(ERROR) << "Skipped one iteration due to malformatted request received.";
         return;
     }
-    VLOG(1) << "Received request body byte array size " << body.size();
+    VLOG(2) << "Received request body byte array size " << body.size();
 
     // step 3. dispatch
     auto f = m_pLogic->dispatch(sender, *pEvenlop, *pRequest)
@@ -288,7 +288,7 @@ void ZmqServer::SenderImpl::sendMessage(const std::string &typeName, MultiPartMe
     evenlop.SerializeToArray(parts->back().data(), parts->back().size());
 
     // step 4.2. append actual message
-    VLOG(1) << "Response proto object have size " << msg.totalSize() << " with evenlop " << evenlop;
+    VLOG(2) << "Response proto object have size " << msg.totalSize() << " with evenlop " << evenlop;
     parts.merge(std::move(msg));
 
     m_server.sendMessage(std::move(parts));

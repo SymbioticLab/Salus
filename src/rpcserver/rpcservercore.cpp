@@ -66,9 +66,9 @@ q::promise<ProtoPtr> RpcServerCore::dispatch(ZmqServer::Sender sender, const Eve
 
 #undef ITEM
 
-    assert(sender);
+    DCHECK(sender);
 
-    VLOG(1) << "Serving " << evenlop.type() << " for oplibrary " << OpLibraryType_Name(evenlop.oplibrary());
+    VLOG(2) << "Serving " << evenlop.type() << " for oplibrary " << OpLibraryType_Name(evenlop.oplibrary());
 
     auto fit = funcs.find(evenlop.type());
     if (fit == funcs.end()) {
@@ -91,7 +91,7 @@ q::promise<unique_ptr<RunResponse>> RpcServerCore::Run(ZmqServer::Sender &&sende
 {
     const auto &opdef = request.opkernel();
 
-    VLOG(1) << "Serving RunRequest with opkernel id " << opdef.id();
+    VLOG(2) << "Serving RunRequest with opkernel id " << opdef.id();
     assert(oplib->accepts(opdef));
 
     auto task = oplib->createRunTask(std::move(sender), evenlop, request);
@@ -108,7 +108,7 @@ q::promise<unique_ptr<RunGraphResponse>> RpcServerCore::RunGraph(ZmqServer::Send
                                                                  const EvenlopDef &evenlop,
                                                                  const RunGraphRequest &request)
 {
-    VLOG(1) << "Serving RunGraphRequest";
+    VLOG(2) << "Serving RunGraphRequest";
 
     auto task = oplib->createRunGraphTask(std::move(sender), evenlop, request);
     if (!task) {
@@ -130,7 +130,7 @@ q::promise<unique_ptr<AllocResponse>> RpcServerCore::Alloc(ZmqServer::Sender &&s
     auto alignment = request.alignment();
     auto num_bytes = request.num_bytes();
 
-    VLOG(1) << "Serving AllocRequest with alignment " << alignment << " and num_bytes " << num_bytes;
+    VLOG(2) << "Serving AllocRequest with alignment " << alignment << " and num_bytes " << num_bytes;
 
     auto ptr = MemoryMgr::instance().allocate(num_bytes, alignment);
     auto addr_handle = reinterpret_cast<uint64_t>(ptr);
@@ -155,7 +155,7 @@ q::promise<unique_ptr<DeallocResponse>> RpcServerCore::Dealloc(ZmqServer::Sender
     auto addr_handle = request.addr_handle();
     auto ptr = reinterpret_cast<void*>(addr_handle);
 
-    VLOG(1) << "Serving DeallocRequest with address handel: " << as_hex(ptr);
+    VLOG(2) << "Serving DeallocRequest with address handel: " << as_hex(ptr);
 
     MemoryMgr::instance().deallocate(ptr);
 
