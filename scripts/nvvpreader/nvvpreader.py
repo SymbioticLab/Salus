@@ -8,6 +8,7 @@ from tqdm import tqdm
 
 metric_name = {
     19923062: 'achieved_occupancy',
+    19923058: 'executed_ipc'
 }
 event_name = {
     83886184: 'active_warps',
