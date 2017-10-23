@@ -225,8 +225,12 @@ void ExecutionEngine::scheduleLoop()
     m_runningTasks = 0;
     m_noPagingRunningTasks = 0;
 
+    size_t schedIterCount = 0;
+    const auto kNameBufLen = 256;
+    char schedIterNameBuf[kNameBufLen];
     while (!m_shouldExit) {
-        TIMED_SCOPE(schedIterObj, "sched-iter");
+        snprintf(schedIterNameBuf, kNameBufLen, "sched-iter-%zu", schedIterCount);
+        TIMED_SCOPE(schedIterObj, schedIterNameBuf);
 
         // Fisrt check if there's any pending deletions
         SessionSet del;
@@ -271,8 +275,6 @@ void ExecutionEngine::scheduleLoop()
             }
         }
 
-        PERFORMANCE_CHECKPOINT_WITH_ID(schedIterObj, "after-snapshot");
-
         // Sort sessions if needed. We assume m_sessions.size() is always no more than a few,
         // therefore sorting in every iteration is acceptable.
         if (sessionsChanged == 0 && m_schedParam.useFairnessCounter) {
@@ -307,7 +309,8 @@ void ExecutionEngine::scheduleLoop()
             // make sure the first session (with least progress) is
             // get scheduled solely, thus can keep up, without other
             // sessions interfere
-            CLOG(INFO, logging::kPerfTag) << "Session stat: " << item->sessHandle
+            CLOG(INFO, logging::kPerfTag) << "Sched iter " << schedIterCount
+                                          << " session: " << item->sessHandle
                                           << " pending: " << item->bgQueue.size()
                                           << " scheduled: " << count
                                           << " counter: " << item->unifiedResSnapshot;
@@ -315,7 +318,7 @@ void ExecutionEngine::scheduleLoop()
                 break;
             }
         }
-        CLOG(INFO, logging::kPerfTag) << "Scheduler stat: "
+        CLOG(INFO, logging::kPerfTag) << "Scheduler iter stat: " << schedIterCount
                                       << " running: " << m_runningTasks
                                       << " noPageRunning: " << m_noPagingRunningTasks;
 
