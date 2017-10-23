@@ -12,6 +12,7 @@ do_mem() {
 
     env CUDA_VISIBLE_DEVICES=2,3 TF_CPP_MIN_LOG_LEVEL=4 $EXECUTOR --logconf ../build/alloc.config &
     pid=$!
+    stdbuf -o0 -e0 -- \
     python -m $2 $3 > $OUTPUTDIR/mem-iter.output
     kill $pid
     wait $pid

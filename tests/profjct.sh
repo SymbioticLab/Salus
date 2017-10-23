@@ -15,6 +15,7 @@ run_case() {
 
     echo "Running $model of batch size $batch_size for $num_batches iterations"
     pushd $BENCHMARKDIR > /dev/null
+    stdbuf -o0 -e0 -- \
     python tf_cnn_benchmarks.py --display_every=1 --local_parameter_device=cpu --num_gpus=1 \
                                 --variable_update=parameter_server --nodistortions \
                                 --executor=$executor \
