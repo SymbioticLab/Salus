@@ -37,8 +37,11 @@ do_prof() {
 
     echo "Running $model of batch size $batch_size, temp dir: $tempdir"
 
-    env CUDA_VISIBLE_DEVICES=2,3 TF_CPP_MIN_LOG_LEVEL=4 nvprof --export-profile "$tempdir/profile.sqlite" --events active_warps -f -- \
-        $EXECUTOR --logconf ../build/disable.config &
+    env CUDA_VISIBLE_DEVICES=2,3 TF_CPP_MIN_LOG_LEVEL=4 \
+        nvprof --export-profile "$tempdir/profile.sqlite" -f \
+               --metrics executed_ipc \
+               -- \
+               $EXECUTOR --logconf ../build/disable.config &
     local pid=$!
 
     local wpid=''
