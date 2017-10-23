@@ -4,7 +4,7 @@ export CUDA_VISIBLE_DEVICES=0,1
 
 EXECUTOR=../build/Release/src/executor
 BENCHMARKDIR=$HOME/buildbed/tf_benchmarks/scripts/tf_cnn_benchmarks
-LOGDIR=templogs
+LOGDIR=../scripts/logs/perflogs
 
 run_case() {
     local model=${2}
@@ -43,6 +43,7 @@ do_prof() {
                -- \
                $EXECUTOR --logconf ../build/disable.config &
     local pid=$!
+    sleep 10
 
     local wpid=''
 
