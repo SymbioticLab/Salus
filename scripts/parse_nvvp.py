@@ -80,3 +80,45 @@ def active_warp_trend(reader, iter_times=None):
     ax.figure.tight_layout()
 
     return df, ax.figure
+
+
+def ipc_trend(reader, iter_times=None):
+    data = []
+    df = reader.kernels
+    df = df[df['metric'] == 'executed_ipc']
+    for start, end, dur, val in zip(df['start'], df['end'], df['duration'], df['metric_val']):
+        avg = val / (dur / 1e6)
+        data.append({
+            'timestamp': start,
+            'active_warps': avg
+        })
+        data.append({
+            'timestamp': end,
+            'active_warps': -avg
+        })
+
+    df = pd.DataFrame(data).set_index('timestamp').sort_index()
+
+    ddf = df.cumsum()
+
+    # drop first iteration
+    if iter_times is not None:
+        starts, ends = zip(*iter_times[1:])
+        ddf = ddf.loc[starts[0]:ends[-1]]
+
+    ax = ddf.plot()
+    ax.grid('on')
+    ax.set_ylabel('(Estimated) IPC Per Millisecond')
+    ax.set_xlabel('Time')
+    ax.set_title('Estimated IPC')
+
+    if iter_times is not None:
+        pu.axvlines(starts, ax=ax, linestyle='--', color='lightgreen', label='Iteration Begin')
+        pu.axvlines(ends, ax=ax, linestyle='--', color='r', label='Iteration End')
+
+    ax.autoscale(axis='x')
+    ax.set_ylim(bottom=-10)
+    ax.legend()
+    ax.figure.tight_layout()
+
+    return df, ax.figure
