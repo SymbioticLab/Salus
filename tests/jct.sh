@@ -15,13 +15,13 @@ do_jct() {
     pid=$!
 
     echo "    warm up: $2.$3.$4"
-    python -m $2 $3.$4 > /tmp/rpc.output
+    stdbuf -o0 -e0 -- python -m $2 $3.$4 > /tmp/rpc.output
     mv /tmp/rpc.output $OUTPUTDIR
     echo "    running: $2.$3.$4"
-    python -m $2 $3.$4 > /tmp/rpc.output
+    stdbuf -o0 -e0 -- python -m $2 $3.$4 > /tmp/rpc.output
     mv /tmp/rpc.output $OUTPUTDIR
     echo "    running: $2.$3.$5"
-    python -m $2 $3.$5 > /tmp/gpu.output
+    stdbuf -o0 -e0 -- python -m $2 $3.$5 > /tmp/gpu.output
     mv /tmp/gpu.output $OUTPUTDIR
 
     kill $pid
