@@ -185,6 +185,8 @@ std::string PerOpAllocator::Name()
 
 void *PerOpAllocator::AllocateRaw(size_t alignment, size_t num_bytes)
 {
+    TIMED_FUNC(timeObj);
+
     AllocLog(DEBUG) << "TFAllocator allocating " << num_bytes
                     << " bytes of memory with alignment " << alignment
                     << " using allocator " << nameOrNull(m_actualAlloc) << "@" << as_hex(m_actualAlloc);
@@ -221,6 +223,8 @@ void *PerOpAllocator::AllocateRaw(size_t alignment, size_t num_bytes)
 
 void* PerOpAllocator::AllocateRaw(size_t alignment, size_t num_bytes, const tensorflow::AllocationAttributes& allocation_attr)
 {
+    TIMED_FUNC(timeObj);
+
     auto attr(allocation_attr);
     // We should not retry on failure due to the restarting feature
     attr.no_retry_on_failure = true;
@@ -269,6 +273,8 @@ tf::int64 PerOpAllocator::AllocationId(void* ptr)
 
 void PerOpAllocator::DeallocateRaw(void *ptr)
 {
+    TIMED_FUNC(timeObj);
+
     auto num_bytes = RequestedSize(ptr);
 
     AllocLog(INFO) << "TFAllocator deallocating memory at " << as_hex(ptr)
