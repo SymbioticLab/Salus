@@ -459,6 +459,10 @@ size_t ExecutionEngine::maybeScheduleFrom(PSessionItem item)
                     return true;
                 };
 
+                if (m_schedParam.randomRuns) {
+                    milliseconds dur {std::rand() % 100};
+                    std::this_thread::sleep_for(dur);
+                }
                 VLOG(2) << "Running opItem in session " << item->sessHandle << ": " << opItem->op->DebugString();
                 opItem->tRunning = system_clock::now();
                 opItem->op->run(cbs);

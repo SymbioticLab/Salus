@@ -50,6 +50,10 @@ struct SchedulingParam
      * later tasks
      */
     uint64_t maxHolWaiting = 50;
+    /**
+     * Add randomness when run tasks
+     */
+    bool randomRuns = false;
 };
 
 /**
