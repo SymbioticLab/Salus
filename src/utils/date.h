@@ -1,5 +1,5 @@
-#ifndef DATE_H
-#define DATE_H
+#ifndef UTILS_DATE_H
+#define UTILS_DATE_H
 
 // The MIT License (MIT)
 //
@@ -7984,4 +7984,4 @@ operator<<(std::basic_ostream<CharT, Traits>& os,
 #endif
 
 
-#endif  // DATE_H
+#endif  // UTILS_DATE_H

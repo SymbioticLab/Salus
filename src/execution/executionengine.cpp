@@ -25,17 +25,20 @@
 #include "utils/envutils.h"
 #include "utils/threadutils.h"
 #include "utils/containerutils.h"
+#include "utils/date.h"
 #include "utils/debugging.h"
 
 #include <functional>
 #include <algorithm>
+#include <iomanip>
 
-using std::chrono::steady_clock;
+using std::chrono::system_clock;
 using std::chrono::duration_cast;
 using std::chrono::milliseconds;
 using std::chrono::nanoseconds;
 using std::chrono::microseconds;
 using namespace std::chrono_literals;
+using namespace date;
 
 namespace {
 inline void logScheduleFailure(const Resources &usage, const ResourceMonitor &resMon)
@@ -53,20 +56,6 @@ inline void logScheduleFailure(const Resources &usage, const ResourceMonitor &re
 }
 
 } // namespace
-
-inline void reportBreakdown(const ExecutionEngine::POpItem &opItem)
-{
-    auto now = steady_clock::now();
-    auto queuing = duration_cast<milliseconds>(opItem->tInspected - opItem->tQueued).count();
-    auto prepare = duration_cast<milliseconds>(opItem->tRunning - opItem->tInspected).count();
-    auto running = duration_cast<milliseconds>(now - opItem->tRunning).count();
-
-    VLOG(2) << "OpItem " << opItem->op->DebugString()
-            << " failure " << opItem->op->failedTimes()
-            << " queuing time " << queuing << " ms"
-            << " preparation time " << prepare << " ms"
-            << " running time " << running << " ms";
-}
 
 ExecutionEngine &ExecutionEngine::instance()
 {
@@ -160,7 +149,7 @@ void ExecutionEngine::InserterImpl::enqueueOperation(std::unique_ptr<OperationTa
 {
     auto opItem = std::make_shared<OperationItem>();
     opItem->op = std::move(task);
-    opItem->tQueued = std::chrono::steady_clock::now();
+    opItem->tQueued = std::chrono::system_clock::now();
 
     m_engine.pushToSessionQueue(m_item, std::move(opItem));
 }
@@ -197,10 +186,10 @@ ExecutionEngine::InserterImpl::~InserterImpl()
 
 bool ExecutionEngine::shouldWaitForAWhile(size_t scheduled, nanoseconds &ns)
 {
-    static auto last = steady_clock::now();
+    static auto last = system_clock::now();
     static auto sleep = 10ms;
 
-    auto now = steady_clock::now();
+    auto now = system_clock::now();
 
     if (scheduled > 0) {
         last = now;
@@ -422,7 +411,7 @@ size_t ExecutionEngine::maybeScheduleFrom(PSessionItem item)
         VLOG(3) << "Scheduling opItem in session " << item->sessHandle << ": " << opItem->op->DebugString();
         TIMED_SCOPE(timerInnerObj, "ExecutionEngine::maybeScheduleFrom::doSchedule");
 
-        opItem->tInspected = steady_clock::now();
+        opItem->tInspected = system_clock::now();
         bool scheduled = false;
         DeviceSpec spec;
         for (auto dt : opItem->op->supportedDeviceTypes()) {
@@ -443,7 +432,7 @@ size_t ExecutionEngine::maybeScheduleFrom(PSessionItem item)
             if (!opItem->op->allowConcurrentPaging()) {
                 m_noPagingRunningTasks += 1;
             }
-            opItem->tScheduled = steady_clock::now();
+            opItem->tScheduled = system_clock::now();
 
             VLOG(3) << "Adding to thread pool: opItem in session " << item->sessHandle
                     << ": " << opItem->op->DebugString();
@@ -455,7 +444,6 @@ size_t ExecutionEngine::maybeScheduleFrom(PSessionItem item)
                 DCHECK(opItem);
 
                 cbs.done = [item, opItem, this]() {
-                    reportBreakdown(opItem);
                     // succeed
                     taskStopped(*item, *opItem, false);
                 };
@@ -472,7 +460,7 @@ size_t ExecutionEngine::maybeScheduleFrom(PSessionItem item)
                 };
 
                 VLOG(2) << "Running opItem in session " << item->sessHandle << ": " << opItem->op->DebugString();
-                opItem->tRunning = steady_clock::now();
+                opItem->tRunning = system_clock::now();
                 opItem->op->run(cbs);
             });
         } else {
@@ -541,11 +529,12 @@ size_t ExecutionEngine::maybeScheduleFrom(PSessionItem item)
 void ExecutionEngine::taskStopped(SessionItem &item, OperationItem &opItem, bool failed)
 {
     UNUSED(item);
+    auto now = system_clock::now();
 
     auto &rctx = opItem.op->resourceContext();
     rctx.releaseStaging();
 
-    auto dur = duration_cast<microseconds>(steady_clock::now() - opItem.tScheduled).count();
+    auto dur = duration_cast<microseconds>(now - opItem.tScheduled).count();
 
     // For now only count memory usage, and simply add up memory usages on different
     // devices.
@@ -563,6 +552,13 @@ void ExecutionEngine::taskStopped(SessionItem &item, OperationItem &opItem, bool
         } else {
             unifiedRes = 1;
         }
+
+        CLOG(INFO, logging::kPerfTag) << "OpItem Stat " << opItem.op->DebugString()
+                                        << " memusage: " << unifiedRes
+                                        << " queued: " << opItem.tQueued
+                                        << " scheduled: " << opItem.tScheduled
+                                        << " finished: " << now;
+
         unifiedRes *= dur;
         item.unifiedRes += unifiedRes;
     }

@@ -96,6 +96,7 @@ private:
     std::vector<Entry*> reffedEntries;
     Entry * first_input = nullptr;
     BufferLockVec buflocks;
+    uint64_t input_size;
 
     ExecutorState::TaggedNode tagged_node;
     ExecutorState::TaggedNodeSeq ready;

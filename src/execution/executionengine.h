@@ -227,13 +227,12 @@ private:
 
         uint64_t hash() const { return reinterpret_cast<uint64_t>(this); }
 
-        std::chrono::time_point<std::chrono::steady_clock> tQueued;
-        std::chrono::time_point<std::chrono::steady_clock> tInspected;
-        std::chrono::time_point<std::chrono::steady_clock> tScheduled;
-        std::chrono::time_point<std::chrono::steady_clock> tRunning;
+        std::chrono::time_point<std::chrono::system_clock> tQueued;
+        std::chrono::time_point<std::chrono::system_clock> tInspected;
+        std::chrono::time_point<std::chrono::system_clock> tScheduled;
+        std::chrono::time_point<std::chrono::system_clock> tRunning;
     };
     friend class ResourceContext;
-    friend void reportBreakdown(const POpItem &opItem);
 
     using SessionList = std::list<PSessionItem>;
     using SessionSet = std::unordered_set<PSessionItem>;

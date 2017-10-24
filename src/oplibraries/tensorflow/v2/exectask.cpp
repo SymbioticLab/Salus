@@ -279,8 +279,11 @@ std::string ExecTask::DebugString()
 {
     std::ostringstream oss;
     oss << "ExecTask(name=" << tagged_node.node->name()
+        << ", type=" << tagged_node.node->op_def().name()
         << ", session=" << m_state->impl_->params_.session
-        << ", failures=" << failureTimes << ")";
+        << ", failures=" << failureTimes
+        << ", inputsize=" << input_size
+        << ")";
     return oss.str();
 }
 
@@ -375,6 +378,12 @@ void ExecTask::run(Callbacks cbs)
         m_state->ClearInputs(first_input, item.num_inputs, buflocks);
         afterRun(s, cbs);
         return;
+    }
+
+    // record input sizes
+    input_size = 0;
+    for (auto &inp : inputs) {
+        input_size += inp->shape().num_elements();
     }
 
     // Remember tickets for reffed inputs, they may be modified by the op
