@@ -4,6 +4,10 @@ import re
 from datetime import timedelta
 
 import pandas as pd
+import matplotlib.pyplot as plt
+
+from . import plotutils as pu
+
 
 ptn_log = re.compile(r"""^\[(?P<timestamp>\d+-\d+-\d+\s\d+:\d+:\d+\.\d{6}) (\d{3})? \]\s
                            \[(?P<thread>\d+)\]\s
@@ -21,13 +25,33 @@ ptn_mu = re.compile(r"""Mutex \s (?P<name>\w+)@(?P<inst>[\dxa-fA-F]+)
                         .+acquiring \s (?P<acq>\d+)us
                         .+locking \s (?P<lck>\d+)us""",
                     re.VERBOSE)
-ptn_overhead = re.compile(r'''OpItem .+\bname=(?P<name>[^,]+),
-                              .+\bsession=(?P<sess>\w+),
-                              .+\bfailures=(?P<failures>\d+)
-                              .+\bqueuing \s time \s (?P<queuing>[\d.]+)
-                              .+\bpreparation \s time \s (?P<preptime>[\d.]+)
-                              .+\brunning \s time \s (?P<running>[\d.]+).+''',
-                          re.VERBOSE)
+
+# OpItem Stat ExecTask(name=_SOURCE, type=NoOp, session=246b928f83c1ecf1, failures=0, inputsize=0) memusage: 1
+# queued: 2017-10-24 14:50:08.625489191 scheduled: 2017-10-24 14:50:08.625684743 finished: 2017-10-24 14:50:08.628265822
+ptn_opstat = re.compile(r'''OpItem \s Stat .+\bname=(?P<name>[^,]+),
+                            .+\btype=(?P<type>[^,]+),
+                            .+\bsession=(?P<sess>\w+),
+                            .+\bfailures=(?P<failures>\d+),
+                            .+\binputsize=(?P<inputsize>\d+)
+                            .+\bmemusage:\s (?P<memusage>\d+)
+                            .+\bqueued:\s (?P<queued>.+)
+                            .+\bscheduled:\s (?P<scheduled>.+)
+                            .+\bfinished:\s (?P<finished>.+)''',
+                        re.VERBOSE)
+
+# Sched iter 0 session: 246b928f83c1ecf1 pending: 0 scheduled: 2 counter: 0
+ptn_sess_iter = re.compile(r'''Sched \s iter \s (?P<iter>\d+) \s
+                               \bsession:\s (?P<sess>\w+) \s
+                               \bpending:\s (?P<pending>\d+) \s
+                               \bscheduled:\s (?P<scheduled>\d+) \s
+                               \bcounter:\s (?P<counter>\d+)''',
+                           re.VERBOSE)
+
+# Scheduler iter stat: 0 running: 3 noPageRunning: 3
+ptn_sched_iter = re.compile(r'''Scheduler \s iter \s stat: \s (?P<iter>\d+) \s
+                                running:\s (?P<running>\d+) \s
+                                noPageRunning:\s (?P<noPageRunning>\d+)''',
+                            re.VERBOSE)
 
 
 def initialize():
@@ -47,13 +71,20 @@ def load_file(path, reinitialize=True):
 
             m = ptn_log.match(line)
             if m:
-                log = match_exec_content(m.group('content'), m.groupdict())
+                ctx = m.groupdict()
+                content = ctx['content']
+                del ctx['content']
+                log = match_exec_content(content, ctx)
                 if log:
+                    ctx.update(log)
                     logs.append(log)
             else:
                 print('Unhandled line: ' + line)
 
-    return logs
+    df = pd.DataFrame(logs)
+    df['timestamp'] = pd.to_datetime(df['timestamp'])
+    df = df.set_index('timestamp').sort_index()
+    return df
 
 
 def match_exec_content(content, ctx):
@@ -83,25 +114,29 @@ def match_exec_content(content, ctx):
             'locked': timedelta(microseconds=int(m.group('lck'))),
             'type': 'mutex'
         }
-    
-    m = ptn_overhead.match(content)
+
+    m = ptn_opstat.match(content)
     if m:
-        return {
-            'type': 'overhead',
-            'op': m.group('name'),
-            'sess': m.group('sess'),
-            'failures': int(m.group('failures')),
-            'queuing': float(m.group('queuing')),
-            'preptime': float(m.group('preptime')),
-            'running': float(m.group('running')),
-        }
+        d = m.groupdict()
+        d['type'] = 'opstat'
+        return d
+
+    m = ptn_sess_iter.match(content)
+    if m:
+        d = m.groupdict()
+        d['type'] = 'sess-iter'
+        return d
+
+    m = ptn_sched_iter.match(content)
+    if m:
+        d = m.groupdict()
+        d['type'] = 'sched-iter'
+        return d
 
     return None
 
 
-def perfcalls(logs):
-    df = pd.DataFrame(logs)
-
+def perfcalls(df):
     # Change from timedelta to us
     df['time'] = df['time'].astype(int) / 1e3
 
@@ -118,16 +153,41 @@ def perfcalls(logs):
     return grouped, func
 
 
-def overhead_breakdown(logs):
-    data = [l for l in logs if l['type'] == 'overhead']
-    df = pd.DataFrame(data).drop('type', axis=1)
+def overhead_breakdown(df):
+    df = df[df['type'] == 'opstat'].drop('type', axis=1)
+    for col in ['queued', 'scheduled', 'finished']:
+        df[col] = pd.to_datetime(df[col])
+    df['queuing'] = df['scheduled'] - df['queued']
+    df['running'] = df['finished'] - df['scheduled']
+    df['failures'] = pd.to_numeric(df['failures'])
 
     operations = ['sum', 'mean', 'min', 'median', 'max']
     grouped = df.groupby('sess').agg({
         'failures': operations,
         'queuing': operations,
-        'preptime': operations,
         'running': operations
     })
     grouped.columns = ['_'.join(x) for x in grouped.columns.ravel()]
     return grouped, df
+
+
+def progress_counter(df, beginning=None):
+    df = df[df['type'] == 'sess-iter'].drop('type', axis=1)
+    for col in ['pending', 'scheduled', 'counter']:
+        df[col] = pd.to_numeric(df[col])
+    
+    useTimedelta = beginning is not None
+
+    fig, ax = plt.subplots()
+    for key, grp in df.groupby(['session']):
+        if useTimedelta:
+            grp.index = grp.index - beginning
+
+        ax = grp.plot(ax=ax, kind='line', x='timestamp', y='counter', label=key)
+
+    if useTimedelta:
+        pu.cleanup_axis_timedelta(ax.xaxis)
+    else:
+        pu.cleanup_axis_datetime(ax.xaxis)
+
+    return df, fig

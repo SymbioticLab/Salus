@@ -750,7 +750,7 @@ def memory_usage(logs, iter_times=None, beginning=None, mem_type=None,
         # Change to timedelta after iteration restriction.
         # for some reason slicing doesn't work on Timedeltas
         ss.index = ss.index - beginning
-        ss.index = ss.index.astype(int)
+        # ss.index = ss.index.astype(int)
 
         series.append(ss)
         if smoother:
@@ -791,7 +791,7 @@ def memory_usage(logs, iter_times=None, beginning=None, mem_type=None,
         fig.text(0.5, 0.02, 'Time (s)', ha='center')
         fig.text(0.02, 0.5, 'Memory Usage (bytes)', va='center', rotation='vertical')
         fig.subplots_adjust(left=0.1, bottom=0.13)
-    return df, series, fig
+    return df, beginning, fig
 
 
 def paging_stat(logs):
@@ -820,19 +820,3 @@ def paging_stat(logs):
     ax = plt.hlines(df.index, dt.date2num(df.start), dt.date2num(df.end))
 
     return df, ax.figure
-
-
-def progress_counter(logs):
-    data = [{'session': l.sess, 'counter': l.cnt, 'timestamp': l.timestamp}
-            for l in logs if l.type == 'prog_cnt']
-    sessstarts = session_beginnings(logs)
-
-    df = pd.DataFrame(data)
-    fig, ax = plt.subplots()
-    for key, grp in df.groupby(['session']):
-        ax = grp.plot(ax=ax, kind='line', x='timestamp', y='counter', label=key)
-        if key in sessstarts:
-            pu.axvlines([sessstarts[key]], ax=ax, linestyle='--',
-                        color=ax.get_lines()[-1].get_color())
-
-    return df, fig
