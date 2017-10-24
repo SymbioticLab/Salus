@@ -87,7 +87,8 @@ def ipc_trend(reader, iter_times=None):
     df = reader.kernels
     df = df[df['metric'] == 'executed_ipc']
     for start, end, dur, val in zip(df['start'], df['end'], df['duration'], df['metric_val']):
-        avg = val / (dur / 1e6)
+        # avg = val / (dur / 1e6)
+        avg = val
         data.append({
             'timestamp': start,
             'ipc': avg
