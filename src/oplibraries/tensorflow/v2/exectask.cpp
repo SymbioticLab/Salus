@@ -383,7 +383,9 @@ void ExecTask::run(Callbacks cbs)
     // record input sizes
     input_size = 0;
     for (auto &inp : inputs) {
-        input_size += inp->shape().num_elements();
+        if (inp.tensor) {
+            input_size += inp->shape().num_elements();
+        }
     }
 
     // Remember tickets for reffed inputs, they may be modified by the op
