@@ -17,7 +17,7 @@ ptn_log = re.compile(r"""^\[(?P<timestamp>\d+-\d+-\d+\s\d+:\d+:\d+\.\d{6}) (\d{3
                      re.VERBOSE)
 
 ptn_exec = re.compile(r"""Executed \[(?P<name>.+)\] in \[(?P<count>\d+) (?P<unit>\w+)\]""")
-ptn_check = re.compile(r"""Performance\scheckpoint \[(?P<name>.+)\]\s
+ptn_check = re.compile(r"""Performance \s checkpoint \s \[(?P<name>.+)\]\s
                            for\sblock\s\[(?P<parent>.+)\]\s:\s
                            \[(?P<count>\d+)\s(?P<unit>\w+)\]""",
                        re.VERBOSE)
