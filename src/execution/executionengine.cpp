@@ -264,8 +264,12 @@ void ExecutionEngine::scheduleLoop()
                 if (sessionsChanged == 0) {
                     item->unifiedResSnapshot = item->unifiedRes;
                     // calculate progress counter increase since last snapshot
-                    auto usages = m_resMonitor.queryUsages(item->tickets);
-                    auto mem = utils::getOrDefault(usages, {ResourceType::MEMORY, {DeviceType::GPU, 0}}, 0);
+                    size_t mem = 0;
+                    {
+                        utils::Guard g(item->tickets_mu);
+                        auto usages = m_resMonitor.queryUsages(item->tickets);
+                        mem = utils::getOrDefault(usages, {ResourceType::MEMORY, {DeviceType::GPU, 0}}, 0);
+                    }
                     item->unifiedResSnapshot += mem * usSinceLastSnapshot;
                     item->unifiedRes = item->unifiedResSnapshot;
                 } else {
@@ -603,8 +607,12 @@ bool ExecutionEngine::doPaging()
     ResourceTag cpuTag {ResourceType::MEMORY, {DeviceType::CPU, 0}};
 
     for (auto &pSess : m_sessions) {
-        auto usages = m_resMonitor.queryUsages(pSess->tickets);
-        auto mem = utils::getOrDefault(usages, gpuTag, 0);
+        size_t mem = 0;
+        {
+            utils::Guard g(pSess->tickets_mu);
+            auto usages = m_resMonitor.queryUsages(pSess->tickets);
+            mem = utils::getOrDefault(usages, gpuTag, 0);
+        }
         candidates.emplace_back(mem, *pSess);
     }
 
