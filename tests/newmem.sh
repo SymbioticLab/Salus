@@ -18,7 +18,7 @@ do_mem() {
     local pid=$!
     pushd $BENCHMARKDIR > /dev/null
     stdbuf -o0 -e0 -- \
-    python tf_cnn_benchmarks.py --display_every=1 --local_parameter_device=cpu --num_gpus=1 --variable_update=parameter_server --nodistortions \
+    python tf_cnn_benchmarks.py --display_every=1  --num_gpus=1 --variable_update=parameter_server --nodistortions \
                                 --num_batches=20 \
                                 --model=$2 --batch_size=$3 > $tempdir/mem-iter.output
     #| tee $OUTPUTDIR/mem-iter.output
