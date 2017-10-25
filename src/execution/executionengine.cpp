@@ -221,7 +221,7 @@ void ExecutionEngine::scheduleLoop()
     auto lastSnapshotTime = system_clock::now();
 
     while (!m_shouldExit) {
-        snprintf(schedIterNameBuf, kNameBufLen, "sched-iter-%zu", schedIterCount);
+        snprintf(schedIterNameBuf, kNameBufLen, "sched-iter-%zu", schedIterCount++);
         TIMED_SCOPE(schedIterObj, schedIterNameBuf);
 
         // Fisrt check if there's any pending deletions
