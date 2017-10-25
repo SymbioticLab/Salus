@@ -217,6 +217,9 @@ void ExecutionEngine::scheduleLoop()
     size_t schedIterCount = 0;
     const auto kNameBufLen = 256;
     char schedIterNameBuf[kNameBufLen];
+
+    auto lastSnapshotTime = system_clock::now();
+
     while (!m_shouldExit) {
         snprintf(schedIterNameBuf, kNameBufLen, "sched-iter-%zu", schedIterCount);
         TIMED_SCOPE(schedIterObj, schedIterNameBuf);
@@ -244,6 +247,9 @@ void ExecutionEngine::scheduleLoop()
 
         // Snapshot resource usage counter first, or reset them
         // and delete sessions as requested
+        auto now = system_clock::now();
+        auto usSinceLastSnapshot = duration_cast<microseconds>(now - lastSnapshotTime).count();
+        lastSnapshotTime = now;
         for (auto it = m_sessions.begin(),
              itend = m_sessions.end(); it != itend;) {
             auto &item = *it;
@@ -257,8 +263,13 @@ void ExecutionEngine::scheduleLoop()
             } else {
                 if (sessionsChanged == 0) {
                     item->unifiedResSnapshot = item->unifiedRes;
+                    // calculate progress counter increase since last snapshot
+                    auto usages = m_resMonitor.queryUsages(item->tickets);
+                    auto mem = utils::getOrDefault(usages, {ResourceType::MEMORY, {DeviceType::GPU, 0}}, 0);
+                    item->unifiedResSnapshot += mem * usSinceLastSnapshot;
+                    item->unifiedRes = item->unifiedResSnapshot;
                 } else {
-                    item->unifiedResSnapshot = item->unifiedRes = 0;
+                    item->unifiedRes = item->unifiedResSnapshot = 0;
                 }
                 ++it;
             }
@@ -272,39 +283,43 @@ void ExecutionEngine::scheduleLoop()
             });
         }
 
-        if (VLOG_IS_ON(2)) {
-            for (auto &sess : m_sessions) {
-                VLOG(2) << "Progress counter for session " << sess->sessHandle << ": " << sess->unifiedResSnapshot;
-            }
-        }
-
-        // Loop through and accept new tasks
+        // Schedule in order
+        size_t totalRemainingCount = 0;
         size_t remainingCount = 0;
+        size_t scheduled = 0;
+        bool shouldSchedule = true;
         for (auto &item : m_sessions) {
             // Move from front end queue to backing storage
             {
                 utils::Guard g(item->mu);
                 item->bgQueue.splice(item->bgQueue.end(), item->queue);
             }
-            remainingCount += item->bgQueue.size();
-        }
 
-        // Schedule in order
-        size_t scheduled = 0;
-        for (auto &item : m_sessions) {
-            auto count = maybeScheduleFrom(item);
-            scheduled += count;
-            remainingCount -= count;
-            // make sure the first session (with least progress) is
-            // get scheduled solely, thus can keep up, without other
-            // sessions interfere
+            // Try schedule from this session
+            size_t count = 0;
+            if (shouldSchedule) {
+                count = maybeScheduleFrom(item);
+                scheduled += count;
+
+                // remaining count is only counted
+                // for sessions that are considered for
+                // scheduling in this sched iter.
+                remainingCount += item->bgQueue.size();
+            }
+            totalRemainingCount += item->bgQueue.size();
+
             CLOG(INFO, logging::kPerfTag) << "Sched iter " << schedIterCount
                                           << " session: " << item->sessHandle
                                           << " pending: " << item->bgQueue.size()
                                           << " scheduled: " << count
                                           << " counter: " << item->unifiedResSnapshot;
-            if (count > 0 && m_schedParam.useFairnessCounter) {
-                break;
+            if (m_schedParam.useFairnessCounter) {
+                // make sure the first session (with least progress) is
+                // get scheduled solely, thus can keep up, without other
+                // sessions interfere
+                if (!m_schedParam.workConservative || count > 0) {
+                    shouldSchedule = false;
+                }
             }
         }
         CLOG(INFO, logging::kPerfTag) << "Scheduler iter stat: " << schedIterCount
@@ -341,7 +356,7 @@ void ExecutionEngine::scheduleLoop()
             std::this_thread::sleep_for(ns);
         }
 
-        if (!remainingCount) {
+        if (!totalRemainingCount) {
             VLOG(2) << "Wait on m_note_has_work";
             m_note_has_work.wait();
         }
@@ -459,7 +474,7 @@ size_t ExecutionEngine::maybeScheduleFrom(PSessionItem item)
                     return true;
                 };
 
-                if (m_schedParam.randomRuns) {
+                if (m_schedParam.randomizedExecution) {
                     milliseconds dur {std::rand() % 100};
                     std::this_thread::sleep_for(dur);
                 }
@@ -538,8 +553,6 @@ void ExecutionEngine::taskStopped(SessionItem &item, OperationItem &opItem, bool
     auto &rctx = opItem.op->resourceContext();
     rctx.releaseStaging();
 
-    auto dur = duration_cast<microseconds>(now - opItem.tScheduled).count();
-
     // For now only count memory usage, and simply add up memory usages on different
     // devices.
     if (!failed) {
@@ -548,13 +561,13 @@ void ExecutionEngine::taskStopped(SessionItem &item, OperationItem &opItem, bool
         uint64_t unifiedRes = 0;
         if (memUsage) {
             for (auto &p : *memUsage) {
-                if (p.first.type != ResourceType::MEMORY) {
+                auto &tag = p.first;
+                if (tag.type != ResourceType::MEMORY
+                    || tag.device.type != DeviceType::GPU) {
                     continue;
                 }
                 unifiedRes += p.second;
             }
-        } else {
-            unifiedRes = 1;
         }
 
         CLOG(INFO, logging::kPerfTag) << "OpItem Stat " << opItem.op->DebugString()
@@ -563,8 +576,10 @@ void ExecutionEngine::taskStopped(SessionItem &item, OperationItem &opItem, bool
                                         << " scheduled: " << opItem.tScheduled
                                         << " finished: " << now;
 
+        /*
         unifiedRes *= dur;
         item.unifiedRes += unifiedRes;
+        */
     }
 
     m_runningTasks -= 1;

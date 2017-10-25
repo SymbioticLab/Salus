@@ -53,7 +53,11 @@ struct SchedulingParam
     /**
      * Add randomness when run tasks
      */
-    bool randomRuns = false;
+    bool randomizedExecution = false;
+    /**
+     * Whether to be work conservative. Only has effect when useFairnessCounter is true.
+     */
+    bool workConservative = true;
 };
 
 /**

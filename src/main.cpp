@@ -21,6 +21,10 @@ static auto kListenFlag = "--listen";
 static auto kMaxHolWaiting = "--max-hol-waiting";
 static auto kDisableFairness = "--disable-fairness";
 static auto kDisableAdmissionControl = "--disable-adc";
+static auto kDisableWorkConservative = "--disable-wc";
+
+static auto kRandomizedExecution = "--random-exec";
+
 static auto kLogConfFlag = "--logconf";
 static auto kVerboseFlag = "--verbose";
 static auto kVModuleFlag = "--vmodule";
@@ -44,6 +48,9 @@ Options:
                                 [default: tcp://*:5501]
     --disable-adc               Disable admission control.
     --disable-fairness          Disable fair sharing in scheduling.
+    --disable-wc                Disable work conservation. Only have effect when
+                                fairness is on.
+    --random-exec               Using randomized execution for tasks.
     --max-hol-waiting=<num>     Maximum number of task allowed go before queue head
                                 in scheduling. [default: 50]
     --logconf <file>            Path to log configuration file. Note that
@@ -64,28 +71,56 @@ Options:
 
 static auto kVersion = R"(AtLast: trAnsparenT deep LeArning Shared execuTion version 0.1)"s;
 
+template<typename T, typename R>
+class value_or_helper
+{
+    using docopt_long_t = typename std::result_of<decltype(&docopt::value::asLong)(docopt::value)>::type;
+
+    static constexpr bool is_string = std::is_same<T, std::string>::value;
+    static constexpr bool is_bool = std::is_same<T, bool>::value;
+    static constexpr bool is_long = std::is_same<T, long>::value
+                                    || (std::is_integral<T>::value
+                                        && !is_bool
+                                        && sizeof(T) <= sizeof(docopt_long_t));
+
+    static_assert(is_string || is_bool || is_long, "docopt::value only supports std::string, bool and long");
+
+    struct string_tag {};
+    struct bool_tag {};
+    struct long_tag {};
+    struct dispatcher {
+    private:
+        using bool_or_string = typename std::conditional<is_bool, bool_tag, string_tag>::type;
+    public:
+        using type = typename std::conditional<is_long, long_tag, bool_or_string>::type;
+    };
+
+    value_or_helper(const docopt::value &v, const R &def, string_tag)
+        : value(v ? v.asString() : def) { }
+
+    value_or_helper(const docopt::value &v, const R &def, bool_tag)
+        : value(v ? v.asBool() : def) { }
+
+    value_or_helper(const docopt::value &v, const R &def, long_tag)
+        : value(v ? v.asLong() : def) { }
+
+public:
+    value_or_helper(const docopt::value &v, const R &def)
+        : value_or_helper(v, def, typename dispatcher::type {}) {}
+
+    typename std::enable_if_t<is_string || is_bool || is_long, R> value;
+};
+
+template<typename T, typename R>
+inline R value_or(const docopt::value &v, const R &def)
+{
+    return value_or_helper<T, R>(v, def).value;
+}
+
 template<typename T>
-utils::optional<T> optional_arg(const docopt::value &v);
-
-template<>
-inline utils::optional<std::string> optional_arg(const docopt::value &v)
+inline utils::optional<T> optional_arg(const docopt::value &v)
 {
-    if (v) return v.asString();
-    return utils::nullopt;
-}
-
-template<>
-inline utils::optional<int> optional_arg(const docopt::value &v)
-{
-    if (v) return v.asLong();
-    return utils::nullopt;
-}
-
-template<>
-inline utils::optional<bool> optional_arg(const docopt::value &v)
-{
-    if (v) return v.asBool();
-    return utils::nullopt;
+    return value_or<T, utils::optional<T>>(v, utils::nullopt);
 }
 
 } // namespace
@@ -120,16 +155,18 @@ void initializeLogging(std::map<std::string, docopt::value> &args)
 
 void configureExecution(std::map<std::string, docopt::value> &args)
 {
-    const auto &argDisableAdmissionControl = args[kDisableAdmissionControl];
-    const auto &argDisableFairness = args[kDisableFairness];
-    auto disableAdmissionControl = argDisableAdmissionControl ? argDisableAdmissionControl.asBool() : false;
-    auto disableFairness = argDisableFairness ? argDisableFairness.asBool() : false;
-    uint64_t maxQueueHeadWaiting = args[kMaxHolWaiting].asLong();
-
+    auto disableAdmissionControl = value_or<bool>(args[kDisableAdmissionControl], false);
     SessionResourceTracker::instance().setDisabled(disableAdmissionControl);
+
+    auto disableFairness = value_or<bool>(args[kDisableFairness], false);
+    uint64_t maxQueueHeadWaiting = value_or<long>(args[kMaxHolWaiting], 50);
+    auto randomizedExecution = value_or<bool>(args[kRandomizedExecution], false);
+    auto disableWorkConservative = value_or<bool>(args[kDisableWorkConservative], false);
     ExecutionEngine::instance().setSchedulingParam({
         !disableFairness, /* useFairnessCounter */
-        maxQueueHeadWaiting
+        maxQueueHeadWaiting,
+        randomizedExecution,
+        !disableWorkConservative
     });
 }
 
@@ -159,6 +196,8 @@ void printConfiguration(std::map<std::string, docopt::value> &)
     auto &param = ExecutionEngine::instance().schedulingParam();
     LOG(INFO) << "    Policy: " << (param.useFairnessCounter ? "fairness" : "efficiency");
     LOG(INFO) << "    MaxQueueHeadWaiting: " << param.maxHolWaiting;
+    LOG(INFO) << "    RandomizedExecution: " << (param.randomizedExecution ? "on" : "off");
+    LOG(INFO) << "    WorkConservative: " << (param.workConservative ? "on" : "off");
 }
 
 int main(int argc, char **argv)
