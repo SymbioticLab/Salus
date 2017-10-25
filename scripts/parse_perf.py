@@ -6,7 +6,7 @@ from datetime import timedelta
 import pandas as pd
 import matplotlib.pyplot as plt
 
-from . import plotutils as pu
+import plotutils as pu
 
 
 ptn_log = re.compile(r"""^\[(?P<timestamp>\d+-\d+-\d+\s\d+:\d+:\d+\.\d{6}) (\d{3})? \]\s
@@ -77,7 +77,7 @@ def load_file(path, reinitialize=True):
                 log = match_exec_content(content, ctx)
                 if log:
                     ctx.update(log)
-                    logs.append(log)
+                    logs.append(ctx)
             else:
                 print('Unhandled line: ' + line)
 
@@ -171,19 +171,24 @@ def overhead_breakdown(df):
     return grouped, df
 
 
-def progress_counter(df, beginning=None):
+def session_counters(df, colnames=None, beginning=None, useFirstRowAsBegining=True):
     df = df[df['type'] == 'sess-iter'].drop('type', axis=1)
     for col in ['pending', 'scheduled', 'counter']:
         df[col] = pd.to_numeric(df[col])
-    
+
+    if useFirstRowAsBegining and beginning is None:
+        beginning = df.index[0]
     useTimedelta = beginning is not None
+    if colnames is None:
+        colnames = ['counter']
 
     fig, ax = plt.subplots()
-    for key, grp in df.groupby(['session']):
+    for key, grp in df.groupby(['sess']):
         if useTimedelta:
             grp.index = grp.index - beginning
+            grp.index = grp.index.astype(int)
 
-        ax = grp.plot(ax=ax, kind='line', x='timestamp', y='counter', label=key)
+        ax = grp.plot(ax=ax, kind='line', y=colnames, label=key)
 
     if useTimedelta:
         pu.cleanup_axis_timedelta(ax.xaxis)
