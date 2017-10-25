@@ -16,7 +16,7 @@ run_case() {
     echo "Running $model of batch size $batch_size for $num_batches iterations"
     pushd $BENCHMARKDIR > /dev/null
     stdbuf -o0 -e0 -- \
-    python tf_cnn_benchmarks.py --display_every=1 --local_parameter_device=cpu --num_gpus=1 \
+    python tf_cnn_benchmarks.py --display_every=1 --num_gpus=1 \
                                 --variable_update=parameter_server --nodistortions \
                                 --num_batches=$num_batches \
                                 --model=$model \
@@ -32,8 +32,8 @@ do_area() {
     mkdir -p "$OUTPUTDIR"
     OUTPUTDIR=$(realpath "$OUTPUTDIR")
 
-    rm -f /tmp/err.output /tmp/alloc.output
-    env CUDA_VISIBLE_DEVICES=2,3 TF_CPP_MIN_LOG_LEVEL=4 $EXECUTOR --logconf ../build/alloc.config &
+    rm -f /tmp/err.output /tmp/alloc.output /tmp/perf.output
+    env CUDA_VISIBLE_DEVICES=2,3 TF_CPP_MIN_LOG_LEVEL=4 $EXECUTOR --logconf ../build/both.config --perflog /tmp/perf.output --disable-work-conservative &
     local pid=$!
 
     local workload_pids=()
@@ -42,7 +42,7 @@ do_area() {
         run_case wpid $1 $2 "$OUTPUTDIR/$1_$2_${3}iter.${#workload_pids[@]}.output" $3
         workload_pids+=("$wpid")
         shift 3
-        sleep 10
+        sleep 5
     done
 
     wait ${workload_pids[@]}
@@ -50,21 +50,29 @@ do_area() {
     kill $pid
     wait $pid
     mv /tmp/alloc.output $OUTPUTDIR/alloc.output
+    mv /tmp/perf.output $OUTPUTDIR/perf.output
 }
 
-do_area ../scripts/logs/area_3res_sleep10 \
+do_area ../scripts/logs/area_3res_sleep5_1min_nocpu_perf \
         resnet50 50 265 \
         resnet50 50 265 \
         resnet50 50 265
-
 exit
 
-do_area ../scripts/logs/area_3of \
+do_area ../scripts/logs/area_3of_sleep5_rand \
         overfeat 50 424 \
         overfeat 50 424 \
         overfeat 50 424
 
 exit
+do_area ../scripts/logs/area_mix_inception \
+        inception3 25 1537 \
+        inception3 50 836 \
+        inception3 100 436 \
+        inception4 25 743
+
+exit
+
 
 do_area ../scripts/logs/area_vgg \
         vgg11 25 20 \

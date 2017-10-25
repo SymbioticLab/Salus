@@ -7,8 +7,10 @@ BENCHMARKDIR=$HOME/buildbed/tf_benchmarks/scripts/tf_cnn_benchmarks
 LOGDIR=templogs
 
 do_mem() {
-    local OUTPUTDIR=$(realpath $1)
+    local OUTPUTDIR=$1
     mkdir -p $OUTPUTDIR
+
+    local tempdir=$(mktemp -d --tmpdir newmem.XXXXXX)
 
     echo "Running $2 of batch size $3"
 
@@ -18,12 +20,14 @@ do_mem() {
     stdbuf -o0 -e0 -- \
     python tf_cnn_benchmarks.py --display_every=1 --local_parameter_device=cpu --num_gpus=1 --variable_update=parameter_server --nodistortions \
                                 --num_batches=20 \
-                                --model=$2 --batch_size=$3 > $OUTPUTDIR/mem-iter.output
+                                --model=$2 --batch_size=$3 > $tempdir/mem-iter.output
     #| tee $OUTPUTDIR/mem-iter.output
     popd > /dev/null
     kill $pid
     wait $pid
     mv /tmp/alloc.output $OUTPUTDIR/alloc.output
+    mv $tempdir/* $OUTPUTDIR
+    rmdir $tempdir
 }
 
 rm -f /tmp/err.output /tmp/alloc.output
@@ -39,8 +43,6 @@ do_mem $LOGDIR/vgg16_100 vgg16 100
 do_mem $LOGDIR/vgg19_25 vgg19 25
 do_mem $LOGDIR/vgg19_50 vgg19 50
 do_mem $LOGDIR/vgg19_100 vgg19 100
-
-exit
 
 do_mem $LOGDIR/resnet50_25 resnet50 25
 do_mem $LOGDIR/resnet50_50 resnet50 50
