@@ -2,6 +2,7 @@ from __future__ import print_function, absolute_import, division
 
 import re
 from datetime import timedelta
+import subprocess as sp
 
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -62,6 +63,16 @@ ptn_paging = re.compile(r'''Paging: \s duration: (?P<duration>\d+) us
 
 def initialize():
     pass
+
+
+def _reprocessing(path):
+    tempdir = sp.check_output(['mktemp', '-d', '--tempdir']).rstrip('\n')
+    try:
+        pass
+    finally:
+        sp.call(['rm', '-r', '-f', tempdir])
+
+    return tempdir
 
 
 def load_file(path, reinitialize=True):
