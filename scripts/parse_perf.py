@@ -53,6 +53,12 @@ ptn_sched_iter = re.compile(r'''Scheduler \s iter \s stat: \s (?P<iter>\d+) \s
                                 noPageRunning:\s (?P<noPageRunning>\d+)''',
                             re.VERBOSE)
 
+# Paging: duration: 19995 us released: 160563712 forceevict: ''
+ptn_paging = re.compile(r'''Paging: \s duration: (?P<duration>\d+) us
+                            \s released: \s (?P<released>\d+)
+                            \s forceevicit: \s '(?P<forceevicited>\w*)' ''',
+                        re.VERBOSE)
+
 
 def initialize():
     pass
@@ -131,6 +137,12 @@ def match_exec_content(content, ctx):
     if m:
         d = m.groupdict()
         d['type'] = 'sched-iter'
+        return d
+
+    m = ptn_paging.match(content)
+    if m:
+        d = m.groupdict()
+        d['type'] = 'paging'
         return d
 
     return None

@@ -599,9 +599,9 @@ bool ExecutionEngine::doPaging()
     utils::ScopeGuards sg([&now, &released, &forceEvicitedSess]() {
         auto dur = system_clock::now() - now;
         CLOG(INFO, logging::kPerfTag) << "Paging: "
-                                      << "duration: " << duration_cast<microseconds>(dur).count() << " us"
-                                      << "released: " << released
-                                      << "forceevict: '" << forceEvicitedSess << "'";
+                                      << " duration: " << duration_cast<microseconds>(dur).count() << " us"
+                                      << " released: " << released
+                                      << " forceevict: '" << forceEvicitedSess << "'";
     });
 
     // Step 1: select candidate sessions
