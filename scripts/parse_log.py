@@ -92,6 +92,24 @@ def initialize():
 initialize()
 
 
+def _process_line_paral(line):
+    line = line.rstrip('\n')
+    m = ptn_exec.match(line)
+    if m:
+        # executor line
+        entry = Entry(m.groupdict(), 'exec')
+        return entry.finalize()
+
+    m = ptn_tf.match(line)
+    if m:
+        # tf line
+        entry = Entry(m.groupdict(), 'tf')
+        return entry.finalize()
+
+    print('Unhandled line: ' + line)
+    return None
+
+
 def load_file(path, reinitialize=True, parallel=False):
     """Load logs"""
 
@@ -132,24 +150,8 @@ def load_file(path, reinitialize=True, parallel=False):
     else:
         pool = mp.Pool(mp.cpu_count())
 
-        def process_line(line):
-            line = line.rstrip('\n')
-            m = ptn_exec.match(line)
-            if m:
-                # executor line
-                entry = Entry(m.groupdict(), 'exec')
-                return entry.finalize()
-
-            m = ptn_tf.match(line)
-            if m:
-                # tf line
-                entry = Entry(m.groupdict(), 'tf')
-                return entry.finalize()
-
-            print('Unhandled line: ' + line)
-
         with open(path) as f:
-            return pool.map(process_line, f, chunksize=2000000)
+            return pool.map(_process_line_paral, f, chunksize=2000000)
 
 
 def load_both(exec_file, tf_file):
