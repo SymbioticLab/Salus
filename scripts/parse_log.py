@@ -151,7 +151,12 @@ def load_file(path, reinitialize=True, parallel_workers=0):
         pool = mp.Pool(parallel_workers)
 
         with open(path) as f:
-            return pool.map(_process_line_paral, f, chunksize=20000)
+            res = pool.map_async(_process_line_paral, f, chunksize=20000)
+            while True:
+                try:
+                    return res.get(999)
+                except mp.TimeoutError:
+                    pass
 
 
 def load_both(exec_file, tf_file):
