@@ -3,6 +3,8 @@ from __future__ import print_function, absolute_import, division
 import re
 from datetime import timedelta
 import subprocess as sp
+import os
+import shutil
 
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -65,14 +67,26 @@ def initialize():
     pass
 
 
-def _reprocessing(path):
-    tempdir = sp.check_output(['mktemp', '-d', '--tempdir']).rstrip('\n')
+def preprocesse(d):
+    perffile = os.path.join(d, 'perf.output')
+    tempdir = sp.check_output(['mktemp', '-d', '--tmpdir']).rstrip('\n')
     try:
-        pass
+        path = os.path.join(tempdir, 'sessiter.output')
+        with open(path, 'w') as f:
+            sp.check_call(['grep', 'Sched iter', perffile], stdout=f)
+        shutil.move(path, d)
+
+        path = os.path.join(tempdir, 'schediter.output')
+        with open(path, 'w') as f:
+            sp.check_call(['grep', 'Scheduler iter', perffile], stdout=f)
+        shutil.move(path, d)
+
+        path = os.path.join(tempdir, 'opstat.output')
+        with open(path, 'w') as f:
+            sp.check_call(['grep', 'OpItem Stat', perffile], stdout=f)
+        shutil.move(path, d)
     finally:
         sp.call(['rm', '-r', '-f', tempdir])
-
-    return tempdir
 
 
 def load_file(path, reinitialize=True):
@@ -205,7 +219,8 @@ def session_counters(df, colnames=None, beginning=None, useFirstRowAsBegining=Tr
     if colnames is None:
         colnames = ['counter']
 
-    fig, axs = plt.subplots(nrows=len(colnames), sharex=True)
+    fig, axs = plt.subplots(nrows=len(colnames), sharex=True, squeeze=False)
+    axs = axs.flatten()
     for key, grp in df.groupby(['sess']):
         if useTimedelta:
             grp.index = grp.index - beginning
