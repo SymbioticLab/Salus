@@ -774,8 +774,11 @@ def memory_usage(logs, iter_times=None, beginning=None, mem_type=None,
 
         # Change to timedelta after iteration restriction.
         # for some reason slicing doesn't work on Timedeltas
+        # Pandas doesn't support irregular Timedelta intervals on xaxis
+        # see https://stackoverflow.com/questions/40621710/axis-interval-spacing-when-plotting-with-pandas-timedelta
+        # and https://github.com/pandas-dev/pandas/issues/8711
         ss.index = ss.index - beginning
-        # ss.index = ss.index.astype(int)
+        ss.index = ss.index.astype(int)
 
         series.append(ss)
         if smoother:
