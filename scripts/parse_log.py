@@ -754,7 +754,10 @@ def memory_usage(logs, iter_times=None, beginning=None, mem_type=None,
 
         series.append(ss)
         if smoother:
-            ss = smoother(ss)
+            if show_avg:
+                ss = smoother(ss, ss2)
+            else:
+                ss = smoother(ss)
 
         if per_sess:
             ss.plot.area(ax=ax, linewidth=0)

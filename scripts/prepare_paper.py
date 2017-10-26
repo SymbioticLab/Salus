@@ -105,7 +105,8 @@ def plot_mem_mnist100(config, local_dir, logs, iters):
 
 @plotter('vgg11_25')
 def plot_mem_vgg11_25(config, local_dir, logs, iters):
-    def smoother(ss):
+    def smoother(ss, ss2):
+        print('{}, {}, {}'.format(ss.min(), ss.max(), ss2.mean()))
         return ss
         # return ss.ewm(span=15).mean()
 
@@ -116,7 +117,8 @@ def plot_mem_vgg11_25(config, local_dir, logs, iters):
 
 @plotter('vgg11_50')
 def plot_mem_vgg11_50(config, local_dir, logs, iters):
-    def smoother(ss):
+    def smoother(ss, ss2):
+        print('{}, {}, {}'.format(ss.min(), ss.max(), ss2.mean()))
         return ss
         # return ss.ewm(span=15).mean()
 
@@ -127,7 +129,8 @@ def plot_mem_vgg11_50(config, local_dir, logs, iters):
 
 @plotter('vgg11_100')
 def plot_mem_vgg11_100(config, local_dir, logs, iters):
-    def smoother(ss):
+    def smoother(ss, ss2):
+        print('{}, {}, {}'.format(ss.min(), ss.max(), ss2.mean()))
         return ss
         # return ss.ewm(span=15).mean()
 
@@ -138,7 +141,8 @@ def plot_mem_vgg11_100(config, local_dir, logs, iters):
 
 @plotter('vgg16_25')
 def plot_mem_vgg16_25(config, local_dir, logs, iters):
-    def smoother(ss):
+    def smoother(ss, ss2):
+        print('{}, {}, {}'.format(ss.min(), ss.max(), ss2.mean()))
         return ss
         # return ss.ewm(span=15).mean()
 
@@ -149,7 +153,8 @@ def plot_mem_vgg16_25(config, local_dir, logs, iters):
 
 @plotter('vgg16_50')
 def plot_mem_vgg16_50(config, local_dir, logs, iters):
-    def smoother(ss):
+    def smoother(ss, ss2):
+        print('{}, {}, {}'.format(ss.min(), ss.max(), ss2.mean()))
         return ss
         # return ss.ewm(span=15).mean()
 
@@ -160,7 +165,8 @@ def plot_mem_vgg16_50(config, local_dir, logs, iters):
 
 @plotter('vgg16_100')
 def plot_mem_vgg16_100(config, local_dir, logs, iters):
-    def smoother(ss):
+    def smoother(ss, ss2):
+        print('{}, {}, {}'.format(ss.min(), ss.max(), ss2.mean()))
         return ss
         # return ss.ewm(span=15).mean()
 
@@ -171,7 +177,8 @@ def plot_mem_vgg16_100(config, local_dir, logs, iters):
 
 @plotter('vgg19_25')
 def plot_mem_vgg19_25(config, local_dir, logs, iters):
-    def smoother(ss):
+    def smoother(ss, ss2):
+        print('{}, {}, {}'.format(ss.min(), ss.max(), ss2.mean()))
         return ss
         # return ss.ewm(span=15).mean()
 
@@ -182,7 +189,8 @@ def plot_mem_vgg19_25(config, local_dir, logs, iters):
 
 @plotter('vgg19_50')
 def plot_mem_vgg19_50(config, local_dir, logs, iters):
-    def smoother(ss):
+    def smoother(ss, ss2):
+        print('{}, {}, {}'.format(ss.min(), ss.max(), ss2.mean()))
         return ss
         # return ss.ewm(span=15).mean()
 
@@ -193,7 +201,8 @@ def plot_mem_vgg19_50(config, local_dir, logs, iters):
 
 @plotter('vgg19_100')
 def plot_mem_vgg19_100(config, local_dir, logs, iters):
-    def smoother(ss):
+    def smoother(ss, ss2):
+        print('{}, {}, {}'.format(ss.min(), ss.max(), ss2.mean()))
         return ss
         # return ss.ewm(span=15).mean()
 
@@ -204,7 +213,8 @@ def plot_mem_vgg19_100(config, local_dir, logs, iters):
 
 @plotter('inception4_75')
 def plot_mem_inception4_75(config, local_dir, logs, iters):
-    def smoother(ss):
+    def smoother(ss, ss2):
+        print('{}, {}, {}'.format(ss.min(), ss.max(), ss2.mean()))
         return ss
         # return ss.ewm(span=15).mean()
 
@@ -215,7 +225,8 @@ def plot_mem_inception4_75(config, local_dir, logs, iters):
 
 @plotter('inception4_50')
 def plot_mem_inception4_50(config, local_dir, logs, iters):
-    def smoother(ss):
+    def smoother(ss, ss2):
+        print('{}, {}, {}'.format(ss.min(), ss.max(), ss2.mean()))
         return ss
         # return ss.ewm(span=15).mean()
 
@@ -226,7 +237,8 @@ def plot_mem_inception4_50(config, local_dir, logs, iters):
 
 @plotter('inception4_25')
 def plot_mem_inception4_25(config, local_dir, logs, iters):
-    def smoother(ss):
+    def smoother(ss, ss2):
+        print('{}, {}, {}'.format(ss.min(), ss.max(), ss2.mean()))
         return ss
         # return ss.ewm(span=15).mean()
 
@@ -237,7 +249,8 @@ def plot_mem_inception4_25(config, local_dir, logs, iters):
 
 @plotter('inception3_100')
 def plot_mem_inception3_100(config, local_dir, logs, iters):
-    def smoother(ss):
+    def smoother(ss, ss2):
+        print('{}, {}, {}'.format(ss.min(), ss.max(), ss2.mean()))
         return ss
         # return ss.ewm(span=15).mean()
 
@@ -248,7 +261,8 @@ def plot_mem_inception3_100(config, local_dir, logs, iters):
 
 @plotter('inception3_50')
 def plot_mem_inception3_50(config, local_dir, logs, iters):
-    def smoother(ss):
+    def smoother(ss, ss2):
+        print('{}, {}, {}'.format(ss.min(), ss.max(), ss2.mean()))
         return ss
         # return ss.ewm(span=15).mean()
 
@@ -259,7 +273,8 @@ def plot_mem_inception3_50(config, local_dir, logs, iters):
 
 @plotter('inception3_25')
 def plot_mem_inception3_25(config, local_dir, logs, iters):
-    def smoother(ss):
+    def smoother(ss, ss2):
+        print('{}, {}, {}'.format(ss.min(), ss.max(), ss2.mean()))
         return ss
         # return ss.ewm(span=15).mean()
 
@@ -270,7 +285,8 @@ def plot_mem_inception3_25(config, local_dir, logs, iters):
 
 @plotter('overfeat_100')
 def plot_mem_overfeat_100(config, local_dir, logs, iters):
-    def smoother(ss):
+    def smoother(ss, ss2):
+        print('{}, {}, {}'.format(ss.min(), ss.max(), ss2.mean()))
         return ss
         # return ss.ewm(span=15).mean()
 
@@ -281,7 +297,8 @@ def plot_mem_overfeat_100(config, local_dir, logs, iters):
 
 @plotter('overfeat_50')
 def plot_mem_overfeat_50(config, local_dir, logs, iters):
-    def smoother(ss):
+    def smoother(ss, ss2):
+        print('{}, {}, {}'.format(ss.min(), ss.max(), ss2.mean()))
         return ss
         # return ss.ewm(span=15).mean()
 
@@ -292,7 +309,8 @@ def plot_mem_overfeat_50(config, local_dir, logs, iters):
 
 @plotter('overfeat_25')
 def plot_mem_overfeat_25(config, local_dir, logs, iters):
-    def smoother(ss):
+    def smoother(ss, ss2):
+        print('{}, {}, {}'.format(ss.min(), ss.max(), ss2.mean()))
         return ss
         # return ss.ewm(span=15).mean()
 
@@ -303,7 +321,8 @@ def plot_mem_overfeat_25(config, local_dir, logs, iters):
 
 @plotter('alexnet_100')
 def plot_mem_alexnet_100(config, local_dir, logs, iters):
-    def smoother(ss):
+    def smoother(ss, ss2):
+        print('{}, {}, {}'.format(ss.min(), ss.max(), ss2.mean()))
         return ss
         # return ss.ewm(span=15).mean()
 
@@ -314,7 +333,8 @@ def plot_mem_alexnet_100(config, local_dir, logs, iters):
 
 @plotter('alexnet_50')
 def plot_mem_alexnet_50(config, local_dir, logs, iters):
-    def smoother(ss):
+    def smoother(ss, ss2):
+        print('{}, {}, {}'.format(ss.min(), ss.max(), ss2.mean()))
         return ss
         # return ss.ewm(span=15).mean()
 
@@ -325,7 +345,8 @@ def plot_mem_alexnet_50(config, local_dir, logs, iters):
 
 @plotter('alexnet_25')
 def plot_mem_alexnet_25(config, local_dir, logs, iters):
-    def smoother(ss):
+    def smoother(ss, ss2):
+        print('{}, {}, {}'.format(ss.min(), ss.max(), ss2.mean()))
         return ss
         # return ss.ewm(span=15).mean()
 
@@ -336,7 +357,8 @@ def plot_mem_alexnet_25(config, local_dir, logs, iters):
 
 @plotter('googlenet_100')
 def plot_mem_googlenet_100(config, local_dir, logs, iters):
-    def smoother(ss):
+    def smoother(ss, ss2):
+        print('{}, {}, {}'.format(ss.min(), ss.max(), ss2.mean()))
         return ss
         # return ss.ewm(span=15).mean()
 
@@ -347,7 +369,8 @@ def plot_mem_googlenet_100(config, local_dir, logs, iters):
 
 @plotter('googlenet_50')
 def plot_mem_googlenet_50(config, local_dir, logs, iters):
-    def smoother(ss):
+    def smoother(ss, ss2):
+        print('{}, {}, {}'.format(ss.min(), ss.max(), ss2.mean()))
         return ss
         # return ss.ewm(span=15).mean()
 
@@ -358,7 +381,8 @@ def plot_mem_googlenet_50(config, local_dir, logs, iters):
 
 @plotter('googlenet_25')
 def plot_mem_googlenet_25(config, local_dir, logs, iters):
-    def smoother(ss):
+    def smoother(ss, ss2):
+        print('{}, {}, {}'.format(ss.min(), ss.max(), ss2.mean()))
         return ss
         # return ss.ewm(span=15).mean()
 
@@ -369,7 +393,8 @@ def plot_mem_googlenet_25(config, local_dir, logs, iters):
 
 @plotter('resnet152_75')
 def plot_mem_resnet152_75(config, local_dir, logs, iters):
-    def smoother(ss):
+    def smoother(ss, ss2):
+        print('{}, {}, {}'.format(ss.min(), ss.max(), ss2.mean()))
         return ss
         # return ss.ewm(span=15).mean()
 
@@ -380,7 +405,8 @@ def plot_mem_resnet152_75(config, local_dir, logs, iters):
 
 @plotter('resnet152_50')
 def plot_mem_resnet152_50(config, local_dir, logs, iters):
-    def smoother(ss):
+    def smoother(ss, ss2):
+        print('{}, {}, {}'.format(ss.min(), ss.max(), ss2.mean()))
         return ss
         # return ss.ewm(span=15).mean()
 
@@ -391,7 +417,8 @@ def plot_mem_resnet152_50(config, local_dir, logs, iters):
 
 @plotter('resnet152_25')
 def plot_mem_resnet152_25(config, local_dir, logs, iters):
-    def smoother(ss):
+    def smoother(ss, ss2):
+        print('{}, {}, {}'.format(ss.min(), ss.max(), ss2.mean()))
         return ss
         # return ss.ewm(span=15).mean()
 
@@ -402,7 +429,8 @@ def plot_mem_resnet152_25(config, local_dir, logs, iters):
 
 @plotter('resnet101_75')
 def plot_mem_resnet101_75(config, local_dir, logs, iters):
-    def smoother(ss):
+    def smoother(ss, ss2):
+        print('{}, {}, {}'.format(ss.min(), ss.max(), ss2.mean()))
         return ss
         # return ss.ewm(span=15).mean()
 
@@ -413,7 +441,8 @@ def plot_mem_resnet101_75(config, local_dir, logs, iters):
 
 @plotter('resnet101_50')
 def plot_mem_resnet101_50(config, local_dir, logs, iters):
-    def smoother(ss):
+    def smoother(ss, ss2):
+        print('{}, {}, {}'.format(ss.min(), ss.max(), ss2.mean()))
         return ss
         # return ss.ewm(span=15).mean()
 
@@ -424,7 +453,8 @@ def plot_mem_resnet101_50(config, local_dir, logs, iters):
 
 @plotter('resnet101_25')
 def plot_mem_resnet101_25(config, local_dir, logs, iters):
-    def smoother(ss):
+    def smoother(ss, ss2):
+        print('{}, {}, {}'.format(ss.min(), ss.max(), ss2.mean()))
         return ss
         # return ss.ewm(span=15).mean()
 
@@ -435,7 +465,8 @@ def plot_mem_resnet101_25(config, local_dir, logs, iters):
 
 @plotter('resnet50_75')
 def plot_mem_resnet50_75(config, local_dir, logs, iters):
-    def smoother(ss):
+    def smoother(ss, ss2):
+        print('{}, {}, {}'.format(ss.min(), ss.max(), ss2.mean()))
         return ss
         # return ss.ewm(span=15).mean()
 
@@ -446,7 +477,8 @@ def plot_mem_resnet50_75(config, local_dir, logs, iters):
 
 @plotter('resnet50_50')
 def plot_mem_resnet50_50(config, local_dir, logs, iters):
-    def smoother(ss):
+    def smoother(ss, ss2):
+        print('{}, {}, {}'.format(ss.min(), ss.max(), ss2.mean()))
         return ss
         # return ss.ewm(span=15).mean()
 
@@ -457,7 +489,8 @@ def plot_mem_resnet50_50(config, local_dir, logs, iters):
 
 @plotter('resnet50_25')
 def plot_mem_resnet50_25(config, local_dir, logs, iters):
-    def smoother(ss):
+    def smoother(ss, ss2):
+        print('{}, {}, {}'.format(ss.min(), ss.max(), ss2.mean()))
         return ss
         # return ss.ewm(span=15).mean()
 
@@ -468,7 +501,8 @@ def plot_mem_resnet50_25(config, local_dir, logs, iters):
 
 # @plotter('res50')
 def plot_mem_res50(config, local_dir, logs, iters):
-    def smoother(ss):
+    def smoother(ss, ss2):
+        print('{}, {}, {}'.format(ss.min(), ss.max(), ss2.mean()))
         return ss
         # return ss.ewm(span=15).mean()
 
@@ -479,7 +513,8 @@ def plot_mem_res50(config, local_dir, logs, iters):
 
 # @plotter('res75')
 def plot_mem_res75(config, local_dir, logs, iters):
-    def smoother(ss):
+    def smoother(ss, ss2):
+        print('{}, {}, {}'.format(ss.min(), ss.max(), ss2.mean()))
         return ss
         # return ss.ewm(span=15).mean()
 
