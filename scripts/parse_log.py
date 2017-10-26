@@ -148,7 +148,7 @@ def load_file(path, reinitialize=True, parallel_workers=0):
                     print('Unhandled line: ' + line)
         return logs
     else:
-        pool = mp.Pool(parallel_workers)
+        pool = mp.Pool(processes=parallel_workers, maxtasksperchild=10)
 
         with open(path) as f:
             res = pool.map_async(_process_line_paral, f, chunksize=20000)
