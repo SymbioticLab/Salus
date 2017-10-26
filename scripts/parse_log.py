@@ -3,6 +3,7 @@ from __future__ import print_function, absolute_import, division
 import re
 from datetime import datetime
 from collections import defaultdict
+import multiprocessing as mp
 
 import pandas as pd
 import seaborn as sns
@@ -91,42 +92,64 @@ def initialize():
 initialize()
 
 
-def load_file(path, reinitialize=True):
+def load_file(path, reinitialize=True, parallel=False):
     """Load logs"""
-    logs = []
 
     if reinitialize:
         initialize()
 
-    with open(path) as f:
-        entry = None
-        for line in f:
-            line = line.rstrip('\n')
+    if not parallel:
+        logs = []
+        with open(path) as f:
+            entry = None
+            for line in f:
+                line = line.rstrip('\n')
 
+                m = ptn_exec.match(line)
+                if m:
+                    if entry:
+                        logs.append(entry.finalize())
+                        entry = None
+                    # executor line
+                    entry = Entry(m.groupdict(), 'exec')
+                    continue
+
+                m = ptn_tf.match(line)
+                if m:
+                    if entry:
+                        logs.append(entry.finalize())
+                        entry = None
+                    # tf line
+                    entry = Entry(m.groupdict(), 'tf')
+                    continue
+
+                # assume it belongs to previous line
+                if entry:
+                    entry.update(line)
+                else:
+                    print('Unhandled line: ' + line)
+        return logs
+    else:
+        pool = mp.Pool(mp.cpu_count())
+
+        def process_line(line):
+            line = line.rstrip('\n')
             m = ptn_exec.match(line)
             if m:
-                if entry:
-                    logs.append(entry.finalize())
-                    entry = None
                 # executor line
                 entry = Entry(m.groupdict(), 'exec')
-                continue
+                return entry.finalize()
 
             m = ptn_tf.match(line)
             if m:
-                if entry:
-                    logs.append(entry.finalize())
-                    entry = None
                 # tf line
                 entry = Entry(m.groupdict(), 'tf')
-                continue
+                return entry.finalize()
 
-            # assume it belongs to previous line
-            if entry:
-                entry.update(line)
-            else:
-                print('Unhandled line: ' + line)
-    return logs
+            print('Unhandled line: ' + line)
+
+        with open(path) as f:
+            return pool.map(process_line, f, chunksize=2000000)
 
 
 def load_both(exec_file, tf_file):
@@ -326,9 +349,6 @@ def match_exec_content(content, entry):
             'alloc_inst': alloc_inst,
             'ticket': ticket
         }
-        if addr in blocks:
-            print('WARNING: overwriting existing mem block: ', addr)
-        blocks[addr] = block
         return {
             'type': 'mem_alloc',
             'size': size,
@@ -339,19 +359,17 @@ def match_exec_content(content, entry):
     m = ptn_mem_dealloc.match(content)
     if m:
         addr = m.group('addr')
-        if addr not in blocks:
-            print('Unknown deallocation at: ', addr)
-            size = int(m.group('size'))
-        else:
-            block = blocks[addr]
-            del blocks[addr]
-            size = block['size']
-            if size != int(m.group('size')):
-                print('WARNING: size differ: actual {}, rememered {}'.format(m.group('size'), size))
-                size = int(m.group('size'))
-            ticket = block['ticket']
-            if ticket != int(m.group('ticket')):
-                print('WARNING: ticket differ: actual {}, remembered {}'.format(m.group('ticket'), ticket))
+        size = int(m.group('size'))
+        mem_type = m.group('mem_type')
+        alloc_inst = m.group('alloc_inst')
+        ticket = int(m.group('ticket'))
+        block = {
+            'size': size,
+            'addr': addr,
+            'mem_type': mem_type,
+            'alloc_inst': alloc_inst,
+            'ticket': ticket
+        }
         return {
             'type': 'mem_dealloc',
             'addr': addr,
