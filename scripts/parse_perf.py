@@ -8,6 +8,7 @@ import shutil
 
 import pandas as pd
 import matplotlib.pyplot as plt
+import matplotlib.dates as dt
 
 import plotutils as pu
 
@@ -228,6 +229,7 @@ def session_counters(df, colnames=None, beginning=None, useFirstRowAsBegining=Tr
 
         for col, ax in zip(colnames, axs):
             grp.plot(ax=ax, kind='line', y=col, label=key)
+            ax.set_title(col)
 
     ax = plt.gca()
     if useTimedelta:
@@ -236,3 +238,23 @@ def session_counters(df, colnames=None, beginning=None, useFirstRowAsBegining=Tr
         pu.cleanup_axis_datetime(ax.xaxis)
 
     return df, fig
+
+
+def paging_stat(df, useFirstRowAsBegining=True, beginning=None):
+    if useFirstRowAsBegining and beginning is None:
+        beginning = df.index[0]
+
+    df = df[df['type'] == 'paging'].drop('type', axis=1)
+    for col in ['duration', 'released']:
+        df[col] = pd.to_numeric(df[col])
+
+    df['duration'] = pd.to_timedelta(df['duration'], unit='us')
+    df['starttime'] = df.index - df['duration']
+    df['endtime'] = df.index
+    # convert to reltime
+    # df.start = df.start - beginning
+    # df.end = df.end - beginning
+
+    ax = plt.hlines(df.index, dt.date2num(df['starttime']), dt.date2num(df['endtime']))
+
+    return df, ax.figure

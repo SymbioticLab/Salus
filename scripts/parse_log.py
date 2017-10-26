@@ -9,7 +9,6 @@ import pandas as pd
 import seaborn as sns
 import numpy as np
 import matplotlib.pyplot as plt
-import matplotlib.dates as dt
 
 import plotutils as pu
 
@@ -828,30 +827,3 @@ def memory_usage(logs, iter_times=None, beginning=None, mem_type=None,
         fig.subplots_adjust(left=0.1, bottom=0.13)
     return df, beginning, fig
 
-
-def paging_stat(logs):
-    data = []
-    beginning = None
-    for l in logs:
-        if l.type == 'disp_custom':
-            if l.req == 'tensorflow.CreateSessionRequest' and beginning is None:
-                beginning = l.timestamp
-        elif l.type == 'paging_end':
-            data.append({
-                'start': l.start,
-                'end': l.end
-            })
-
-    df = pd.DataFrame(data)
-    if len(df) == 0:
-        return df, None
-
-    # convert to reltime
-    # df.start = df.start - beginning
-    # df.end = df.end - beginning
-
-    df.start = df.start.astype(datetime)
-    df.end = df.end.astype(datetime)
-    ax = plt.hlines(df.index, dt.date2num(df.start), dt.date2num(df.end))
-
-    return df, ax.figure
