@@ -330,14 +330,11 @@ void ExecutionEngine::scheduleLoop()
                                       << " running: " << m_runningTasks
                                       << " noPageRunning: " << m_noPagingRunningTasks;
 
-        PERFORMANCE_CHECKPOINT_WITH_ID(schedIterObj, "without-paging");
-
         // Update conditions and check if we need paging
         bool noProgress = remainingCount > 0 && scheduled == 0;
         int64_t running_tasks = m_noPagingRunningTasks;
         bool needPaging = (noProgress && running_tasks == 0);
         if (needPaging && m_sessions.size() > 1) {
-            TIMED_SCOPE(pagingObj, "paging");
             if (doPaging()) {
                 // succeed, retry immediately
                 continue;
@@ -428,7 +425,7 @@ size_t ExecutionEngine::maybeScheduleFrom(PSessionItem item)
         }
 
         VLOG(3) << "Scheduling opItem in session " << item->sessHandle << ": " << opItem->op->DebugString();
-        TIMED_SCOPE(timerInnerObj, "ExecutionEngine::maybeScheduleFrom::doSchedule");
+        TIMED_SCOPE_IF(timerInnerObj, "ExecutionEngine::maybeScheduleFrom::doSchedule", VLOG_IS_ON(1));
 
         opItem->tInspected = system_clock::now();
         bool scheduled = false;
@@ -456,7 +453,8 @@ size_t ExecutionEngine::maybeScheduleFrom(PSessionItem item)
             VLOG(3) << "Adding to thread pool: opItem in session " << item->sessHandle
                     << ": " << opItem->op->DebugString();
             q::with(m_qec->queue(), std::move(opItem)).then([item, this](POpItem &&opItem){
-                TIMED_SCOPE(timerInnerObj, "ExecutionEngine::maybeScheduleFrom::doSchedule::run");
+                TIMED_SCOPE_IF(timerInnerObj, "ExecutionEngine::maybeScheduleFrom::doSchedule::run",
+                               VLOG_IS_ON(1));
                 OperationTask::Callbacks cbs;
 
                 DCHECK(item);
@@ -594,6 +592,18 @@ void ExecutionEngine::taskStopped(SessionItem &item, OperationItem &opItem, bool
 
 bool ExecutionEngine::doPaging()
 {
+    auto now = system_clock::now();
+    size_t released = 0;
+    std::string forceEvicitedSess;
+
+    utils::ScopeGuards sg([&now, &released, &forceEvicitedSess]() {
+        auto dur = system_clock::now() - now;
+        CLOG(INFO, logging::kPerfTag) << "Paging: "
+                                      << "duration: " << duration_cast<microseconds>(dur).count() << " us"
+                                      << "released: " << released
+                                      << "forceevict: '" << forceEvicitedSess << "'";
+    });
+
     // Step 1: select candidate sessions
     std::vector<std::pair<
         size_t,
@@ -679,7 +689,7 @@ bool ExecutionEngine::doPaging()
 
             VLOG(2) << "    request to page out ticket " << victim << " of usage " << usage;
             // request the session to do paging
-            auto released = sess.pagingCb.volunteer(victim, std::move(rctx));
+            released += sess.pagingCb.volunteer(victim, std::move(rctx));
             if (released > 0) {
                 // someone freed some memory on GPU, we are good to go.
                 VLOG(2) << "    released " << released << " bytes via paging";
@@ -706,6 +716,7 @@ bool ExecutionEngine::doPaging()
         if (!sess.pagingCb) {
             continue;
         }
+        forceEvicitedSess = sess.sessHandle;
 
         // Don't retry anymore for OOM kernels in this session
         sess.protectOOM = false;

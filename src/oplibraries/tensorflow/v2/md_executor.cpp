@@ -376,7 +376,7 @@ void ExecutorState::RunAsync(tf::Executor::DoneCallback done)
 
 void ExecutorState::Process(TaggedNode tagged_node)
 {
-    TIMED_FUNC(timerObj);
+    TIMED_FUNC_IF(timerObj, VLOG_IS_ON(1));
 
     // Initial parameters passed to OpKernel::Compute.
     tf::OpKernelContext::Params params;
@@ -411,7 +411,7 @@ void ExecutorState::Process(TaggedNode tagged_node)
 tf::Status ExecutorState::SetupKernel(TaggedNode node, const ExecutorImpl::DeviceItem &ditem,
                                       tf::OpKernel **op_kernel)
 {
-    TIMED_FUNC(timerObj);
+    TIMED_FUNC_IF(timerObj, VLOG_IS_ON(1));
 
     auto &ndef = node.node->def();
 
@@ -431,7 +431,7 @@ tf::Status ExecutorState::SetupKernel(TaggedNode node, const ExecutorImpl::Devic
 
 tf::DeviceContext * ExecutorState::FindDeviceContext(size_t id, tf::Device* device)
 {
-    TIMED_FUNC(timerObj);
+    TIMED_FUNC_IF(timerObj, VLOG_IS_ON(1));
 
     auto it = m_deviceContextMaps.end();
     {
@@ -480,7 +480,7 @@ tf::Status ExecutorState::PrepareInputs(const NodeItem &item, tf::OpKernel *kern
                                         DeviceContextVec *input_device_contexts,
                                         AllocatorAttributeVec *input_alloc_attrs, bool *is_input_dead)
 {
-    TIMED_FUNC(timerObj);
+    TIMED_FUNC_IF(timerObj, VLOG_IS_ON(1));
     DCHECK(buflocks);
 
     auto node = item.node;
@@ -498,7 +498,7 @@ tf::Status ExecutorState::PrepareInputs(const NodeItem &item, tf::OpKernel *kern
     // Check and bring back paged out entries. Also gather all buf lock for later use
     std::unordered_set<boost::upgrade_mutex*> locks;
     {
-        TIMED_SCOPE(pagingCheckObj, "check paging");
+        TIMED_SCOPE_IF(pagingCheckObj, "check paging", VLOG_IS_ON(1));
         for (int i = 0; i < item.num_inputs; ++i) {
             auto entry = first_input + i;
             if (!entry->has_value) {
@@ -513,7 +513,6 @@ tf::Status ExecutorState::PrepareInputs(const NodeItem &item, tf::OpKernel *kern
             boost::shared_lock<boost::upgrade_mutex> ul(tree->buf_mu);
             if (tree->paged_out) {
                 ul.unlock();
-                PERFORMANCE_CHECKPOINT_WITH_ID(pagingCheckObj, "after read");
                 boost::unique_lock<boost::upgrade_mutex> uul(tree->buf_mu);
                 // double check again, as unlock-lockexclusive is not atomic
                 if (tree->paged_out) {
@@ -535,7 +534,7 @@ tf::Status ExecutorState::PrepareInputs(const NodeItem &item, tf::OpKernel *kern
     // lock all buflocks as read for whole period,
     // all read/write should happen after this
     {
-        TIMED_SCOPE(readLockObj, "lock all read");
+        TIMED_SCOPE_IF(readLockObj, "lock all read", VLOG_IS_ON(1));
         utils::lock_shared(locks.begin(), locks.end());
     }
 
@@ -691,7 +690,7 @@ tf::Status ExecutorState::ProcessOutputs(const NodeItem &item, tf::OpKernelConte
                                          const std::shared_ptr<PerOpAllocDevice> &device,
                                          EntryVector *outputs, tf::NodeExecStats *stats)
 {
-    TIMED_FUNC(timerObj);
+    TIMED_FUNC_IF(timerObj, VLOG_IS_ON(1));
 
     auto node = item.node;
     DCHECK_EQ(0, outputs->size());
@@ -812,7 +811,7 @@ tf::Status ExecutorState::ProcessOutputs(const NodeItem &item, tf::OpKernelConte
 
 void ExecutorState::ClearInputs(Entry *first, size_t num, BufferLockVec &buflocks)
 {
-    TIMED_FUNC(timerObj);
+    TIMED_FUNC_IF(timerObj, VLOG_IS_ON(1));
 
     // Release locks first, because it may be deleted below
     buflocks.clear();
@@ -854,7 +853,7 @@ void ExecutorState::ClearInputs(Entry *first, size_t num, BufferLockVec &buflock
 void ExecutorState::PropagateOutputs(const TaggedNode &tagged_node, const NodeItem *item,
                                      EntryVector *outputs, TaggedNodeSeq *ready)
 {
-    TIMED_FUNC(timerObj);
+    TIMED_FUNC_IF(timerObj, VLOG_IS_ON(1));
 
     auto node = tagged_node.node;
     FrameState *input_frame = tagged_node.input_frame;
@@ -991,7 +990,7 @@ bool ExecutorState::NodeDone(const tf::Status &s, const tf::Node *node, const tf
                              tf::Rendezvous *rendezvous, const TaggedNodeSeq &ready,
                              tf::NodeExecStats *stats)
 {
-    TIMED_FUNC(timerObj);
+    TIMED_FUNC_IF(timerObj, VLOG_IS_ON(1));
 
     if (stats) {
         nodestats::SetAllEnd(stats);
@@ -1053,7 +1052,7 @@ bool ExecutorState::NodeDone(const tf::Status &s, const tf::Node *node, const tf
 
 void ExecutorState::ScheduleReady(const TaggedNodeSeq &ready)
 {
-    TIMED_FUNC(timerObj);
+    TIMED_FUNC_IF(timerObj, VLOG_IS_ON(1));
 
     if (ready.empty()) {
         VLOG(3) << "ScheduleReady on an empty ready queue";
@@ -1355,7 +1354,7 @@ void ExecutorState::CleanupFramesIterations(FrameState *frame, int64_t iter, Tag
 void ExecutorState::FrameState::ActivateNodes(const NodeItem *item, const bool is_dead, int64_t iter,
                                               EntryVector *outputs, TaggedNodeSeq *ready)
 {
-    TIMED_FUNC(timerObj);
+    TIMED_FUNC_IF(timerObj, VLOG_IS_ON(1));
 
     auto &gview = executor->gview_;
     auto iter_state = GetIteration(iter);
