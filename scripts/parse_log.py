@@ -110,13 +110,13 @@ def _process_line_paral(line):
     return None
 
 
-def load_file(path, reinitialize=True, parallel=False):
+def load_file(path, reinitialize=True, parallel_workers=0):
     """Load logs"""
 
     if reinitialize:
         initialize()
 
-    if not parallel:
+    if parallel_workers == 0:
         logs = []
         with open(path) as f:
             entry = None
@@ -148,10 +148,10 @@ def load_file(path, reinitialize=True, parallel=False):
                     print('Unhandled line: ' + line)
         return logs
     else:
-        pool = mp.Pool(mp.cpu_count())
+        pool = mp.Pool(parallel_workers)
 
         with open(path) as f:
-            return pool.map(_process_line_paral, f, chunksize=2000000)
+            return pool.map(_process_line_paral, f, chunksize=20000)
 
 
 def load_both(exec_file, tf_file):
