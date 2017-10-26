@@ -443,6 +443,7 @@ void ExecTask::afterCompute(bool is_dead, const Callbacks &cbs, const tf::remote
 
     if (is_dead) {
         outputs.resize(item.num_outputs);
+        buflocks.clear();
     } else {
         // Inspect return state for retrying on memory failure
         if (maybeMemoryFailure(pctx->status(), cbs.memFailure)) {
@@ -453,6 +454,9 @@ void ExecTask::afterCompute(bool is_dead, const Callbacks &cbs, const tf::remote
             nodestats::SetOpEnd(stats);
 
         s = m_state->ProcessOutputs(item, pctx.get(), device, &outputs, stats);
+        // clear locks, we don't need them, and they may be deleted when
+        // update ref entry
+        buflocks.clear();
         // Update ref entry tickets
         updateRefEntryTickets(reffedEntries);
 

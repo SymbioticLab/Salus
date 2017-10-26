@@ -820,9 +820,33 @@ void ExecutorState::ClearInputs(Entry *first, size_t num, BufferLockVec &buflock
     for (size_t i = 0; i < num; ++i) {
         auto entry = first + i;
 
-        VLOG(2) << "Removing entry " << as_hex(entry)
-                << " of ticket " << entry->alloc_ticket << " due to clearinputs";
-        impl_->removeFromBufferTree(entry, nullptr);
+        bool removeTree = false;
+        if (entry->val_field_is_set) {
+            auto buf = tf::remote::PagingHelper::bufferOf(*entry->val.get());
+            removeTree = buf
+                && tf::remote::PagingHelper::refCountOf(*buf) == 1
+                && tf::remote::PagingHelper::refCountOf(*buf->root_buffer()) == 1;
+        }
+
+        if (removeTree) {
+            DCHECK(entry->alloc_tree);
+            VLOG(2) << "Removing entry " << as_hex(entry)
+                    << " of ticket " << entry->alloc_tree->ticket << " due to clearinputs";
+            utils::TGuard g(impl_->entry_mu_, "ClearInputs");
+            auto range = impl_->active_buffers_.equal_range(entry->alloc_tree->ticket);
+            for (auto it = range.first; it != range.second; ++it) {
+                if (it->second == entry->alloc_tree) {
+                    impl_->active_buffers_.erase(it);
+                    break;
+                }
+            }
+            // alloc_tree will auto unlink from it's container buffer_trees_
+            delete entry->alloc_tree;
+            entry->alloc_tree = nullptr;
+        } else if (entry->has_value) {
+            impl_->removeFromBufferTree(entry, nullptr);
+        }
+
         entry->ClearVal();
     }
 }
