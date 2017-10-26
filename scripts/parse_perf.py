@@ -205,14 +205,16 @@ def session_counters(df, colnames=None, beginning=None, useFirstRowAsBegining=Tr
     if colnames is None:
         colnames = ['counter']
 
-    fig, ax = plt.subplots()
+    fig, axs = plt.subplots(nrows=len(colnames), sharex=True)
     for key, grp in df.groupby(['sess']):
         if useTimedelta:
             grp.index = grp.index - beginning
             grp.index = grp.index.astype(int)
 
-        ax = grp.plot(ax=ax, kind='line', y=colnames, label=key)
+        for col, ax in zip(colnames, axs):
+            grp.plot(ax=ax, kind='line', y=col, label=key)
 
+    ax = plt.gca()
     if useTimedelta:
         pu.cleanup_axis_timedelta(ax.xaxis)
     else:
