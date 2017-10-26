@@ -360,8 +360,6 @@ size_t ExecutorImpl::handlePagingRequest(uint64_t oldTicket, std::unique_ptr<Res
 
     for (auto &part : parts) {
         DCHECK(!part->paged_out);
-        DCHECK(!part->empty());
-
         if (!part->root_buf) {
             // We use empty root_buf as a dumy tree for
             // uninitialized tensors, although it's unlikely
@@ -502,14 +500,14 @@ void ExecutorImpl::updateBufferTree(Entry *entry, uint64_t ticket)
     }
 }
 
-bool ExecutorImpl::removeFromBufferTree(Entry *entry, EntryVec *needUpdate)
+void ExecutorImpl::removeFromBufferTree(const Entry *entry, EntryVec *needUpdate)
 {
     TIMED_FUNC_IF(timerObj, VLOG_IS_ON(1));
     DCHECK(entry);
 
     auto tree = entry->alloc_tree;
     if (!tree) {
-        return false;
+        return;
     }
 
     auto matchRefs = [needUpdate, entry] (auto e) {
@@ -527,33 +525,13 @@ bool ExecutorImpl::removeFromBufferTree(Entry *entry, EntryVec *needUpdate)
 
     utils::TGuard g(entry_mu_, "RemoveFromBufferTree");
 
-    bool removed = false;
     if (utils::erase_if(tree->roots, matchRefs)) {
-        removed = true;
+        return;
     }
     // the entry was not found in roots, so it must be in one of the subs
-    for (auto it = tree->subs.begin(), itend = tree->subs.end();
-         !removed && it != itend; ++it) {
-
-        if (utils::erase_if(it->second, matchRefs)) {
-            removed = true;
+    for (auto &p : tree->subs) {
+        if (utils::erase_if(p.second, matchRefs)) {
+            break;
         }
     }
-    DCHECK(removed) << "Tree doesn't contain the entry";
-
-    if (tree->root_buf && tree->root_buf->RefCountIsOne()) {
-        DCHECK(tree->empty());
-        auto range = active_buffers_.equal_range(tree->ticket);
-        for (auto it = range.first; it != range.second; ++it) {
-            if (it->second == entry->alloc_tree) {
-                active_buffers_.erase(it);
-                break;
-            }
-        }
-        // tree will auto unlink from it's container buffer_trees_
-        tree->root_buf = nullptr;
-        delete tree;
-        return true;
-    }
-    return false;
 }
