@@ -676,11 +676,11 @@ def plot_case_study1_diff(config, local_dir, logs, iters):
     ax = fig.axes[-1]
     ax.set_xlabel('Time (s)')
     fig.tight_layout(rect=[0, 0.18, 1, 1])
-    #fig.subplots_adjust(bottom=.18, left=.16, right=.98, top=.98)
+    # fig.subplots_adjust(bottom=.18, left=.16, right=.98, top=.98)
 
     handles, labels = ax.get_legend_handles_labels()
     ax.legend(handles=handles, labels=['googlenet_100', 'overfeat_50', 'resnet50_50'], ncol=3,
-              loc='upper center', bbox_to_anchor=(0.5, -0.55), frameon=False)
+              loc='upper center', bbox_to_anchor=(0.4, -0.55), frameon=False)
     fig.set_size_inches(3.45, 3.6, forward=True)
     return fig
 
@@ -699,9 +699,9 @@ def plot_nested_doll_4res(config, local_dir, logs, iters):
     ax = fig.axes[-1]
     ax.legend().remove()
     ax.set_title('Memory Usage')
-    #ax.set_title('resnet50_50 of 265,180,170,100 iterations')
+    # ax.set_title('resnet50_50 of 265,180,170,100 iterations')
     fig.tight_layout(pad=0)
-    #fig.adjust(right=.98, top=.85, left=.2, bottom=.2)
+    # fig.adjust(right=.98, top=.85, left=.2, bottom=.2)
     return fig
 
 
@@ -766,7 +766,8 @@ def plot_nested_doll_mix5_samelength(config, local_dir, logs, iters):
     ax0.set_title('Scheduled Tasks')
     ax0.legend().set_visible(False)
     handles, labels = ax1.get_legend_handles_labels()
-    ax1.legend(handles=handles, labels=['alexnet_100', 'overfeat_50', 'googlenet_50', "inception3_25", "resnet50_50"], ncol=3,
+    ax1.legend(handles=handles, labels=['alexnet_100', 'overfeat_50', 'googlenet_50', "inception3_25",
+                                        "resnet50_50"], ncol=3,
                loc='upper center', bbox_to_anchor=(0.5, -0.21), frameon=False)
     ax0.set_ylabel('# of Tasks')
     ax1.set_xlabel('Time (s)')
@@ -775,6 +776,7 @@ def plot_nested_doll_mix5_samelength(config, local_dir, logs, iters):
     ax1.tick_params(axis='y', labelsize=8)
     ax0.tick_params(axis='y', labelsize=8)
     return fig
+
 
 @plotter('jctratio')
 def plot_jctratio(config, local_dir, logs, iters):
@@ -809,7 +811,7 @@ def main():
     if config.show:
         plt.style.use('seaborn')
     else:
-        plt.style.use('seaborn-paper')
+        plt.style.use('grayscale')
         rc = {
             'font.family': 'Times New Roman',
             'font.weight': 'book',
@@ -830,6 +832,8 @@ def main():
             'legend.handlelength': 1.0,
             'legend.handletextpad': 0.4,
             'legend.borderpad': 0.2,
+            'axes.prop_cycle': (mpl.cycler('color', ['0.0', '0.4', '0.8', '0.9']) +
+                                mpl.cycler('linestyle', ['-', '--', '-', '--']))
         }
         mpl.rcParams.update(rc)
 
