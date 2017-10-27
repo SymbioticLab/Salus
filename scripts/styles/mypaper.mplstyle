@@ -1,0 +1,19 @@
+font.family: Times New Roman
+font.weight: normal
+font.size: 10
+axes.spines.top: False
+axes.spines.right: False
+figure.figsize: 3.45, 3.45
+figure.dpi: 600
+figure.autolayout: True
+figure.subplot.left: 0.125
+figure.subplot.right: 0.98
+figure.subplot.bottom: 0.11
+figure.subplot.top: 0.98
+savefig.transparent: True
+xtick.labelsize: 9
+ytick.labelsize: 9
+legend.columnspacing: 1.0
+legend.handlelength: 1.0
+legend.handletextpad: 0.4
+legend.borderpad: 0.2

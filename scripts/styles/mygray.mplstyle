@@ -1,0 +1,1 @@
+axes.prop_cycle: cycler('color', ['0.0', '0.8', '0.4', '0.7', '0.2'])
