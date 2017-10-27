@@ -681,6 +681,7 @@ def plot_case_study1_diff(config, local_dir, logs, iters):
 
         ax = fig.axes[-1]
         ax.set_xlabel('Time (s)')
+        ax.set_xlim(left=0)
         fig.tight_layout(rect=[0, 0.18, 1, 1])
         # fig.subplots_adjust(bottom=.18, left=.16, right=.98, top=.98)
 

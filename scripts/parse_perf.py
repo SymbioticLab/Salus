@@ -230,6 +230,8 @@ def session_counters(df, colnames=None, beginning=None, useFirstRowAsBegining=Tr
         axs = axs.flatten()
 
         for col, x in zip(colnames, axs):
+            removeZeros = col != 'counter'
+            print("removeZeros: {} for {}".format(removeZeros, col))
             sessionsCounter = {}
             for k, gg in df.groupby('sess'):
                 sessionsCounter[k] = gg[col]
@@ -247,17 +249,18 @@ def session_counters(df, colnames=None, beginning=None, useFirstRowAsBegining=Tr
                     if useTimedelta:
                         s.index = s.index - beginning
                         s.index = s.index.astype(int)
-                    sz = s[s > 0]
                     zorder = None
                     if zorders is not None:
                         zorder = zorders[k]
-                    if len(sz) > 0:
-                        sz.plot(ax=x, kind='line', label=k, zorder=zorder)
-                    else:
-                        s.plot(ax=x, kind='line', label=k, zorder=zorder)
+                    if removeZeros:
+                        sz = s[s > 0]
+                        if len(sz) > 0:
+                            s = sz
+                    s.plot(ax=x, kind='line', label=k, zorder=zorder)
             x.set_title(col)
     else:
         col = colnames[0]
+        removeZeros = col != 'counter'
         sessionsCounter = {}
         for k, gg in df.groupby('sess'):
             sessionsCounter[k] = gg[col]
@@ -276,11 +279,11 @@ def session_counters(df, colnames=None, beginning=None, useFirstRowAsBegining=Tr
                     s.index = s.index - beginning
                     s.index = s.index.astype(int)
                 # import ipdb; ipdb.set_trace()
-                sz = s[s > 0]
-                if len(sz) > 0:
-                    sz.plot(ax=ax, kind='line', label=k)
-                else:
-                    s.plot(ax=ax, kind='line', label=k)
+                if removeZeros:
+                    sz = s[s > 0]
+                    if len(sz) > 0:
+                        s = sz
+                s.plot(ax=ax, kind='line', label=k)
         ax.set_title(col)
 
     ax = ax if ax is not None else plt.gca()
