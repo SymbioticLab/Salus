@@ -590,7 +590,7 @@ def plot_case_preemption(config, local_dir, logs, iters):
 
     fig = plt.figure()
     spec = mpl.gridspec.GridSpec(2, 1, height_ratios=[1, 3])
-    spec.update(hspace=0.15, left=0.16, right=.98, top=.98, bottom=0.18)
+    spec.update(hspace=0.2, left=0.16, right=.98, top=.8, bottom=0.18)
     ax0 = fig.add_subplot(spec[0])
     ax1 = fig.add_subplot(spec[1], sharex=ax0)
     plt.setp(ax0.get_xticklabels(), visible=False)
@@ -626,7 +626,7 @@ def plot_case_bigsmall_wc(config, local_dir, logs, iters):
 
     fig = plt.figure()
     spec = mpl.gridspec.GridSpec(2, 1, height_ratios=[1, 3])
-    spec.update(hspace=0.15, left=0.16, right=.98, top=.98, bottom=0.18)
+    spec.update(hspace=0.2, left=0.16, right=.98, top=.8, bottom=0.18)
     ax0 = fig.add_subplot(spec[0])
     ax1 = fig.add_subplot(spec[1], sharex=ax0)
     plt.setp(ax0.get_xticklabels(), visible=False)
@@ -712,7 +712,7 @@ def plot_paging_inception_of_vgg(config, local_dir, logs, iters):
 
     fig = plt.figure()
     spec = mpl.gridspec.GridSpec(2, 1, height_ratios=[1, 3])
-    spec.update(hspace=0.15, left=0.18, right=.98, top=.98, bottom=0.18)
+    spec.update(hspace=0.2, left=0.2, right=.98, top=.8, bottom=0.18)
     ax0 = fig.add_subplot(spec[0])
     ax1 = fig.add_subplot(spec[1], sharex=ax0)
     plt.setp(ax0.get_xticklabels(), visible=False)
@@ -748,7 +748,7 @@ def plot_nested_doll_mix5_samelength(config, local_dir, logs, iters):
 
     fig = plt.figure()
     spec = mpl.gridspec.GridSpec(2, 1, height_ratios=[1, 3])
-    spec.update(hspace=0.15, left=0.18, right=.98, top=.98, bottom=0.22)
+    spec.update(hspace=0.2, left=0.18, right=.98, top=.8, bottom=0.22)
     ax0 = fig.add_subplot(spec[0])
     ax1 = fig.add_subplot(spec[1], sharex=ax0)
     plt.setp(ax0.get_xticklabels(), visible=False)
