@@ -787,6 +787,7 @@ def plot_jctratio(config, local_dir, logs, iters):
     ax.set_ylabel('JCT Ratio')
     ax.grid(b=False)
     plt.xticks(rotation=60)
+    ax.figure.set_size_inches(3.45, 2)
     ax.figure.tight_layout()
     plt.subplots_adjust(left=.16, right=.98, bottom=.18, top=.98)
     return ax.figure

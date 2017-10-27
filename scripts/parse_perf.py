@@ -247,8 +247,10 @@ def session_counters(df, colnames=None, beginning=None, useFirstRowAsBegining=Tr
                     if useTimedelta:
                         s.index = s.index - beginning
                         s.index = s.index.astype(int)
-                    s = s[s > 0]
-                    if len(s) > 0:
+                    sz = s[s > 0]
+                    if len(sz) > 0:
+                        sz.plot(ax=x, kind='line', label=k)
+                    else:
                         s.plot(ax=x, kind='line', label=k)
             x.set_title(col)
     else:
@@ -271,8 +273,10 @@ def session_counters(df, colnames=None, beginning=None, useFirstRowAsBegining=Tr
                     s.index = s.index - beginning
                     s.index = s.index.astype(int)
                 # import ipdb; ipdb.set_trace()
-                s = s[s > 0]
-                if len(s) > 0:
+                sz = s[s > 0]
+                if len(sz) > 0:
+                    sz.plot(ax=ax, kind='line', label=k)
+                else:
                     s.plot(ax=ax, kind='line', label=k)
         ax.set_title(col)
 
