@@ -659,10 +659,14 @@ def plot_case_bigsmall_wc(config, local_dir, logs, iters):
 @plotter('case_study1_diff', mem=False)
 def plot_case_study1_diff(config, local_dir, logs, iters):
     with mpl.style.context(('color3')):
-        #mpl.rcParams['axes.prop_cycle'] = mpl.cycler('color', ['ed7d31', 'dcedd0', '244185'])
+        # mpl.rcParams['axes.prop_cycle'] = mpl.cycler('color', ['ed7d31', 'dcedd0', '244185'])
         perfdf = pf.load_file(os.path.join(local_dir, 'sessiter.output'))
 
-        df, fig = pf.session_counters(perfdf, colnames=['counter', 'scheduled', 'pending'])
+        df, fig = pf.session_counters(perfdf, colnames=['counter', 'scheduled', 'pending'], zorders={
+            '54bb635e1e1e818c': 5,
+            '574b8a7a6990ada7': 10,
+            'd5a9fd260a0bbe9e': 1
+        })
 
         fig.axes[0].legend().remove()
         fig.axes[0].set_title('Aggregate Memory Usage')
@@ -681,7 +685,10 @@ def plot_case_study1_diff(config, local_dir, logs, iters):
         # fig.subplots_adjust(bottom=.18, left=.16, right=.98, top=.98)
 
         handles, labels = ax.get_legend_handles_labels()
-        ax.legend(handles=handles, labels=['googlenet_100', 'overfeat_50', 'resnet50_50'], ncol=3,
+        ax.legend(handles=handles,
+                  labels=['googlenet_100', 'overfeat_50', 'resnet50_50'],
+                  # labels=labels,
+                  ncol=3,
                   loc='upper center', bbox_to_anchor=(0.42, -0.55), frameon=False)
         fig.set_size_inches(3.45, 3.6, forward=True)
         return fig

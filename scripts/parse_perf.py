@@ -214,7 +214,7 @@ def overhead_breakdown(df):
     return grouped, df
 
 
-def session_counters(df, colnames=None, beginning=None, useFirstRowAsBegining=True, ax=None):
+def session_counters(df, colnames=None, beginning=None, useFirstRowAsBegining=True, ax=None, zorders=None):
     df = df[df['type'] == 'sess-iter'].drop('type', axis=1)
     for col in ['pending', 'scheduled', 'counter']:
         df[col] = pd.to_numeric(df[col])
@@ -248,10 +248,13 @@ def session_counters(df, colnames=None, beginning=None, useFirstRowAsBegining=Tr
                         s.index = s.index - beginning
                         s.index = s.index.astype(int)
                     sz = s[s > 0]
+                    zorder = None
+                    if zorders is not None:
+                        zorder = zorders[k]
                     if len(sz) > 0:
-                        sz.plot(ax=x, kind='line', label=k)
+                        sz.plot(ax=x, kind='line', label=k, zorder=zorder)
                     else:
-                        s.plot(ax=x, kind='line', label=k)
+                        s.plot(ax=x, kind='line', label=k, zorder=zorder)
             x.set_title(col)
     else:
         col = colnames[0]
