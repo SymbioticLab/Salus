@@ -781,7 +781,7 @@ def plot_nested_doll_mix5_samelength(config, local_dir, logs, iters):
 @plotter('jctratio')
 def plot_jctratio(config, local_dir, logs, iters):
     df = pd.read_csv(os.path.join(local_dir, 'jctratio.csv'))
-    ax = df.boxplot()
+    ax = df.boxplot(showfliers=False)
     ax.set_ylabel('JCT Ratio')
     ax.grid(b=False)
     plt.xticks(rotation=60)
@@ -811,10 +811,10 @@ def main():
     if config.show:
         plt.style.use('seaborn')
     else:
-        plt.style.use('grayscale')
+        plt.style.use('seaborn-paper')
         rc = {
             'font.family': 'Times New Roman',
-            'font.weight': 'book',
+            'font.weight': 'normal',
             'font.size': 10,
             'axes.spines.top': False,
             'axes.spines.right': False,
@@ -832,8 +832,7 @@ def main():
             'legend.handlelength': 1.0,
             'legend.handletextpad': 0.4,
             'legend.borderpad': 0.2,
-            'axes.prop_cycle': (mpl.cycler('color', ['0.0', '0.4', '0.8', '0.9']) +
-                                mpl.cycler('linestyle', ['-', '--', '-', '--']))
+            # 'axes.prop_cycle': mpl.cycler('color', ['0.0', '0.4', '0.8', '0.9']),
         }
         mpl.rcParams.update(rc)
 
