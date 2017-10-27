@@ -657,13 +657,14 @@ def plot_case_bigsmall_wc(config, local_dir, logs, iters):
 @plotter('case_study1_diff', mem=False)
 def plot_case_study1_diff(config, local_dir, logs, iters):
     with mpl.style.context(('color3')):
+        mpl.rcParams['axes.prop_cycle'] = mpl.cycler('color', ['ed7d31', 'dcedd0', '244185'])
         perfdf = pf.load_file(os.path.join(local_dir, 'sessiter.output'))
 
         df, fig = pf.session_counters(perfdf, colnames=['counter', 'scheduled', 'pending'])
 
         fig.axes[0].legend().remove()
         fig.axes[0].set_title('Aggregate Memory Usage')
-        fig.axes[0].set_ylabel('($\mathrm{byte} \cdot \mathrm{\mu s}$)')
+        fig.axes[0].set_ylabel('(byte * us)')
 
         fig.axes[1].legend().remove()
         fig.axes[1].set_title('Scheduled Tasks')
