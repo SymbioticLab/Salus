@@ -792,6 +792,26 @@ def plot_jctratio(config, local_dir, logs, iters):
     return ax.figure
 
 
+@plotter('fair20')
+def plot_fair20(config, local_dir, logs, iters):
+    with mpl.style.context(('grayscale-20')):
+        def smoother(ss):
+            sampled = ss.resample('500us').interpolate(method='time')
+            print("previous len: {} now: {}".format(len(ss), len(sampled)))
+            return sampled
+
+        df, _, fig = pl.memory_usage(logs, mem_type='GPU_0_bfc', per_sess=True,
+                                     show_avg=False)
+
+        ax = fig.axes[-1]
+        ax.legend().remove()
+        ax.set_title('Memory Usage')
+        # ax.set_title('resnet50_50 of 265,180,170,100 iterations')
+        fig.tight_layout(pad=0)
+        # fig.adjust(right=.98, top=.85, left=.2, bottom=.2)
+        return fig
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('cases', nargs='*', metavar='CASE',

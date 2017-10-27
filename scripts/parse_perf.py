@@ -273,7 +273,7 @@ def session_counters(df, colnames=None, beginning=None, useFirstRowAsBegining=Tr
                 # import ipdb; ipdb.set_trace()
                 s = s[s > 0]
                 if len(s) > 0:
-                    s.plot(ax=x, kind='line', label=k)
+                    s.plot(ax=ax, kind='line', label=k)
         ax.set_title(col)
 
     ax = ax if ax is not None else plt.gca()
