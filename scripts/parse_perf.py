@@ -57,10 +57,10 @@ ptn_sched_iter = re.compile(r'''Scheduler \s iter \s stat: \s (?P<iter>\d+) \s
                                 noPageRunning:\s (?P<noPageRunning>\d+)''',
                             re.VERBOSE)
 
-# Paging: duration: 19995 us released: 160563712 forceevict: ''
-ptn_paging = re.compile(r'''Paging: \s duration: (?P<duration>\d+) us
+# Paging:  duration: 19995 us released: 160563712 forceevict: ''
+ptn_paging = re.compile(r'''Paging: \s+ duration: \s (?P<duration>\d+) \s us
                             \s released: \s (?P<released>\d+)
-                            \s forceevicit: \s '(?P<forceevicited>\w*)' ''',
+                            \s forceevict: \s '(?P<forceevicted>\w*)' ''',
                         re.VERBOSE)
 
 
@@ -85,6 +85,11 @@ def preprocesse(d):
         path = os.path.join(tempdir, 'opstat.output')
         with open(path, 'w') as f:
             sp.check_call(['grep', 'OpItem Stat', perffile], stdout=f)
+        shutil.move(path, d)
+
+        path = os.path.join(tempdir, 'paging.output')
+        with open(path, 'w') as f:
+            sp.check_call(['grep', 'Paging', perffile], stdout=f)
         shutil.move(path, d)
     finally:
         sp.call(['rm', '-r', '-f', tempdir])
@@ -209,7 +214,7 @@ def overhead_breakdown(df):
     return grouped, df
 
 
-def session_counters(df, colnames=None, beginning=None, useFirstRowAsBegining=True):
+def session_counters(df, colnames=None, beginning=None, useFirstRowAsBegining=True, ax=None):
     df = df[df['type'] == 'sess-iter'].drop('type', axis=1)
     for col in ['pending', 'scheduled', 'counter']:
         df[col] = pd.to_numeric(df[col])
@@ -220,24 +225,32 @@ def session_counters(df, colnames=None, beginning=None, useFirstRowAsBegining=Tr
     if colnames is None:
         colnames = ['counter']
 
-    fig, axs = plt.subplots(nrows=len(colnames), sharex=True, squeeze=False)
-    axs = axs.flatten()
-    for key, grp in df.groupby(['sess']):
-        if useTimedelta:
-            grp.index = grp.index - beginning
-            grp.index = grp.index.astype(int)
+    if ax is None:
+        fig, axs = plt.subplots(nrows=len(colnames), sharex=True, squeeze=False)
+        axs = axs.flatten()
+        for key, grp in df.groupby(['sess']):
+            if useTimedelta:
+                grp.index = grp.index - beginning
+                grp.index = grp.index.astype(int)
 
-        for col, ax in zip(colnames, axs):
-            grp.plot(ax=ax, kind='line', y=col, label=key)
-            ax.set_title(col)
+            for col, x in zip(colnames, axs):
+                grp.plot(ax=x, kind='line', y=col, label=key)
+                x.set_title(col)
+    else:
+        for key, grp in df.groupby(['sess']):
+            if useTimedelta:
+                grp.index = grp.index - beginning
+                grp.index = grp.index.astype(int)
 
-    ax = plt.gca()
+                grp.plot(ax=ax, kind='line', y=colnames, label=key)
+
+    ax = ax if ax is not None else plt.gca()
     if useTimedelta:
         pu.cleanup_axis_timedelta(ax.xaxis)
     else:
         pu.cleanup_axis_datetime(ax.xaxis)
 
-    return df, fig
+    return df, ax.figure
 
 
 def paging_stat(df, useFirstRowAsBegining=True, beginning=None):

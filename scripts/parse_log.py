@@ -689,7 +689,8 @@ def resp_on_wire_time(logs):
 
 
 def memory_usage(logs, iter_times=None, beginning=None, mem_type=None,
-                 unified_ylabel=False, smoother=None, xformatter=None, per_sess=False, show_avg=None):
+                 unified_ylabel=False, smoother=None, xformatter=None,
+                 per_sess=False, show_avg=None, ax=None):
     if beginning is None:
         beginning = get_beginning(logs)
 
@@ -748,9 +749,12 @@ def memory_usage(logs, iter_times=None, beginning=None, mem_type=None,
         beginning = df.index[0]
 
     nrows = len(df['mem_type'].unique())
-    fig, axs = plt.subplots(nrows=nrows, ncols=1, sharex=True, squeeze=False)
-    # Make axes into a 1D array
-    axs = axs.reshape(-1)
+    if ax is None:
+        fig, axs = plt.subplots(nrows=nrows, ncols=1, sharex=True, squeeze=False)
+        # Make axes into a 1D array
+        axs = axs.reshape(-1)
+    else:
+        axs = [ax]
 
     series = []
     pending_avg = []
@@ -764,24 +768,18 @@ def memory_usage(logs, iter_times=None, beginning=None, mem_type=None,
         else:
             ss = group['size'].cumsum()
 
-        # Restrict x axis to iteration times, must be done after cumsum, otherwise there
+        # Restrict x axis to iteration timaxes, must be done after cumsum, otherwise there
         # will be negative number
         if iter_times is not None:
             starts = iter_times[0][0]
             ends = iter_times[-1][1]
             ss = ss.loc[starts:ends]
 
+        ss.index = ss.index - beginning
+
         if show_avg:
             ss2 = ss.resample('100us').interpolate(method='time')
             pending_avg.append((ss2.mean(), ax))
-
-        # Change to timedelta after iteration restriction.
-        # for some reason slicing doesn't work on Timedeltas
-        # Pandas doesn't support irregular Timedelta intervals on xaxis
-        # see https://stackoverflow.com/questions/40621710/axis-interval-spacing-when-plotting-with-pandas-timedelta
-        # and https://github.com/pandas-dev/pandas/issues/8711
-        ss.index = ss.index - beginning
-        ss.index = ss.index.astype(int)
 
         series.append(ss)
         if smoother:
@@ -789,6 +787,13 @@ def memory_usage(logs, iter_times=None, beginning=None, mem_type=None,
                 ss = smoother(ss, ss2)
             else:
                 ss = smoother(ss)
+
+        # Change to timedelta after iteration restriction.
+        # for some reason slicing doesn't work on Timedeltas
+        # Pandas doesn't support irregular Timedelta intervals on xaxis
+        # see https://stackoverflow.com/questions/40621710/axis-interval-spacing-when-plotting-with-pandas-timedelta
+        # and https://github.com/pandas-dev/pandas/issues/8711
+        ss.index = ss.index.astype(int)
 
         if per_sess:
             ss.plot.area(ax=ax, linewidth=0)
@@ -819,6 +824,7 @@ def memory_usage(logs, iter_times=None, beginning=None, mem_type=None,
         return 'x={:.4f}, y={:.1f} MB'.format(x, y / 1024 / 1024)
     axs[-1].format_coord = format_coord
 
+    fig = axs[-1].figure
     fig.tight_layout()
 
     if unified_ylabel:

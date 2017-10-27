@@ -14,6 +14,7 @@ except ImportError:
 import matplotlib as mpl
 import matplotlib.pyplot as plt
 
+import parse_perf as pf
 import parse_log as pl
 import parse_nvvp as pn
 
@@ -30,8 +31,13 @@ def plotter(name):
             local_dir = os.path.join(config.log_dir, name)
             log_file = os.path.join(local_dir, 'alloc.output')
             iter_file = os.path.join(local_dir, 'mem-iter.output')
+
             logs = pl.load_file(log_file)
-            sessstart, iters = pn.parse_iterations(iter_file)
+
+            iters = None
+            if os.path.isfile(iter_file):
+                sessstart, iters = pn.parse_iterations(iter_file)
+
             fig = func(config, local_dir, logs, iters)
             fig.set_size_inches(2.35, 2.35, forward=True)
             return fig
@@ -568,6 +574,72 @@ def plot_mem_mix6(config, local_dir, logs, iters):
     pass
 
 
+@plotter('case_preemption')
+def plot_case_preemption(config, local_dir, logs, iters):
+
+    perfdf = pf.load_file(os.path.join(local_dir, 'sessiter.output'))
+
+    fig = plt.figure()
+    spec = mpl.gridspec.GridSpec(2, 1, height_ratios=[1, 3])
+    spec.update(hspace=0.15, left=0.24, right=.98, top=.98, bottom=0.17)
+    ax0 = fig.add_subplot(spec[0])
+    ax1 = fig.add_subplot(spec[1], sharex=ax0)
+    plt.setp(ax0.get_xticklabels(), visible=False)
+
+    df, _ = pf.session_counters(perfdf, colnames=['scheduled'], ax=ax0)
+
+    def smoother(ss):
+        sampled = ss.resample('500us').interpolate(method='time')
+        print("previous len: {} now: {}".format(len(ss), len(sampled)))
+        return sampled
+
+    df, _, _ = pl.memory_usage(logs, mem_type='GPU_0_bfc', per_sess=True,
+                               ax=ax1, show_avg=False, smoother=smoother)
+
+    ax0.legend().set_visible(False)
+    handles, labels = ax1.get_legend_handles_labels()
+    ax1.legend(handles=handles, labels=['alexnet_100', 'inception3_25'])
+    ax0.set_ylabel('# of Tasks')
+    ax1.set_xlabel('Time (s)')
+    ax1.tick_params(axis='x', labelsize=8)
+    ax1.tick_params(axis='y', labelsize=8)
+    ax0.tick_params(axis='y', labelsize=8)
+    return fig
+
+
+@plotter('case_bigsmall_wc')
+def plot_case_bigsmall_wc(config, local_dir, logs, iters):
+
+    perfdf = pf.load_file(os.path.join(local_dir, 'sessiter.output'))
+
+    fig = plt.figure()
+    spec = mpl.gridspec.GridSpec(2, 1, height_ratios=[1, 3])
+    spec.update(hspace=0.15, left=0.24, right=.98, top=.98, bottom=0.17)
+    ax0 = fig.add_subplot(spec[0])
+    ax1 = fig.add_subplot(spec[1], sharex=ax0)
+    plt.setp(ax0.get_xticklabels(), visible=False)
+
+    df, _ = pf.session_counters(perfdf, colnames=['scheduled'], ax=ax0)
+
+    def smoother(ss):
+        sampled = ss.resample('500us').interpolate(method='time')
+        print("previous len: {} now: {}".format(len(ss), len(sampled)))
+        return sampled
+
+    df, _, _ = pl.memory_usage(logs, mem_type='GPU_0_bfc', per_sess=True,
+                               ax=ax1, show_avg=False, smoother=smoother)
+
+    ax0.legend().set_visible(False)
+    handles, labels = ax1.get_legend_handles_labels()
+    ax1.legend(handles=handles, labels=['alexnet_100', 'inception3_25'])
+    ax0.set_ylabel('# of Tasks')
+    ax1.set_xlabel('Time (s)')
+    ax1.tick_params(axis='x', labelsize=8)
+    ax1.tick_params(axis='y', labelsize=8)
+    ax0.tick_params(axis='y', labelsize=8)
+    return fig
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('cases', nargs='*', metavar='CASE',
@@ -593,13 +665,15 @@ def main():
         rc = {
             'font.family': 'Times New Roman',
             'font.weight': 'book',
-            'font.size': 10,
+            'font.size': 8,
             'axes.spines.top': False,
             'axes.spines.right': False,
             'figure.figsize': (3.45, 3.45),
             'figure.dpi': 600,
             'figure.autolayout': True,
             'savefig.transparent': True,
+            'xtick.labelsize': 5,
+            'ytick.labelsize': 5,
         }
         mpl.rcParams.update(rc)
 

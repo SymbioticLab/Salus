@@ -143,7 +143,7 @@ def cleanup_axis_bytes(axis):
 def cleanup_axis_timedelta(axis, formatter=None):
     if formatter is None:
         def formatter(x, pos):
-            return '{:.0f}'.format(x / 1e6)
+            return '{:.0f}'.format(x / 1e9)
     axis.set_major_locator(MaxNLocator(nbins=4, min_n_ticks=2))
     axis.set_major_formatter(FuncFormatter(formatter))
     return axis
