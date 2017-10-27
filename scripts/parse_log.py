@@ -809,7 +809,7 @@ def memory_usage(logs, iter_times=None, beginning=None, mem_type=None,
     if unified_ylabel:
         axs[-1].xaxis.label.set_visible(False)
     else:
-        axs[-1].set_xlabel('Time (ms)')
+        axs[-1].set_xlabel('Time (s)')
     axs[-1].autoscale(axis='x')
     # xlim = axs[-1].get_xlim()
     axs[-1].set_xlim(left=0)

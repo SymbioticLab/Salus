@@ -606,10 +606,13 @@ def plot_case_preemption(config, local_dir, logs, iters):
                                ax=ax1, show_avg=False, smoother=smoother)
 
     ax0.legend().set_visible(False)
+    ax0.set_title('Scheduled Tasks')
     handles, labels = ax1.get_legend_handles_labels()
-    ax1.legend(handles=handles, labels=['alexnet_100', 'inception3_25'], ncol=2, loc='upper center', bbox_to_anchor=(0.5, -0.21))
+    ax1.legend(handles=handles, labels=['alexnet_100', 'inception3_25'], ncol=2,
+               loc='upper center', bbox_to_anchor=(0.5, -0.21), frameon=False)
     ax0.set_ylabel('# of Tasks')
     ax1.set_xlabel('Time (s)')
+    ax1.set_title('Memory Usage')
     ax1.tick_params(axis='x', labelsize=8)
     ax1.tick_params(axis='y', labelsize=8)
     ax0.tick_params(axis='y', labelsize=8)
@@ -638,11 +641,13 @@ def plot_case_bigsmall_wc(config, local_dir, logs, iters):
     df, _, _ = pl.memory_usage(logs, mem_type='GPU_0_bfc', per_sess=True,
                                ax=ax1, show_avg=False, smoother=smoother)
 
+    ax0.set_title('Scheduled Tasks')
     ax0.legend().set_visible(False)
     handles, labels = ax1.get_legend_handles_labels()
     ax1.legend(handles=handles, labels=['alexnet_100', 'inception3_25'], ncol=2,
-               loc='upper center', bbox_to_anchor=(0.5, -0.2))
+               loc='upper center', bbox_to_anchor=(0.5, -0.2), frameon=False)
     ax0.set_ylabel('# of Tasks')
+    ax1.set_title('Memory Usage')
     ax1.set_xlabel('Time (s)')
     ax1.tick_params(axis='x', labelsize=8)
     ax1.tick_params(axis='y', labelsize=8)
@@ -670,12 +675,13 @@ def plot_case_study1_diff(config, local_dir, logs, iters):
 
     ax = fig.axes[-1]
     ax.set_xlabel('Time (s)')
-    fig.tight_layout(rect=[0, 0.18, 1, .98])
+    fig.tight_layout(rect=[0, 0.18, 1, 1])
     #fig.subplots_adjust(bottom=.18, left=.16, right=.98, top=.98)
 
     handles, labels = ax.get_legend_handles_labels()
     ax.legend(handles=handles, labels=['googlenet_100', 'overfeat_50', 'resnet50_50'], ncol=3,
-              loc='upper center', bbox_to_anchor=(0.5, -0.5))
+              loc='upper center', bbox_to_anchor=(0.5, -0.55), frameon=False)
+    fig.set_size_inches(3.45, 3.6, forward=True)
     return fig
 
 
@@ -692,6 +698,7 @@ def plot_nested_doll_4res(config, local_dir, logs, iters):
 
     ax = fig.axes[-1]
     ax.legend().remove()
+    ax.set_title('Memory Usage')
     #ax.set_title('resnet50_50 of 265,180,170,100 iterations')
     fig.tight_layout(pad=0)
     #fig.adjust(right=.98, top=.85, left=.2, bottom=.2)
@@ -720,11 +727,13 @@ def plot_paging_inception_of_vgg(config, local_dir, logs, iters):
     df, _, _ = pl.memory_usage(logs, mem_type='GPU_0_bfc', per_sess=True,
                                ax=ax1, show_avg=False, smoother=smoother)
 
+    ax0.set_title('Scheduled Tasks')
     ax0.legend().set_visible(False)
     handles, labels = ax1.get_legend_handles_labels()
     ax1.legend(handles=handles, labels=['overfeat_100', 'vgg16_25', 'inception3_100'], ncol=3,
-               loc='upper center', bbox_to_anchor=(0.5, -0.2))
+               loc='upper center', bbox_to_anchor=(0.5, -0.2), frameon=False)
     ax0.set_ylabel('# of Tasks')
+    ax1.set_title('Memory Usage')
     ax1.set_xlabel('Time (s)')
     ax1.tick_params(axis='x', labelsize=8)
     ax1.tick_params(axis='y', labelsize=8)
@@ -754,12 +763,14 @@ def plot_nested_doll_mix5_samelength(config, local_dir, logs, iters):
     df, _, _ = pl.memory_usage(logs, mem_type='GPU_0_bfc', per_sess=True,
                                ax=ax1, show_avg=False, smoother=smoother)
 
+    ax0.set_title('Scheduled Tasks')
     ax0.legend().set_visible(False)
     handles, labels = ax1.get_legend_handles_labels()
     ax1.legend(handles=handles, labels=['alexnet_100', 'overfeat_50', 'googlenet_50', "inception3_25", "resnet50_50"], ncol=3,
-               loc='upper center', bbox_to_anchor=(0.5, -0.21))
+               loc='upper center', bbox_to_anchor=(0.5, -0.21), frameon=False)
     ax0.set_ylabel('# of Tasks')
     ax1.set_xlabel('Time (s)')
+    ax1.set_title('Memory Usage')
     ax1.tick_params(axis='x', labelsize=8)
     ax1.tick_params(axis='y', labelsize=8)
     ax0.tick_params(axis='y', labelsize=8)
