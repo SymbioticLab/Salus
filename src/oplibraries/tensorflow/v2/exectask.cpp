@@ -99,6 +99,8 @@ const std::vector<DeviceType> &ExecTask::supportedDeviceTypes() const
 
 bool ExecTask::prepare(std::unique_ptr<ResourceContext> &&rctx)
 {
+    statusInPrepare = tf::Status::OK();
+
     auto &dev = rctx->spec();
 
     auto match = [&dev](auto type) { return type == dev.type; };
@@ -108,6 +110,7 @@ bool ExecTask::prepare(std::unique_ptr<ResourceContext> &&rctx)
 
     auto s = m_state->impl_->LookupDevice(dev, &ditem);
     if (!s.ok()) {
+        statusInPrepare.Update(s);
         return false;
     }
 
@@ -135,6 +138,7 @@ bool ExecTask::prepare(std::unique_ptr<ResourceContext> &&rctx)
         // We are on the same device, good.
     } else if (!ok.ok()) {
         LOG(ERROR) << "Failed to find kernel with status " << ok << " for Node: " << tagged_node.node->name();
+        statusInPrepare.Update(ok);
         // it is okay, just continue to create the kernel
     }
 
@@ -143,7 +147,8 @@ bool ExecTask::prepare(std::unique_ptr<ResourceContext> &&rctx)
         auto s = m_state->SetupKernel(tagged_node, ditem, &op_kernel);
         if (!s.ok()) {
             LOG(ERROR) << "Error when creating kernel for node " << tagged_node.node->name() << ": " << s;
-            done = false;
+            statusInPrepare.Update(s);
+            done = true;
         }
     }
 
@@ -319,6 +324,12 @@ void ExecTask::run(Callbacks cbs)
 
     // clear early
     params.rendezvous = nullptr;
+
+    if (!statusInPrepare.ok()) {
+        m_state->MaybeMarkCompleted(input_frame, input_iter, id);
+        afterRun(statusInPrepare, cbs);
+        return;
+    }
 
     DCHECK(op_kernel);
     DCHECK(ditem.device);

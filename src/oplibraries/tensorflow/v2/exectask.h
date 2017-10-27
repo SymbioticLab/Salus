@@ -92,6 +92,7 @@ private:
     tf::OpKernel *op_kernel = nullptr;
     bool kernel_is_async;
     bool has_ref_input;
+    tf::Status statusInPrepare;
 
     std::vector<Entry*> reffedEntries;
     Entry * first_input = nullptr;
