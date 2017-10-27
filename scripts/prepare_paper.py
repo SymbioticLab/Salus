@@ -794,7 +794,7 @@ def plot_jctratio(config, local_dir, logs, iters):
 
 @plotter('fair20')
 def plot_fair20(config, local_dir, logs, iters):
-    with mpl.style.context(('grayscale-20')):
+    with mpl.style.context(('grayscale20')):
         def smoother(ss):
             sampled = ss.resample('500us').interpolate(method='time')
             print("previous len: {} now: {}".format(len(ss), len(sampled)))
