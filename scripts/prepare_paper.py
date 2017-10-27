@@ -680,7 +680,7 @@ def plot_case_study1_diff(config, local_dir, logs, iters):
 
     handles, labels = ax.get_legend_handles_labels()
     ax.legend(handles=handles, labels=['googlenet_100', 'overfeat_50', 'resnet50_50'], ncol=3,
-              loc='upper center', bbox_to_anchor=(0.4, -0.55), frameon=False)
+              loc='upper center', bbox_to_anchor=(0.42, -0.55), frameon=False)
     fig.set_size_inches(3.45, 3.6, forward=True)
     return fig
 
@@ -731,7 +731,7 @@ def plot_paging_inception_of_vgg(config, local_dir, logs, iters):
     ax0.legend().set_visible(False)
     handles, labels = ax1.get_legend_handles_labels()
     ax1.legend(handles=handles, labels=['overfeat_100', 'vgg16_25', 'inception3_100'], ncol=3,
-               loc='upper center', bbox_to_anchor=(0.5, -0.2), frameon=False)
+               loc='upper center', bbox_to_anchor=(0.4, -0.2), frameon=False)
     ax0.set_ylabel('# of Tasks')
     ax1.set_title('Memory Usage')
     ax1.set_xlabel('Time (s)')
@@ -756,7 +756,7 @@ def plot_nested_doll_mix5_samelength(config, local_dir, logs, iters):
     df, _ = pf.session_counters(perfdf, colnames=['scheduled'], ax=ax0)
 
     def smoother(ss):
-        sampled = ss.resample('500us').interpolate(method='time')
+        sampled = ss.resample('50ms').interpolate(method='time')
         print("previous len: {} now: {}".format(len(ss), len(sampled)))
         return sampled
 
@@ -768,7 +768,7 @@ def plot_nested_doll_mix5_samelength(config, local_dir, logs, iters):
     handles, labels = ax1.get_legend_handles_labels()
     ax1.legend(handles=handles, labels=['alexnet_100', 'overfeat_50', 'googlenet_50', "inception3_25",
                                         "resnet50_50"], ncol=3,
-               loc='upper center', bbox_to_anchor=(0.5, -0.21), frameon=False)
+               loc='upper center', bbox_to_anchor=(0.48, -0.19), frameon=False)
     ax0.set_ylabel('# of Tasks')
     ax1.set_xlabel('Time (s)')
     ax1.set_title('Memory Usage')
