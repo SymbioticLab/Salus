@@ -825,7 +825,7 @@ def memory_usage(logs, iter_times=None, beginning=None, mem_type=None,
     axs[-1].format_coord = format_coord
 
     fig = axs[-1].figure
-    fig.tight_layout()
+    #fig.tight_layout()
 
     if unified_ylabel:
         fig.text(0.5, 0.02, 'Time (s)', ha='center')

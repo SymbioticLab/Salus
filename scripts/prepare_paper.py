@@ -13,6 +13,7 @@ except ImportError:
 
 import matplotlib as mpl
 import matplotlib.pyplot as plt
+import pandas as pd
 
 import parse_perf as pf
 import parse_log as pl
@@ -22,24 +23,32 @@ import parse_nvvp as pn
 cases = defaultdict(list)
 
 
-def plotter(name):
+def plotter(name, mem=True):
     def plotter_decorator(func):
         filename = func.__name__.lstrip('plot_').replace('_', '-')
 
         @wraps(func)
         def wrapped(config):
             local_dir = os.path.join(config.log_dir, name)
+            if not os.path.isdir(local_dir):
+                return None
             log_file = os.path.join(local_dir, 'alloc.output')
             iter_file = os.path.join(local_dir, 'mem-iter.output')
 
-            logs = pl.load_file(log_file)
-
+            logs = None
             iters = None
-            if os.path.isfile(iter_file):
-                sessstart, iters = pn.parse_iterations(iter_file)
+
+            if mem:
+                try:
+                    logs = pl.load_file(log_file)
+                except IOError:
+                    pass
+
+                if os.path.isfile(iter_file):
+                    sessstart, iters = pn.parse_iterations(iter_file)
 
             fig = func(config, local_dir, logs, iters)
-            fig.set_size_inches(2.35, 2.35, forward=True)
+            #fig.set_size_inches(2.35, 2.35, forward=True)
             return fig
 
         cases[name].append((wrapped, filename))
@@ -581,7 +590,7 @@ def plot_case_preemption(config, local_dir, logs, iters):
 
     fig = plt.figure()
     spec = mpl.gridspec.GridSpec(2, 1, height_ratios=[1, 3])
-    spec.update(hspace=0.15, left=0.24, right=.98, top=.98, bottom=0.17)
+    spec.update(hspace=0.15, left=0.16, right=.98, top=.98, bottom=0.18)
     ax0 = fig.add_subplot(spec[0])
     ax1 = fig.add_subplot(spec[1], sharex=ax0)
     plt.setp(ax0.get_xticklabels(), visible=False)
@@ -598,7 +607,7 @@ def plot_case_preemption(config, local_dir, logs, iters):
 
     ax0.legend().set_visible(False)
     handles, labels = ax1.get_legend_handles_labels()
-    ax1.legend(handles=handles, labels=['alexnet_100', 'inception3_25'])
+    ax1.legend(handles=handles, labels=['alexnet_100', 'inception3_25'], ncol=2, loc='upper center', bbox_to_anchor=(0.5, -0.21))
     ax0.set_ylabel('# of Tasks')
     ax1.set_xlabel('Time (s)')
     ax1.tick_params(axis='x', labelsize=8)
@@ -614,7 +623,7 @@ def plot_case_bigsmall_wc(config, local_dir, logs, iters):
 
     fig = plt.figure()
     spec = mpl.gridspec.GridSpec(2, 1, height_ratios=[1, 3])
-    spec.update(hspace=0.15, left=0.24, right=.98, top=.98, bottom=0.17)
+    spec.update(hspace=0.15, left=0.16, right=.98, top=.98, bottom=0.18)
     ax0 = fig.add_subplot(spec[0])
     ax1 = fig.add_subplot(spec[1], sharex=ax0)
     plt.setp(ax0.get_xticklabels(), visible=False)
@@ -631,13 +640,141 @@ def plot_case_bigsmall_wc(config, local_dir, logs, iters):
 
     ax0.legend().set_visible(False)
     handles, labels = ax1.get_legend_handles_labels()
-    ax1.legend(handles=handles, labels=['alexnet_100', 'inception3_25'])
+    ax1.legend(handles=handles, labels=['alexnet_100', 'inception3_25'], ncol=2,
+               loc='upper center', bbox_to_anchor=(0.5, -0.2))
     ax0.set_ylabel('# of Tasks')
     ax1.set_xlabel('Time (s)')
     ax1.tick_params(axis='x', labelsize=8)
     ax1.tick_params(axis='y', labelsize=8)
     ax0.tick_params(axis='y', labelsize=8)
     return fig
+
+
+@plotter('case_study1_diff', mem=False)
+def plot_case_study1_diff(config, local_dir, logs, iters):
+
+    perfdf = pf.load_file(os.path.join(local_dir, 'sessiter.output'))
+
+    df, fig = pf.session_counters(perfdf, colnames=['counter', 'scheduled', 'pending'])
+
+    fig.axes[0].legend().remove()
+    fig.axes[0].set_title('Aggregate Memory Usage')
+    fig.axes[0].set_ylabel('($\mathrm{byte} \cdot \mathrm{\mu s}$)')
+
+    fig.axes[1].legend().remove()
+    fig.axes[1].set_title('Scheduled Tasks')
+    fig.axes[1].set_ylabel('# of Tasks')
+
+    fig.axes[2].set_title('Pending Tasks')
+    fig.axes[2].set_ylabel('# of Tasks')
+
+    ax = fig.axes[-1]
+    ax.set_xlabel('Time (s)')
+    fig.tight_layout(rect=[0, 0.18, 1, .98])
+    #fig.subplots_adjust(bottom=.18, left=.16, right=.98, top=.98)
+
+    handles, labels = ax.get_legend_handles_labels()
+    ax.legend(handles=handles, labels=['googlenet_100', 'overfeat_50', 'resnet50_50'], ncol=3,
+              loc='upper center', bbox_to_anchor=(0.5, -0.5))
+    return fig
+
+
+@plotter('nested_doll_4res')
+def plot_nested_doll_4res(config, local_dir, logs, iters):
+
+    def smoother(ss):
+        sampled = ss.resample('500us').interpolate(method='time')
+        print("previous len: {} now: {}".format(len(ss), len(sampled)))
+        return sampled
+
+    df, _, fig = pl.memory_usage(logs, mem_type='GPU_0_bfc', per_sess=True,
+                                 show_avg=False, smoother=smoother)
+
+    ax = fig.axes[-1]
+    ax.legend().remove()
+    #ax.set_title('resnet50_50 of 265,180,170,100 iterations')
+    fig.tight_layout(pad=0)
+    #fig.adjust(right=.98, top=.85, left=.2, bottom=.2)
+    return fig
+
+
+@plotter('paging_inception_of_vgg')
+def plot_paging_inception_of_vgg(config, local_dir, logs, iters):
+
+    perfdf = pf.load_file(os.path.join(local_dir, 'sessiter.output'))
+
+    fig = plt.figure()
+    spec = mpl.gridspec.GridSpec(2, 1, height_ratios=[1, 3])
+    spec.update(hspace=0.15, left=0.18, right=.98, top=.98, bottom=0.18)
+    ax0 = fig.add_subplot(spec[0])
+    ax1 = fig.add_subplot(spec[1], sharex=ax0)
+    plt.setp(ax0.get_xticklabels(), visible=False)
+
+    df, _ = pf.session_counters(perfdf, colnames=['scheduled'], ax=ax0)
+
+    def smoother(ss):
+        sampled = ss.resample('500us').interpolate(method='time')
+        print("previous len: {} now: {}".format(len(ss), len(sampled)))
+        return sampled
+
+    df, _, _ = pl.memory_usage(logs, mem_type='GPU_0_bfc', per_sess=True,
+                               ax=ax1, show_avg=False, smoother=smoother)
+
+    ax0.legend().set_visible(False)
+    handles, labels = ax1.get_legend_handles_labels()
+    ax1.legend(handles=handles, labels=['overfeat_100', 'vgg16_25', 'inception3_100'], ncol=3,
+               loc='upper center', bbox_to_anchor=(0.5, -0.2))
+    ax0.set_ylabel('# of Tasks')
+    ax1.set_xlabel('Time (s)')
+    ax1.tick_params(axis='x', labelsize=8)
+    ax1.tick_params(axis='y', labelsize=8)
+    ax0.tick_params(axis='y', labelsize=8)
+    return fig
+
+
+@plotter('nested_doll_mix5_samelength')
+def plot_nested_doll_mix5_samelength(config, local_dir, logs, iters):
+
+    perfdf = pf.load_file(os.path.join(local_dir, 'sessiter.output'))
+
+    fig = plt.figure()
+    spec = mpl.gridspec.GridSpec(2, 1, height_ratios=[1, 3])
+    spec.update(hspace=0.15, left=0.18, right=.98, top=.98, bottom=0.22)
+    ax0 = fig.add_subplot(spec[0])
+    ax1 = fig.add_subplot(spec[1], sharex=ax0)
+    plt.setp(ax0.get_xticklabels(), visible=False)
+
+    df, _ = pf.session_counters(perfdf, colnames=['scheduled'], ax=ax0)
+
+    def smoother(ss):
+        sampled = ss.resample('500us').interpolate(method='time')
+        print("previous len: {} now: {}".format(len(ss), len(sampled)))
+        return sampled
+
+    df, _, _ = pl.memory_usage(logs, mem_type='GPU_0_bfc', per_sess=True,
+                               ax=ax1, show_avg=False, smoother=smoother)
+
+    ax0.legend().set_visible(False)
+    handles, labels = ax1.get_legend_handles_labels()
+    ax1.legend(handles=handles, labels=['alexnet_100', 'overfeat_50', 'googlenet_50', "inception3_25", "resnet50_50"], ncol=3,
+               loc='upper center', bbox_to_anchor=(0.5, -0.21))
+    ax0.set_ylabel('# of Tasks')
+    ax1.set_xlabel('Time (s)')
+    ax1.tick_params(axis='x', labelsize=8)
+    ax1.tick_params(axis='y', labelsize=8)
+    ax0.tick_params(axis='y', labelsize=8)
+    return fig
+
+@plotter('jctratio')
+def plot_jctratio(config, local_dir, logs, iters):
+    df = pd.read_csv(os.path.join(local_dir, 'jctratio.csv'))
+    ax = df.boxplot()
+    ax.set_ylabel('JCT Ratio')
+    ax.grid(b=False)
+    plt.xticks(rotation=60)
+    ax.figure.tight_layout()
+    plt.subplots_adjust(left=.16, right=.98, bottom=.18, top=.98)
+    return ax.figure
 
 
 def main():
@@ -665,15 +802,23 @@ def main():
         rc = {
             'font.family': 'Times New Roman',
             'font.weight': 'book',
-            'font.size': 8,
+            'font.size': 10,
             'axes.spines.top': False,
             'axes.spines.right': False,
             'figure.figsize': (3.45, 3.45),
             'figure.dpi': 600,
             'figure.autolayout': True,
+            'figure.subplot.left': 0.125,
+            'figure.subplot.right': 0.98,
+            'figure.subplot.bottom': 0.11,
+            'figure.subplot.top': 0.98,
             'savefig.transparent': True,
-            'xtick.labelsize': 5,
-            'ytick.labelsize': 5,
+            'xtick.labelsize': 9,
+            'ytick.labelsize': 9,
+            'legend.columnspacing': 1.0,
+            'legend.handlelength': 1.0,
+            'legend.handletextpad': 0.4,
+            'legend.borderpad': 0.2,
         }
         mpl.rcParams.update(rc)
 
@@ -681,6 +826,9 @@ def main():
         for f, filename in cases[name]:
             print("Generating " + filename)
             fig = f(config)
+            if not fig:
+                print('Not found')
+                continue
             if config.show:
                 fig.set_size_inches(6, 6, forward=True)
                 plt.show()
