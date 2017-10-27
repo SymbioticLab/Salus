@@ -228,21 +228,53 @@ def session_counters(df, colnames=None, beginning=None, useFirstRowAsBegining=Tr
     if ax is None:
         fig, axs = plt.subplots(nrows=len(colnames), sharex=True, squeeze=False)
         axs = axs.flatten()
-        for key, grp in df.groupby(['sess']):
-            if useTimedelta:
-                grp.index = grp.index - beginning
-                grp.index = grp.index.astype(int)
 
-            for col, x in zip(colnames, axs):
-                grp.plot(ax=x, kind='line', y=col, label=key)
-                x.set_title(col)
+        for col, x in zip(colnames, axs):
+            sessionsCounter = {}
+            for k, gg in df.groupby('sess'):
+                sessionsCounter[k] = gg[col]
+            ss = pd.DataFrame(sessionsCounter)
+
+            if False:
+                # ss = ss.resample('500us').fillna(method='ffill').fillna(0)
+                if useTimedelta:
+                    ss.index = ss.index - beginning
+                    ss.index = ss.index.astype(int)
+                # import ipdb; ipdb.set_trace()
+                ss.plot.area(ax=x, linewidth=0)
+            else:
+                for k, s in sessionsCounter.items():
+                    if useTimedelta:
+                        s.index = s.index - beginning
+                        s.index = s.index.astype(int)
+                    s = s[s > 0]
+                    if len(s) > 0:
+                        s.plot(ax=x, kind='line', label=k)
+            x.set_title(col)
     else:
-        for key, grp in df.groupby(['sess']):
-            if useTimedelta:
-                grp.index = grp.index - beginning
-                grp.index = grp.index.astype(int)
+        col = colnames[0]
+        sessionsCounter = {}
+        for k, gg in df.groupby('sess'):
+            sessionsCounter[k] = gg[col]
+        ss = pd.DataFrame(sessionsCounter)
 
-                grp.plot(ax=ax, kind='line', y=colnames, label=key)
+        if False:
+            # ss = ss.resample('500us').fillna(method='ffill').fillna(0)
+            if useTimedelta:
+                ss.index = ss.index - beginning
+                ss.index = ss.index.astype(int)
+            # import ipdb; ipdb.set_trace()
+            ss.plot.area(ax=ax, linewidth=0)
+        else:
+            for k, s in sessionsCounter.items():
+                if useTimedelta:
+                    s.index = s.index - beginning
+                    s.index = s.index.astype(int)
+                # import ipdb; ipdb.set_trace()
+                s = s[s > 0]
+                if len(s) > 0:
+                    s.plot(ax=x, kind='line', label=k)
+        ax.set_title(col)
 
     ax = ax if ax is not None else plt.gca()
     if useTimedelta:

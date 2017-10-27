@@ -613,6 +613,7 @@ def plot_case_preemption(config, local_dir, logs, iters):
     ax0.set_ylabel('# of Tasks')
     ax1.set_xlabel('Time (s)')
     ax1.set_title('Memory Usage')
+    ax1.set_xlim([0, 150 * 1e9])
     ax1.tick_params(axis='x', labelsize=8)
     ax1.tick_params(axis='y', labelsize=8)
     ax0.tick_params(axis='y', labelsize=8)
@@ -648,6 +649,7 @@ def plot_case_bigsmall_wc(config, local_dir, logs, iters):
     ax0.set_ylabel('# of Tasks')
     ax1.set_title('Memory Usage')
     ax1.set_xlabel('Time (s)')
+    ax1.set_xlim([0, 150 * 1e9])
     ax1.tick_params(axis='x', labelsize=8)
     ax1.tick_params(axis='y', labelsize=8)
     ax0.tick_params(axis='y', labelsize=8)
@@ -657,7 +659,7 @@ def plot_case_bigsmall_wc(config, local_dir, logs, iters):
 @plotter('case_study1_diff', mem=False)
 def plot_case_study1_diff(config, local_dir, logs, iters):
     with mpl.style.context(('color3')):
-        mpl.rcParams['axes.prop_cycle'] = mpl.cycler('color', ['ed7d31', 'dcedd0', '244185'])
+        #mpl.rcParams['axes.prop_cycle'] = mpl.cycler('color', ['ed7d31', 'dcedd0', '244185'])
         perfdf = pf.load_file(os.path.join(local_dir, 'sessiter.output'))
 
         df, fig = pf.session_counters(perfdf, colnames=['counter', 'scheduled', 'pending'])
