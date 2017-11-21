@@ -1,11 +1,14 @@
 #! /usr/bin/env python
+from __future__ import print_function, absolute_import, division
 import os
+import sys
 from subprocess import Popen
 import csv
 import argparse
 from operator import attrgetter
 import shlex
 import time
+from datetime import datetime
 
 try:
     from pathlib import Path
@@ -88,6 +91,7 @@ def runServer(config):
         '--logconf',
         os.path.join(build_dir, config.server_log_config)
     ], env=env, stdin=DEVNULL, stdout=stdout, stderr=stderr)
+    time.sleep(5)
     return serverP
 
 
@@ -99,16 +103,21 @@ def run(workloads, config):
     key = attrgetter(key)
     torun = sorted(workloads, key=key, reverse=desc)
 
+    print('{} works to run'.format(len(torun)))
+
     serverP = runServer(config)
 
     started = []
     running = []
     for w in torun:
+        print('Look at', w.name, " running ", len(running))
         if len(running) < config.concurrent_jobs:
-            print('Starting: {} ({} jobs running)'.format(w.name, len(running)))
+            print('{}: Starting: {} ({} jobs running)'.format(datetime.now(), w.name, len(running)))
+            print('{}: Starting: {} ({} jobs running)'.format(datetime.now(), w.name, len(running)), file=sys.stderr)
             started.append(w)
             running.append((w.runAsync(), w.name))
-            continue
+        else:
+            raise ValueError()
         # Wait for something to finish
         while len(running) >= config.concurrent_jobs and not serverP.poll():
             def stillRunning(x):
@@ -120,6 +129,7 @@ def run(workloads, config):
 
             running[:] = [x for x in running if stillRunning(x)]
             time.sleep(.25)
+        print("Num running ", len(running))
         if serverP.poll():
             print('Error: server died: {}'.format(serverP.returncode))
             break

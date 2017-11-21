@@ -33,7 +33,7 @@ do_area() {
     OUTPUTDIR=$(realpath "$OUTPUTDIR")
 
     rm -f /tmp/err.output /tmp/alloc.output /tmp/perf.output
-    env CUDA_VISIBLE_DEVICES=2,3 TF_CPP_MIN_LOG_LEVEL=4 $EXECUTOR --logconf ../build/both.config --perflog /tmp/perf.output --disable-work-conservative &
+    env CUDA_VISIBLE_DEVICES=2,3 TF_CPP_MIN_LOG_LEVEL=4 $EXECUTOR --logconf ../build/both.config --perflog /tmp/perf.output --disable-wc &
     local pid=$!
 
     local workload_pids=()
