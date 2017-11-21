@@ -74,22 +74,22 @@ def preprocesse(d):
     try:
         path = os.path.join(tempdir, 'sessiter.output')
         with open(path, 'w') as f:
-            sp.check_call(['grep', 'Sched iter', perffile], stdout=f)
+            sp.call(['grep', 'Sched iter', perffile], stdout=f)
         shutil.move(path, d)
 
         path = os.path.join(tempdir, 'schediter.output')
         with open(path, 'w') as f:
-            sp.check_call(['grep', 'Scheduler iter', perffile], stdout=f)
+            sp.call(['grep', 'Scheduler iter', perffile], stdout=f)
         shutil.move(path, d)
 
         path = os.path.join(tempdir, 'opstat.output')
         with open(path, 'w') as f:
-            sp.check_call(['grep', 'OpItem Stat', perffile], stdout=f)
+            sp.call(['grep', 'OpItem Stat', perffile], stdout=f)
         shutil.move(path, d)
 
         path = os.path.join(tempdir, 'paging.output')
         with open(path, 'w') as f:
-            sp.check_call(['grep', 'Paging', perffile], stdout=f)
+            sp.call(['grep', 'Paging', perffile], stdout=f)
         shutil.move(path, d)
     finally:
         sp.call(['rm', '-r', '-f', tempdir])
