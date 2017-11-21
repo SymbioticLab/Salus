@@ -145,36 +145,9 @@ PTask TFOpLibraryV2::createCustomTask(ZmqServer::Sender sender, const zrpc::Even
         HANDLER(ListDevices, sessionFromRecvId(recvId))
         HANDLER(Reset, sessionFromRecvId(recvId))
 
-        // Worker handlers
-        HANDLER(RegisterGraph, req->session_handle())
-        HANDLER(RunGraph, sessionFromRecvId(recvId))
-        HANDLER(GetStatus, sessionFromRecvId(recvId))
-        HANDLER(DeregisterGraph, sessionFromRecvId(recvId))
-        HANDLER(CleanupGraph, sessionFromRecvId(recvId))
-        HANDLER(CleanupAll, sessionFromRecvId(recvId))
-        HANDLER(Logging, sessionFromRecvId(recvId))
-        HANDLER(Tracing, sessionFromRecvId(recvId))
+        // Only local worker is used. No worker request handlers
 #undef HANDLER
 
-        {"tensorflow.RecvTensorRequest", [this](auto sender, auto recvId, auto creq, auto cb) {
-            auto req = utils::createMessage<tensorflow::RecvTensorRequest>("tensorflow.RecvTensorRequest",
-                                                                           creq.extra().data(),
-                                                                           creq.extra().size());
-            if (!req) {
-                LOG(ERROR) << "Failed to parse message";
-                cb(nullptr);
-                return;
-            }
-            auto proxy = getProxy(sessionFromRecvId(recvId));
-            auto preq = req.release();
-            proxy->HandleRecvTensorRaw(preq, [sender, cb, preq](auto resp, auto status) {
-                UNUSED(status);
-                sender->sendMessage("tensorflow.RecvTensorResponse", MultiPartMessage(resp));
-                delete preq;
-                delete resp;
-                cb(nullptr);
-            });
-        }},
         {"tensorflow.CreateSessionRequest", [this](auto sender, auto recvId, auto creq, auto cb) {
             UNUSED(sender);
             this->handleCreateSession(recvId, creq, cb);
