@@ -247,9 +247,6 @@ void TFOpLibraryV2::handleCreateSession(const std::string &recvId, const executo
         return;
     }
 
-    /*
-    req->config().zmq_options().resourceMap();
-    */
     ResourceMap rm;
 
     auto &m = req->config().zmq_options().resource_map();

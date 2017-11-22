@@ -245,6 +245,7 @@ void ExecutionEngine::scheduleLoop()
             DCHECK(m_newSessions.size() == 0);
         }
 
+        PERFORMANCE_CHECKPOINT_WITH_ID(schedIterObj, "after-accept");
         // Snapshot resource usage counter first, or reset them
         // and delete sessions as requested
         auto now = system_clock::now();
@@ -279,6 +280,7 @@ void ExecutionEngine::scheduleLoop()
             }
         }
 
+        PERFORMANCE_CHECKPOINT_WITH_ID(schedIterObj, "after-snapshot");
         // Sort sessions if needed. We assume m_sessions.size() is always no more than a few,
         // therefore sorting in every iteration is acceptable.
         if (sessionsChanged == 0 && m_schedParam.useFairnessCounter) {
@@ -286,6 +288,7 @@ void ExecutionEngine::scheduleLoop()
                 return lhs->unifiedResSnapshot < rhs->unifiedResSnapshot;
             });
         }
+        PERFORMANCE_CHECKPOINT_WITH_ID(schedIterObj, "after-sort");
 
         // Schedule in order
         size_t totalRemainingCount = 0;
@@ -330,6 +333,7 @@ void ExecutionEngine::scheduleLoop()
                                       << " running: " << m_runningTasks
                                       << " noPageRunning: " << m_noPagingRunningTasks;
 
+        PERFORMANCE_CHECKPOINT_WITH_ID(schedIterObj, "after-sched");
         // Update conditions and check if we need paging
         bool noProgress = remainingCount > 0 && scheduled == 0;
         int64_t running_tasks = m_noPagingRunningTasks;
