@@ -136,8 +136,8 @@ def match_exec_content(content, ctx):
         name = m.group('name')
         schediter = None,
         if name.startswith('sched-iter-'):
-            name = 'sched-iter'
             schediter = int(name.strip('sched-iter-'))
+            name = 'sched-iter'
         return {
             'name': name,
             'time': timedelta(microseconds=int(m.group('count'))),
