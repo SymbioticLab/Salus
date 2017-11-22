@@ -69,33 +69,34 @@ def initialize():
 
 
 def preprocesse(d):
+
     perffile = os.path.join(d, 'perf.output')
     tempdir = sp.check_output(['mktemp', '-d', '--tmpdir']).rstrip('\n')
     try:
         path = os.path.join(tempdir, 'sessiter.output')
         with open(path, 'w') as f:
             sp.call(['grep', 'Sched iter', perffile], stdout=f)
-        shutil.move(path, d)
+        shutil.copy(path, d)
 
         path = os.path.join(tempdir, 'schediter.output')
         with open(path, 'w') as f:
             sp.call(['grep', 'Scheduler iter', perffile], stdout=f)
-        shutil.move(path, d)
+        shutil.copy(path, d)
 
         path = os.path.join(tempdir, 'opstat.output')
         with open(path, 'w') as f:
             sp.call(['grep', 'OpItem Stat', perffile], stdout=f)
-        shutil.move(path, d)
+        shutil.copy(path, d)
 
         path = os.path.join(tempdir, 'paging.output')
         with open(path, 'w') as f:
             sp.call(['grep', 'Paging', perffile], stdout=f)
-        shutil.move(path, d)
+        shutil.copy(path, d)
 
         path = os.path.join(tempdir, 'timing.output')
         with open(path, 'w') as f:
             sp.call(['grep', 'Executed', perffile], stdout=f)
-        shutil.move(path, d)
+        shutil.copy(path, d)
     finally:
         sp.call(['rm', '-r', '-f', tempdir])
 
