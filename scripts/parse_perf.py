@@ -133,9 +133,15 @@ def load_file(path, reinitialize=True):
 def match_exec_content(content, ctx):
     m = ptn_exec.match(content)
     if m:
+        name = m.group('name')
+        schediter = None,
+        if name.startswith('sched-iter-'):
+            name = 'sched-iter'
+            schediter = int(name.strip('sched-iter-'))
         return {
-            'name': m.group('name'),
+            'name': name,
             'time': timedelta(microseconds=int(m.group('count'))),
+            'iter': schediter,
             'parent': None,
             'type': 'func'
         }
