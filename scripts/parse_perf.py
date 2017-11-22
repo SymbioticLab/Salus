@@ -191,7 +191,7 @@ def perfcalls(df):
     })
     # Using ravel, and a string join, we can create better names for the columns:
     grouped.columns = [x[-1] for x in grouped.columns.ravel()]
-    grouped.sort_values(by=['sum', 'mean'], ascending=False)
+    grouped = grouped.sort_values(by=['sum', 'mean'], ascending=False)
 
     return grouped, func
 
