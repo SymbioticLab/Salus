@@ -95,7 +95,7 @@ def preprocesse(d):
 
         path = os.path.join(tempdir, 'timing.output')
         with open(path, 'w') as f:
-            sp.call(['grep', 'Executed', perffile], stdout=f)
+            sp.call(['grep', '-e', 'Executed', '-e', 'Performance checkpoint', perffile], stdout=f)
         shutil.copy(path, d)
     finally:
         sp.call(['rm', '-r', '-f', tempdir])
