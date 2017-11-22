@@ -189,7 +189,7 @@ def perfcalls(df):
     # Change from timedelta to us
     df['time'] = df['time'].astype(int) / 1e3
 
-    func = df[df['type'] == 'func'].drop(['acquire', 'locked', 'type'], axis=1)
+    func = df[df['type'] == 'func'].dropna(axis=1)
 
     # for func
     grouped = func.groupby('name').agg({
