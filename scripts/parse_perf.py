@@ -91,6 +91,11 @@ def preprocesse(d):
         with open(path, 'w') as f:
             sp.call(['grep', 'Paging', perffile], stdout=f)
         shutil.move(path, d)
+
+        path = os.path.join(tempdir, 'timing.output')
+        with open(path, 'w') as f:
+            sp.call(['grep', 'Executed', perffile], stdout=f)
+        shutil.move(path, d)
     finally:
         sp.call(['rm', '-r', '-f', tempdir])
 
