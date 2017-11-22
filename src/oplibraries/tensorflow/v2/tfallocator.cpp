@@ -297,8 +297,9 @@ void PerOpAllocator::recordSize(void *ptr, size_t size)
 {
     utils::Guard g(m_mu);
     m_lastFailedAllocSize = size;
-    if (ptr)
+    if (ptr) {
         m_allocated[ptr] = size;
+    }
 }
 
 size_t PerOpAllocator::findSize(void *ptr)

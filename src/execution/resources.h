@@ -47,6 +47,17 @@ struct ResourceTag
 
     static ResourceTag fromString(const std::string &str);
 
+    // some handy constant
+    static const ResourceTag &GPU0Memory() {
+        static ResourceTag tag { ResourceType::MEMORY, {DeviceType::GPU, 0}};
+        return tag;
+    }
+
+    static const ResourceTag &CPU0Memory() {
+        static ResourceTag tag { ResourceType::MEMORY, {DeviceType::CPU, 0}};
+        return tag;
+    }
+
     std::string DebugString() const;
 
 private:
@@ -96,6 +107,8 @@ Resources &removeZeros(Resources &lhs);
 Resources &merge(Resources &lhs, const Resources &rhs, bool skipNonExist=false);
 Resources &subtract(Resources &lhs, const Resources &rhs, bool skipNonExist=false);
 Resources &scale(Resources &lhs, double scale);
+
+size_t totalMemory(Resources &res);
 
 std::string DebugString(const Resources &res, const std::string &indent = "");
 } // namespace resources
