@@ -32,6 +32,7 @@ do_jct() {
     local model=${1}
     local batch_size=${2}
     local OUTPUTDIR=${3:-"$LOGDIR/$1_$2"}
+    local batch_num=${BATCH_NUM:-20}
 
     mkdir -p $OUTPUTDIR
 
@@ -43,23 +44,26 @@ do_jct() {
     local wpid=''
 
     echo -n "    Warm up RPC: "
-    run_case wpid $model $batch_size "/tmp/rpc.output" "salus"
+    run_case wpid $model $batch_size "/tmp/rpc.output" "salus" $batch_num
     wait $wpid
     mv /tmp/rpc.output $OUTPUTDIR
 
     echo -n "    Running RPC: "
-    run_case wpid $model $batch_size "/tmp/rpc.output" "salus"
+    run_case wpid $model $batch_size "/tmp/rpc.output" "salus" $batch_num
     wait $wpid
     mv /tmp/rpc.output $OUTPUTDIR
 
     echo -n "    Running GPU: "
-    run_case wpid $model $batch_size "/tmp/gpu.output" "gpu"
+    run_case wpid $model $batch_size "/tmp/gpu.output" "gpu" $batch_num
     wait $wpid
     mv /tmp/gpu.output $OUTPUTDIR
 
     kill $pid
     wait $pid
 }
+
+BATCH_NUM=2726 do_jct alexnet 25
+exit
 
 do_jct vgg11 25
 do_jct vgg11 50
