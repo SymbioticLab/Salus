@@ -197,6 +197,15 @@ Resources &removeZeros(Resources &lhs)
     return lhs;
 }
 
+size_t totalMemory(Resources &res)
+{
+    size_t mem = 0;
+    for (auto p : res) {
+        mem += p.second;
+    }
+    return mem;
+}
+
 std::string DebugString(const Resources &res, const std::string &indent)
 {
     std::ostringstream oss;

@@ -25,6 +25,7 @@
 #include "execution/itask.h"
 #include "platform/logging.h"
 #include "utils/threadutils.h"
+#include "utils/containerutils.h"
 #include "execution/resources.h"
 
 #include <q/lib.hpp>
@@ -211,21 +212,37 @@ private:
 
         // Only accessed by main scheduling thread
         UnsafeQueue bgQueue;
-        uint64_t unifiedResSnapshot;
-        bool forceEvicted = false;
+        double unifiedResSnapshot;
+        bool forceEvicted {false};
 
         uint64_t holWaiting = 0;
         uint64_t queueHeadHash = 0;
 
         // Accessed by multiple scheduling thread
-        std::atomic_bool protectOOM = {true};
-        std::atomic_uint_fast64_t unifiedRes = {0};
+        std::atomic_bool protectOOM {true};
+
         std::unordered_set<uint64_t> tickets;
         std::mutex tickets_mu;
 
-        explicit SessionItem(const std::string &handle) : sessHandle(handle) {}
+        explicit SessionItem(const std::string &handle)
+            : sessHandle(handle)
+        {
+            // NOTE: add other devices
+            resUsage[ResourceTag::GPU0Memory()].get() = 0;
+            resUsage[ResourceTag::CPU0Memory()].get() = 0;
+        }
 
         ~SessionItem();
+
+        utils::MutableAtom::value_type &resourceUsage(const ResourceTag &tag)
+        {
+            return resUsage.at(tag).get();
+        }
+
+    private:
+        using AtomicResUsages = std::unordered_map<ResourceTag, utils::MutableAtom>;
+        // must be initialized in constructor
+        AtomicResUsages resUsage;
     };
     void pushToSessionQueue(PSessionItem item, POpItem opItem);
 
@@ -286,26 +303,36 @@ public:
 
     struct OperationScope
     {
-        explicit OperationScope(ResourceMonitor::LockedProxy &&proxy)
+        explicit OperationScope(const ResourceContext &context, ResourceMonitor::LockedProxy &&proxy)
             : proxy(std::move(proxy))
+            , context(context)
         {}
 
         OperationScope(OperationScope &&scope)
             : valid(scope.valid)
             , proxy(std::move(scope.proxy))
-        {}
+            , context(scope.context)
+        {
+            scope.valid = false;
+        }
+
+        ~OperationScope() {
+            commit();
+        }
 
         operator bool() const { return valid; }
 
         void rollback();
 
     private:
+        void commit();
+
         friend class ResourceContext;
 
         bool valid = true;
         ResourceMonitor::LockedProxy proxy;
         Resources res;
-        uint64_t ticket;
+        const ResourceContext & context;
     };
 
     OperationScope allocMemory(size_t num_bytes) const;

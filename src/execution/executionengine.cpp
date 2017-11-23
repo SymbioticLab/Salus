@@ -37,6 +37,8 @@ using std::chrono::duration_cast;
 using std::chrono::milliseconds;
 using std::chrono::nanoseconds;
 using std::chrono::microseconds;
+using std::chrono::seconds;
+using FpSeconds = std::chrono::duration<double, seconds::period>;
 using namespace std::chrono_literals;
 using namespace date;
 
@@ -249,7 +251,7 @@ void ExecutionEngine::scheduleLoop()
         // Snapshot resource usage counter first, or reset them
         // and delete sessions as requested
         auto now = system_clock::now();
-        auto usSinceLastSnapshot = duration_cast<microseconds>(now - lastSnapshotTime).count();
+        auto sSinceLastSnapshot = FpSeconds(now - lastSnapshotTime).count();
         lastSnapshotTime = now;
         for (auto it = m_sessions.begin(),
              itend = m_sessions.end(); it != itend;) {
@@ -258,23 +260,16 @@ void ExecutionEngine::scheduleLoop()
                 VLOG(2) << "Deleting session " << item->sessHandle << "@" << as_hex(item);
                 DCHECK(item.use_count() == 1);
                 // The deletion of session's executor is async to this thread.
-                // So it's legit for tickets to be nonempt
+                // So it's legit for tickets to be nonempty
                 // DCHECK(item->tickets.empty());
                 it = m_sessions.erase(it);
             } else {
                 if (sessionsChanged == 0) {
-                    item->unifiedResSnapshot = item->unifiedRes;
                     // calculate progress counter increase since last snapshot
-                    size_t mem = 0;
-                    {
-                        utils::Guard g(item->tickets_mu);
-                        auto usages = m_resMonitor.queryUsages(item->tickets);
-                        mem = utils::getOrDefault(usages, {ResourceType::MEMORY, {DeviceType::GPU, 0}}, 0);
-                    }
-                    item->unifiedResSnapshot += mem * usSinceLastSnapshot;
-                    item->unifiedRes = item->unifiedResSnapshot;
+                    size_t mem = item->resourceUsage(ResourceTag::GPU0Memory());
+                    item->unifiedResSnapshot += mem * sSinceLastSnapshot;
                 } else {
-                    item->unifiedRes = item->unifiedResSnapshot = 0;
+                    item->unifiedResSnapshot = 0;
                 }
                 ++it;
             }
@@ -562,30 +557,11 @@ void ExecutionEngine::taskStopped(SessionItem &item, OperationItem &opItem, bool
     // For now only count memory usage, and simply add up memory usages on different
     // devices.
     if (!failed) {
-        // TODO: find better formula to do this
-        auto memUsage = m_resMonitor.queryUsage(rctx.ticket());
-        uint64_t unifiedRes = 0;
-        if (memUsage) {
-            for (auto &p : *memUsage) {
-                auto &tag = p.first;
-                if (tag.type != ResourceType::MEMORY
-                    || tag.device.type != DeviceType::GPU) {
-                    continue;
-                }
-                unifiedRes += p.second;
-            }
-        }
-
         CLOG(INFO, logging::kPerfTag) << "OpItem Stat " << opItem.op->DebugString()
-                                        << " memusage: " << unifiedRes
+//                                         << " memusage: " << unifiedRes
                                         << " queued: " << opItem.tQueued
                                         << " scheduled: " << opItem.tScheduled
                                         << " finished: " << now;
-
-        /*
-        unifiedRes *= dur;
-        item.unifiedRes += unifiedRes;
-        */
     }
 
     m_runningTasks -= 1;
@@ -789,10 +765,9 @@ ResourceContext::~ResourceContext()
 ResourceContext::OperationScope ResourceContext::allocMemory(size_t num_bytes) const
 {
 
-    OperationScope scope(resMon.lock());
+    OperationScope scope(*this, resMon.lock());
 
     scope.res[{ResourceType::MEMORY, m_spec}] = num_bytes;
-    scope.ticket = m_ticket;
     scope.valid = scope.proxy.allocate(m_ticket, scope.res);
 
     return scope;
@@ -800,11 +775,14 @@ ResourceContext::OperationScope ResourceContext::allocMemory(size_t num_bytes) c
 
 void ResourceContext::deallocMemory(size_t num_bytes) const
 {
+    ResourceTag tag {ResourceType::MEMORY, m_spec};
     Resources res{
-        {{ResourceType::MEMORY, m_spec}, num_bytes}
+        {tag, num_bytes}
     };
 
     if (resMon.free(m_ticket, res)) {
+        session.resourceUsage(tag) -= num_bytes;
+
         removeTicketFromSession();
     }
 }
@@ -812,9 +790,19 @@ void ResourceContext::deallocMemory(size_t num_bytes) const
 void ResourceContext::OperationScope::rollback()
 {
     DCHECK(valid);
-    proxy.free(ticket, res);
+    proxy.free(context.ticket(), res);
     // no need to call removeTicketFromSession
     // because this most likely will not be the last deallocation
+}
+
+void ResourceContext::OperationScope::commit()
+{
+    if (!valid) return;
+
+    // the allocation is used by the session (i.e. the session left the scope without rollback)
+    for (auto p : res) {
+        context.session.resourceUsage(p.first) += p.second;
+    }
 }
 
 std::ostream &operator<<(std::ostream &os, const ResourceContext &c)
