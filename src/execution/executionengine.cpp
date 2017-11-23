@@ -233,7 +233,6 @@ void ExecutionEngine::scheduleLoop()
             auto &item = *it;
             if (del.erase(item) > 0) {
                 VLOG(2) << "Deleting session " << item->sessHandle << "@" << as_hex(item);
-                DCHECK(item.use_count() == 1);
                 // The deletion of session's executor is async to this thread.
                 // So it's legit for tickets to be nonempty
                 // DCHECK(item->tickets.empty());
