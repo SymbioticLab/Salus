@@ -48,7 +48,7 @@ ptn_sess_iter = re.compile(r'''Sched \s iter \s (?P<iter>\d+) \s
                                \bsession:\s (?P<sess>\w+) \s
                                \bpending:\s (?P<pending>\d+) \s
                                \bscheduled:\s (?P<scheduled>\d+) \s
-                               \bcounter:\s (?P<counter>\d+)''',
+                               \bcounter:\s (?P<counter>[\d.e+-]+)''',
                            re.VERBOSE)
 
 # Scheduler iter stat: 0 running: 3 noPageRunning: 3
