@@ -37,6 +37,8 @@ using std::chrono::duration_cast;
 using std::chrono::milliseconds;
 using std::chrono::nanoseconds;
 using std::chrono::microseconds;
+using std::chrono::seconds;
+using FpSeconds = std::chrono::duration<double, seconds::period>;
 using namespace std::chrono_literals;
 using namespace date;
 
@@ -249,7 +251,7 @@ void ExecutionEngine::scheduleLoop()
         // Snapshot resource usage counter first, or reset them
         // and delete sessions as requested
         auto now = system_clock::now();
-        auto usSinceLastSnapshot = duration_cast<microseconds>(now - lastSnapshotTime).count();
+        auto sSinceLastSnapshot = FpSeconds(now - lastSnapshotTime).count();
         lastSnapshotTime = now;
         for (auto it = m_sessions.begin(),
              itend = m_sessions.end(); it != itend;) {
@@ -265,7 +267,7 @@ void ExecutionEngine::scheduleLoop()
                 if (sessionsChanged == 0) {
                     // calculate progress counter increase since last snapshot
                     size_t mem = item->resourceUsage(ResourceTag::GPU0Memory());
-                    item->unifiedResSnapshot += mem * usSinceLastSnapshot;
+                    item->unifiedResSnapshot += mem * sSinceLastSnapshot;
                 } else {
                     item->unifiedResSnapshot = 0;
                 }

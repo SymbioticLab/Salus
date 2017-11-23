@@ -212,7 +212,7 @@ private:
 
         // Only accessed by main scheduling thread
         UnsafeQueue bgQueue;
-        uint64_t unifiedResSnapshot;
+        double unifiedResSnapshot;
         bool forceEvicted {false};
 
         uint64_t holWaiting = 0;
