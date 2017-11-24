@@ -91,10 +91,6 @@ ExecutorImpl::ExecutorImpl(const tf::MultiDeviceExecutorParams &p, const tf::Gra
 
 ExecutorImpl::~ExecutorImpl()
 {
-    // clear paging callbacks so we won't get called after we were deleted
-    // but haven't been removed from session list yet.
-    inserter_->registerPagingCallbacks({});
-
     for (auto fiter : frame_info_) {
         delete fiter.second;
     }

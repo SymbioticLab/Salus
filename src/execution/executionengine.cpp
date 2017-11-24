@@ -124,6 +124,8 @@ void ExecutionEngine::deleteSession(PSessionItem item)
 
 void ExecutionEngine::InserterImpl::enqueueOperation(std::unique_ptr<OperationTask> &&task)
 {
+    DCHECK(m_item);
+
     auto opItem = std::make_shared<OperationItem>();
     opItem->op = std::move(task);
     opItem->tQueued = std::chrono::system_clock::now();
@@ -133,16 +135,24 @@ void ExecutionEngine::InserterImpl::enqueueOperation(std::unique_ptr<OperationTa
 
 void ExecutionEngine::InserterImpl::registerPagingCallbacks(PagingCallbacks &&pcb)
 {
+    DCHECK(m_item);
     utils::Guard g(m_item->mu);
     m_item->pagingCb = std::move(pcb);
 }
 
 void ExecutionEngine::InserterImpl::deleteSession(std::function<void()> cb)
 {
+    DCHECK(m_item);
+
     {
         utils::Guard g(m_item->mu);
         m_item->cleanupCb = std::move(cb);
+        // clear paging callbacks so the executorImpl won't get called after it is deleted
+        // but haven't been removed from session list yet.
+        m_item->pagingCb = {};
     }
+
+    // Request engine to remove session and give up our reference to the session item
     m_engine.deleteSession(std::move(m_item));
 }
 
