@@ -55,7 +55,7 @@ public:
     ThreadPoolPrivate(ThreadPool *q, const ThreadPoolOptions &options);
     ~ThreadPoolPrivate();
 
-    void run(Closure c);
+    Closure tryRun(Closure c);
     void stop();
     void join();
     size_t numThreads() const;
@@ -128,9 +128,17 @@ ThreadPool::ThreadPool(const ThreadPoolOptions &options)
 
 ThreadPool::~ThreadPool() = default;
 
+Closure ThreadPool::tryRun(Closure c)
+{
+    return d->tryRun(std::move(c));
+}
 void ThreadPool::run(Closure c)
 {
-    d->run(std::move(c));
+    c = d->tryRun(std::move(c));
+    if (c) {
+        // enqueue failed, run on current thread
+        c();
+    }
 }
 void ThreadPool::stop()
 {
@@ -190,7 +198,7 @@ ThreadPoolPrivate::ThreadPoolPrivate(ThreadPool *q, const ThreadPoolOptions &opt
     }
 }
 
-void ThreadPoolPrivate::run(Closure c)
+Closure ThreadPoolPrivate::tryRun(Closure c)
 {
     auto pt = getPerThread();
     if (pt->pool == this) {
@@ -210,9 +218,8 @@ void ThreadPoolPrivate::run(Closure c)
     // this is kept alive while any threads can potentially be in Schedule.
     if (!c) {
         m_ec.Notify(false);
-    } else {
-        c(); // Push failed, execute directly.
     }
+    return c;
 }
 
 void ThreadPoolPrivate::stop()

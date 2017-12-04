@@ -66,44 +66,54 @@ public:
     ThreadPool &operator=(ThreadPool &&other) = default;
 
     using Closure = tp::FixedFunction<void()>;
+
     /**
-     * Run a job, don't care about its completion. This may be more efficient
-     * because no future is created
+     * @brief Try run a closure c in thread pool.
+     * @returns c itself if queue is full. Otherwise a default constructed Closure.
+     */
+    Closure tryRun(Closure c);
+
+    /**
+     * @brief Run the closure c in thread pool, don't care about its completion.
+     * This may be more efficient, because no wrapper task for future/promise is created.
+     * If the queue is full, then c is run on calling thread.
      */
     void run(Closure c);
 
     /**
-     * Post a job, returns immediately with a future holding the result
+     * @brief Post the closure c to thread pool, returns with a future holding the result.
+     * If the queue is full, then closure is executed on caller thread before return.
+     * @returns future holding the return value of closure c.
      */
     template<typename Closure>
-    auto post(Closure closure)
+    auto post(Closure &&c)
     {
         using R = std::invoke_result_t<Closure>;
         using Task = std::packaged_task<R()>;
 
-        Task tk(std::move(closure));
+        Task tk(std::move(c));
         auto fu = tk.get_future();
         run(std::move(tk));
         return fu;
     }
 
     /**
-     * Signal to stop the thread pool, currently running tasks will continue to run.
+     * @brief Signal to stop the thread pool, currently running tasks will continue to run.
      */
     void stop();
 
     /**
-     * Wait for all thread to exit
+     * @brief Wait for all thread to exit
      */
     void join();
 
     /**
-     * Returns the number of threads in the pool
+     * @returns the number of threads in the pool
      */
     size_t numThreads() const;
 
     /**
-     * Returns a logical thread index between 0 and numThreads() - 1 if called
+     * @returns a logical thread index between 0 and numThreads() - 1 if called
      * from one of the threads in the pool. Returns -1 otherwise.
      */
     int currentThreadId() const;

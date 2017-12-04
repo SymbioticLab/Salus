@@ -418,10 +418,6 @@ size_t ExecutionEngine::maybeScheduleFrom(PSessionItem item)
 
         // Send to thread pool
         if (scheduled) {
-            m_runningTasks += 1;
-            if (!opItem->op->allowConcurrentPaging()) {
-                m_noPagingRunningTasks += 1;
-            }
             opItem->tScheduled = system_clock::now();
 
             VLOG(3) << "Adding to thread pool: opItem in session " << item->sessHandle
@@ -443,8 +439,14 @@ size_t ExecutionEngine::maybeScheduleFrom(PSessionItem item)
                 return true;
             };
 
-            m_pool.run([item = std::move(item), opItem = std::move(opItem), cbs = std::move(cbs),
-                        randomizedExecution = m_schedParam.randomizedExecution]() {
+            // NOTE: this is waited by schedule thread, so we can't afford running
+            // the operation inline. If the thread pool is full, simply consider the
+            // opItem as not scheduled.
+
+            // opItem has to be captured by value, we need it in case the thread pool is full
+            auto c = m_pool.tryRun([item = std::move(item), opItem, cbs = std::move(cbs),
+                                    &runningTasks = m_runningTasks, &noPagingRunningTasks = m_noPagingRunningTasks,
+                                    randomizedExecution = m_schedParam.randomizedExecution]() {
                 TIMED_SCOPE_IF(timerInnerObj, "ExecutionEngine::maybeScheduleFrom::doSchedule::run",
                                VLOG_IS_ON(1));
                 DCHECK(item);
@@ -454,11 +456,19 @@ size_t ExecutionEngine::maybeScheduleFrom(PSessionItem item)
                     milliseconds dur {std::rand() % 100};
                     std::this_thread::sleep_for(dur);
                 }
+                runningTasks += 1;
+                if (!opItem->op->allowConcurrentPaging()) {
+                    noPagingRunningTasks += 1;
+                }
 
                 VLOG(2) << "Running opItem in session " << item->sessHandle << ": " << opItem->op->DebugString();
                 opItem->tRunning = system_clock::now();
                 opItem->op->run(cbs);
             });
+            if (!c) {
+                // successfully sent to thread pool, we can reset opItem
+                opItem.reset();
+            }
         } else {
             VLOG(2) << "Failed to schedule opItem in session " << item->sessHandle << ": " << opItem->op->DebugString();
         }
