@@ -504,7 +504,7 @@ size_t ExecutionEngine::maybeScheduleFrom(PSessionItem item)
             futures.emplace_back(std::move(fu));
         }
 
-        VLOG(2) << "All opItem in session " << item->sessHandle << " exaimed";
+        VLOG(2) << "All opItem in session " << item->sessHandle << " examined";
 
         for (auto &fu : futures) {
             auto poi = fu.get();

@@ -24,13 +24,33 @@
 #include "EventCount.h"
 
 #include <atomic>
+#include <memory>
 #include <thread>
 #include <vector>
 
 using std::unique_ptr;
 using std::vector;
 
-using Closure = ThreadPool::Closure;
+struct Task
+{
+    ThreadPool::Closure c;
+
+    Task() = default;
+    explicit Task(ThreadPool::Closure &&cc) : c(std::move(cc)) {}
+
+    Task(Task &&) = default;
+    Task &operator=(Task &&) = default;
+
+    void operator () ()
+    {
+        c();
+    }
+
+    operator bool() const
+    {
+        return c;
+    }
+};
 
 ThreadPoolOptions::ThreadPoolOptions()
 {
@@ -49,13 +69,13 @@ class ThreadPoolPrivate
 {
     ThreadPool *const q; // not own
 
-    using Queue = RunQueue<Closure, 1024>;
+    using Queue = RunQueue<Task, 1024>;
 
 public:
     ThreadPoolPrivate(ThreadPool *q, const ThreadPoolOptions &options);
     ~ThreadPoolPrivate();
 
-    Closure tryRun(Closure c);
+    Task tryRun(Task c);
     void stop();
     void join();
     size_t numThreads() const;
@@ -83,14 +103,14 @@ private:
     /**
      * Steal tries to steal work from other worker threads in best-effort manner.
      */
-    Closure steal();
+    Task steal();
 
     /**
      * waitForWork blocks until new work is available (returns true), or if it is
      * time to exit (returns false). Can optionally return a task to execute in t
      * (in such case t.f != nullptr on return).
      */
-    bool waitForWork(EventCount::Waiter *waiter, Closure *t);
+    bool waitForWork(EventCount::Waiter *waiter, Task *t);
 
     int nonEmptyQueueIndex();
 
@@ -128,17 +148,11 @@ ThreadPool::ThreadPool(const ThreadPoolOptions &options)
 
 ThreadPool::~ThreadPool() = default;
 
-Closure ThreadPool::tryRun(Closure c)
+ThreadPool::Closure ThreadPool::tryRun(Closure c)
 {
-    return d->tryRun(std::move(c));
-}
-void ThreadPool::run(Closure c)
-{
-    c = d->tryRun(std::move(c));
-    if (c) {
-        // enqueue failed, run on current thread
-        c();
-    }
+    Task t(std::move(c));
+    t = d->tryRun(std::move(t));
+    return std::move(t.c);
 }
 void ThreadPool::stop()
 {
@@ -160,9 +174,9 @@ int ThreadPool::currentThreadId() const
 ThreadPoolPrivate::ThreadPoolPrivate(ThreadPool *q, const ThreadPoolOptions &options)
     : q(q)
     , m_options(options)
-    , m_threads(options.numThreads)
+    // Queue is not movable or copyable, thus can only be constructed this way
     , m_queues(options.numThreads)
-    , m_coprimes(options.numThreads)
+    // Waiter is not movable or copyable, thus can only be constructed this way
     , m_waiters(options.numThreads)
     , m_blocked(0)
     , m_spinning(false)
@@ -171,6 +185,9 @@ ThreadPoolPrivate::ThreadPoolPrivate(ThreadPool *q, const ThreadPoolOptions &opt
     , m_ec(m_waiters)
 {
     auto numThreads = m_options.numThreads;
+
+    m_threads.reserve(numThreads);
+    m_coprimes.reserve(numThreads);
 
     // Calculate coprimes of numThreads.
     // Coprimes are used for a random walk over all threads in Steal
@@ -198,16 +215,16 @@ ThreadPoolPrivate::ThreadPoolPrivate(ThreadPool *q, const ThreadPoolOptions &opt
     }
 }
 
-Closure ThreadPoolPrivate::tryRun(Closure c)
+Task ThreadPoolPrivate::tryRun(Task t)
 {
     auto pt = getPerThread();
     if (pt->pool == this) {
         // Worker thread of this pool, push onto the thread's queue.
-        c = m_queues[pt->thread_id].PushFront(std::move(c));
+        t = m_queues[pt->thread_id].PushFront(std::move(t));
     } else {
         // A free-standing thread (or worker of another pool), push onto a random
         // queue.
-        c = m_queues[rand(&pt->rand) % m_queues.size()].PushBack(std::move(c));
+        t = m_queues[rand(&pt->rand) % m_queues.size()].PushBack(std::move(t));
     }
     // Note: below we touch this after making w available to worker threads.
     // Strictly speaking, this can lead to a racy-use-after-free. Consider that
@@ -216,10 +233,10 @@ Closure ThreadPoolPrivate::tryRun(Closure c)
     // completes overall computations, which in turn leads to destruction of
     // this. We expect that such scenario is prevented by program, that is,
     // this is kept alive while any threads can potentially be in Schedule.
-    if (!c) {
+    if (!t) {
         m_ec.Notify(false);
     }
-    return c;
+    return t;
 }
 
 void ThreadPoolPrivate::stop()
@@ -365,7 +382,7 @@ void ThreadPoolPrivate::workerLoop(int thread_id)
     }
 }
 
-Closure ThreadPoolPrivate::steal()
+Task ThreadPoolPrivate::steal()
 {
     auto pt = getPerThread();
     const size_t size = m_queues.size();
@@ -385,7 +402,7 @@ Closure ThreadPoolPrivate::steal()
     return {};
 }
 
-bool ThreadPoolPrivate::waitForWork(EventCount::Waiter *waiter, Closure *t)
+bool ThreadPoolPrivate::waitForWork(EventCount::Waiter *waiter, Task *t)
 {
     // We already did best-effort emptiness check in Steal, so prepare for blocking.
     m_ec.Prewait(waiter);

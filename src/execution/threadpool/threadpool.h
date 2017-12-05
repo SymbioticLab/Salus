@@ -74,24 +74,32 @@ public:
     Closure tryRun(Closure c);
 
     /**
-     * @brief Run the closure c in thread pool, don't care about its completion.
+     * @brief Run the Func f in thread pool, don't care about its completion.
      * This may be more efficient, because no wrapper task for future/promise is created.
-     * If the queue is full, then c is run on calling thread.
+     * If the queue is full, then f is run on calling thread.
      */
-    void run(Closure c);
+    template<typename Func>
+    void run(Func f)
+    {
+        auto c = tryRun(std::move(f));
+        if (c) {
+            // enqueue failed, run on current thread
+            c();
+        }
+    }
 
     /**
-     * @brief Post the closure c to thread pool, returns with a future holding the result.
+     * @brief Post the function f to thread pool, returns with a future holding the result.
      * If the queue is full, then closure is executed on caller thread before return.
-     * @returns future holding the return value of closure c.
+     * @returns future holding the return value of function f.
      */
-    template<typename Closure>
-    auto post(Closure &&c)
+    template<typename Func>
+    auto post(Func f)
     {
-        using R = std::invoke_result_t<Closure>;
+        using R = std::invoke_result_t<Func>;
         using Task = std::packaged_task<R()>;
 
-        Task tk(std::move(c));
+        Task tk(std::move(f));
         auto fu = tk.get_future();
         run(std::move(tk));
         return fu;
