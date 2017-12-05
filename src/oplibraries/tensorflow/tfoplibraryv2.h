@@ -19,8 +19,8 @@
 #ifndef TFOPLIBRARYV2_H
 #define TFOPLIBRARYV2_H
 
-#include "oplibraries/ioplibrary.h"
 #include "execution/executionengine.h"
+#include "oplibraries/ioplibrary.h"
 
 #include <atomic>
 #include <memory>
@@ -50,14 +50,14 @@ public:
 
     bool accepts(const executor::OpKernelDef &operation) override;
 
-    PTask createCustomTask(ZmqServer::Sender sender, const executor::EvenlopDef &evenlop,
-                           const executor::CustomRequest &req) override;
+    void onCustom(ZmqServer::Sender sender, const executor::EvenlopDef &evenlop,
+                  const executor::CustomRequest &req, DoneCallback cb) override;
 
-    PTask createRunGraphTask(ZmqServer::Sender sender, const executor::EvenlopDef &evenlop,
-                             const executor::RunGraphRequest &req) override;
+    void onRunGraph(ZmqServer::Sender sender, const executor::EvenlopDef &evenlop,
+                    const executor::RunGraphRequest &req, DoneCallback cb) override;
 
-    PTask createRunTask(ZmqServer::Sender sender, const executor::EvenlopDef &evenlop,
-                        const executor::RunRequest &req) override;
+    void onRun(ZmqServer::Sender sender, const executor::EvenlopDef &evenlop, const executor::RunRequest &req,
+               DoneCallback cb) override;
 
 private:
     using Proxy = tensorflow::remote::TFSessionProxy;
@@ -75,8 +75,8 @@ private:
 
     const std::string &sessionFromRecvId(const std::string &recvId);
 
-    void handleCreateSession(const std::string &recvId, const executor::CustomRequest&, ITask::DoneCallback);
-    void handleCloseSession(const std::string &recvId, const executor::CustomRequest&, ITask::DoneCallback);
+    void handleCreateSession(const std::string &recvId, const executor::CustomRequest &, DoneCallback);
+    void handleCloseSession(const std::string &recvId, const executor::CustomRequest &, DoneCallback);
 
     std::mutex m_mu;
     std::unordered_map<std::string, ProxyAndInserter> m_proxies;

@@ -1,20 +1,20 @@
 /*
  * <one line to give the library's name and an idea of what it does.>
  * Copyright (C) 2017  Aetf <aetf@unlimitedcodeworks.xyz>
- * 
+ *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation, either version 3 of the License, or
  * (at your option) any later version.
- * 
+ *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
- * 
+ *
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
- * 
+ *
  */
 
 #ifndef EXECUTIONENGINE_H
@@ -22,21 +22,20 @@
 
 #include "devices.h"
 
-#include "execution/itask.h"
-#include "platform/logging.h"
-#include "utils/threadutils.h"
-#include "utils/containerutils.h"
 #include "execution/resources.h"
 #include "execution/threadpool/threadpool.h"
+#include "platform/logging.h"
+#include "utils/containerutils.h"
+#include "utils/threadutils.h"
 
 #include <atomic>
-#include <list>
-#include <future>
-#include <memory>
-#include <unordered_set>
-#include <unordered_map>
 #include <chrono>
+#include <future>
+#include <list>
+#include <memory>
 #include <type_traits>
+#include <unordered_map>
+#include <unordered_set>
 
 class OperationTask;
 class ResourceContext;
@@ -81,9 +80,10 @@ public:
     struct PagingCallbacks
     {
         std::function<void()> forceEvicted;
-        std::function<size_t(uint64_t, std::unique_ptr<ResourceContext>&&)> volunteer;
+        std::function<size_t(uint64_t, std::unique_ptr<ResourceContext> &&)> volunteer;
 
-        operator bool() const {
+        operator bool() const
+        {
             return forceEvicted && volunteer;
         }
     };
@@ -93,8 +93,13 @@ public:
     public:
         InserterImpl(InserterImpl &&other)
             : InserterImpl(std::move(other.m_item), other.m_engine)
-        { }
-        InserterImpl(const PSessionItem &item, ExecutionEngine &engine) : m_item(item), m_engine(engine) {}
+        {
+        }
+        InserterImpl(const PSessionItem &item, ExecutionEngine &engine)
+            : m_item(item)
+            , m_engine(engine)
+        {
+        }
 
         ~InserterImpl();
 
@@ -112,15 +117,18 @@ public:
 
     Inserter registerSession(const std::string &sessHandle);
 
-    ThreadPool &pool() {
+    ThreadPool &pool()
+    {
         return m_pool;
     }
 
-    void setSchedulingParam(const SchedulingParam &param) {
+    void setSchedulingParam(const SchedulingParam &param)
+    {
         m_schedParam = param;
     }
 
-    const SchedulingParam &schedulingParam() const {
+    const SchedulingParam &schedulingParam() const
+    {
         return m_schedParam;
     }
 
@@ -166,13 +174,13 @@ private:
         // Only accessed by main scheduling thread
         UnsafeQueue bgQueue;
         double unifiedResSnapshot;
-        bool forceEvicted {false};
+        bool forceEvicted{false};
 
         uint64_t holWaiting = 0;
         uint64_t queueHeadHash = 0;
 
         // Accessed by multiple scheduling thread
-        std::atomic_bool protectOOM {true};
+        std::atomic_bool protectOOM{true};
 
         std::unordered_set<uint64_t> tickets;
         std::mutex tickets_mu;
@@ -203,7 +211,10 @@ private:
     {
         std::unique_ptr<OperationTask> op;
 
-        uint64_t hash() const { return reinterpret_cast<uint64_t>(this); }
+        uint64_t hash() const
+        {
+            return reinterpret_cast<uint64_t>(this);
+        }
 
         std::chrono::time_point<std::chrono::system_clock> tQueued;
         std::chrono::time_point<std::chrono::system_clock> tInspected;
@@ -242,8 +253,14 @@ class ResourceContext
     uint64_t m_ticket;
 
 public:
-    const DeviceSpec &spec() const { return m_spec; }
-    uint64_t ticket() const { return m_ticket; }
+    const DeviceSpec &spec() const
+    {
+        return m_spec;
+    }
+    uint64_t ticket() const
+    {
+        return m_ticket;
+    }
 
     ResourceContext(const ResourceContext &other, const DeviceSpec &spec);
     ResourceContext(ExecutionEngine::SessionItem &item, ResourceMonitor &resMon);
@@ -257,7 +274,8 @@ public:
         explicit OperationScope(const ResourceContext &context, ResourceMonitor::LockedProxy &&proxy)
             : proxy(std::move(proxy))
             , context(context)
-        {}
+        {
+        }
 
         OperationScope(OperationScope &&scope)
             : valid(scope.valid)
@@ -267,11 +285,15 @@ public:
             scope.valid = false;
         }
 
-        ~OperationScope() {
+        ~OperationScope()
+        {
             commit();
         }
 
-        operator bool() const { return valid; }
+        operator bool() const
+        {
+            return valid;
+        }
 
         void rollback();
 
@@ -283,7 +305,7 @@ public:
         bool valid = true;
         ResourceMonitor::LockedProxy proxy;
         Resources res;
-        const ResourceContext & context;
+        const ResourceContext &context;
     };
 
     OperationScope allocMemory(size_t num_bytes) const;

@@ -9,7 +9,6 @@ set(SRC_LIST
 
     "execution/executionengine.cpp"
     "execution/devices.cpp"
-    "execution/itask.cpp"
     "execution/operationtask.cpp"
     "execution/resources.cpp"
     "execution/threadpool/nonblockingthreadpool.cpp"
