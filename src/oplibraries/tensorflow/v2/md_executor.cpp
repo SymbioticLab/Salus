@@ -51,11 +51,17 @@ static const auto* const kEmptyTensor = new tf::Tensor;
 bool IsInitializationOp(const tf::Node* node) {
     return node->op_def().allows_uninitialized_input();
 }
+
+void ExecutionEngineRunner(tf::Executor::Args::Closure c)
+{
+    ExecutionEngine::instance().pool().run(std::move(c));
+}
+
 } // namespace
 
 tensorflow::Status NewMultiDeviceExecutor(const tensorflow::MultiDeviceExecutorParams& params,
                                           const tensorflow::Graph* graph, ExecutionEngine::Inserter ins,
-                                          tensorflow::Executor **executor)
+                                          tf::Executor **executor)
 {
     auto impl = new ExecutorImpl(params, graph, ins);
     auto s = impl->Initialize();
@@ -85,10 +91,6 @@ ExecutorImpl::ExecutorImpl(const tf::MultiDeviceExecutorParams &p, const tf::Gra
 
 ExecutorImpl::~ExecutorImpl()
 {
-    // clear paging callbacks so we won't get called after we were deleted
-    // but haven't been removed from session list yet.
-    inserter_->registerPagingCallbacks({});
-
     for (auto fiter : frame_info_) {
         delete fiter.second;
     }
@@ -301,7 +303,7 @@ ExecutorState::ExecutorState(const tf::Executor::Args &args, ExecutorImpl *impl)
     , call_frame_(args.call_frame)
     , impl_(impl)
     , cancellation_manager_(args.cancellation_manager)
-    , runner_(args.runner)
+    , runner_(ExecutionEngineRunner)
     , sync_on_finish_(args.sync_on_finish)
     , num_outstanding_ops_(0)
     , num_emitted_ops_(0)

@@ -1,4 +1,3 @@
-
 # Use CMAKE_CURRENT_LIST_DIR as this file will be included
 set(third_party_dir ${CMAKE_CURRENT_LIST_DIR})
 

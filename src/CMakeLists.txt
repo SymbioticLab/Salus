@@ -7,9 +7,9 @@ set(SRC_LIST
 
     "execution/executionengine.cpp"
     "execution/devices.cpp"
-    "execution/itask.cpp"
     "execution/operationtask.cpp"
     "execution/resources.cpp"
+    "execution/threadpool/nonblockingthreadpool.cpp"
 
     "rpcserver/rpcservercore.cpp"
     "rpcserver/zmqserver.cpp"
@@ -55,7 +55,6 @@ target_link_libraries(executor
     ZeroMQ::zmq
     Boost::boost
     Boost::thread
-    q
     docopt_s
 )
 

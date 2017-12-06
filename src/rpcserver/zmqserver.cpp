@@ -249,16 +249,7 @@ void ZmqServer::dispatch(zmq::socket_t &sock)
     VLOG(2) << "Received request body byte array size " << body.size();
 
     // step 3. dispatch
-    auto f = m_pLogic->dispatch(sender, *pEvenlop, *pRequest)
-
-    // step 4. send response back
-    .then([sender = std::move(sender)](ProtoPtr &&pResponse) mutable {
-        if (pResponse) {
-            sender->sendMessage(std::move(pResponse));
-        }
-    }).fail([](std::exception_ptr e){
-        LOG(ERROR) << "Caught exception in logic dispatch: " << e;
-    });
+    m_pLogic->dispatch(sender, *pEvenlop, *pRequest);
 }
 
 ZmqServer::SenderImpl::SenderImpl(ZmqServer &server, uint64_t seq, MultiPartMessage &&identities)
