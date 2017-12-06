@@ -39,7 +39,7 @@ struct ThreadPoolOptions
 
     /**
      * Times of tries for spin wait before go to wait.
-     * Use -1 for default value, * which is 5000 / numThreads
+     * Use -1 for default value, which is 5000 / numThreads
      */
     int spinCount = -1;
 

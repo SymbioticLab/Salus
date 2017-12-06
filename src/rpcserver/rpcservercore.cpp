@@ -69,11 +69,13 @@ void RpcServerCore::dispatch(ZmqServer::Sender sender, const EvenlopDef &evenlop
     auto fit = funcs.find(evenlop.type());
     if (fit == funcs.end()) {
         LOG(ERROR) << "Skipping request because requested method not found: " << evenlop.type();
+        return;
     }
 
     auto oplib = OpLibraryRegistary::instance().findOpLibrary(evenlop.oplibrary());
     if (!oplib) {
         LOG(ERROR) << "Skipping due to failed to find requested OpLibrary.";
+        return;
     }
 
     fit->second(std::move(sender), oplib, evenlop, request);
@@ -85,7 +87,7 @@ void RpcServerCore::Run(ZmqServer::Sender &&sender, IOpLibrary *oplib, const Eve
     const auto &opdef = request.opkernel();
 
     VLOG(2) << "Serving RunRequest with opkernel id " << opdef.id();
-    assert(oplib->accepts(opdef));
+    DCHECK(oplib->accepts(opdef));
 
     oplib->onRun(sender, evenlop, request, [sender](auto resp) {
         if (resp) {

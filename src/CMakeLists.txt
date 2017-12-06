@@ -1,7 +1,5 @@
 include_directories(${CMAKE_CURRENT_SOURCE_DIR})
 
-# add_definitions(-DTHREADPOOL_USE_Q)
-
 set(SRC_LIST
     "oplibraries/ioplibrary.cpp"
 
@@ -58,7 +56,6 @@ target_link_libraries(executor
     Boost::boost
     Boost::thread
     docopt_s
-    thread-pool-cpp
 )
 
 if(USE_TENSORFLOW)
