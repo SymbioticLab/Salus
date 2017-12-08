@@ -37,9 +37,12 @@ struct Task
 
     Task() = default;
     explicit Task(ThreadPool::Closure &&cc) : c(std::move(cc)) {}
+    ~Task() = default;
 
     Task(Task &&) = default;
     Task &operator=(Task &&) = default;
+    Task(const Task &) = delete;
+    Task &operator=(const Task &) = delete;
 
     void operator () ()
     {
@@ -67,9 +70,14 @@ ThreadPoolOptions::ThreadPoolOptions()
 
 class ThreadPoolPrivate
 {
-    ThreadPool *const q; // not own
+    ThreadPool *const q; // NOLINT
 
     using Queue = RunQueue<Task, 1024>;
+
+    ThreadPoolPrivate(const ThreadPoolPrivate &) = delete;
+    ThreadPoolPrivate &operator =(const ThreadPoolPrivate &) = delete;
+    ThreadPoolPrivate(ThreadPoolPrivate &&) = delete;
+    ThreadPoolPrivate &operator =(ThreadPoolPrivate &&) = delete;
 
 public:
     ThreadPoolPrivate(ThreadPool *q, const ThreadPoolOptions &options);

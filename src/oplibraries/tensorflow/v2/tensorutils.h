@@ -192,7 +192,7 @@ struct Entry
 
     struct MaybeLock
     {
-        MaybeLock(Entry *en) : mu(en->ref_mu){
+        explicit MaybeLock(Entry *en) : mu(en->ref_mu){
             if (mu) {
                 mu->lock();
             }

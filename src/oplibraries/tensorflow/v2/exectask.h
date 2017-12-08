@@ -1,17 +1,17 @@
 /*
  * <one line to give the library's name and an idea of what it does.>
  * Copyright (C) 2017  Aetf <aetf@unlimitedcodeworks.xyz>
- * 
+ *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation, either version 3 of the License, or
  * (at your option) any later version.
- * 
+ *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
- * 
+ *
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
@@ -33,7 +33,7 @@
 
 namespace utils {
 class semaphore;
-} // namespace
+} // namespace utils
 
 /**
  * @todo write docs
@@ -41,10 +41,8 @@ class semaphore;
 class ExecTask : public OperationTask
 {
 public:
-    ExecTask(ExecutorState *state, utils::semaphore &num_finished_ops,
-             const ExecutorState::TaggedNode &node,
-             const tf::OpKernelContext::Params &initial_params,
-             tf::Rendezvous *rendez, int maxFailures = 2);
+    ExecTask(ExecutorState *state, utils::semaphore &num_finished_ops, const ExecutorState::TaggedNode &node,
+             const tf::OpKernelContext::Params &initial_params, tf::Rendezvous *rendez, int maxFailures = 2);
 
     bool prepare(std::unique_ptr<ResourceContext> &&rctx) override;
 
@@ -52,7 +50,10 @@ public:
 
     void cancel() override;
 
-    int failedTimes() const override { return failureTimes; }
+    int failedTimes() const override
+    {
+        return failureTimes;
+    }
 
     Resources estimatedUsage(const DeviceSpec &dev) override;
 
@@ -69,21 +70,21 @@ public:
 private:
     void inferUsage(const DeviceSpec &dev);
 
-    bool maybeMemoryFailure(const tf::Status &s, MemFailCallback memFailure);
+    bool maybeMemoryFailure(const tf::Status &s, const MemFailCallback &memFailure);
 
     void afterCompute(bool is_dead, const Callbacks &cbs, const tf::remote::NodeItem &item);
 
     void afterRun(const tf::Status &s, const Callbacks &cbs);
 
-    void updateRefEntryTickets(const std::vector<Entry*> &entries);
+    void updateRefEntryTickets(const std::vector<Entry *> &entries);
 
 private:
     ExecutorImpl::DeviceItem ditem;
     std::unordered_map<DeviceSpec, Resources> cachedUsage;
     std::vector<DeviceType> supportedTypes;
-    std::function<void(tf::OpKernel*, tf::FunctionLibraryRuntime*)> deleteKernel;
+    std::function<void(tf::OpKernel *, tf::FunctionLibraryRuntime *)> deleteKernel;
 
-    std::unique_ptr<PerOpAllocDevice, std::function<void(PerOpAllocDevice*)>> wrappedDevice;
+    std::unique_ptr<PerOpAllocDevice, std::function<void(PerOpAllocDevice *)>> wrappedDevice;
 
     int failureTimes = 0;
     int maxFailures;
@@ -95,10 +96,10 @@ private:
     bool has_ref_input;
     tf::Status statusInPrepare;
 
-    std::vector<Entry*> reffedEntries;
-    Entry * first_input = nullptr;
+    std::vector<Entry *> reffedEntries;
+    Entry *first_input = nullptr;
     BufferLockVec buflocks;
-    uint64_t input_size;
+    uint64_t input_size = 0;
 
     ExecutorState::TaggedNode tagged_node;
     ExecutorState::TaggedNodeSeq ready;

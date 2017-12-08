@@ -28,7 +28,7 @@ std::string bytesToHexString(const uint8_t *info, size_t infoLength, size_t maxL
     static const char ellipses[] = "...";
     static const size_t ellipsesLen = sizeof(ellipses) / sizeof(char);
 
-    if (infoLength <= 0 || !info) {
+    if (infoLength == 0 || !info) {
         return {};
     }
 

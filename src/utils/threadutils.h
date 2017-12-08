@@ -115,7 +115,7 @@ template<typename SharedLockable>
 class shared_mutex_adapter
 {
 public:
-    shared_mutex_adapter(SharedLockable &mu) : m_mu(&mu) {}
+    explicit shared_mutex_adapter(SharedLockable &mu) : m_mu(&mu) {}
 
     void lock() { m_mu->lock_shared(); }
     void unlock() noexcept { m_mu->unlock_shared(); }

@@ -54,7 +54,7 @@ class EventCount
 public:
     class Waiter;
 
-    EventCount(std::vector<Waiter> &waiters)
+    explicit EventCount(std::vector<Waiter> &waiters)
         : waiters_(waiters)
     {
         assert(waiters.size() < (1 << kWaiterBits) - 1);
@@ -181,7 +181,7 @@ public:
         }
     }
 
-    class Waiter
+    struct Waiter
     {
         friend class EventCount;
         // Align to 128 byte boundary to prevent false sharing with other Waiter objects in the same vector.

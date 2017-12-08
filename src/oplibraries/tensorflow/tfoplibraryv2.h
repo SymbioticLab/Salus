@@ -45,6 +45,8 @@ class CustomRequest;
 class TFOpLibraryV2 : public IOpLibrary
 {
 public:
+    TFOpLibraryV2() = default;
+
     bool initialize() override;
     void uninitialize() override;
 

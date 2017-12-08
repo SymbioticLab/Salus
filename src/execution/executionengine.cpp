@@ -67,7 +67,6 @@ ExecutionEngine &ExecutionEngine::instance()
 }
 
 ExecutionEngine::ExecutionEngine()
-    : m_pool()
 {
     // Start scheduling thread
     m_schedThread = std::make_unique<std::thread>(std::bind(&ExecutionEngine::scheduleLoop, this));
@@ -157,19 +156,20 @@ void ExecutionEngine::InserterImpl::deleteSession(std::function<void()> cb)
     m_engine.deleteSession(std::move(m_item));
 }
 
-void ExecutionEngine::pushToSessionQueue(PSessionItem item, POpItem opItem)
+void ExecutionEngine::pushToSessionQueue(const PSessionItem &item, POpItem &&opItem)
 {
     {
         utils::Guard g(item->mu);
-        item->queue.push_back(opItem);
+        item->queue.emplace_back(std::move(opItem));
     }
     m_note_has_work.notify();
 }
 
 ExecutionEngine::InserterImpl::~InserterImpl()
 {
-    if (m_item)
+    if (m_item) {
         m_engine.deleteSession(m_item);
+    }
 }
 
 bool ExecutionEngine::shouldWaitForAWhile(size_t scheduled, nanoseconds &ns)
@@ -219,7 +219,7 @@ void ExecutionEngine::scheduleLoop()
 
             using std::swap;
             swap(del, m_deletedSessions);
-            DCHECK(m_deletedSessions.size() == 0);
+            DCHECK(m_deletedSessions.empty());
         }
 
         // Append any new sessions
@@ -230,7 +230,7 @@ void ExecutionEngine::scheduleLoop()
             sessionsChanged += m_newSessions.size();
 
             m_sessions.splice(m_sessions.end(), m_newSessions);
-            DCHECK(m_newSessions.size() == 0);
+            DCHECK(m_newSessions.empty());
         }
 
         PERFORMANCE_CHECKPOINT_WITH_ID(schedIterObj, "after-accept");
@@ -709,6 +709,7 @@ ResourceContext::ResourceContext(const ResourceContext &other, const DeviceSpec 
 
 ResourceContext::ResourceContext(ExecutionEngine::SessionItem &item, ResourceMonitor &resMon)
     : resMon(resMon)
+    , m_spec()
     , m_ticket(0)
     , session(item)
     , hasStaging(false)
@@ -783,8 +784,9 @@ void ResourceContext::OperationScope::rollback()
 
 void ResourceContext::OperationScope::commit()
 {
-    if (!valid)
+    if (!valid) {
         return;
+    }
 
     // the allocation is used by the session (i.e. the session left the scope without rollback)
     for (auto p : res) {

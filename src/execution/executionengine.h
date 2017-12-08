@@ -138,7 +138,7 @@ private:
     // scheduler parameters
     SchedulingParam m_schedParam;
 
-    std::atomic<bool> m_shouldExit = {false};
+    std::atomic<bool> m_shouldExit{false};
     std::unique_ptr<std::thread> m_schedThread;
     void scheduleLoop();
     bool shouldWaitForAWhile(size_t scheduled, std::chrono::nanoseconds &ns);
@@ -151,11 +151,8 @@ private:
 
     // Bookkeeping
     ResourceMonitor m_resMonitor;
-    // TODO: remove this
-    std::atomic_int_fast64_t m_runningTasks;
-
-    std::atomic_int_fast64_t m_noPagingRunningTasks;
-    std::unordered_map<uint64_t, std::weak_ptr<SessionItem>> m_ticketOwners;
+    std::atomic_int_fast64_t m_runningTasks{0};
+    std::atomic_int_fast64_t m_noPagingRunningTasks{0};
 
     // Paging
     bool doPaging();
@@ -187,6 +184,7 @@ private:
 
         explicit SessionItem(const std::string &handle)
             : sessHandle(handle)
+            , unifiedResSnapshot(0.0)
         {
             // NOTE: add other devices
             resUsage[ResourceTag::GPU0Memory()].get() = 0;
@@ -205,7 +203,7 @@ private:
         // must be initialized in constructor
         AtomicResUsages resUsage;
     };
-    void pushToSessionQueue(PSessionItem item, POpItem opItem);
+    void pushToSessionQueue(const PSessionItem &item, POpItem &&opItem);
 
     struct OperationItem
     {
@@ -304,7 +302,7 @@ public:
 
         bool valid = true;
         ResourceMonitor::LockedProxy proxy;
-        Resources res;
+        Resources res{};
         const ResourceContext &context;
     };
 

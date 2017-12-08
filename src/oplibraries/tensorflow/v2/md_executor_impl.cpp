@@ -1,17 +1,17 @@
 /*
  * <one line to give the library's name and an idea of what it does.>
  * Copyright (C) 2017  Aetf <aetf@unlimitedcodeworks.xyz>
- * 
+ *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation, either version 3 of the License, or
  * (at your option) any later version.
- * 
+ *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
- * 
+ *
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
@@ -27,14 +27,14 @@
 
 #include "oplibraries/tensorflow/v2/peropallocdevice.h"
 #include "oplibraries/tensorflow/v2/tfallocator.h"
-#include "utils/stringutils.h"
 #include "utils/containerutils.h"
+#include "utils/stringutils.h"
 
-#include <boost/thread/lock_algorithms.hpp>
 #include <boost/iterator/indirect_iterator.hpp>
+#include <boost/thread/lock_algorithms.hpp>
 
-#include <vector>
 #include <unordered_set>
+#include <vector>
 
 namespace nodestats {
 void SetScheduled(tf::NodeExecStats *nt, int64_t t)
@@ -105,9 +105,9 @@ void SetReferencedTensors(tf::NodeExecStats *nt, const tf::TensorReferenceVector
 {
     // be careful not to increment the reference count on any tensor
     // while recording the information
-    for (size_t i = 0; i < tensors.size(); ++i) {
+    for (const auto &tensor : tensors) {
         auto description = nt->add_referenced_tensor();
-        tensors.at(i).FillDescription(description);
+        tensor.FillDescription(description);
     }
 }
 
@@ -115,50 +115,45 @@ void SetReferencedTensors(tf::NodeExecStats *nt, const tf::TensorReferenceVector
 // Returns true iff the node is a transfer node.
 // TODO(tucker): merge with the DetailText function in session.cc
 // in a common location.
-bool SetTimelineLabel(tf::NodeExecStats *node_stats, const tf::Node* node)
+bool SetTimelineLabel(tf::NodeExecStats *node_stats, const tf::Node *node)
 {
     bool is_transfer_node = false;
     std::string memory;
-    for (auto& all : node_stats->memory()) {
+    for (auto &all : node_stats->memory()) {
         auto tot = all.total_bytes();
         if (tot >= 0.1 * 1048576.0) {
             auto peak = all.peak_bytes();
             if (peak > 0) {
-                memory =
-                tf::strings::StrCat(memory, "[", all.allocator_name(),
-                                tf::strings::Printf(" %.1fMB %.1fMB] ", tot / 1048576.0,
-                                                peak / 1048576.0));
+                memory = tf::strings::StrCat(memory, "[", all.allocator_name(),
+                                             tf::strings::Printf(" %.1fMB %.1fMB] ", tot / 1048576.0,
+                                                                 peak / 1048576.0));
             } else {
                 memory = tf::strings::StrCat(memory, "[", all.allocator_name(),
-                                         tf::strings::Printf(" %.1fMB] ", tot / 1048576.0));
+                                             tf::strings::Printf(" %.1fMB] ", tot / 1048576.0));
             }
         }
     }
     auto def = node->def();
-    std::string text = "";
+    std::string text;
     if (IsSend(node)) {
         std::string tensor_name;
         TF_CHECK_OK(GetNodeAttr(def, "tensor_name", &tensor_name));
         std::string recv_device;
         TF_CHECK_OK(GetNodeAttr(def, "recv_device", &recv_device));
-        text = tf::strings::StrCat(memory, def.name(), " = ", def.op(), "(",
-                               tensor_name, " @", recv_device);
+        text = tf::strings::StrCat(memory, def.name(), " = ", def.op(), "(", tensor_name, " @", recv_device);
         is_transfer_node = true;
     } else if (IsRecv(node)) {
         std::string tensor_name;
         TF_CHECK_OK(GetNodeAttr(def, "tensor_name", &tensor_name));
         std::string send_device;
         TF_CHECK_OK(GetNodeAttr(def, "send_device", &send_device));
-        text = tf::strings::StrCat(memory, def.name(), " = ", def.op(), "(",
-                               tensor_name, " @", send_device);
+        text = tf::strings::StrCat(memory, def.name(), " = ", def.op(), "(", tensor_name, " @", send_device);
         is_transfer_node = true;
     } else {
         text = tf::strings::StrCat(
             memory, def.name(), " = ", def.op(), "(",
-                               tf::str_util::Join(
-                                   std::vector<tf::StringPiece>(def.input().begin(), def.input().end()),
-                                              ", "),
-                               ")");
+            tf::str_util::Join(std::vector<tf::StringPiece>(def.input().begin(), def.input().end()), ", "),
+            ")");
     }
     node_stats->set_timeline_label(text);
     return is_transfer_node;
@@ -204,11 +199,8 @@ std::string rendezKey(const tf::Node *n, uint64_t frame_id, int64_t iter)
         LOG(ERROR) << "Node " << n->name() << " doesn't have required attribute: tensor_name";
     }
 
-    return tf::strings::StrCat(send_device, ";",
-                           tf::strings::FpToString(send_device_incarnation), ";",
-                           recv_device, ";",
-                           tensor_name, ";",
-                           frame_id, ":", iter);
+    return tf::strings::StrCat(send_device, ";", tf::strings::FpToString(send_device_incarnation), ";",
+                               recv_device, ";", tensor_name, ";", frame_id, ":", iter);
 }
 
 } // namespace
@@ -219,7 +211,7 @@ void ExecutorState::fetchRecvShape(const tf::Node *n)
         return;
     }
 
-    auto zr = static_cast<tf::ZrpcRemoteRendezvous*>(rendezvous_);
+    auto zr = static_cast<tf::ZrpcRemoteRendezvous *>(rendezvous_); // NOLINT
     DCHECK_NOTNULL(zr);
 
     auto key = rendezKey(n, 0, 0);
@@ -254,8 +246,8 @@ void ExecutorState::addNodeToRefiner(const TaggedNode &tn)
         auto e = *node->in_edges().begin();
         auto ctx = refiner_.GetContext(e->src());
         if (!ctx) {
-            VLOG(3) << "Input '" << e->src()->name() << "' for '"
-                    << node->name() << "' was not previously added to ShapeRefiner.";
+            VLOG(3) << "Input '" << e->src()->name() << "' for '" << node->name()
+                    << "' was not previously added to ShapeRefiner.";
             return;
         }
         auto key = rendezKey(tn.node, tn.input_frame->frame_id, tn.input_iter);
@@ -264,7 +256,8 @@ void ExecutorState::addNodeToRefiner(const TaggedNode &tn)
         auto key = rendezKey(tn.node, tn.input_frame->frame_id, tn.input_iter);
         auto it = sendShapes_.find(key);
         if (it == sendShapes_.end()) {
-            VLOG(3) << "Send op with key '" << key << "' for '" << node->name() << "' was not previously added to ShapeRefiner.";
+            VLOG(3) << "Send op with key '" << key << "' for '" << node->name()
+                    << "' was not previously added to ShapeRefiner.";
             return;
         }
         auto &shape = it->second;
@@ -291,16 +284,14 @@ size_t ExecutorImpl::handlePagingRequest(uint64_t oldTicket, std::unique_ptr<Res
     // and potentially share the storage.
     // We want to move one complete set of tensors that are sharing buffer.
     size_t totalReleased = 0;
-    std::vector<TensorBufferTree*> parts;
+    std::vector<TensorBufferTree *> parts;
     parts.reserve(4);
     BufferMutexSet reflocks;
     reflocks.reserve(8);
 
     // guard after decl of parts, because we need to use it.
     utils::ScopeGuards sg;
-    sg += [&totalReleased]() {
-        VLOG(2) << "Paging released " << totalReleased << " bytes of memory";
-    };
+    sg += [&totalReleased]() { VLOG(2) << "Paging released " << totalReleased << " bytes of memory"; };
 
     {
         utils::TGuard g(entry_mu_, "PagingStart");
@@ -319,8 +310,7 @@ size_t ExecutorImpl::handlePagingRequest(uint64_t oldTicket, std::unique_ptr<Res
                 reflocks.insert(&tree->buf_mu);
                 parts.push_back(tree);
 
-                VLOG(2) << "Removing tree " << as_hex(tree)
-                        << " of ticket " << oldTicket << " due to paging";
+                VLOG(2) << "Removing tree " << as_hex(tree) << " of ticket " << oldTicket << " due to paging";
                 it = active_buffers_.erase(it);
             } else {
                 ++it;
@@ -332,7 +322,8 @@ size_t ExecutorImpl::handlePagingRequest(uint64_t oldTicket, std::unique_ptr<Res
     sg += [this, &parts, oldTicket]() {
         utils::TGuard g(entry_mu_, "PagingEnd");
         for (auto part : parts) {
-            VLOG(2) << "Adding buffer tree of ticket " << part->ticket << " (was " << oldTicket << ") due to paging";
+            VLOG(2) << "Adding buffer tree of ticket " << part->ticket << " (was " << oldTicket
+                    << ") due to paging";
             active_buffers_.emplace(part->ticket, part);
         }
     };
@@ -354,6 +345,7 @@ size_t ExecutorImpl::handlePagingRequest(uint64_t oldTicket, std::unique_ptr<Res
     // Lock all buffer, and all read/write should happen after this
     utils::lock(reflocks.begin(), reflocks.end());
     std::vector<std::unique_lock<boost::upgrade_mutex>> guards;
+    guards.reserve(reflocks.size());
     for (auto l : reflocks) {
         guards.emplace_back(*l, std::adopt_lock);
     }
@@ -376,9 +368,8 @@ size_t ExecutorImpl::handlePagingRequest(uint64_t oldTicket, std::unique_ptr<Res
         auto ok = moveTensorTree(*part, item.device);
         if (ok.ok()) {
             DCHECK(oldRoot->RefCountIsOne());
-            VLOG(2) << "Releasing old root buffer " << as_hex(oldRoot)
-                    << " with data block at " << as_hex(oldRoot->data())
-                    << " of size " << size;
+            VLOG(2) << "Releasing old root buffer " << as_hex(oldRoot) << " with data block at "
+                    << as_hex(oldRoot->data()) << " of size " << size;
 
             totalReleased += size;
             part->paged_out = true;
@@ -483,8 +474,8 @@ void ExecutorImpl::updateBufferTree(Entry *entry, uint64_t ticket)
     DCHECK_EQ(tree->ticket, ticket);
     DCHECK_EQ(tree->root_buf, root_buf);
 
-    VLOG(2) << "Adding entry " << as_hex(entry) << " to tree " << tree
-            << " of buffer " << tree->root_buf << " with ticket " << ticket;
+    VLOG(2) << "Adding entry " << as_hex(entry) << " to tree " << tree << " of buffer " << tree->root_buf
+            << " with ticket " << ticket;
 
     if (root_buf == buf) {
         auto it = std::find(tree->roots.begin(), tree->roots.end(), entry);
@@ -510,14 +501,14 @@ void ExecutorImpl::removeFromBufferTree(const Entry *entry, EntryVec *needUpdate
         return;
     }
 
-    auto matchRefs = [needUpdate, entry] (auto e) {
+    auto matchRefs = [needUpdate, entry](auto e) {
         if (e == entry || (needUpdate && entry->ref && e->ref == entry->ref)) {
-            VLOG(2) << "Removing entry " << as_hex(e) << " from tree " << entry->alloc_tree
-                    << " of buffer " << entry->alloc_tree->root_buf
-                    << " with ticket " << entry->alloc_tree->ticket;
+            VLOG(2) << "Removing entry " << as_hex(e) << " from tree " << entry->alloc_tree << " of buffer "
+                    << entry->alloc_tree->root_buf << " with ticket " << entry->alloc_tree->ticket;
             e->alloc_tree = nullptr;
-            if (needUpdate)
+            if (needUpdate) {
                 needUpdate->push_back(e);
+            }
             return true;
         }
         return false;

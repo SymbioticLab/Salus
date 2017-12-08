@@ -23,32 +23,32 @@ limitations under the License.
 #include "md_executor.h"
 #include "md_executor_impl.h"
 
+#include "execution/devices.h"
+#include "execution/executionengine.h"
 #include "oplibraries/tensorflow/v2/exectask.h"
 #include "oplibraries/tensorflow/v2/peropallocdevice.h"
 #include "oplibraries/tensorflow/v2/tfallocator.h"
-#include "execution/devices.h"
-#include "execution/executionengine.h"
-#include "utils/threadutils.h"
 #include "utils/stringutils.h"
+#include "utils/threadutils.h"
 
-#include <boost/thread/shared_mutex.hpp>
 #include <boost/thread/lock_algorithms.hpp>
+#include <boost/thread/shared_mutex.hpp>
 
 #include <deque>
+#include <functional>
 #include <memory>
 #include <string>
 #include <unordered_map>
-#include <functional>
 
 namespace tf = tensorflow;
-namespace gtl = tf::gtl;
 using namespace tf::remote;
 
 namespace {
 // 1-D, 0 element tensor.
-static const auto* const kEmptyTensor = new tf::Tensor;
+const tf::Tensor kEmptyTensor;
 
-bool IsInitializationOp(const tf::Node* node) {
+bool IsInitializationOp(const tf::Node *node)
+{
     return node->op_def().allows_uninitialized_input();
 }
 
@@ -59,11 +59,11 @@ void ExecutionEngineRunner(tf::Executor::Args::Closure c)
 
 } // namespace
 
-tensorflow::Status NewMultiDeviceExecutor(const tensorflow::MultiDeviceExecutorParams& params,
-                                          const tensorflow::Graph* graph, ExecutionEngine::Inserter ins,
+tensorflow::Status NewMultiDeviceExecutor(const tensorflow::MultiDeviceExecutorParams &params,
+                                          const tensorflow::Graph *graph, ExecutionEngine::Inserter ins,
                                           tf::Executor **executor)
 {
-    auto impl = new ExecutorImpl(params, graph, ins);
+    auto impl = new ExecutorImpl(params, graph, std::move(ins));
     auto s = impl->Initialize();
     if (s.ok()) {
         *executor = impl;
@@ -73,14 +73,14 @@ tensorflow::Status NewMultiDeviceExecutor(const tensorflow::MultiDeviceExecutorP
     return s;
 }
 
-ExecutorImpl::ExecutorImpl(const tf::MultiDeviceExecutorParams &p, const tf::Graph *g, ExecutionEngine::Inserter ins)
+ExecutorImpl::ExecutorImpl(const tf::MultiDeviceExecutorParams &p, const tf::Graph *g,
+                           ExecutionEngine::Inserter ins)
     : params_(p)
     , graph_(g)
-    , gview_()
-    , inserter_(ins)
+    , inserter_(std::move(ins))
 {
-    CHECK(p.find_kernel != nullptr);
-    CHECK(p.create_kernel != nullptr);
+    DCHECK(p.find_kernel != nullptr);
+    DCHECK(p.create_kernel != nullptr);
 
     using namespace std::placeholders;
     inserter_->registerPagingCallbacks({
@@ -96,9 +96,7 @@ ExecutorImpl::~ExecutorImpl()
     }
     delete graph_;
 
-    buffer_trees_.clear_and_dispose([](auto tree) {
-        delete tree;
-    });
+    buffer_trees_.clear_and_dispose([](auto tree) { delete tree; });
 }
 
 void GetMaxPendingCounts(const tf::Node *n, int *max_pending, int *max_dead_count)
@@ -134,7 +132,7 @@ tf::Status ExecutorImpl::Initialize()
 
     // Cache this value so we make this virtual function call once, rather
     // that O(# steps * # nodes per step) times.
-    //device_record_tensor_accesses_ = params_.device->RequiresRecordingAccessedTensors();
+    // device_record_tensor_accesses_ = params_.device->RequiresRecordingAccessedTensors();
 
     for (auto &it : cf_info.unique_frame_names) {
         EnsureFrameInfo(it)->nodes = new std::vector<const tf::Node *>;
@@ -349,7 +347,7 @@ ExecutorState::~ExecutorState()
     }
 }
 
-void ExecutorState::RunAsync(tf::Executor::DoneCallback done)
+void ExecutorState::RunAsync(const tf::Executor::DoneCallback &done)
 {
     VLOG(3) << "ExecutorState::RunAsync";
 
@@ -362,7 +360,7 @@ void ExecutorState::RunAsync(tf::Executor::DoneCallback done)
 
     // Initialize the ready queue.
     for (const auto *n : impl_->root_nodes_) {
-        DCHECK_EQ(n->in_edges().size(), 0);
+        DCHECK(n->in_edges().empty());
         ready.push_back(TaggedNode{n, root_frame_, 0, false});
     }
     if (ready.empty()) {
@@ -431,7 +429,7 @@ tf::Status ExecutorState::SetupKernel(TaggedNode node, const ExecutorImpl::Devic
     return tf::Status::OK();
 }
 
-tf::DeviceContext * ExecutorState::FindDeviceContext(size_t id, tf::Device* device)
+tf::DeviceContext *ExecutorState::FindDeviceContext(size_t id, tf::Device *device)
 {
     TIMED_FUNC_IF(timerObj, VLOG_IS_ON(1));
 
@@ -475,10 +473,9 @@ bool onSameDevice(tensorflow::Device *devA, const tensorflow::AllocatorAttribute
 } // namespace
 
 tf::Status ExecutorState::PrepareInputs(const NodeItem &item, tf::OpKernel *kernel,
-                                        const std::shared_ptr<PerOpAllocDevice> device,
-                                        tf::DeviceContext *device_context,
-                                        Entry *first_input, TensorValueVec *inputs,
-                                        BufferLockVec *buflocks,
+                                        const std::shared_ptr<PerOpAllocDevice> &device,
+                                        tf::DeviceContext *device_context, Entry *first_input,
+                                        TensorValueVec *inputs, BufferLockVec *buflocks,
                                         DeviceContextVec *input_device_contexts,
                                         AllocatorAttributeVec *input_alloc_attrs, bool *is_input_dead)
 {
@@ -498,7 +495,7 @@ tf::Status ExecutorState::PrepareInputs(const NodeItem &item, tf::OpKernel *kern
     *is_input_dead = false;
 
     // Check and bring back paged out entries. Also gather all buf lock for later use
-    std::unordered_set<boost::upgrade_mutex*> locks;
+    std::unordered_set<boost::upgrade_mutex *> locks;
     {
         TIMED_SCOPE_IF(pagingCheckObj, "check paging", VLOG_IS_ON(1));
         for (int i = 0; i < item.num_inputs; ++i) {
@@ -518,8 +515,7 @@ tf::Status ExecutorState::PrepareInputs(const NodeItem &item, tf::OpKernel *kern
                 boost::unique_lock<boost::upgrade_mutex> uul(tree->buf_mu);
                 // double check again, as unlock-lockexclusive is not atomic
                 if (tree->paged_out) {
-                    VLOG(2) << "Paging back tree " << as_hex(tree)
-                            << " of alloc ticket " << tree->ticket
+                    VLOG(2) << "Paging back tree " << as_hex(tree) << " of alloc ticket " << tree->ticket
                             << " for node " << kernel->name();
                     auto ok = moveTensorTree(*tree, device);
                     if (!ok.ok()) {
@@ -560,7 +556,7 @@ tf::Status ExecutorState::PrepareInputs(const NodeItem &item, tf::OpKernel *kern
             if (!is_merge) {
                 DCHECK(IsTransferNode(node));
                 DCHECK(!entry->val_field_is_set);
-                entry->SetVal(*kEmptyTensor);
+                entry->SetVal(kEmptyTensor);
 
                 // give the entry an alloc_tree, since it has value now
                 impl_->updateBufferTree(entry, device->resourceContext().ticket());
@@ -590,21 +586,17 @@ tf::Status ExecutorState::PrepareInputs(const NodeItem &item, tf::OpKernel *kern
         if (kernel->input_memory_types()[i] == tensorflow::HOST_MEMORY) {
             expected.set_on_host(true);
         }
-        bool on_same_device = onSameDevice(entry->device.get(), entry->alloc_attr,
-                                           device.get(), expected);
+        bool on_same_device = onSameDevice(entry->device.get(), entry->alloc_attr, device.get(), expected);
 
-        VLOG(2) << "    Input " << i
-        << ": Entry " << (entry->ref ? "ref": "noref")
-        << "\tOpInput " << (expect_ref ? "ref": "noref")
-        << "\tDevice " << entry->alloc_attr << "@" << as_hex(entry->device)
-        << " and " << expected << "@" << as_hex(device)
-        << ", on_same_device " << on_same_device;
+        VLOG(2) << "    Input " << i << ": Entry " << (entry->ref ? "ref" : "noref") << "\tOpInput "
+                << (expect_ref ? "ref" : "noref") << "\tDevice " << entry->alloc_attr << "@"
+                << as_hex(entry->device) << " and " << expected << "@" << as_hex(device)
+                << ", on_same_device " << on_same_device;
 
         if (expect_ref && entry->ref == nullptr) {
             // case 1, 2
             LOG(ERROR) << i << "-th input expects a ref type: " << node->def();
-            return AttachDef(tf::errors::InvalidArgument(i, "-th input expects a ref type"),
-                            node->def());
+            return AttachDef(tf::errors::InvalidArgument(i, "-th input expects a ref type"), node->def());
         }
 
         // Dereference if needed
@@ -616,10 +608,9 @@ tf::Status ExecutorState::PrepareInputs(const NodeItem &item, tf::OpKernel *kern
                 notInitialized = entry->ref && !entry->ref->IsInitialized() && !IsInitializationOp(item.node);
             }
             if (notInitialized) {
-                return AttachDef(
-                    tf::errors::FailedPrecondition("Attempting to use uninitialized value ",
-                                                kernel->def().input(i)),
-                                kernel->def());
+                return AttachDef(tf::errors::FailedPrecondition("Attempting to use uninitialized value ",
+                                                                kernel->def().input(i)),
+                                 kernel->def());
             }
             // Automatically gain lock
             entry->MaybeDereference();
@@ -635,16 +626,14 @@ tf::Status ExecutorState::PrepareInputs(const NodeItem &item, tf::OpKernel *kern
             // We must lock if this is an reference, as others may update the fields
             Entry::MaybeLock l(entry);
 
-            VLOG(2) << "Copying from device " << entry->device->name()
-                    << " to device " << device->name()
+            VLOG(2) << "Copying from device " << entry->device->name() << " to device " << device->name()
                     << " to prepare " << i << "-th input for op " << kernel->name();
             DCHECK(entry->alloc_tree);
             auto oldTicket = entry->alloc_tree->ticket;
             auto ok = moveTensor(*entry, device, device_context, expected, "");
             if (!ok.ok()) {
-                LOG(ERROR) << "Copying from device " << entry->device->name()
-                           << " to device " << device->name()
-                           << " failed when preparing " << i << "-th input for op "
+                LOG(ERROR) << "Copying from device " << entry->device->name() << " to device "
+                           << device->name() << " failed when preparing " << i << "-th input for op "
                            << kernel->name() << ": " << ok;
                 return ok;
             }
@@ -662,9 +651,8 @@ tf::Status ExecutorState::PrepareInputs(const NodeItem &item, tf::OpKernel *kern
             for (auto &e : needUpdate) {
                 e->alloc_ticket = device->resourceContext().ticket();
                 impl_->updateBufferTree(e, device->resourceContext().ticket());
-                VLOG(2) << "Update entry " << as_hex(e)
-                        << " from ticket " << oldTicket
-                        << " to " << device->resourceContext().ticket() << " due to devcopy";
+                VLOG(2) << "Update entry " << as_hex(e) << " from ticket " << oldTicket << " to "
+                        << device->resourceContext().ticket() << " due to devcopy";
                 DCHECK(e->alloc_tree);
             }
         }
@@ -679,8 +667,8 @@ tf::Status ExecutorState::PrepareInputs(const NodeItem &item, tf::OpKernel *kern
         inp->tensor = entry->RefOrVal();
 
         VLOG(2) << "    Input " << i << " is from entry " << as_hex(entry) << " ref " << as_hex(entry->ref)
-                << " tensor " << as_hex(inp->tensor)
-                << " buffer " << as_hex(tf::remote::PagingHelper::bufferOf(*inp->tensor));
+                << " tensor " << as_hex(inp->tensor) << " buffer "
+                << as_hex(tf::remote::PagingHelper::bufferOf(*inp->tensor));
         (*input_device_contexts)[i] = entry->device_context;
         (*input_alloc_attrs)[i] = entry->alloc_attr;
 
@@ -695,7 +683,7 @@ tf::Status ExecutorState::ProcessOutputs(const NodeItem &item, tf::OpKernelConte
     TIMED_FUNC_IF(timerObj, VLOG_IS_ON(1));
 
     auto node = item.node;
-    DCHECK_EQ(0, outputs->size());
+    DCHECK(outputs->empty());
     outputs->resize(item.num_outputs);
 
     auto s = ctx->status();
@@ -727,13 +715,13 @@ tf::Status ExecutorState::ProcessOutputs(const NodeItem &item, tf::OpKernelConte
             // Unless it's a Switch or a Recv, the node must produce a
             // tensor value at i-th output.
             if (!IsSwitch(node) && !IsRecv(node)) {
-                s.Update(tf::errors::Internal("Missing ", i, "-th output from ", SummarizeNodeDef(node->def())));
+                s.Update(
+                    tf::errors::Internal("Missing ", i, "-th output from ", SummarizeNodeDef(node->def())));
             }
         } else {
             Entry *out = &((*outputs)[i]);
-            VLOG(2) << "    Process " << i << "-th output: device " << device->name()
-                    << ", " << ctx->output_alloc_attr(i)
-                    << ", data block " << as_hex(val->tensor_data().data());
+            VLOG(2) << "    Process " << i << "-th output: device " << device->name() << ", "
+                    << ctx->output_alloc_attr(i) << ", data block " << as_hex(val->tensor_data().data());
 
             // Set the device of the output entry.
             out->device = device;
@@ -743,8 +731,9 @@ tf::Status ExecutorState::ProcessOutputs(const NodeItem &item, tf::OpKernelConte
 
             // Sanity check of output tensor types.
             auto dtype = val->dtype();
-            if (val.is_ref())
+            if (val.is_ref()) {
                 dtype = MakeRefType(dtype);
+            }
             if (dtype == item.output_type(i)) {
                 if (stats && val.tensor->IsInitialized()) {
                     nodestats::SetOutput(stats, i, val.tensor);
@@ -774,10 +763,14 @@ tf::Status ExecutorState::ProcessOutputs(const NodeItem &item, tf::OpKernelConte
                     }
                 }
             } else {
-                s.Update(tf::errors::Internal("Output ", i, " of type ", DataTypeString(dtype),
-                                          " does not match declared output type ",
-                                          DataTypeString(item.output_type(i)), " for node ",
-                                          SummarizeNodeDef(node->def())));
+                s.Update(tf::errors::Internal("Output ",
+                                              i,
+                                              " of type ",
+                                              DataTypeString(dtype),
+                                              " does not match declared output type ",
+                                              DataTypeString(item.output_type(i)),
+                                              " for node ",
+                                              SummarizeNodeDef(node->def())));
             }
 
             // Set the allocator attributes of the output entry, must be done after setting value in entry
@@ -790,7 +783,8 @@ tf::Status ExecutorState::ProcessOutputs(const NodeItem &item, tf::OpKernelConte
                 if (alloc) {
                     ticket = alloc->resourceContext().ticket();
                     if (out->ref) {
-                        VLOG(3) << alloc->resourceContext() << ": Buffer " << as_hex(buf) << " refIsOne " << buf->RefCountIsOne();
+                        VLOG(3) << alloc->resourceContext() << ": Buffer " << as_hex(buf) << " refIsOne "
+                                << buf->RefCountIsOne();
                     }
                 }
             }
@@ -823,16 +817,15 @@ void ExecutorState::ClearInputs(Entry *first, size_t num, BufferLockVec &buflock
 
         bool removeTree = false;
         if (entry->val_field_is_set) {
-            auto buf = tf::remote::PagingHelper::bufferOf(*entry->val.get());
-            removeTree = buf
-                && tf::remote::PagingHelper::refCountOf(*buf) == 1
-                && tf::remote::PagingHelper::refCountOf(*buf->root_buffer()) == 1;
+            auto buf = tf::remote::PagingHelper::bufferOf(*entry->val);
+            removeTree = buf && tf::remote::PagingHelper::refCountOf(*buf) == 1
+                         && tf::remote::PagingHelper::refCountOf(*buf->root_buffer()) == 1;
         }
 
         if (removeTree) {
             DCHECK(entry->alloc_tree);
-            VLOG(2) << "Removing entry " << as_hex(entry)
-                    << " of ticket " << entry->alloc_tree->ticket << " due to clearinputs";
+            VLOG(2) << "Removing entry " << as_hex(entry) << " of ticket " << entry->alloc_tree->ticket
+                    << " due to clearinputs";
             utils::TGuard g(impl_->entry_mu_, "ClearInputs");
             auto range = impl_->active_buffers_.equal_range(entry->alloc_tree->ticket);
             for (auto it = range.first; it != range.second; ++it) {
@@ -922,7 +915,7 @@ void ExecutorState::PropagateOutputs(const TaggedNode &tagged_node, const NodeIt
             if (input_iter == input_frame->iteration_count
                 && input_frame->num_outstanding_iterations == input_frame->max_parallel_iterations) {
                 // Reached the maximum for parallel iterations.
-                input_frame->next_iter_roots.push_back({node, (*outputs)[0]});
+                input_frame->next_iter_roots.emplace_back(node, (*outputs)[0]);
                 output_frame = nullptr;
             } else {
                 // If this is a new iteration, start it.
@@ -989,8 +982,7 @@ void ExecutorState::ForceInterrupt(const tf::Status &s)
 }
 
 bool ExecutorState::NodeDone(const tf::Status &s, const tf::Node *node, const tf::Device *device,
-                             tf::Rendezvous *rendezvous, const TaggedNodeSeq &ready,
-                             tf::NodeExecStats *stats)
+                             tf::Rendezvous *rendezvous, const TaggedNodeSeq &ready, tf::NodeExecStats *stats)
 {
     TIMED_FUNC_IF(timerObj, VLOG_IS_ON(1));
 
@@ -1027,8 +1019,9 @@ bool ExecutorState::NodeDone(const tf::Status &s, const tf::Node *node, const tf
             cancellation_manager_->StartCancel();
         }
     }
-    if (rendezvous)
+    if (rendezvous) {
         rendezvous->Unref();
+    }
 
     VLOG(2) << "NodeDone ready size: " << ready.size();
     VLOG(3) << "NodeDone s: " << s;
@@ -1079,7 +1072,7 @@ void ExecutorState::ScheduleReady(const TaggedNodeSeq &ready)
 const tf::Tensor *ExecutorState::GetTensorValueForDump(const Entry &input)
 {
     if (!input.has_value) {
-        return kEmptyTensor;
+        return &kEmptyTensor;
     } else if (input.ref == nullptr) {
         return input.val.get();
     } else {
@@ -1112,8 +1105,7 @@ void ExecutorState::DumpPendingNodeState(const int node_id, const Entry *input_v
         auto &input = input_vector[input_base + i];
         auto *tensor = GetTensorValueForDump(input);
         if (tensor->IsInitialized()) {
-            VLOG(2) << "      Input " << i
-                    << ": Tensor<type: " << DataTypeString(tensor->dtype())
+            VLOG(2) << "      Input " << i << ": Tensor<type: " << DataTypeString(tensor->dtype())
                     << " shape: " << tensor->shape().DebugString() << ">";
         } else {
             VLOG(2) << "      Input " << i << ": not present";
@@ -1131,8 +1123,7 @@ void ExecutorState::DumpActiveNodeState(const int node_id, const Entry *input_ve
         auto &input = input_vector[input_base + i];
         auto *tensor = GetTensorValueForDump(input);
         if (tensor->IsInitialized()) {
-            VLOG(2) << "      Input " << i
-                    << ": Tensor<type: " << DataTypeString(tensor->dtype())
+            VLOG(2) << "      Input " << i << ": Tensor<type: " << DataTypeString(tensor->dtype())
                     << " shape: " << tensor->shape().DebugString() << ">";
         } else {
             VLOG(2) << "      Input " << i << ": not present";
@@ -1167,10 +1158,9 @@ void ExecutorState::DumpIterationState(const FrameState *frame, IterationState *
         auto &input = iteration->input_tensors[i];
         auto *tensor = GetTensorValueForDump(input);
         if (tensor->IsInitialized()) {
-            VLOG(2) << "      Input " << i
-                    << ": Tensor<type: " << DataTypeString(tensor->dtype())
-                    << " shape: " << tensor->shape().DebugString()
-                    << " bytes: " << tensor->TotalBytes() << ">";
+            VLOG(2) << "      Input " << i << ": Tensor<type: " << DataTypeString(tensor->dtype())
+                    << " shape: " << tensor->shape().DebugString() << " bytes: " << tensor->TotalBytes()
+                    << ">";
             total_bytes += tensor->TotalBytes();
         }
     }
@@ -1245,7 +1235,7 @@ void ExecutorState::FindOrCreateChildFrame(FrameState *frame, int64_t iter, cons
     int parallel_iters;
     s = GetNodeAttr(node->def(), "parallel_iterations", &parallel_iters);
     DCHECK(s.ok()) << s;
-    FrameState *temp = new FrameState(impl_, parallel_iters);
+    auto temp = new FrameState(impl_, parallel_iters);
     temp->frame_name = child_name;
     temp->frame_id = tf::Hash64(child_name);
     temp->parent_frame = frame;
@@ -1290,8 +1280,9 @@ void ExecutorState::DeleteFrame(FrameState *frame, TaggedNodeSeq *ready)
 
                 // TODO(yuanbyu): We don't need this if we require the subgraph
                 // given to an executor not to contain a sink node.
-                if (dst_node->IsSink())
+                if (dst_node->IsSink()) {
                     continue;
+                }
 
                 bool dst_dead = true;
                 bool dst_ready = false;
@@ -1314,8 +1305,9 @@ void ExecutorState::DeleteFrame(FrameState *frame, TaggedNodeSeq *ready)
                     dst_ready = (parent_iter_state->decrement_pending(dst_pending_id, 1) == 0);
                 }
                 if (dst_ready) {
-                    if (IsControlTrigger(dst_node))
+                    if (IsControlTrigger(dst_node)) {
                         dst_dead = false;
+                    }
                     ready->push_back(TaggedNode(dst_node, parent_frame, parent_iter, dst_dead));
                     parent_iter_state->outstanding_ops++;
                 }
@@ -1372,8 +1364,9 @@ void ExecutorState::FrameState::ActivateNodes(const NodeItem *item, const bool i
 
         // TODO(yuanbyu): We don't need this if we require the subgraph
         // given to an executor not to contain a sink node.
-        if (dst_item->is_sink)
+        if (dst_item->is_sink) {
             continue;
+        }
 
         bool dst_dead = false;
         bool dst_ready = false;
@@ -1439,16 +1432,17 @@ void ExecutorState::FrameState::ActivateNodes(const NodeItem *item, const bool i
 
             if (entry.has_value) {
                 DCHECK_EQ(entry.alloc_tree, nullptr);
-                VLOG(2) << "Adding entry " << as_hex(&entry) << " ref " << as_hex(entry.ref)
-                        << " of ticket " << entry.alloc_ticket << " due to activation";
+                VLOG(2) << "Adding entry " << as_hex(&entry) << " ref " << as_hex(entry.ref) << " of ticket "
+                        << entry.alloc_ticket << " due to activation";
                 executor->updateBufferTree(&entry, entry.alloc_ticket);
             }
         }
 
         // Add dst to the ready queue if it's ready
         if (dst_ready) {
-            if (dst_item->is_control_trigger)
+            if (dst_item->is_control_trigger) {
                 dst_dead = false;
+            }
             ready->push_back(TaggedNode(dst_item->node, this, iter, dst_dead));
             iter_state->outstanding_ops++;
         }
@@ -1485,7 +1479,7 @@ void ExecutorState::FrameState::ActivateLoopInvs(const GraphView *gview, int64_t
 void ExecutorState::FrameState::AddLoopInv(const NodeItem *item, const Entry &entry, TaggedNodeSeq *ready)
 {
     // Store this value.
-    inv_values.push_back({item->node, entry});
+    inv_values.emplace_back(item->node, entry);
 
     // Make this value available to all iterations.
     bool is_dead = !entry.has_value;

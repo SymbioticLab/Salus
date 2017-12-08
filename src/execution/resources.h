@@ -1,17 +1,17 @@
 /*
  * <one line to give the library's name and an idea of what it does.>
  * Copyright (C) 2017  Aetf <aetf@unlimitedcodeworks.xyz>
- * 
+ *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation, either version 3 of the License, or
  * (at your option) any later version.
- * 
+ *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
- * 
+ *
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
@@ -20,13 +20,13 @@
 #define EXECUTION_RESOURCES_H
 
 #include "execution/devices.h"
-#include "utils/macros.h"
 #include "utils/cpp17.h"
+#include "utils/macros.h"
 
+#include <list>
+#include <mutex>
 #include <unordered_map>
 #include <unordered_set>
-#include <mutex>
-#include <list>
 #include <vector>
 
 enum class ResourceType
@@ -48,13 +48,15 @@ struct ResourceTag
     static ResourceTag fromString(const std::string &str);
 
     // some handy constant
-    static const ResourceTag &GPU0Memory() {
-        static ResourceTag tag { ResourceType::MEMORY, {DeviceType::GPU, 0}};
+    static const ResourceTag &GPU0Memory()
+    {
+        static ResourceTag tag{ResourceType::MEMORY, {DeviceType::GPU, 0}};
         return tag;
     }
 
-    static const ResourceTag &CPU0Memory() {
-        static ResourceTag tag { ResourceType::MEMORY, {DeviceType::CPU, 0}};
+    static const ResourceTag &CPU0Memory()
+    {
+        static ResourceTag tag{ResourceType::MEMORY, {DeviceType::CPU, 0}};
         return tag;
     }
 
@@ -64,7 +66,10 @@ private:
     friend bool operator==(const ResourceTag &lhs, const ResourceTag &rhs);
     friend bool operator!=(const ResourceTag &lhs, const ResourceTag &rhs);
 
-    auto tie() const { return std::tie(type, device); }
+    auto tie() const
+    {
+        return std::tie(type, device);
+    }
 };
 
 inline bool operator==(const ResourceTag &lhs, const ResourceTag &rhs)
@@ -104,8 +109,8 @@ bool compatible(const Resources &lhs, const Resources &rhs);
 // Remove items whose value is 0
 Resources &removeZeros(Resources &lhs);
 
-Resources &merge(Resources &lhs, const Resources &rhs, bool skipNonExist=false);
-Resources &subtract(Resources &lhs, const Resources &rhs, bool skipNonExist=false);
+Resources &merge(Resources &lhs, const Resources &rhs, bool skipNonExist = false);
+Resources &subtract(Resources &lhs, const Resources &rhs, bool skipNonExist = false);
 Resources &scale(Resources &lhs, double scale);
 
 size_t totalMemory(Resources &res);
@@ -169,7 +174,7 @@ private:
     std::unordered_map<std::string, uint64_t> m_sessToTicket;
     std::unordered_map<uint64_t, ResourceMap> m_sessions;
 
-    std::list<ResourceMap*> m_peak;
+    std::list<ResourceMap *> m_peak;
 };
 
 /**
@@ -206,30 +211,38 @@ public:
 
     struct LockedProxy
     {
-        LockedProxy(ResourceMonitor *resMon) : m_resMonitor(resMon) {
+        explicit LockedProxy(ResourceMonitor *resMon)
+            : m_resMonitor(resMon)
+        {
             assert(m_resMonitor);
             m_resMonitor->m_mu.lock();
         }
 
-        LockedProxy(LockedProxy &&other) : m_resMonitor(other.m_resMonitor) {
+        LockedProxy(LockedProxy &&other)
+            : m_resMonitor(other.m_resMonitor)
+        {
             other.m_resMonitor = nullptr;
         }
 
-        LockedProxy &operator=(LockedProxy &&other) {
+        LockedProxy &operator=(LockedProxy &&other)
+        {
             release();
             using std::swap;
             swap(m_resMonitor, other.m_resMonitor);
             return *this;
         }
 
-        ~LockedProxy() {
+        ~LockedProxy()
+        {
             release();
         }
 
         bool allocate(uint64_t ticket, const Resources &res);
         bool free(uint64_t ticket, const Resources &res);
+
     private:
-        void release() {
+        void release()
+        {
             if (m_resMonitor) {
                 m_resMonitor->m_mu.unlock();
                 m_resMonitor = nullptr;
@@ -241,7 +254,8 @@ public:
         ResourceMonitor *m_resMonitor;
     };
 
-    LockedProxy lock() {
+    LockedProxy lock()
+    {
         return LockedProxy(this);
     }
 

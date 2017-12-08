@@ -1,17 +1,17 @@
 /*
  * <one line to give the library's name and an idea of what it does.>
  * Copyright (C) 2017  Aetf <aetf@unlimitedcodeworks.xyz>
- * 
+ *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation, either version 3 of the License, or
  * (at your option) any later version.
- * 
+ *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
- * 
+ *
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
@@ -26,19 +26,18 @@
 #include "exectask.h"
 
 #include "execution/devices.h"
-#include "utils/threadutils.h"
-#include "utils/macros.h"
 #include "oplibraries/tensorflow/v2/md_rendezvous.h"
-#include "oplibraries/tensorflow/v2/tfallocator.h"
 #include "oplibraries/tensorflow/v2/peropallocdevice.h"
+#include "oplibraries/tensorflow/v2/tfallocator.h"
+#include "utils/macros.h"
+#include "utils/threadutils.h"
 
 #include <sstream>
 
 namespace tf = tensorflow;
 
 ExecTask::ExecTask(ExecutorState *state, utils::semaphore &num_finished_ops,
-                   const ExecutorState::TaggedNode &node,
-                   const tf::OpKernelContext::Params &initial_params,
+                   const ExecutorState::TaggedNode &node, const tf::OpKernelContext::Params &initial_params,
                    tf::Rendezvous *rendez, int maxFailures)
     : deleteKernel(state->impl_->params_.delete_kernel)
     , maxFailures(maxFailures)
@@ -56,16 +55,16 @@ ExecTask::ExecTask(ExecutorState *state, utils::semaphore &num_finished_ops,
     params.input_alloc_attrs = &input_alloc_attrs;
 
     tf::DeviceTypeVector tftypes;
-    auto ok = tf::SupportedDeviceTypesForNode({tf::DEVICE_GPU, tf::DEVICE_CPU},
-                                              tagged_node.node->def(), &tftypes);
+    auto ok =
+        tf::SupportedDeviceTypesForNode({tf::DEVICE_GPU, tf::DEVICE_CPU}, tagged_node.node->def(), &tftypes);
     if (!ok.ok()) {
-        LOG(ERROR) << "Error while querying supported device for node "
-                   << tagged_node.node->name() << ": " << ok;
+        LOG(ERROR) << "Error while querying supported device for node " << tagged_node.node->name() << ": "
+                   << ok;
     }
 
     VLOG(2) << "Op " << tagged_node.node->def() << " supports device:";
     supportedTypes.reserve(tftypes.size());
-    for (auto tft : tftypes) {
+    for (const auto &tft : tftypes) {
         if (tft == tf::DEVICE_CPU) {
             supportedTypes.push_back(DeviceType::CPU);
             VLOG(2) << "    CPU";
@@ -126,7 +125,8 @@ bool ExecTask::prepare(std::unique_ptr<ResourceContext> &&rctx)
     if (ok.ok() && op_kernel) {
         // we saw this kernel before, check if the device match
         if (devName.empty()) {
-            LOG(WARNING) << "We've created the kernel, but don't remember its device: " << tagged_node.node->name();
+            LOG(WARNING) << "We've created the kernel, but don't remember its device: "
+                         << tagged_node.node->name();
             auto s = tf::errors::Internal("We've created the kernel, but don't remember its device");
             op_kernel = nullptr;
             done = false;
@@ -174,7 +174,7 @@ bool ExecTask::allowConcurrentPaging() const
     return kernel_is_async;
 }
 
-Resources ExecTask::estimatedUsage(const DeviceSpec& dev)
+Resources ExecTask::estimatedUsage(const DeviceSpec &dev)
 {
     // First see if we have usage for this node in session
     // but only if we haven't failed before, otherwise,
@@ -288,12 +288,9 @@ void ExecTask::inferUsage(const DeviceSpec &dev)
 std::string ExecTask::DebugString()
 {
     std::ostringstream oss;
-    oss << "ExecTask(name=" << tagged_node.node->name()
-        << ", type=" << tagged_node.node->op_def().name()
-        << ", session=" << m_state->impl_->params_.session
-        << ", failures=" << failureTimes
-        << ", inputsize=" << input_size
-        << ")";
+    oss << "ExecTask(name=" << tagged_node.node->name() << ", type=" << tagged_node.node->op_def().name()
+        << ", session=" << m_state->impl_->params_.session << ", failures=" << failureTimes
+        << ", inputsize=" << input_size << ")";
     return oss.str();
 }
 
@@ -381,10 +378,8 @@ void ExecTask::run(Callbacks cbs)
 
     // Prepares inputs.
     bool is_input_dead = false;
-    s = m_state->PrepareInputs(item, op_kernel, ditem.device, params.op_device_context,
-                    first_input, &inputs, &buflocks,
-                    &input_device_contexts, &input_alloc_attrs,
-                    &is_input_dead);
+    s = m_state->PrepareInputs(item, op_kernel, ditem.device, params.op_device_context, first_input, &inputs,
+                               &buflocks, &input_device_contexts, &input_alloc_attrs, &is_input_dead);
     if (!s.ok()) {
         // Inspect return state for retrying on memory failure
         if (maybeMemoryFailure(s, cbs.memFailure)) {
@@ -430,8 +425,9 @@ void ExecTask::run(Callbacks cbs)
         params.eigen_gpu_device = nullptr; // Force allocation
         pctx = std::make_unique<tf::OpKernelContext>(&params, item.num_outputs);
 
-        if (stats)
+        if (stats) {
             nodestats::SetOpStart(stats);
+        }
         ditem.device->ComputeAsync(async, pctx.get(), [this, cbs, &item]() {
             VLOG(2) << "Async Kernel done: " << SummarizeNodeDef(tagged_node.node->def());
             afterCompute(false, cbs, item);
@@ -440,8 +436,9 @@ void ExecTask::run(Callbacks cbs)
         // Synchronous computes.
         VLOG(2) << "Launch sync kernel";
         pctx = std::make_unique<tf::OpKernelContext>(&params, item.num_outputs);
-        if (stats)
+        if (stats) {
             nodestats::SetOpStart(stats);
+        }
         DCHECK_NOTNULL(op_kernel);
         ditem.device->Compute(op_kernel, pctx.get());
 
@@ -466,8 +463,9 @@ void ExecTask::afterCompute(bool is_dead, const Callbacks &cbs, const tf::remote
             return;
         }
 
-        if (stats)
+        if (stats) {
             nodestats::SetOpEnd(stats);
+        }
 
         s = m_state->ProcessOutputs(item, pctx.get(), device, &outputs, stats);
         // clear locks, we don't need them, and they may be deleted when
@@ -476,8 +474,9 @@ void ExecTask::afterCompute(bool is_dead, const Callbacks &cbs, const tf::remote
         // Update ref entry tickets
         updateRefEntryTickets(reffedEntries);
 
-        if (stats)
+        if (stats) {
             nodestats::SetMemory(stats, pctx.get());
+        }
     }
 
     // Clears inputs.
@@ -500,8 +499,9 @@ void ExecTask::afterCompute(bool is_dead, const Callbacks &cbs, const tf::remote
         // Get the list of all tensors accessed during the execution
         tf::TensorReferenceVector accessed;
         pctx->retrieve_accessed_tensors(&accessed);
-        if (stats)
+        if (stats) {
             nodestats::SetReferencedTensors(stats, accessed);
+        }
         // callee takes ownership of the vector
         device->ConsumeListOfAccessedTensors(pctx->op_device_context(), accessed);
     }
@@ -511,7 +511,7 @@ void ExecTask::afterCompute(bool is_dead, const Callbacks &cbs, const tf::remote
     afterRun(s, cbs);
 }
 
-void ExecTask::updateRefEntryTickets(const std::vector<Entry*> &entries)
+void ExecTask::updateRefEntryTickets(const std::vector<Entry *> &entries)
 {
     auto impl = m_state->impl_;
 
@@ -554,8 +554,8 @@ void ExecTask::afterRun(const tf::Status &s, const Callbacks &cbs)
         auto usage = estimatedUsage(ditem.device->resourceContext().spec());
         m_state->impl_->saveSucceedUsageForNode(tagged_node.node->name(), usage);
     }
-    auto completed = m_state->NodeDone(s, tagged_node.node, ditem.device.get(), params.rendezvous,
-                                       ready, stats);
+    auto completed =
+        m_state->NodeDone(s, tagged_node.node, ditem.device.get(), params.rendezvous, ready, stats);
 
     num_finished_ops.notify();
 
@@ -569,11 +569,11 @@ void ExecTask::afterRun(const tf::Status &s, const Callbacks &cbs)
     }
 }
 
-bool ExecTask::maybeMemoryFailure(const tf::Status &s, MemFailCallback memFailure)
+bool ExecTask::maybeMemoryFailure(const tf::Status &s, const MemFailCallback &memFailure)
 {
     if (s.code() == tf::error::RESOURCE_EXHAUSTED) {
         // we didn't implement rollback. So this can only happen for non ref input ops
-        //DCHECK(!has_ref_input);
+        // DCHECK(!has_ref_input);
 
         // also release locks
         buflocks.clear();

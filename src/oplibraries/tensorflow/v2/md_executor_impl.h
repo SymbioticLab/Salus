@@ -215,7 +215,7 @@ public:
     ExecutorState(const tf::Executor::Args &args, ExecutorImpl *impl);
     ~ExecutorState();
 
-    void RunAsync(tf::Executor::DoneCallback done);
+    void RunAsync(const tf::Executor::DoneCallback &done);
 
     // Something wrong happened.
     void ForceInterrupt(const tf::Status &s);
@@ -600,7 +600,7 @@ private:
 
     // Before invoking item->kernel, fills in its "inputs".
     tf::Status PrepareInputs(const NodeItem &item, tf::OpKernel *kernel,
-                             std::shared_ptr<PerOpAllocDevice> device,
+                             const std::shared_ptr<PerOpAllocDevice> &device,
                              tf::DeviceContext *device_context,
                              Entry *first_input, TensorValueVec *inputs,
                              BufferLockVec *buflocks,

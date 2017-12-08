@@ -18,21 +18,21 @@
 
 #include "resources.h"
 
-#include "utils/threadutils.h"
-#include "utils/containerutils.h"
 #include "platform/logging.h"
+#include "utils/containerutils.h"
+#include "utils/threadutils.h"
 
-#include <sstream>
-#include <tuple>
 #include <algorithm>
 #include <functional>
+#include <sstream>
+#include <tuple>
 
-using utils::Guard;
 using boost::optional;
+using utils::Guard;
 
 std::string enumToString(const ResourceType &rt)
 {
-    switch(rt) {
+    switch (rt) {
     case ResourceType::COMPUTE:
         return "COMPUTE";
     case ResourceType::MEMORY:
@@ -63,7 +63,7 @@ ResourceType resourceTypeFromString(const std::string &rt)
         return {resourceTypeFromString(str), {DeviceType::CPU, 0}};
     }
 
-    ResourceTag tag;
+    ResourceTag tag{};
     tag.type = resourceTypeFromString(str.substr(0, pos));
 
     pos = pos + 1;
@@ -125,7 +125,7 @@ bool contains(const Resources &avail, const Resources &req)
 {
     auto aend = avail.end();
 
-    ResourceTag tag;
+    ResourceTag tag{};
     size_t val;
     for (auto p : req) {
         std::tie(tag, val) = p;
@@ -187,7 +187,7 @@ Resources &removeZeros(Resources &lhs)
 {
     auto it = lhs.begin();
     auto itend = lhs.end();
-    while(it != itend) {
+    while (it != itend) {
         if (it->second == 0) {
             it = lhs.erase(it);
         } else {
@@ -215,7 +215,7 @@ std::string DebugString(const Resources &res, const std::string &indent)
     return oss.str();
 }
 
-} // namespace resources;
+} // namespace resources
 
 using namespace resources;
 
@@ -241,7 +241,7 @@ SessionResourceTracker::SessionResourceTracker(const Resources &cap)
 {
     auto lend = m_limits.end();
 
-    ResourceTag tag;
+    ResourceTag tag{};
     size_t val;
     for (auto p : cap) {
         std::tie(tag, val) = p;
@@ -350,11 +350,9 @@ void SessionResourceTracker::freeUnsafe(uint64_t ticket)
 
     merge(m_limits, it->second.persistant);
 
-    using namespace std::placeholders;
-
-    m_peak.erase(std::remove_if(m_peak.begin(), m_peak.end(), [&it](auto pr) {
-        return pr == &(it->second);
-    }));
+    m_peak.erase(std::remove_if(m_peak.begin(), m_peak.end(),
+                 [&it](auto pr) { return pr == &(it->second); }),
+                 m_peak.end());
 
     m_sessions.erase(it);
 }
@@ -397,7 +395,7 @@ std::string SessionResourceTracker::DebugString() const
     oss << "SessionResourceTracker" << std::endl;
     oss << "    Issued tickets:" << std::endl;
     for (auto &p : m_sessions) {
-        oss << "      " << p.first << " -> " <<  p.second.DebugString();
+        oss << "      " << p.first << " -> " << p.second.DebugString();
     }
     oss << "    Sessions:" << std::endl;
     for (auto &p : m_sessToTicket) {
@@ -425,7 +423,7 @@ void ResourceMonitor::initializeLimits(const Resources &cap)
 
     auto lend = m_limits.end();
 
-    ResourceTag tag;
+    ResourceTag tag{};
     size_t val;
     for (auto p : cap) {
         std::tie(tag, val) = p;
@@ -458,7 +456,7 @@ bool ResourceMonitor::allocate(uint64_t ticket, const Resources &res)
     return allocateUnsafe(ticket, res);
 }
 
-bool ResourceMonitor::LockedProxy::allocate(uint64_t ticket, const Resources& res)
+bool ResourceMonitor::LockedProxy::allocate(uint64_t ticket, const Resources &res)
 {
     assert(m_resMonitor);
     return m_resMonitor->allocateUnsafe(ticket, res);
@@ -541,7 +539,7 @@ bool ResourceMonitor::free(uint64_t ticket, const Resources &res)
     return freeUnsafe(ticket, res);
 }
 
-bool ResourceMonitor::LockedProxy::free(uint64_t ticket, const Resources& res)
+bool ResourceMonitor::LockedProxy::free(uint64_t ticket, const Resources &res)
 {
     assert(m_resMonitor);
     return m_resMonitor->freeUnsafe(ticket, res);
@@ -569,7 +567,8 @@ bool ResourceMonitor::freeUnsafe(uint64_t ticket, const Resources &res)
     return false;
 }
 
-std::vector<std::pair<size_t, uint64_t>> ResourceMonitor::sortVictim(const std::unordered_set<uint64_t> &candidates) const
+std::vector<std::pair<size_t, uint64_t>> ResourceMonitor::sortVictim(
+    const std::unordered_set<uint64_t> &candidates) const
 {
     assert(!candidates.empty());
 
@@ -577,7 +576,7 @@ std::vector<std::pair<size_t, uint64_t>> ResourceMonitor::sortVictim(const std::
     usages.reserve(candidates.size());
 
     // TODO: currently only select based on GPU memory usage, generalize to all resources
-    ResourceTag tag{ ResourceType::MEMORY, {DeviceType::GPU, 0}};
+    ResourceTag tag{ResourceType::MEMORY, {DeviceType::GPU, 0}};
     {
         Guard g(m_mu);
         for (auto &ticket : candidates) {
@@ -593,7 +592,7 @@ std::vector<std::pair<size_t, uint64_t>> ResourceMonitor::sortVictim(const std::
         }
     }
 
-    std::sort(usages.begin(), usages.end(), [](const auto &lhs, const auto &rhs){
+    std::sort(usages.begin(), usages.end(), [](const auto &lhs, const auto &rhs) {
         return lhs > rhs;
     });
     return usages;

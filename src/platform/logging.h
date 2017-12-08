@@ -101,7 +101,7 @@ inline const char *thread_id(const el::LogMessage *)
     struct tid_str_t
     {
         char c_str[SIZE_T_BUF_LEN];
-        tid_str_t(size_t tid)
+        explicit tid_str_t(size_t tid)
         {
             std::snprintf(c_str, SIZE_T_BUF_LEN, "%zu", tid);
         }
