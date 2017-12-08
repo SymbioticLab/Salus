@@ -688,7 +688,7 @@ def resp_on_wire_time(logs):
     return ts, ax.figure
 
 
-def memory_usage(logs, iter_times=None, beginning=None, mem_type=None,
+def memory_usage(logs, iter_times=None, beginning=None, starts=None, ends=None, mem_type=None,
                  unified_ylabel=False, smoother=None, xformatter=None,
                  per_sess=False, show_avg=None, ax=None):
     if beginning is None:
@@ -768,12 +768,22 @@ def memory_usage(logs, iter_times=None, beginning=None, mem_type=None,
         else:
             ss = group['size'].cumsum()
 
+        # Do range restriction
+        rstarts = None
+        rends = None
         # Restrict x axis to iteration timaxes, must be done after cumsum, otherwise there
         # will be negative number
         if iter_times is not None:
-            starts = iter_times[0][0]
-            ends = iter_times[-1][1]
-            ss = ss.loc[starts:ends]
+            rstarts = iter_times[0][0]
+            rends = iter_times[-1][1]
+        rstarts = starts
+        rends = ends
+        if rstarts is not None and rends is not None:
+            ss = ss.loc[rstarts:rends]
+        elif rstarts is not None:
+            ss = ss.loc[rstarts:]
+        elif rends is not None:
+            ss = ss.loc[:rends]
 
         ss.index = ss.index - beginning
 

@@ -48,7 +48,7 @@ def plotter(name, mem=True):
                     sessstart, iters = pn.parse_iterations(iter_file)
 
             fig = func(config, local_dir, logs, iters)
-            #fig.set_size_inches(2.35, 2.35, forward=True)
+            # fig.set_size_inches(2.35, 2.35, forward=True)
             return fig
 
         cases[name].append((wrapped, filename))
@@ -413,7 +413,7 @@ def plot_mem_resnet152_75(config, local_dir, logs, iters):
         return ss
         # return ss.ewm(span=15).mean()
 
-    df, _, fig = pl.memory_usage(logs, iter_times=iters[0:10],
+    df, _, fig = pl.memory_usage(logs, ends=iters[10][1],
                                  mem_type='GPU_0_bfc', smoother=smoother)
     return fig
 
@@ -514,30 +514,6 @@ def plot_mem_resnet50_25(config, local_dir, logs, iters):
     return fig
 
 
-# @plotter('res50')
-def plot_mem_res50(config, local_dir, logs, iters):
-    def smoother(ss, ss2):
-        print('{}, {}, {}'.format(ss.min(), ss.max(), ss2.mean()))
-        return ss
-        # return ss.ewm(span=15).mean()
-
-    df, _, fig = pl.memory_usage(logs, iter_times=iters[0:10],
-                                 mem_type='GPU_0_bfc', smoother=smoother)
-    return fig
-
-
-# @plotter('res75')
-def plot_mem_res75(config, local_dir, logs, iters):
-    def smoother(ss, ss2):
-        print('{}, {}, {}'.format(ss.min(), ss.max(), ss2.mean()))
-        return ss
-        # return ss.ewm(span=15).mean()
-
-    df, _, fig = pl.memory_usage(logs, iter_times=iters[0:10],
-                                 mem_type='GPU_0_bfc', smoother=smoother)
-    return fig
-
-
 # @plotter('ptbT')
 def plot_mem_ptbT(config, local_dir, logs, iters):
     def smoother(ss):
@@ -576,11 +552,6 @@ def plot_mem_ptbL(config, local_dir, logs, iters):
     df, _, fig = pl.memory_usage(logs, iter_times=iters[0:10],
                                  mem_type='GPU_0_bfc', smoother=smoother)
     return fig
-
-
-# @plotter('mix6')
-def plot_mem_mix6(config, local_dir, logs, iters):
-    pass
 
 
 @plotter('case_preemption')
