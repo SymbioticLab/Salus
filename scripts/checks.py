@@ -2,11 +2,12 @@ from collections import defaultdict
 import re
 
 
-def check_threadpool(path):
-    pat = re.compile(r'Threadpool (?P<evt>start|end) to run seq (?P<seq>\d+)')
+def check_threadpool(path, name='Threadpool'):
+    pat = re.compile(name + r' (?P<evt>start|end) to run seq (?P<seq>\d+)')
     with open(path) as f:
         lines = f.readlines()
     evts = [pat.search(line).groups() for line in lines if pat.search(line)]
+    print('evts num: {}'.format(len(evts)))
     r = set()
     for evt, seq in evts:
         if evt == 'start':
@@ -49,7 +50,7 @@ def check_kernel_create(path):
             m = ptn_create.search(line)
             if m:
                 kernels[m.group('kernel')] = m.group('op')
-            
+
             m = ptn_find.search(line)
             if m:
                 addr = m.group('kernel')
@@ -57,7 +58,7 @@ def check_kernel_create(path):
                     raise ValueError('Found nonexist kernel: ', addr, m.group('op'))
                 if kernels[addr] != m.group('op'):
                     raise ValueError('Found kernel changed op: ', addr, kernels[addr], m.group('op'))
-            
+
             m = ptn_delete.search(line)
             if m:
                 addr = m.group('kernel')
