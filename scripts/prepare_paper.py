@@ -766,6 +766,11 @@ def plot_nested_doll_mix5_samelength(config, local_dir, logs, iters):
 @plotter('jctratio')
 def plot_jctratio(config, local_dir, logs, iters):
     df = pd.read_csv(os.path.join(local_dir, 'jctratio.csv'))
+    # sort columns
+    cols = df.columns.tolist()
+    cols.sort()
+    df = df[cols]
+
     ax = df.boxplot(showfliers=False)
     ax.set_ylabel('JCT Ratio')
     ax.grid(b=False)
