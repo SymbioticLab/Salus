@@ -413,8 +413,8 @@ def plot_mem_resnet152_75(config, local_dir, logs, iters):
         return ss
         # return ss.ewm(span=15).mean()
 
-    df, _, fig = pl.memory_usage(logs, ends=iters[10][1],
-                                 mem_type='GPU_0_bfc', smoother=smoother)
+    df, _, fig = pl.memory_usage(logs, ends=iters[0][1], show_avg=False, mem_type='GPU_0_bfc')
+    fig.set_size_inches(1.75, 3.45, forward=True)
     return fig
 
 
@@ -556,7 +556,7 @@ def plot_mem_ptbL(config, local_dir, logs, iters):
 
 @plotter('case_preemption')
 def plot_case_preemption(config, local_dir, logs, iters):
-
+    pf.preprocess(local_dir)
     perfdf = pf.load_file(os.path.join(local_dir, 'sessiter.output'))
 
     fig = plt.figure()
@@ -593,6 +593,7 @@ def plot_case_preemption(config, local_dir, logs, iters):
 
 @plotter('case_bigsmall_wc')
 def plot_case_bigsmall_wc(config, local_dir, logs, iters):
+    pf.preprocess(local_dir)
     perfdf = pf.load_file(os.path.join(local_dir, 'sessiter.output'))
 
     fig = plt.figure()
@@ -631,6 +632,7 @@ def plot_case_bigsmall_wc(config, local_dir, logs, iters):
 def plot_case_study1_diff(config, local_dir, logs, iters):
     with mpl.style.context(('color3')):
         # mpl.rcParams['axes.prop_cycle'] = mpl.cycler('color', ['ed7d31', 'dcedd0', '244185'])
+        pf.preprocess(local_dir)
         perfdf = pf.load_file(os.path.join(local_dir, 'sessiter.output'))
 
         df, fig = pf.session_counters(perfdf, colnames=['counter', 'scheduled', 'pending'], zorders={
@@ -689,6 +691,7 @@ def plot_nested_doll_4res(config, local_dir, logs, iters):
 @plotter('paging_inception_of_vgg')
 def plot_paging_inception_of_vgg(config, local_dir, logs, iters):
     with mpl.style.context(('color3')):
+        pf.preprocess(local_dir)
         perfdf = pf.load_file(os.path.join(local_dir, 'sessiter.output'))
 
         fig = plt.figure()
@@ -725,6 +728,7 @@ def plot_paging_inception_of_vgg(config, local_dir, logs, iters):
 @plotter('nested_doll_mix5_samelength')
 def plot_nested_doll_mix5_samelength(config, local_dir, logs, iters):
     with mpl.style.context(('color5')):
+        pf.preprocess(local_dir)
         perfdf = pf.load_file(os.path.join(local_dir, 'sessiter.output'))
 
         fig = plt.figure()

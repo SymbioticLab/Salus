@@ -776,8 +776,8 @@ def memory_usage(logs, iter_times=None, beginning=None, starts=None, ends=None, 
         if iter_times is not None:
             rstarts = iter_times[0][0]
             rends = iter_times[-1][1]
-        rstarts = starts
-        rends = ends
+        rstarts = starts if starts is not None else rstarts
+        rends = ends if ends is not None else rends
         if rstarts is not None and rends is not None:
             ss = ss.loc[rstarts:rends]
         elif rstarts is not None:

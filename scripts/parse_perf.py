@@ -68,8 +68,7 @@ def initialize():
     pass
 
 
-def preprocesse(d):
-
+def preprocess(d):
     perffile = os.path.join(d, 'perf.output')
     tempdir = sp.check_output(['mktemp', '-d', '--tmpdir']).rstrip('\n')
     try:
@@ -262,7 +261,7 @@ def session_counters(df, colnames=None, beginning=None, useFirstRowAsBegining=Tr
                         s.index = s.index - beginning
                         s.index = s.index.astype(int)
                     zorder = None
-                    if zorders is not None:
+                    if zorders is not None and k in zorders:
                         zorder = zorders[k]
                     if removeZeros:
                         sz = s[s > 0]
