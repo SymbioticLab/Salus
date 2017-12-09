@@ -414,7 +414,7 @@ def plot_mem_resnet152_75(config, local_dir, logs, iters):
         # return ss.ewm(span=15).mean()
 
     df, _, fig = pl.memory_usage(logs, ends=iters[0][1], show_avg=False, mem_type='GPU_0_bfc')
-    fig.set_size_inches(1.75, 3.45, forward=True)
+    fig.set_size_inches(3.45, 1.75, forward=True)
     return fig
 
 
