@@ -637,16 +637,16 @@ def plot_case_study1_diff(config, local_dir, logs, iters):
         perfdf = pf.load_file(os.path.join(local_dir, 'sessiter.output'))
 
         df, fig = pf.session_counters(perfdf, colnames=['counter', 'scheduled', 'pending'], zorders={
-            '54bb635e1e1e818c': 5,
-            '574b8a7a6990ada7': 10,
-            'd5a9fd260a0bbe9e': 1
+            '16262ffc6e3ddddf': 5,
+            'cfe7d613e94bcc28': 10,
+            '318dbb0290ba058d': 1
         })
 
         fig.axes[0].legend().remove()
         fig.axes[0].set_title('Aggregate Memory Usage')
-        fig.axes[0].set_ylabel('(byte * us)')
-        fig.axes[0].set_yscale('symlog')
-        fig.axes[0].yaxis.set_major_locator(pu.MaxNLocator(nbins=4, min_n_ticks=2))
+        fig.axes[0].set_ylabel('(byte * s)')
+        # fig.axes[0].set_yscale('symlog')
+        # fig.axes[0].yaxis.set_major_locator(pu.MaxNLocator(nbins=4, min_n_ticks=2))
 
         fig.axes[1].legend().remove()
         fig.axes[1].set_title('Scheduled Tasks')
