@@ -801,7 +801,7 @@ def plot_fair20(config, local_dir, logs, iters):
         return fig
 
 
-def main():
+def main(argv=None):
     parser = argparse.ArgumentParser()
     parser.add_argument('cases', nargs='*', metavar='CASE',
                         help='Case names to generate figures',
@@ -814,7 +814,7 @@ def main():
                         default='figures')
     parser.add_argument('--show', action='store_true', default=False,
                         help='Show figure instead of generate images')
-    config = parser.parse_args()
+    config = parser.parse_args(argv)
 
     Path(config.save_dir).mkdir(exist_ok=True)
 
