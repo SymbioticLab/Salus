@@ -18,6 +18,7 @@ import pandas as pd
 import parse_perf as pf
 import parse_log as pl
 import parse_nvvp as pn
+import plotutils as pu
 
 
 cases = defaultdict(list)
@@ -644,6 +645,8 @@ def plot_case_study1_diff(config, local_dir, logs, iters):
         fig.axes[0].legend().remove()
         fig.axes[0].set_title('Aggregate Memory Usage')
         fig.axes[0].set_ylabel('(byte * us)')
+        fig.axes[0].set_yscale('symlog')
+        fig.axes[0].yaxis.set_major_locator(pu.MaxNLocator(nbins=4, min_n_ticks=2))
 
         fig.axes[1].legend().remove()
         fig.axes[1].set_title('Scheduled Tasks')
@@ -836,7 +839,7 @@ def main(argv=None):
                 plt.show()
             else:
                 fig.savefig(os.path.join(config.save_dir, filename + '.pdf'), transparent=True)
-            plt.close(fig)
+                plt.close(fig)
 
 
 if __name__ == '__main__':
