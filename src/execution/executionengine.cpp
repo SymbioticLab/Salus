@@ -767,9 +767,10 @@ void ResourceContext::deallocMemory(size_t num_bytes) const
     ResourceTag tag{ResourceType::MEMORY, m_spec};
     Resources res{{tag, num_bytes}};
 
-    if (resMon.free(m_ticket, res)) {
-        session.resourceUsage(tag) -= num_bytes;
+    bool ticketIsEmpty = resMon.free(m_ticket, res);
+    session.resourceUsage(tag) -= num_bytes;
 
+    if (ticketIsEmpty) {
         removeTicketFromSession();
     }
 }

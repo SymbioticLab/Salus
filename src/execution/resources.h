@@ -185,8 +185,13 @@ class ResourceMonitor
 public:
     ResourceMonitor() = default;
 
-    // Read limits from hardware, and capped by cap
+    /**
+     * @brief Read limits from hardware
+     */
     void initializeLimits();
+    /**
+     * @brief Read limits from hardware, and capped by cap
+     */
     void initializeLimits(const Resources &cap);
 
     // Try pre-allocate resources
@@ -196,10 +201,15 @@ public:
     // otherwise may return false
     bool allocate(uint64_t ticket, const Resources &res);
 
-    // Release remaining pre-allocated resources
+    /**
+     * @brief Releases remaining pre-allocated resources from ticket `ticket`.
+     */
     void free(uint64_t ticket);
 
-    // Free resources, return true if after this, the ticket hold no more resources.
+    /**
+     * @brief Frees resources `res` for ticket `ticket`.
+     * @returns true if the ticket holds no more resources.
+     */
     bool free(uint64_t ticket, const Resources &res);
 
     std::vector<std::pair<size_t, uint64_t>> sortVictim(const std::unordered_set<uint64_t> &candidates) const;
