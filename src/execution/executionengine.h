@@ -270,7 +270,9 @@ public:
     struct OperationScope
     {
         explicit OperationScope(const ResourceContext &context, ResourceMonitor::LockedProxy &&proxy)
-            : proxy(std::move(proxy))
+            : valid(true)
+            , proxy(std::move(proxy))
+            , res()
             , context(context)
         {
         }
@@ -278,6 +280,7 @@ public:
         OperationScope(OperationScope &&scope)
             : valid(scope.valid)
             , proxy(std::move(scope.proxy))
+            , res(std::move(scope.res))
             , context(scope.context)
         {
             scope.valid = false;
@@ -300,9 +303,9 @@ public:
 
         friend class ResourceContext;
 
-        bool valid = true;
+        bool valid;
         ResourceMonitor::LockedProxy proxy;
-        Resources res{};
+        Resources res;
         const ResourceContext &context;
     };
 
