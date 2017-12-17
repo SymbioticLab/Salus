@@ -56,9 +56,10 @@ std::unique_ptr<zrpc::CustomResponse> consumeResponse(RESPONSE *resp, tf::Status
 
     return cresp;
 }
-} // namespace
 
 OpLibraryRegistary::Register tfoplibraryv2(executor::TENSORFLOW, std::make_unique<TFOpLibraryV2>(), 200);
+
+} // namespace
 
 bool TFOpLibraryV2::initialize()
 {

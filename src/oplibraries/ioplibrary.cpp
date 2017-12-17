@@ -32,6 +32,11 @@ OpLibraryRegistary &OpLibraryRegistary::instance()
 
 OpLibraryRegistary::OpLibraryRegistary() = default;
 
+OpLibraryRegistary::~OpLibraryRegistary()
+{
+    uninitializeLibraries();
+}
+
 OpLibraryRegistary::Register::Register(executor::OpLibraryType libraryType,
                                        std::unique_ptr<IOpLibrary> &&library,
                                        int priority)

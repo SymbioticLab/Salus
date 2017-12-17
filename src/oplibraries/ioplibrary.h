@@ -66,7 +66,7 @@ class OpLibraryRegistary final
 public:
     OpLibraryRegistary();
 
-    ~OpLibraryRegistary() = default;
+    ~OpLibraryRegistary();
 
     struct Register
     {

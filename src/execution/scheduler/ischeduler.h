@@ -1,0 +1,110 @@
+/*
+ * <one line to give the library's name and an idea of what it does.>
+ * Copyright (C) 2017  Aetf <aetf@unlimitedcodeworks.xyz>
+ * 
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ * 
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ * 
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ */
+
+#ifndef ISCHEDULER_H
+#define ISCHEDULER_H
+
+#include "sessionitem.h"
+
+#include "utils/cpp17.h"
+#include "utils/pointerutils.h"
+
+#include <boost/container/small_vector.hpp>
+
+#include <string_view>
+#include <memory>
+#include <mutex>
+#include <map>
+#include <utility>
+#include <functional>
+
+/**
+ * @brief Scheduler interface to schedule
+ */
+class ExecutionEngine;
+struct SessionChangeSet
+{
+    SessionSet deletedSessions;
+    size_t numSessionAdded;
+};
+
+class IScheduler
+{
+public:
+    explicit IScheduler(ExecutionEngine &engine);
+    virtual ~IScheduler();
+
+    virtual void selectCandidateSessions(const SessionList &sessions,
+                                         const SessionChangeSet &changeset,
+                                         boost::container::small_vector_base<PSessionItem> *candidates) = 0;
+    /**
+     * @brief schedule from a particular session
+     * @returns number of tasks scheduled, and whether should continue to next session.
+     */
+    virtual std::pair<size_t, bool> maybeScheduleFrom(PSessionItem item) = 0;
+
+protected:
+    /**
+     * @brief Preallocate resources for task on device
+     * @param opItem the task to preallocate
+     * @param spec the device to preallocate on
+     */
+    bool maybePreAllocateFor(OperationItem &opItem, const DeviceSpec &spec);
+
+    /**
+     * @brief submit task for execution.
+     * @param opItem the task to execute
+     * @returns the task itself is submission failed, otherwise nullptr
+     */
+    POpItem submitTask(POpItem &&opItem);
+
+    ExecutionEngine &m_engine;
+};
+
+class SchedulerRegistary final
+{
+public:
+    SchedulerRegistary();
+
+    ~SchedulerRegistary();
+
+    using SchedulerFactory = std::function<std::unique_ptr<IScheduler>(ExecutionEngine&)>;
+    struct Register
+    {
+        Register(std::string_view name, SchedulerFactory factory);
+    };
+
+    std::unique_ptr<IScheduler> create(std::string_view name, ExecutionEngine &engine) const;
+
+    static SchedulerRegistary &instance();
+
+private:
+    struct SchedulerItem
+    {
+        SchedulerFactory factory;
+
+        SchedulerItem() = default;
+        explicit SchedulerItem(SchedulerFactory factory) : factory(factory) {}
+
+    };
+    mutable std::mutex m_mu;
+    // NOTE: std::unordered_map doesn't support lookup using std::string_view
+    std::map<std::string, SchedulerItem, std::less<>> m_schedulers;
+};
+
+#endif // ISCHEDULER_H
