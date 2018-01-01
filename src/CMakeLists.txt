@@ -7,8 +7,10 @@ set(SRC_LIST
 
     "execution/scheduler/operationitem.cpp"
     "execution/scheduler/sessionitem.cpp"
-    "execution/scheduler/fairscheduler.cpp"
     "execution/scheduler/ischeduler.cpp"
+    "execution/scheduler/impl/fair.cpp"
+    "execution/scheduler/impl/pack.cpp"
+    "execution/scheduler/impl/preempt.cpp"
     "execution/executionengine.cpp"
     "execution/devices.cpp"
     "execution/operationtask.cpp"

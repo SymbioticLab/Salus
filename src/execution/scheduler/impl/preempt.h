@@ -16,31 +16,33 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef FAIRSCHEDULER_H
-#define FAIRSCHEDULER_H
+#ifndef PREEMPTSCHEDULER_H
+#define PREEMPTSCHEDULER_H
 
-#include "ischeduler.h"
+#include "execution/scheduler/ischeduler.h"
 
 #include <chrono>
 
 /**
- * @todo write docs
+ * @brief Always gives new session higher priority
  */
-class FairScheduler : public IScheduler
+class PreemptScheduler : public IScheduler
 {
 public:
-    FairScheduler(ExecutionEngine &engine);
-    ~FairScheduler() override;
+    PreemptScheduler(ExecutionEngine &engine);
+    ~PreemptScheduler() override;
+
+    std::string name() const override;
 
     void selectCandidateSessions(const SessionList &sessions,
                                  const SessionChangeSet &changeset,
-                                 boost::container::small_vector_base<PSessionItem> *candidates) override;
+                                 utils::not_null<CandidateList*> candidates) override;
     std::pair<size_t, bool> maybeScheduleFrom(PSessionItem item) override;
 
 private:
-    POpItem scheduleTask(POpItem &&opItem);
-
     std::pair<size_t, bool> reportScheduleResult(size_t scheduled) const;
+
+    std::unordered_map<std::string, int> priorities;
 };
 
-#endif // FAIRSCHEDULER_H
+#endif // PREEMPTSCHEDULER_H

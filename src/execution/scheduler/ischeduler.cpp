@@ -18,13 +18,25 @@
 
 #include "ischeduler.h"
 
+#include "execution/operationtask.h"
+#include "execution/scheduler/operationitem.h"
 #include "utils/threadutils.h"
 #include "utils/macros.h"
+#include "utils/envutils.h"
 #include "platform/logging.h"
 
 #include <chrono>
 
 using std::chrono::system_clock;
+
+namespace {
+bool useGPU()
+{
+    auto use = utils::fromEnvVar("EXEC_SCHED_USE_GPU", true);
+    VLOG(2) << "Scheduling using: " << (use ? "GPU,CPU" : "CPU");
+    return use;
+}
+} // namespace
 
 SchedulerRegistary &SchedulerRegistary::instance()
 {
@@ -69,6 +81,36 @@ bool IScheduler::maybePreAllocateFor(OperationItem &opItem, const DeviceSpec &sp
 
 POpItem IScheduler::submitTask(POpItem &&opItem)
 {
-    return m_engine.submitTask(std::move(opItem));
-}
+    auto item = opItem->sess.lock();
+    if (!item) {
+        // session already deleted, discard this task sliently
+        return nullptr;
+    }
 
+    VLOG(3) << "Scheduling opItem in session " << item->sessHandle << ": " << opItem->op->DebugString();
+    TIMED_SCOPE_IF(timerInnerObj, "IScheduler::submitTask", VLOG_IS_ON(1));
+
+    opItem->tInspected = system_clock::now();
+    bool scheduled = false;
+    DeviceSpec spec;
+    for (auto dt : opItem->op->supportedDeviceTypes()) {
+        if (dt == DeviceType::GPU && !useGPU()) {
+            continue;
+        }
+        spec = {dt, 0};
+        if (maybePreAllocateFor(*opItem, spec)) {
+            VLOG(3) << "Task scheduled on " << spec.DebugString();
+            scheduled = true;
+            break;
+        }
+    }
+
+    // Send to thread pool
+    if (scheduled) {
+        opItem = m_engine.submitTask(std::move(opItem));
+    } else {
+        VLOG(2) << "Failed to schedule opItem in session " << item->sessHandle << ": "
+                << opItem->op->DebugString();
+    }
+    return opItem;
+}

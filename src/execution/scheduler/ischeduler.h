@@ -40,7 +40,9 @@ class ExecutionEngine;
 struct SessionChangeSet
 {
     SessionSet deletedSessions;
-    size_t numSessionAdded;
+    size_t numAddedSessions = 0;
+    SessionList::iterator addedSessionBegin;
+    SessionList::iterator addedSessionEnd;
 };
 
 class IScheduler
@@ -49,9 +51,12 @@ public:
     explicit IScheduler(ExecutionEngine &engine);
     virtual ~IScheduler();
 
+    virtual std::string name() const = 0;
+
+    using CandidateList = boost::container::small_vector_base<PSessionItem>;
     virtual void selectCandidateSessions(const SessionList &sessions,
                                          const SessionChangeSet &changeset,
-                                         boost::container::small_vector_base<PSessionItem> *candidates) = 0;
+                                         utils::not_null<CandidateList*> candidates) = 0;
     /**
      * @brief schedule from a particular session
      * @returns number of tasks scheduled, and whether should continue to next session.
@@ -86,7 +91,7 @@ public:
     using SchedulerFactory = std::function<std::unique_ptr<IScheduler>(ExecutionEngine&)>;
     struct Register
     {
-        Register(std::string_view name, SchedulerFactory factory);
+        explicit Register(std::string_view name, SchedulerFactory factory);
     };
 
     std::unique_ptr<IScheduler> create(std::string_view name, ExecutionEngine &engine) const;

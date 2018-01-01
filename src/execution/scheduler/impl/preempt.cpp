@@ -16,7 +16,7 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include "fairscheduler.h"
+#include "preempt.h"
 
 #include "execution/scheduler/operationitem.h"
 #include "execution/operationtask.h"
@@ -38,76 +38,54 @@ using namespace std::chrono_literals;
 using namespace date;
 
 namespace {
-SchedulerRegistary::Register reg("fair", [](auto &engine) {
-    return std::make_unique<FairScheduler>(engine);
+SchedulerRegistary::Register reg("preempt", [](auto &engine) {
+    return std::make_unique<PreemptScheduler>(engine);
 });
-
-bool useGPU()
-{
-    auto use = utils::fromEnvVar("EXEC_SCHED_USE_GPU", true);
-    VLOG(2) << "Scheduling using: " << (use ? "GPU,CPU" : "CPU");
-    return use;
-}
-
 } // namespace
 
-FairScheduler::FairScheduler(ExecutionEngine &engine) : IScheduler(engine) {}
+PreemptScheduler::PreemptScheduler(ExecutionEngine &engine) : IScheduler(engine) {}
 
-FairScheduler::~FairScheduler() = default;
+PreemptScheduler::~PreemptScheduler() = default;
 
-void FairScheduler::selectCandidateSessions(const SessionList &sessions,
-                                            const SessionChangeSet &changeset,
-                                            boost::container::small_vector_base<PSessionItem> *candidates)
+std::string PreemptScheduler::name() const
 {
-    static auto lastSnapshotTime = system_clock::now();
+    return "preempt";
+}
 
-    DCHECK_NOTNULL(candidates);
+void PreemptScheduler::selectCandidateSessions(const SessionList &sessions,
+                                               const SessionChangeSet &changeset,
+                                               utils::not_null<CandidateList*> candidates)
+{
+    static int priorityCounter = 0;
 
     candidates->clear();
 
-    // Snapshot resource usage counter first, or reset them
-    auto now = system_clock::now();
-    auto sSinceLastSnapshot = FpSeconds(now - lastSnapshotTime).count();
-    lastSnapshotTime = now;
-    for (auto &sess : sessions) {
-        if (changeset.numSessionAdded == 0) {
-            // calculate progress counter increase since last snapshot
-            size_t mem = sess->resourceUsage(ResourceTag::GPU0Memory());
-            sess->unifiedResSnapshot += mem * sSinceLastSnapshot;
-        } else {
-            sess->unifiedResSnapshot = 0;
+    // newly added session has higher priority and preempts other sessions.
+    if (changeset.numAddedSessions != 0) {
+        for (auto it = changeset.addedSessionBegin; it != changeset.addedSessionEnd; ++it) {
+            priorities[(*it)->sessHandle] = priorityCounter;
         }
+        ++priorityCounter;
+    }
 
+    for (auto &sess : sessions) {
         candidates->emplace_back(sess);
     }
 
-    // Sort sessions if needed. We assume m_sessions.size() is always no more than a few,
+    // Sort sessions by priority. We assume m_sessions.size() is always no more than a few,
     // therefore sorting in every iteration is acceptable.
-    if (changeset.numSessionAdded == 0 && m_engine.schedulingParam().useFairnessCounter) {
-        using std::sort;
-        sort(candidates->begin(), candidates->end(), [](const auto &lhs, const auto &rhs) {
-            return lhs->unifiedResSnapshot < rhs->unifiedResSnapshot;
-        });
-    }
+    using std::sort; // sort is asc order is using operator<.
+    sort(candidates->begin(), candidates->end(), [this](const auto &lhs, const auto &rhs) {
+        return priorities[lhs->sessHandle] > priorities[rhs->sessHandle];
+    });
 }
 
-std::pair<size_t, bool> FairScheduler::maybeScheduleFrom(PSessionItem item)
+std::pair<size_t, bool> PreemptScheduler::maybeScheduleFrom(PSessionItem item)
 {
     auto &queue = item->bgQueue;
     size_t scheduled = 0;
 
-    auto size = queue.size();
-    VLOG(3) << "Scheduling all opItem in session " << item->sessHandle << ": queue size " << size;
-    if (size == 0) {
-        return reportScheduleResult(scheduled);
-    }
-
-    if (item->forceEvicted) {
-        // cancel all pending tasks
-        scheduled = size;
-        for (auto &opItem : queue) {
-            opItem->op->cancel();
-        }
+    if (queue.empty()) {
         return reportScheduleResult(scheduled);
     }
 
@@ -117,13 +95,14 @@ std::pair<size_t, bool> FairScheduler::maybeScheduleFrom(PSessionItem item)
                 << " (max=" << m_engine.schedulingParam().maxHolWaiting << ")";
         // Only try to schedule head in this case
         auto &head = queue.front();
-        head = scheduleTask(std::move(head));
+        head = submitTask(std::move(head));
         if (!head) {
             queue.pop_front();
             scheduled += 1;
         }
     } else {
         // Do all schedule in queue in parallel
+        auto size = queue.size();
         SessionItem::UnsafeQueue stage;
         stage.swap(queue);
 
@@ -132,7 +111,7 @@ std::pair<size_t, bool> FairScheduler::maybeScheduleFrom(PSessionItem item)
         for (auto &opItem : stage) {
             auto fu = m_engine.pool().post([opItem = std::move(opItem), this]() mutable {
                 DCHECK(opItem);
-                return scheduleTask(std::move(opItem));
+                return submitTask(std::move(opItem));
             });
             futures.emplace_back(std::move(fu));
         }
@@ -163,43 +142,7 @@ std::pair<size_t, bool> FairScheduler::maybeScheduleFrom(PSessionItem item)
     return reportScheduleResult(scheduled);
 }
 
-POpItem FairScheduler::scheduleTask(POpItem &&opItem)
-{
-    auto item = opItem->sess.lock();
-    if (!item) {
-        // session already deleted, discard this task sliently
-        return nullptr;
-    }
-
-    VLOG(3) << "Scheduling opItem in session " << item->sessHandle << ": " << opItem->op->DebugString();
-    TIMED_SCOPE_IF(timerInnerObj, "FairScheduler::scheduleTask", VLOG_IS_ON(1));
-
-    opItem->tInspected = system_clock::now();
-    bool scheduled = false;
-    DeviceSpec spec;
-    for (auto dt : opItem->op->supportedDeviceTypes()) {
-        if (dt == DeviceType::GPU && !useGPU()) {
-            continue;
-        }
-        spec = {dt, 0};
-        if (maybePreAllocateFor(*opItem, spec)) {
-            VLOG(3) << "Task scheduled on " << spec.DebugString();
-            scheduled = true;
-            break;
-        }
-    }
-
-    // Send to thread pool
-    if (scheduled) {
-        opItem = submitTask(std::move(opItem));
-    } else {
-        VLOG(2) << "Failed to schedule opItem in session " << item->sessHandle << ": "
-                << opItem->op->DebugString();
-    }
-    return opItem;
-}
-
-std::pair<size_t, bool> FairScheduler::reportScheduleResult(size_t scheduled) const
+std::pair<size_t, bool> PreemptScheduler::reportScheduleResult(size_t scheduled) const
 {
     static auto workConservative = m_engine.schedulingParam().workConservative;
     // make sure the first session (with least progress) is

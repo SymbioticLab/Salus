@@ -199,6 +199,7 @@ void ExecutionEngine::scheduleLoop()
 {
     m_resMonitor.initializeLimits();
     auto scheduler = SchedulerRegistary::instance().create(m_schedParam.scheduler, *this);
+    DCHECK(scheduler);
 
     m_runningTasks = 0;
     m_noPagingRunningTasks = 0;
@@ -212,20 +213,20 @@ void ExecutionEngine::scheduleLoop()
         snprintf(schedIterNameBuf, kNameBufLen, "sched-iter-%zu", schedIterCount++);
         TIMED_SCOPE(schedIterObj, schedIterNameBuf);
 
+        SessionChangeSet changeset;
         // Fisrt check if there's any pending deletions
-        SessionSet del;
         {
             utils::Guard g(m_delMu);
 
             using std::swap;
-            swap(del, m_deletedSessions);
+            swap(changeset.deletedSessions, m_deletedSessions);
             DCHECK(m_deletedSessions.empty());
         }
 
         // Delete sessions as requested
         // NOTE: don't clear del yet, we need that in changeset for scheduling
-        m_sessions.remove_if([&del](auto sess){
-            bool deleted = del.count(sess) > 0;
+        m_sessions.remove_if([&changeset](auto sess){
+            bool deleted = changeset.deletedSessions.count(sess) > 0;
             if (deleted) {
                 VLOG(2) << "Deleting session " << sess->sessHandle << "@" << as_hex(sess);
                 // The deletion of session's executor is async to this thread.
@@ -236,11 +237,15 @@ void ExecutionEngine::scheduleLoop()
         });
 
         // Append any new sessions
-        size_t numSessionAdded = 0;
         {
             utils::Guard g(m_newMu);
 
-            numSessionAdded = m_newSessions.size();
+            changeset.numAddedSessions = m_newSessions.size();
+
+            // list::splice doesn't invalidate iterators, so use
+            // m_newSessions.begin() here is ok, and a must.
+            changeset.addedSessionBegin = m_newSessions.begin();
+            changeset.addedSessionEnd = m_sessions.end();
 
             m_sessions.splice(m_sessions.end(), m_newSessions);
             DCHECK(m_newSessions.empty());
@@ -265,16 +270,27 @@ void ExecutionEngine::scheduleLoop()
         PERFORMANCE_CHECKPOINT_WITH_ID(schedIterObj, "after-accept");
 
         // Select and sort candidates.
-        scheduler->selectCandidateSessions(m_sessions, {del, numSessionAdded}, &candidates);
+        scheduler->selectCandidateSessions(m_sessions, changeset, &candidates);
 
         // Deleted sessions are no longer needed, release them.
-        del.clear();
+        changeset.deletedSessions.clear();
 
         // Schedule tasks from candidate sessions
         // NOTE: remainingCount only counts for candidate sessions in this sched iter.
         size_t remainingCount = 0;
         size_t scheduled = 0;
         for (auto &item : candidates) {
+            if (item->forceEvicted) {
+                VLOG(2) << "Force evicting pending tasks in session " << item->sessHandle;
+                // cancel all pending tasks
+                for (auto &opItem : item->bgQueue) {
+                    opItem->op->cancel();
+                }
+                continue;
+            }
+            VLOG(3) << "Scheduling all opItem in session " << item->sessHandle
+                    << ": queue size " << item->bgQueue.size();
+
             // Try schedule from this session
             auto [count, shouldContinue] = scheduler->maybeScheduleFrom(item);
             item->lastScheduled = count;

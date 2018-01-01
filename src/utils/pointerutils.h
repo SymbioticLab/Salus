@@ -183,7 +183,7 @@ public:
     constexpr not_null(U &&u)
         : ptr_(std::forward<U>(u))
     {
-        Expects(ptr_ != nullptr);
+        DCHECK(ptr_ != nullptr);
     }
 
     template<typename U, typename = std::enable_if_t<std::is_convertible<U, T>::value>>
@@ -197,7 +197,7 @@ public:
 
     constexpr T get() const
     {
-        Ensures(ptr_ != nullptr);
+        DCHECK(ptr_ != nullptr);
         return ptr_;
     }
 
