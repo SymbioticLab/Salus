@@ -47,7 +47,7 @@ Options:
     -l <endpoint>, --listen=<endpoint>
                                 Listen on ZeroMQ endpoint <endpoint>.
                                 [default: tcp://*:5501]
-    --sched                     Scheduler to use. Choices: fair, preempt, pack.
+    --sched <policy>            Use <policy> for scheduling . Choices: fair, preempt, pack.
                                 [default: fair]
     --disable-adc               Disable admission control.
     --disable-fairness          Disable fair sharing in scheduling.
