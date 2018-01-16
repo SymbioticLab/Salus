@@ -90,62 +90,7 @@ void FairScheduler::selectCandidateSessions(const SessionList &sessions,
 
 std::pair<size_t, bool> FairScheduler::maybeScheduleFrom(PSessionItem item)
 {
-    auto &queue = item->bgQueue;
-    size_t scheduled = 0;
-
-    if (queue.empty()) {
-        return reportScheduleResult(scheduled);
-    }
-
-    // Exam if queue front has been waiting for a long time
-    if (item->holWaiting > m_engine.schedulingParam().maxHolWaiting) {
-        VLOG(2) << "In session " << item->sessHandle << ": HOL waiting exceeds maximum: " << item->holWaiting
-                << " (max=" << m_engine.schedulingParam().maxHolWaiting << ")";
-        // Only try to schedule head in this case
-        auto &head = queue.front();
-        head = submitTask(std::move(head));
-        if (!head) {
-            queue.pop_front();
-            scheduled += 1;
-        }
-    } else {
-        // Do all schedule in queue in parallel
-        auto size = queue.size();
-        SessionItem::UnsafeQueue stage;
-        stage.swap(queue);
-
-        std::vector<std::future<std::shared_ptr<OperationItem>>> futures;
-        futures.reserve(stage.size());
-        for (auto &opItem : stage) {
-            auto fu = m_engine.pool().post([opItem = std::move(opItem), this]() mutable {
-                DCHECK(opItem);
-                return submitTask(std::move(opItem));
-            });
-            futures.emplace_back(std::move(fu));
-        }
-
-        VLOG(2) << "All opItem in session " << item->sessHandle << " examined";
-
-        for (auto &fu : futures) {
-            auto poi = fu.get();
-            if (poi) {
-                queue.emplace_back(std::move(poi));
-            }
-        }
-
-        scheduled = size - queue.size();
-    }
-
-    // update queue head waiting
-    if (queue.empty()) {
-        item->queueHeadHash = 0;
-        item->holWaiting = 0;
-    } else if (queue.front()->hash() == item->queueHeadHash) {
-        item->holWaiting += scheduled;
-    } else {
-        item->queueHeadHash = queue.front()->hash();
-        item->holWaiting = 0;
-    }
+    auto scheduled = submitAllTaskFromQueue(item);
 
     return reportScheduleResult(scheduled);
 }

@@ -24,8 +24,6 @@ static auto kDisableAdmissionControl = "--disable-adc";
 static auto kDisableWorkConservative = "--disable-wc";
 static auto kScheduler = "--sched";
 
-static auto kRandomizedExecution = "--random-exec";
-
 static auto kLogConfFlag = "--logconf";
 static auto kVerboseFlag = "--verbose";
 static auto kVModuleFlag = "--vmodule";
@@ -53,7 +51,6 @@ Options:
     --disable-fairness          Disable fair sharing in scheduling.
     --disable-wc                Disable work conservation. Only have effect when
                                 fairness is on.
-    --random-exec               Using randomized execution for tasks.
     --max-hol-waiting=<num>     Maximum number of task allowed go before queue head
                                 in scheduling. [default: 50]
     --logconf <file>            Path to log configuration file. Note that
@@ -163,7 +160,6 @@ void configureExecution(std::map<std::string, docopt::value> &args)
 
     auto disableFairness = value_or<bool>(args[kDisableFairness], false);
     uint64_t maxQueueHeadWaiting = value_or<long>(args[kMaxHolWaiting], 50);
-    auto randomizedExecution = value_or<bool>(args[kRandomizedExecution], false);
     auto disableWorkConservative = value_or<bool>(args[kDisableWorkConservative], false);
     auto sched = value_or<std::string>(args[kScheduler], "fair"s);
 
@@ -173,9 +169,7 @@ void configureExecution(std::map<std::string, docopt::value> &args)
     }
 
     ExecutionEngine::instance().setSchedulingParam({
-        !disableFairness, /* useFairnessCounter */
         maxQueueHeadWaiting,
-        randomizedExecution,
         !disableWorkConservative,
         sched
     });
@@ -207,7 +201,6 @@ void printConfiguration(std::map<std::string, docopt::value> &)
     auto &param = ExecutionEngine::instance().schedulingParam();
     LOG(INFO) << "    Policy: " << param.scheduler;
     LOG(INFO) << "    MaxQueueHeadWaiting: " << param.maxHolWaiting;
-    LOG(INFO) << "    RandomizedExecution: " << (param.randomizedExecution ? "on" : "off");
     LOG(INFO) << "    WorkConservative: " << (param.workConservative ? "on" : "off");
 }
 

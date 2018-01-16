@@ -45,18 +45,13 @@ struct OperationItem;
 
 struct SchedulingParam
 {
-    bool useFairnessCounter = true;
     /**
      * Maximum head-of-line waiting tasks allowed before refuse to schedule
-     * later tasks
+     * later tasks in the same queue.
      */
     uint64_t maxHolWaiting = 50;
     /**
-     * Add randomness when run tasks
-     */
-    bool randomizedExecution = false;
-    /**
-     * Whether to be work conservative. Only has effect when useFairnessCounter is true.
+     * Whether to be work conservative. This has no effect when using scheduler 'pack'
      */
     bool workConservative = true;
     /**

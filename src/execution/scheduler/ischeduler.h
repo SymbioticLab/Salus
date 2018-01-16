@@ -78,6 +78,16 @@ protected:
      */
     POpItem submitTask(POpItem &&opItem);
 
+    /**
+     * @brief a convenient helper function to submit all tasks in queue from session, with HOL blocking handled.
+     *
+     * The queue is modified to contain any tasks left. Ordering is not changed.
+     *
+     * @param item The session to schedule from
+     * @returns number of tasks successfully submitted
+     */
+    size_t submitAllTaskFromQueue(const PSessionItem &item);
+
     ExecutionEngine &m_engine;
 };
 
