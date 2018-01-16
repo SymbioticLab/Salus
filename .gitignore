@@ -17,6 +17,7 @@ CMakeLists.txt.user*
 build/*
 build-*/*
 spack_packages
+spack-packages
 
 # Vagrant
 .vagrant

@@ -817,6 +817,7 @@ def main(argv=None):
                         default='figures')
     parser.add_argument('--show', action='store_true', default=False,
                         help='Show figure instead of generate images')
+    parser.add_argument('--format', default='pdf', help='Show figure instead of generate images')
     config = parser.parse_args(argv)
 
     Path(config.save_dir).mkdir(exist_ok=True)
@@ -838,7 +839,7 @@ def main(argv=None):
                 fig.set_size_inches(6, 6, forward=True)
                 plt.show()
             else:
-                fig.savefig(os.path.join(config.save_dir, filename + '.pdf'), transparent=True)
+                fig.savefig(os.path.join(config.save_dir, filename + '.' + config.format), transparent=True)
                 plt.close(fig)
 
 
