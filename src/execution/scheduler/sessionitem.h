@@ -30,6 +30,7 @@
 #include <unordered_set>
 #include <unordered_map>
 #include <memory>
+#include <any>
 
 /**
  * @todo write docs
@@ -47,29 +48,28 @@ private:
 
     size_t lastScheduled = 0;
 
+    uint64_t holWaiting = 0;
+    uint64_t queueHeadHash = 0;
+
     std::unordered_set<uint64_t> tickets;
     std::mutex tickets_mu;
 
+    // Accessed by multiple scheduling thread
+    std::atomic_bool protectOOM{true};
+
     friend class ExecutionEngine;
     friend class ResourceContext;
+    friend class IScheduler;
 
 public:
     std::string sessHandle;
 
     // Only accessed by main scheduling thread
     UnsafeQueue bgQueue;
-    double unifiedResSnapshot;
     bool forceEvicted{false};
-
-    uint64_t holWaiting = 0;
-    uint64_t queueHeadHash = 0;
-
-    // Accessed by multiple scheduling thread
-    std::atomic_bool protectOOM{true};
 
     explicit SessionItem(const std::string &handle)
         : sessHandle(handle)
-        , unifiedResSnapshot(0.0)
     {
         // NOTE: add other devices
         resUsage[ResourceTag::GPU0Memory()].get() = 0;

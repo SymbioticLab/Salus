@@ -61,30 +61,36 @@ void FairScheduler::selectCandidateSessions(const SessionList &sessions,
 
     candidates->clear();
 
-    // Snapshot resource usage counter first, or reset them
-    auto now = system_clock::now();
-    auto sSinceLastSnapshot = FpSeconds(now - lastSnapshotTime).count();
-    lastSnapshotTime = now;
-    for (auto &sess : sessions) {
-        if (changeset.numAddedSessions == 0) {
-            // calculate progress counter increase since last snapshot
-            size_t mem = sess->resourceUsage(ResourceTag::GPU0Memory());
-            sess->unifiedResSnapshot += mem * sSinceLastSnapshot;
-        } else {
-            sess->unifiedResSnapshot = 0;
-        }
-
-        candidates->emplace_back(sess);
+    // Remove old sessions
+    for (auto &sess : changeset.deletedSessions) {
+        aggResUsages.erase(sess->sessHandle);
     }
 
     // Sort sessions if needed. When there is addition, counters are reset thus no need to sort.
+    // Snapshot resource usage counter first, or reset them
     if (changeset.numAddedSessions == 0) {
+        auto now = system_clock::now();
+        auto sSinceLastSnapshot = FpSeconds(now - lastSnapshotTime).count();
+        lastSnapshotTime = now;
+        for (auto &sess : sessions) {
+            candidates->emplace_back(sess);
+            // calculate progress counter increase since last snapshot
+            size_t mem = sess->resourceUsage(ResourceTag::GPU0Memory());
+            aggResUsages[sess->sessHandle] += mem * sSinceLastSnapshot;
+        }
+
         // We assume m_sessions.size() is always no more than a few,
         // therefore sorting in every iteration is acceptable.
         using std::sort;
-        sort(candidates->begin(), candidates->end(), [](const auto &lhs, const auto &rhs) {
-            return lhs->unifiedResSnapshot < rhs->unifiedResSnapshot;
+        sort(candidates->begin(), candidates->end(), [this](const auto &lhs, const auto &rhs) {
+            return aggResUsages.at(lhs->sessHandle) < aggResUsages.at(rhs->sessHandle);
         });
+    } else {
+        // clear to reset everything to zero.
+        aggResUsages.clear();
+        for (auto &sess : sessions) {
+            candidates->emplace_back(sess);
+        }
     }
 }
 
@@ -102,4 +108,11 @@ std::pair<size_t, bool> FairScheduler::reportScheduleResult(size_t scheduled) co
     // get scheduled solely, thus can keep up, without other
     // sessions interfere
     return {scheduled, workConservative && scheduled == 0};
+}
+
+std::string FairScheduler::debugString(const PSessionItem &item)
+{
+    std::ostringstream oss;
+    oss << "counter: " << aggResUsages.at(item->sessHandle);
+    return oss.str();
 }

@@ -63,6 +63,19 @@ public:
      */
     virtual std::pair<size_t, bool> maybeScheduleFrom(PSessionItem item) = 0;
 
+    /**
+     * @brief Per session debug information.
+     * @param item pointer to the session
+     * @returns debug information related to session `item`
+     */
+    virtual std::string debugString(const PSessionItem &item);
+
+    /**
+     * @brief debug information
+     * @returns debug information
+     */
+    virtual std::string debugString();
+
 protected:
     /**
      * @brief Preallocate resources for task on device

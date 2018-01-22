@@ -311,7 +311,7 @@ void ExecutionEngine::scheduleLoop()
             CLOG(INFO, logging::kPerfTag)
                 << "Sched iter " << schedIterCount << " session: " << item->sessHandle
                 << " pending: " << item->bgQueue.size() << " scheduled: " << item->lastScheduled
-                << " counter: " << item->unifiedResSnapshot;
+                << " " << scheduler->debugString(item);
         }
 
         PERFORMANCE_CHECKPOINT_WITH_ID(schedIterObj, "after-sched");

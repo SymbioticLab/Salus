@@ -22,6 +22,7 @@
 #include "execution/scheduler/ischeduler.h"
 
 #include <chrono>
+#include <unordered_map>
 
 /**
  * @todo write docs
@@ -39,8 +40,13 @@ public:
                                  utils::not_null<CandidateList*> candidates) override;
     std::pair<size_t, bool> maybeScheduleFrom(PSessionItem item) override;
 
+    using IScheduler::debugString;
+    std::string debugString(const PSessionItem &item) override;
+
 private:
     std::pair<size_t, bool> reportScheduleResult(size_t scheduled) const;
+
+    std::unordered_map<std::string, double> aggResUsages;
 };
 
 #endif // FAIRSCHEDULER_H
