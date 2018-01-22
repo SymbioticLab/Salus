@@ -41,7 +41,7 @@ public:
     std::pair<size_t, bool> maybeScheduleFrom(PSessionItem item) override;
 
     using IScheduler::debugString;
-    std::string debugString(const PSessionItem &item) override;
+    std::string debugString(const PSessionItem &item) const override;
 
 private:
     std::pair<size_t, bool> reportScheduleResult(size_t scheduled) const;

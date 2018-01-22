@@ -68,13 +68,13 @@ public:
      * @param item pointer to the session
      * @returns debug information related to session `item`
      */
-    virtual std::string debugString(const PSessionItem &item);
+    virtual std::string debugString(const PSessionItem &item) const;
 
     /**
      * @brief debug information
      * @returns debug information
      */
-    virtual std::string debugString();
+    virtual std::string debugString() const;
 
 protected:
     /**

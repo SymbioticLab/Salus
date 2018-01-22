@@ -26,6 +26,7 @@
 #include "utils/envutils.h"
 
 #include <chrono>
+#include <sstream>
 
 using std::chrono::duration_cast;
 using std::chrono::microseconds;
@@ -88,8 +89,11 @@ void FairScheduler::selectCandidateSessions(const SessionList &sessions,
     } else {
         // clear to reset everything to zero.
         aggResUsages.clear();
+        aggResUsages.reserve(sessions.size());
         for (auto &sess : sessions) {
             candidates->emplace_back(sess);
+            // touch each item once to ensure it's in the map
+            aggResUsages[sess->sessHandle] = 0;
         }
     }
 }
@@ -110,7 +114,7 @@ std::pair<size_t, bool> FairScheduler::reportScheduleResult(size_t scheduled) co
     return {scheduled, workConservative && scheduled == 0};
 }
 
-std::string FairScheduler::debugString(const PSessionItem &item)
+std::string FairScheduler::debugString(const PSessionItem &item) const
 {
     std::ostringstream oss;
     oss << "counter: " << aggResUsages.at(item->sessHandle);

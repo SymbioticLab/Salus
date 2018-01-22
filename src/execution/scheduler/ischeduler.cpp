@@ -79,13 +79,13 @@ bool IScheduler::maybePreAllocateFor(OperationItem &opItem, const DeviceSpec &sp
     return m_engine.maybePreAllocateFor(opItem, spec);
 }
 
-std::string IScheduler::debugString(const PSessionItem &item)
+std::string IScheduler::debugString(const PSessionItem &item) const
 {
     UNUSED(item);
     return {};
 }
 
-std::string IScheduler::debugString()
+std::string IScheduler::debugString() const
 {
     return {};
 }
