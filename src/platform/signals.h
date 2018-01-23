@@ -21,6 +21,10 @@
 
 namespace signals {
 
+void initialize();
+
+void waitForTerminate();
+
 using Handler = void (int);
 
 void installSignalHandler(int sig, Handler);

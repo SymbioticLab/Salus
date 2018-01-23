@@ -2,6 +2,7 @@
 #include "execution/executionengine.h"
 #include "rpcserver/zmqserver.h"
 #include "platform/logging.h"
+#include "platform/signals.h"
 #include "utils/cpp17.h"
 #include "utils/macros.h"
 
@@ -17,18 +18,24 @@ using namespace std;
 using namespace std::string_literals;
 
 namespace {
-static auto kListenFlag = "--listen";
-static auto kMaxHolWaiting = "--max-hol-waiting";
-static auto kDisableFairness = "--disable-fairness";
-static auto kDisableAdmissionControl = "--disable-adc";
-static auto kDisableWorkConservative = "--disable-wc";
-static auto kScheduler = "--sched";
 
-static auto kLogConfFlag = "--logconf";
-static auto kVerboseFlag = "--verbose";
-static auto kVModuleFlag = "--vmodule";
-static auto kVLogFileFlag = "--vlogfile";
-static auto kPLogFileFlag = "--perflog";
+namespace flags {
+const static auto version = "--version";
+const static auto help = "--help";
+
+const static auto listen = "--listen";
+const static auto maxHolWaiting = "--max-hol-waiting";
+const static auto disableFairness = "--disable-fairness";
+const static auto disableAdmissionControl = "--disable-adc";
+const static auto disableWorkConservative = "--disable-wc";
+const static auto scheduler = "--sched";
+
+const static auto logConf = "--logconf";
+const static auto verbose = "--verbose";
+const static auto vModule = "--vmodule";
+const static auto vLogFile = "--vlogfile";
+const static auto pLogFile = "--perflog";
+} // namespace flags
 
 // <program-name> [-v | -vv | -vvv | --verbose=<verbosity>] [--vmodule=<vmodules>] [-l <endpoint>]
 static auto kUsage =
@@ -69,7 +76,7 @@ Options:
     --perflog=<file>            Enable performance logging and log to <file>.
 )"s;
 
-static auto kVersion = R"(Salus: Fine-Grained GPU Sharing for DNN version 0.1)"s;
+static auto kVersion = R"(Salus: Fine-Grained GPU Sharing for DNN version 0.1.0)"s;
 
 template<typename T, typename R>
 class value_or_helper
@@ -136,32 +143,32 @@ auto parseArguments(int argc, char **argv)
     regex pattern(R"(<program-name>)");
     kUsage = regex_replace(kUsage, pattern, executable);
     kVersion = regex_replace(kVersion, pattern, executable);
-    return docopt::docopt(kUsage,
-                          {argv + 1, argv + argc},
-                          true,
-                          kVersion);
+
+    return docopt::docopt(kUsage, {argv + 1, argv + argc},
+                          /* help = */ true,
+                          /* version = */ kVersion);
 }
 
 void initializeLogging(std::map<std::string, docopt::value> &args)
 {
     logging::initialize({
-        optional_arg<std::string>(args[kLogConfFlag]),
-        optional_arg<int>(args[kVerboseFlag]),
-        optional_arg<std::string>(args[kVModuleFlag]),
-        optional_arg<std::string>(args[kVLogFileFlag]),
-        optional_arg<std::string>(args[kPLogFileFlag]),
+        optional_arg<std::string>(args[flags::logConf]),
+        optional_arg<int>(args[flags::verbose]),
+        optional_arg<std::string>(args[flags::vModule]),
+        optional_arg<std::string>(args[flags::vLogFile]),
+        optional_arg<std::string>(args[flags::pLogFile]),
     });
 }
 
 void configureExecution(std::map<std::string, docopt::value> &args)
 {
-    auto disableAdmissionControl = value_or<bool>(args[kDisableAdmissionControl], false);
+    auto disableAdmissionControl = value_or<bool>(args[flags::disableAdmissionControl], false);
     SessionResourceTracker::instance().setDisabled(disableAdmissionControl);
 
-    auto disableFairness = value_or<bool>(args[kDisableFairness], false);
-    uint64_t maxQueueHeadWaiting = value_or<long>(args[kMaxHolWaiting], 50);
-    auto disableWorkConservative = value_or<bool>(args[kDisableWorkConservative], false);
-    auto sched = value_or<std::string>(args[kScheduler], "fair"s);
+    auto disableFairness = value_or<bool>(args[flags::disableFairness], false);
+    uint64_t maxQueueHeadWaiting = value_or<long>(args[flags::maxHolWaiting], 50);
+    auto disableWorkConservative = value_or<bool>(args[flags::disableWorkConservative], false);
+    auto sched = value_or<std::string>(args[flags::scheduler], "fair"s);
 
     // Handle deprecated arguments
     if (disableFairness) {
@@ -208,15 +215,17 @@ int main(int argc, char **argv)
 {
     auto args = parseArguments(argc, argv);
 
+    // NOTE: logging is initialized as global objects, avoid using any global variables
     initializeLogging(args);
+
+    signals::initialize();
 
     configureExecution(args);
 
     printConfiguration(args);
 
-    auto &server = ZmqServer::instance();
-
-    const auto &listen = args[kListenFlag].asString();
+    ZmqServer server;
+    const auto &listen = (args)[flags::listen].asString();
     LOG(INFO) << "Starting server listening at " << listen;
     server.start(listen);
 

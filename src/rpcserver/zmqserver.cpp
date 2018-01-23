@@ -36,16 +36,10 @@ namespace {
 constexpr const char kBeAddr[] = "inproc://backend";
 } // namespace
 
-/*static*/ ZmqServer &ZmqServer::instance()
-{
-    static ZmqServer s(std::make_unique<RpcServerCore>());
-    return s;
-}
-
-ZmqServer::ZmqServer(std::unique_ptr<RpcServerCore> &&logic)
+ZmqServer::ZmqServer()
     : m_zmqCtx(1)
     , m_keepRunning(false)
-    , m_pLogic(std::move(logic))
+    , m_pLogic(std::make_unique<RpcServerCore>())
     , m_sendQueue(128)
 {
 }
@@ -337,7 +331,10 @@ void ZmqServer::join()
 {
     // Handle SIGINT and SIGTERM
     // so the user can stop the server from terminal
-    handleSignals();
+    signals::waitForTerminate();
+
+    LOG(INFO) << "Stopping ZmqServer";
+    requestStop();
 
     if (m_sendThread && m_sendThread->joinable()) {
         m_sendThread->join();
@@ -348,20 +345,4 @@ void ZmqServer::join()
     }
 
     LOG(INFO) << "ZmqServer stopped";
-
-    // TODO:
-    // uninstall signal handlers
-}
-
-void ZmqServer::handleSignals()
-{
-    auto handler = [](int sig) {
-        auto &server = ZmqServer::instance();
-        // Flush and start a new line on stdout, so ^C won't mess up the output
-        std::cout << std::endl;
-        LOG(INFO) << "Stopping ZmqServer due to signal: " << signals::signalName(sig);
-        server.requestStop();
-    };
-    signals::installSignalHandler(SIGINT, handler);
-    signals::installSignalHandler(SIGTERM, handler);
 }

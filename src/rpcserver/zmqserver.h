@@ -43,11 +43,8 @@ class ServerWorker;
  */
 class ZmqServer
 {
-    explicit ZmqServer(std::unique_ptr<RpcServerCore> &&logic);
-
 public:
-    static ZmqServer &instance();
-
+    ZmqServer();
 
     ~ZmqServer();
 
@@ -79,11 +76,6 @@ public:
     using Sender = std::shared_ptr<SenderImpl>;
 
 private:
-    /**
-     * Handle signals
-     */
-    void handleSignals();
-
     /**
      * Low level api for sending messages back to client.
      */
