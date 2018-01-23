@@ -20,9 +20,6 @@ using namespace std::string_literals;
 namespace {
 
 namespace flags {
-const static auto version = "--version";
-const static auto help = "--help";
-
 const static auto listen = "--listen";
 const static auto maxHolWaiting = "--max-hol-waiting";
 const static auto disableFairness = "--disable-fairness";
@@ -52,15 +49,14 @@ Options:
     -l <endpoint>, --listen=<endpoint>
                                 Listen on ZeroMQ endpoint <endpoint>.
                                 [default: tcp://*:5501]
-    --sched <policy>            Use <policy> for scheduling . Choices: fair, preempt, pack.
+    --sched=<policy>            Use <policy> for scheduling . Choices: fair, preempt, pack.
                                 [default: fair]
     --disable-adc               Disable admission control.
-    --disable-fairness          Disable fair sharing in scheduling.
     --disable-wc                Disable work conservation. Only have effect when
                                 fairness is on.
     --max-hol-waiting=<num>     Maximum number of task allowed go before queue head
                                 in scheduling. [default: 50]
-    --logconf <file>            Path to log configuration file. Note that
+    --logconf=<file>            Path to log configuration file. Note that
                                 settings in this file takes precedence over
                                 other command line arguments.
     -v <level>, --verbose=<level>
@@ -74,6 +70,10 @@ Options:
     --vlogfile=<file>           Verbose logging goes to <file>.
                                 [default: verbose.log]
     --perflog=<file>            Enable performance logging and log to <file>.
+
+Deprecated options:
+    --disable-fairness          Disable fair sharing in scheduling, having the same effect as
+                                --sched=pack.
 )"s;
 
 static auto kVersion = R"(Salus: Fine-Grained GPU Sharing for DNN version 0.1.0)"s;
