@@ -408,7 +408,12 @@ POpItem ExecutionEngine::submitTask(POpItem &&opItem)
             };
             cbs.memFailure = [opItem, this]() mutable {
                 auto item = opItem->sess.lock();
-                if (!item || !item->protectOOM) {
+                if (!item) {
+                    VLOG(2) << "Found expired session during handling of memory failure of opItem: " << opItem->op->DebugString();
+                    return false;
+                }
+                if (!item->protectOOM) {
+                    VLOG(2) << "Pass through OOM failed task back to client: " << opItem->op->DebugString();
                     return false;
                 }
 

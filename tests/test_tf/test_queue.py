@@ -15,7 +15,7 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #
-from __future__ import print_function
+from __future__ import print_function, division
 
 import unittest
 import tensorflow as tf
@@ -31,7 +31,7 @@ def run_queue(sess):
     queue = tf.train.range_input_producer(limit=100, num_epochs=1, shuffle=True)
 
     batch_num = 10
-    get_batch = queue.dequeue_many(100 / batch_num)
+    get_batch = queue.dequeue_many(100 // batch_num)
 
     preds = []
     with tfhelper.initialized_scope(sess) as coord:
