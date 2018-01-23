@@ -92,7 +92,7 @@ private:
     };
     mutable std::mutex m_mu;
     std::unordered_map<executor::OpLibraryType, LibraryItem> m_opLibraries;
-    bool initialized;
+    int initialized;
 };
 
 #endif // IOPLIBRARY_H

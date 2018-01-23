@@ -32,10 +32,7 @@ OpLibraryRegistary &OpLibraryRegistary::instance()
 
 OpLibraryRegistary::OpLibraryRegistary() = default;
 
-OpLibraryRegistary::~OpLibraryRegistary()
-{
-    uninitializeLibraries();
-}
+OpLibraryRegistary::~OpLibraryRegistary() = default;
 
 OpLibraryRegistary::Register::Register(executor::OpLibraryType libraryType,
                                        std::unique_ptr<IOpLibrary> &&library,
@@ -65,6 +62,11 @@ void OpLibraryRegistary::registerOpLibrary(executor::OpLibraryType libraryType,
 void OpLibraryRegistary::initializeLibraries()
 {
     utils::Guard g(m_mu);
+    ++initialized;
+    if (initialized > 1) {
+        return;
+    }
+
     auto it = m_opLibraries.begin();
     auto itend = m_opLibraries.end();
     while (it != itend) {
@@ -79,6 +81,13 @@ void OpLibraryRegistary::initializeLibraries()
 
 void OpLibraryRegistary::uninitializeLibraries()
 {
+    utils::Guard g(m_mu);
+
+    --initialized;
+    if (initialized <= 0) {
+        return;
+    }
+
     for (auto &p : m_opLibraries) {
         p.second.library->uninitialize();
     }

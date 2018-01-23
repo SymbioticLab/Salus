@@ -74,4 +74,37 @@ const char *signalName(int sig)
 #undef CASE
 }
 
+namespace {
+void handler(int signo)
+{
+    const char *action = "";
+    switch (signo) {
+        case SIGINT:
+        case SIGTERM:
+            action = ", exiting";
+            break;
+        default:
+            action = ", ignoring";
+    }
+
+    // Flush and start a new line on stdout, so ^C won't mess up the output
+    std::cout << std::endl;
+    LOG(INFO) << "Received signal " << signalName(signo) << action;
+}
+
+} // namespace
+
+void initialize()
+{
+    installSignalHandler(SIGINT, handler);
+    installSignalHandler(SIGTERM, handler);
+}
+
+void waitForTerminate()
+{
+    sigset_t set;
+    sigemptyset(&set);
+    sigsuspend(&set);
+}
+
 } // namespace signals
