@@ -1,9 +1,9 @@
 from __future__ import print_function, division, absolute_import
 
-from contextlib import contextmanager
-
+import sys
 import time
 from timeit import default_timer
+from contextlib import contextmanager
 
 import numpy as np
 import numpy.testing as npt
@@ -19,6 +19,10 @@ def _add_config_to_kwargs(kwargs, nconfig):
         kwargs['config'] = tf.ConfigProto()
     kwargs['config'].MergeFrom(nconfig)
     return kwargs
+
+
+def eprint(*args, **kwargs):
+    print(*args, file=sys.stderr, **kwargs)
 
 
 # TODO: implement the device selection as a session option.
@@ -73,11 +77,15 @@ def run_on_sessions(func, targets, *args, **kwargs):
                     results.append(res)
                     retry = False
             except Exception as ex:
-                retry = True
-                print("Retrying due to error:", ex)
                 import traceback
                 traceback.print_exc()
                 time.sleep(1)
+
+                retry = not isinstance(ex,tf.errors.ResourceExhaustedError)
+                if retry:
+                    eprint("Retrying due to error:", ex)
+                else:
+                    raise
         duration = default_timer() - start_time
         print("JCT: {:.3f} s".format(duration))
 
