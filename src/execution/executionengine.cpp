@@ -352,6 +352,16 @@ void ExecutionEngine::scheduleLoop()
     m_sessions.clear();
 }
 
+std::unique_ptr<ResourceContext> ExecutionEngine::makeResourceContext(SessionItem &sess, const DeviceSpec &spec, const Resources &res)
+{
+    auto rctx = std::make_unique<ResourceContext>(sess, m_resMonitor);
+    if (!rctx->initializeStaging(spec, res)) {
+        logScheduleFailure(res, m_resMonitor);
+        rctx.reset();
+    }
+    return rctx;
+}
+
 bool ExecutionEngine::maybePreAllocateFor(OperationItem &opItem, const DeviceSpec &spec)
 {
     auto item = opItem.sess.lock();
@@ -361,9 +371,8 @@ bool ExecutionEngine::maybePreAllocateFor(OperationItem &opItem, const DeviceSpe
 
     auto usage = opItem.op->estimatedUsage(spec);
 
-    auto rctx = std::make_unique<ResourceContext>(*item, m_resMonitor);
-    if (!rctx->initializeStaging(spec, usage)) {
-        logScheduleFailure(usage, m_resMonitor);
+    auto rctx = makeResourceContext(*item, spec, usage);
+    if (!rctx) {
         return false;
     }
 
@@ -482,22 +491,16 @@ bool ExecutionEngine::doPaging()
     });
 
     // Step 1: select candidate sessions
-    std::vector<std::pair<size_t, std::reference_wrapper<SessionItem>>> candidates;
+    std::vector<std::pair<size_t, utils::not_null<SessionItem*>>> candidates;
     candidates.reserve(m_sessions.size());
 
     // Step 1.1: count total memory usage for each session
     // TODO: we currently assume we are paging GPU memory to CPU, make it generic to use Resources
-    ResourceTag gpuTag{ResourceType::MEMORY, {DeviceType::GPU, 0}};
-    ResourceTag cpuTag{ResourceType::MEMORY, {DeviceType::CPU, 0}};
+    const static ResourceTag gpuTag{ResourceType::MEMORY, {DeviceType::GPU, 0}};
+    const static ResourceTag cpuTag{ResourceType::MEMORY, {DeviceType::CPU, 0}};
 
     for (auto &pSess : m_sessions) {
-        size_t mem = 0;
-        {
-            utils::Guard g(pSess->tickets_mu);
-            auto usages = m_resMonitor.queryUsages(pSess->tickets);
-            mem = utils::getOrDefault(usages, gpuTag, 0);
-        }
-        candidates.emplace_back(mem, *pSess);
+        candidates.emplace_back(pSess->resourceUsage(gpuTag), pSess.get());
     }
 
     // sort in des order
@@ -513,53 +516,49 @@ bool ExecutionEngine::doPaging()
     }
 
     if (VLOG_IS_ON(2)) {
-        for (size_t i = 0; i != candidates.size(); ++i) {
-            auto usage = candidates[i].first;
-            SessionItem &sess = candidates[i].second;
-            VLOG(2) << "Session " << sess.sessHandle << " usage: " << usage;
+        for (auto [usage, pSess] : candidates) {
+            VLOG(2) << "Session " << pSess->sessHandle << " usage: " << usage;
         }
     }
 
     // Step 2: inform owner to do paging given suggestion
     for (size_t i = 1; i != candidates.size(); ++i) {
-        SessionItem &sess = candidates[i].second;
+        auto pSess = candidates[i].second;
         std::vector<std::pair<size_t, uint64_t>> victims;
         {
-            utils::Guard g(sess.tickets_mu);
-            if (sess.tickets.empty()) {
+            utils::Guard g(pSess->tickets_mu);
+            if (pSess->tickets.empty()) {
                 // no need to go beyond
                 break;
             }
-            victims = m_resMonitor.sortVictim(sess.tickets);
+            victims = m_resMonitor.sortVictim(pSess->tickets);
         }
 
         // we will be doing paging on this session. Lock it's input queue lock
         // also prevents the executor from clearing the paging callbacks.
         // This should not create deadlock as nothing could finish at this time,
         // thus no new tasks could be submitted.
-        utils::Guard g(sess.mu);
-        if (!sess.pagingCb) {
+        utils::Guard g(pSess->mu);
+        if (!pSess->pagingCb) {
             continue;
         }
 
-        VLOG(2) << "Visiting session: " << sess.sessHandle;
+        VLOG(2) << "Visiting session: " << pSess->sessHandle;
 
-        for (auto &p : victims) {
-            auto usage = p.first;
-            auto victim = p.second;
+        for (auto [usage, victim] : victims) {
             // preallocate some CPU memory for use.
             Resources res{{cpuTag, usage}};
 
-            auto rctx = std::make_unique<ResourceContext>(sess, m_resMonitor);
-            if (!rctx->initializeStaging({DeviceType::CPU, 0}, res)) {
+            auto rctx = makeResourceContext(*pSess, devices::CPU0, res);
+            if (!rctx) {
                 LOG(ERROR) << "No enough CPU memory for paging. Required: " << res[cpuTag] << " bytes";
                 return false;
             }
-            AllocLog(INFO) << "Pre allocated " << *rctx << " for session=" << sess.sessHandle;
+            AllocLog(INFO) << "Pre allocated " << *rctx << " for session=" << pSess->sessHandle;
 
             VLOG(2) << "    request to page out ticket " << victim << " of usage " << usage;
             // request the session to do paging
-            released += sess.pagingCb.volunteer(victim, std::move(rctx));
+            released += pSess->pagingCb.volunteer(victim, std::move(rctx));
             if (released > 0) {
                 // someone freed some memory on GPU, we are good to go.
                 VLOG(2) << "    released " << released << " bytes via paging";
@@ -571,29 +570,25 @@ bool ExecutionEngine::doPaging()
     }
 
     LOG(ERROR) << "All paging request failed. Dump all session usage";
-    for (size_t i = 0; i != candidates.size(); ++i) {
-        auto usage = candidates[i].first;
-        SessionItem &sess = candidates[i].second;
-        LOG(ERROR) << "Session " << sess.sessHandle << " usage: " << usage;
+    for (auto [usage, pSess] : candidates) {
+        LOG(ERROR) << "Session " << pSess->sessHandle << " usage: " << usage;
     }
     LOG(ERROR) << "Dump resource monitor status: " << m_resMonitor.DebugString();
 
     // Forcely kill one session
-    for (size_t i = 1; i != candidates.size(); ++i) {
-        SessionItem &sess = candidates[i].second;
-
-        utils::Guard g(sess.mu);
-        if (!sess.pagingCb) {
+    for (auto [usage, pSess] : candidates) {
+        utils::Guard g(pSess->mu);
+        if (!pSess->pagingCb) {
             continue;
         }
-        forceEvicitedSess = sess.sessHandle;
+        forceEvicitedSess = pSess->sessHandle;
 
         // Don't retry anymore for OOM kernels in this session
-        sess.protectOOM = false;
-        sess.forceEvicted = true;
+        pSess->protectOOM = false;
+        pSess->forceEvicted = true;
 
-        VLOG(2) << "Force evict session: " << sess.sessHandle;
-        sess.pagingCb.forceEvicted();
+        VLOG(2) << "Force evict session: " << pSess->sessHandle << " with usage " << usage;
+        pSess->pagingCb.forceEvicted();
         return true;
     }
     LOG(ERROR) << "Nothing to force evict";

@@ -143,6 +143,7 @@ private:
 
     // Task life cycle
     friend class IScheduler;
+    std::unique_ptr<ResourceContext> makeResourceContext(SessionItem &sess, const DeviceSpec &spec, const Resources &res);
     bool maybePreAllocateFor(OperationItem &opItem, const DeviceSpec &spec);
     POpItem submitTask(POpItem &&opItem);
     void taskStopped(OperationItem &opItem, bool failed);

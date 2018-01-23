@@ -41,7 +41,7 @@ struct DeviceSpec
 
     DeviceSpec() = default;
 
-    DeviceSpec(DeviceType t, int id = 0) : type(t), id(id) {}
+    constexpr DeviceSpec(DeviceType t, int id = 0) : type(t), id(id) {}
 
     static DeviceSpec fromString(const std::string &str);
 
@@ -65,6 +65,12 @@ inline bool operator!=(const DeviceSpec &lhs, const DeviceSpec &rhs)
 }
 
 std::ostream &operator<<(std::ostream &os, const DeviceSpec &c);
+
+namespace devices {
+constexpr DeviceSpec CPU0 {DeviceType::GPU, 0};
+constexpr DeviceSpec GPU0 {DeviceType::GPU, 0};
+constexpr DeviceSpec GPU1 {DeviceType::GPU, 1};
+} // namespace devices
 
 namespace std {
 template<>

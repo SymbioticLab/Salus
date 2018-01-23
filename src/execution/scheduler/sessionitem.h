@@ -72,8 +72,8 @@ public:
         : sessHandle(handle)
     {
         // NOTE: add other devices
-        resUsage[ResourceTag::GPU0Memory()].get() = 0;
-        resUsage[ResourceTag::CPU0Memory()].get() = 0;
+        resUsage[resources::GPU0Memory].get() = 0;
+        resUsage[resources::CPU0Memory].get() = 0;
     }
 
     ~SessionItem();

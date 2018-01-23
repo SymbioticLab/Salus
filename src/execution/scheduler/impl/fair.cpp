@@ -76,7 +76,7 @@ void FairScheduler::selectCandidateSessions(const SessionList &sessions,
         for (auto &sess : sessions) {
             candidates->emplace_back(sess);
             // calculate progress counter increase since last snapshot
-            size_t mem = sess->resourceUsage(ResourceTag::GPU0Memory());
+            size_t mem = sess->resourceUsage(resources::GPU0Memory);
             aggResUsages[sess->sessHandle] += mem * sSinceLastSnapshot;
         }
 
