@@ -5,11 +5,18 @@ set(SRC_LIST
 
     "memorymgr/memorymgr.cpp"
 
+    "execution/scheduler/operationitem.cpp"
+    "execution/scheduler/sessionitem.cpp"
+    "execution/scheduler/ischeduler.cpp"
+    "execution/scheduler/impl/fair.cpp"
+    "execution/scheduler/impl/pack.cpp"
+    "execution/scheduler/impl/preempt.cpp"
     "execution/executionengine.cpp"
     "execution/devices.cpp"
     "execution/operationtask.cpp"
     "execution/resources.cpp"
     "execution/threadpool/nonblockingthreadpool.cpp"
+    "execution/scheduler/ischeduler.cpp"
 
     "rpcserver/rpcservercore.cpp"
     "rpcserver/zmqserver.cpp"

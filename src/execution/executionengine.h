@@ -27,6 +27,7 @@
 #include "platform/logging.h"
 #include "utils/containerutils.h"
 #include "utils/threadutils.h"
+#include "utils/pointerutils.h"
 
 #include <atomic>
 #include <chrono>
@@ -39,54 +40,50 @@
 
 class OperationTask;
 class ResourceContext;
+struct SessionItem;
+struct OperationItem;
 
 struct SchedulingParam
 {
-    bool useFairnessCounter = true;
     /**
      * Maximum head-of-line waiting tasks allowed before refuse to schedule
-     * later tasks
+     * later tasks in the same queue.
      */
     uint64_t maxHolWaiting = 50;
     /**
-     * Add randomness when run tasks
-     */
-    bool randomizedExecution = false;
-    /**
-     * Whether to be work conservative. Only has effect when useFairnessCounter is true.
+     * Whether to be work conservative. This has no effect when using scheduler 'pack'
      */
     bool workConservative = true;
+    /**
+     * The scheduler to use
+     */
+    std::string scheduler = "fair";
+};
+
+struct PagingCallbacks
+{
+    std::function<void()> forceEvicted;
+    std::function<size_t(uint64_t, std::unique_ptr<ResourceContext> &&)> volunteer;
+
+    operator bool() const
+    {
+        return forceEvicted && volunteer;
+    }
 };
 
 /**
- * @todo write docs
- */
+* @todo write docs
+*/
+using PSessionItem = std::shared_ptr<SessionItem>;
+using POpItem = std::shared_ptr<OperationItem>;
+class IScheduler;
 class ExecutionEngine
 {
-    struct SessionItem;
-    struct OperationItem;
-
-    using PSessionItem = std::shared_ptr<SessionItem>;
-    using POpItem = std::shared_ptr<OperationItem>;
-
-    using KernelQueue = std::list<POpItem>;
-    using UnsafeQueue = std::list<POpItem>;
 
 public:
     static ExecutionEngine &instance();
 
     ~ExecutionEngine();
-
-    struct PagingCallbacks
-    {
-        std::function<void()> forceEvicted;
-        std::function<size_t(uint64_t, std::unique_ptr<ResourceContext> &&)> volunteer;
-
-        operator bool() const
-        {
-            return forceEvicted && volunteer;
-        }
-    };
 
     class InserterImpl
     {
@@ -132,6 +129,7 @@ public:
         return m_schedParam;
     }
 
+
 private:
     ExecutionEngine();
 
@@ -144,10 +142,11 @@ private:
     bool shouldWaitForAWhile(size_t scheduled, std::chrono::nanoseconds &ns);
 
     // Task life cycle
-    size_t maybeScheduleFrom(PSessionItem item);
-    bool maybePreAllocateFor(SessionItem &item, OperationItem &opItem, const DeviceSpec &spec);
-
-    void taskStopped(SessionItem &item, OperationItem &opItem, bool failed);
+    friend class IScheduler;
+    bool maybePreAllocateFor(OperationItem &opItem, const DeviceSpec &spec);
+    POpItem submitTask(POpItem &&opItem);
+    void taskStopped(OperationItem &opItem, bool failed);
+    void taskRunning(OperationItem &opItem);
 
     // Bookkeeping
     ResourceMonitor m_resMonitor;
@@ -158,76 +157,14 @@ private:
     bool doPaging();
 
     // Incoming kernels
-    struct SessionItem
-    {
-        // also protected by mu (may be accessed both in schedule thread and close session thread)
-        PagingCallbacks pagingCb;
-        std::function<void()> cleanupCb;
+    void pushToSessionQueue(POpItem &&opItem);
 
-        std::string sessHandle;
-        KernelQueue queue;
-        std::mutex mu;
-
-        // Only accessed by main scheduling thread
-        UnsafeQueue bgQueue;
-        double unifiedResSnapshot;
-        bool forceEvicted{false};
-
-        uint64_t holWaiting = 0;
-        uint64_t queueHeadHash = 0;
-
-        // Accessed by multiple scheduling thread
-        std::atomic_bool protectOOM{true};
-
-        std::unordered_set<uint64_t> tickets;
-        std::mutex tickets_mu;
-
-        explicit SessionItem(const std::string &handle)
-            : sessHandle(handle)
-            , unifiedResSnapshot(0.0)
-        {
-            // NOTE: add other devices
-            resUsage[ResourceTag::GPU0Memory()].get() = 0;
-            resUsage[ResourceTag::CPU0Memory()].get() = 0;
-        }
-
-        ~SessionItem();
-
-        utils::MutableAtom::value_type &resourceUsage(const ResourceTag &tag)
-        {
-            return resUsage.at(tag).get();
-        }
-
-    private:
-        using AtomicResUsages = std::unordered_map<ResourceTag, utils::MutableAtom>;
-        // must be initialized in constructor
-        AtomicResUsages resUsage;
-    };
-    void pushToSessionQueue(const PSessionItem &item, POpItem &&opItem);
-
-    struct OperationItem
-    {
-        std::unique_ptr<OperationTask> op;
-
-        uint64_t hash() const
-        {
-            return reinterpret_cast<uint64_t>(this);
-        }
-
-        std::chrono::time_point<std::chrono::system_clock> tQueued;
-        std::chrono::time_point<std::chrono::system_clock> tInspected;
-        std::chrono::time_point<std::chrono::system_clock> tScheduled;
-        std::chrono::time_point<std::chrono::system_clock> tRunning;
-    };
     friend class ResourceContext;
 
-    using SessionList = std::list<PSessionItem>;
-    using SessionSet = std::unordered_set<PSessionItem>;
-
-    SessionList m_newSessions;
+    std::list<PSessionItem> m_newSessions;
     std::mutex m_newMu;
 
-    SessionSet m_deletedSessions;
+    std::unordered_set<PSessionItem> m_deletedSessions;
     std::mutex m_delMu;
 
     utils::notification m_note_has_work;
@@ -235,7 +172,7 @@ private:
     // iterate through the whole list, insert at end, and delete.
     // Insert and delete rarely happens, and delete is handled in the same thread
     // as iteration.
-    SessionList m_sessions;
+    std::list<PSessionItem> m_sessions;
 
     void insertSession(PSessionItem item);
     void deleteSession(PSessionItem item);
@@ -261,7 +198,7 @@ public:
     }
 
     ResourceContext(const ResourceContext &other, const DeviceSpec &spec);
-    ResourceContext(ExecutionEngine::SessionItem &item, ResourceMonitor &resMon);
+    ResourceContext(SessionItem &item, ResourceMonitor &resMon);
     ~ResourceContext();
 
     bool initializeStaging(const DeviceSpec &spec, const Resources &res);
@@ -315,7 +252,7 @@ public:
 private:
     void removeTicketFromSession() const;
 
-    ExecutionEngine::SessionItem &session;
+    SessionItem &session;
     std::atomic<bool> hasStaging;
 };
 std::ostream &operator<<(std::ostream &os, const ResourceContext &c);

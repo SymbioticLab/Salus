@@ -418,7 +418,7 @@ void ExecTask::run(Callbacks cbs)
         // Asynchronous computes.
         VLOG(2) << "Launch Async kernel";
         auto async = op_kernel->AsAsync();
-        DCHECK(async != nullptr);
+        DCHECK_NOTNULL(async);
 
         // Ensure OpKernelContext constructor will make a new eigen GPU device if
         // necessary.
@@ -428,7 +428,7 @@ void ExecTask::run(Callbacks cbs)
         if (stats) {
             nodestats::SetOpStart(stats);
         }
-        ditem.device->ComputeAsync(async, pctx.get(), [this, cbs, &item]() {
+        ditem.device->ComputeAsync(async, pctx.get(), [this, cbs = std::move(cbs), &item]() {
             VLOG(2) << "Async Kernel done: " << SummarizeNodeDef(tagged_node.node->def());
             afterCompute(false, cbs, item);
         });

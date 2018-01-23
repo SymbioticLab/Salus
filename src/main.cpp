@@ -22,8 +22,7 @@ static auto kMaxHolWaiting = "--max-hol-waiting";
 static auto kDisableFairness = "--disable-fairness";
 static auto kDisableAdmissionControl = "--disable-adc";
 static auto kDisableWorkConservative = "--disable-wc";
-
-static auto kRandomizedExecution = "--random-exec";
+static auto kScheduler = "--sched";
 
 static auto kLogConfFlag = "--logconf";
 static auto kVerboseFlag = "--verbose";
@@ -38,7 +37,7 @@ R"(Usage:
     <program-name> --help
     <program-name> --version
 
-AtLast: trAnsparenT deep LeArning Shared execuTion.
+Salus: Fine-Grained GPU Sharing for DNN.
 
 Options:
     -h, --help                  Print this help message and exit.
@@ -46,11 +45,12 @@ Options:
     -l <endpoint>, --listen=<endpoint>
                                 Listen on ZeroMQ endpoint <endpoint>.
                                 [default: tcp://*:5501]
+    --sched <policy>            Use <policy> for scheduling . Choices: fair, preempt, pack.
+                                [default: fair]
     --disable-adc               Disable admission control.
     --disable-fairness          Disable fair sharing in scheduling.
     --disable-wc                Disable work conservation. Only have effect when
                                 fairness is on.
-    --random-exec               Using randomized execution for tasks.
     --max-hol-waiting=<num>     Maximum number of task allowed go before queue head
                                 in scheduling. [default: 50]
     --logconf <file>            Path to log configuration file. Note that
@@ -69,7 +69,7 @@ Options:
     --perflog=<file>            Enable performance logging and log to <file>.
 )"s;
 
-static auto kVersion = R"(AtLast: trAnsparenT deep LeArning Shared execuTion version 0.1)"s;
+static auto kVersion = R"(Salus: Fine-Grained GPU Sharing for DNN version 0.1)"s;
 
 template<typename T, typename R>
 class value_or_helper
@@ -160,13 +160,18 @@ void configureExecution(std::map<std::string, docopt::value> &args)
 
     auto disableFairness = value_or<bool>(args[kDisableFairness], false);
     uint64_t maxQueueHeadWaiting = value_or<long>(args[kMaxHolWaiting], 50);
-    auto randomizedExecution = value_or<bool>(args[kRandomizedExecution], false);
     auto disableWorkConservative = value_or<bool>(args[kDisableWorkConservative], false);
+    auto sched = value_or<std::string>(args[kScheduler], "fair"s);
+
+    // Handle deprecated arguments
+    if (disableFairness) {
+        sched = "pack";
+    }
+
     ExecutionEngine::instance().setSchedulingParam({
-        !disableFairness, /* useFairnessCounter */
         maxQueueHeadWaiting,
-        randomizedExecution,
-        !disableWorkConservative
+        !disableWorkConservative,
+        sched
     });
 }
 
@@ -194,9 +199,8 @@ void printConfiguration(std::map<std::string, docopt::value> &)
     LOG(INFO) << "Admission control: " << (SessionResourceTracker::instance().disabled() ? "off" : "on");
     LOG(INFO) << "Scheduling parameters:";
     auto &param = ExecutionEngine::instance().schedulingParam();
-    LOG(INFO) << "    Policy: " << (param.useFairnessCounter ? "fairness" : "efficiency");
+    LOG(INFO) << "    Policy: " << param.scheduler;
     LOG(INFO) << "    MaxQueueHeadWaiting: " << param.maxHolWaiting;
-    LOG(INFO) << "    RandomizedExecution: " << (param.randomizedExecution ? "on" : "off");
     LOG(INFO) << "    WorkConservative: " << (param.workConservative ? "on" : "off");
 }
 
