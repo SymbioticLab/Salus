@@ -46,6 +46,7 @@ class TFOpLibraryV2 : public IOpLibrary
 {
 public:
     TFOpLibraryV2() = default;
+    ~TFOpLibraryV2();
 
     bool initialize() override;
     void uninitialize() override;

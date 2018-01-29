@@ -61,6 +61,8 @@ OpLibraryRegistary::Register tfoplibraryv2(executor::TENSORFLOW, std::make_uniqu
 
 } // namespace
 
+TFOpLibraryV2::~TFOpLibraryV2() = default;
+
 bool TFOpLibraryV2::initialize()
 {
     m_proxy = std::make_unique<TFOpLibraryProxy>();
