@@ -50,7 +50,7 @@ find_package(ZeroMQ REQUIRED)
 set_package_properties(ZeroMQ PROPERTIES TYPE REQUIRED PURPOSE "For communication")
 
 # Boost
-find_package(Boost 1.64 EXACT REQUIRED COMPONENTS
+find_package(Boost 1.66 EXACT REQUIRED COMPONENTS
     thread
 )
 set_package_properties(Boost PROPERTIES TYPE REQUIRED PURPOSE "For lock free queue and some utilities")
@@ -80,6 +80,7 @@ include(cmake/CompileOptions.cmake)
 include(cmake/CheckCXXFeature.cmake)
 check_cxx_feature(cxx_enum_hash HAS_CXX_ENUM_HASH)
 check_cxx_feature(cxx_aligned_alloc HAS_CXX_ALIGNED_ALLOC)
+check_cxx_feature(cxx_builtin_expect HAS_CXX_BUILTIN_EXPECT)
 
 configure_file(src/config.h.in ${CMAKE_CURRENT_BINARY_DIR}/config.h)
 include_directories(${CMAKE_CURRENT_BINARY_DIR})

@@ -31,7 +31,7 @@
 using tensorflow::Status;
 using tensorflow::Tensor;
 
-MultiDeviceRendezvous::MultiDeviceRendezvous(const std::shared_ptr<tensorflow::Device> &device,
+LocalWrapperRendezvous::LocalWrapperRendezvous(const std::shared_ptr<tensorflow::Device> &device,
                                              tensorflow::Rendezvous *rendez)
     : m_device(device)
     , m_local(rendez)
@@ -39,12 +39,12 @@ MultiDeviceRendezvous::MultiDeviceRendezvous(const std::shared_ptr<tensorflow::D
     m_local->Ref();
 }
 
-MultiDeviceRendezvous::~MultiDeviceRendezvous()
+LocalWrapperRendezvous::~LocalWrapperRendezvous()
 {
     m_local->Unref();
 }
 
-tensorflow::Status MultiDeviceRendezvous::Send(const ParsedKey &parsed, const Args &send_args,
+tensorflow::Status LocalWrapperRendezvous::Send(const ParsedKey &parsed, const Args &send_args,
                                       const tensorflow::Tensor &val, const bool is_dead)
 {
     VLOG(2) << "MultiDeviceRendezvous::Send " << parsed.FullKey().ToString();
@@ -55,7 +55,7 @@ tensorflow::Status MultiDeviceRendezvous::Send(const ParsedKey &parsed, const Ar
     return m_local->Send(parsed, args, val, is_dead);
 }
 
-void MultiDeviceRendezvous::RecvAsync(const ParsedKey &parsed, const Args &recv_args, DoneCallback done)
+void LocalWrapperRendezvous::RecvAsync(const ParsedKey &parsed, const Args &recv_args, DoneCallback done)
 {
     VLOG(2) << "MultiDeviceRendezvous::RecvAsync " << parsed.FullKey().ToString();
 
@@ -65,7 +65,7 @@ void MultiDeviceRendezvous::RecvAsync(const ParsedKey &parsed, const Args &recv_
     m_local->RecvAsync(parsed, args, std::move(done));
 }
 
-void MultiDeviceRendezvous::StartAbort(const tensorflow::Status &status)
+void LocalWrapperRendezvous::StartAbort(const tensorflow::Status &status)
 {
     return m_local->StartAbort(status);
 }

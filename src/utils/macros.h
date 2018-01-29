@@ -17,14 +17,14 @@
  *
  */
 
-#ifndef MACROS_H
-#define MACROS_H
+#ifndef SALUS_UTILS_MACROS_H
+#define SALUS_UTILS_MACROS_H
 
 #include "config.h"
 
 #define UNUSED(x) (void) (x)
 
-#ifndef HAS_CXX_ENUM_HASH
+#if !defined(HAS_CXX_ENUM_HASH)
 namespace std {
 template<class E>
 class hash
@@ -38,7 +38,25 @@ public:
     }
 };
 } // namespace std
-#endif // CXX_HAS_ENUM_HASH
+#endif // HAS_CXX_ENUM_HASH
+
+// GCC/Clang can be told that a certain branch is not likely to be taken (for
+// instance, a CHECK failure), and use that information in static analysis.
+// Giving it this information can help it optimize for the common case in
+// the absence of better information (ie. -fprofile-arcs).
+#if defined(HAS_CXX_BUILTIN_EXPECT)
+#define SALUS_PREDICT_FALSE(x) (__builtin_expect(x, 0))
+#define SALUS_PREDICT_TRUE(x) (__builtin_expect(!!(x), 1))
+#else
+#define SALUS_PREDICT_FALSE(x) (x)
+#define SALUS_PREDICT_TRUE(x) (x)
+#endif // HAS_CXX_BUILTIN_EXPECT
+
+// A macro to disallow the copy constructor and operator= functions
+// This is usually placed in the private: declarations for a class.
+#define SALUS_DISALLOW_COPY_AND_ASSIGN(TypeName) \
+  TypeName(const TypeName&) = delete;         \
+  void operator=(const TypeName&) = delete
 
 constexpr std::size_t operator "" _sz (unsigned long long n) { return n; }
 
@@ -51,4 +69,4 @@ inline void hash_combine(std::size_t& seed, const T& v)
 }
 } // namespace utils
 
-#endif // MACROS_H
+#endif // SALUS_UTILS_MACROS_H

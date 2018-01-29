@@ -39,8 +39,14 @@ add_subdirectory(platform)
 if(USE_TENSORFLOW)
     list(APPEND SRC_LIST
         "oplibraries/tensorflow/tfoplibraryv2.cpp"
+        "oplibraries/tfinstance.cpp"
+        "oplibraries/tfsession.cpp"
+        "oplibraries/tfutils.cpp"
+        "oplibraries/worker/rendezvousmgr.cpp"
+        "oplibraries/worker/devicecontextwithdevice.cpp"
+
         "oplibraries/tensorflow/v2/md_executor.cpp"
-        "oplibraries/tensorflow/v2/md_rendezvous.cpp"
+        "oplibraries/tensorflow/v2/local_wrapper_rendezvous.cpp"
         "oplibraries/tensorflow/v2/tfallocator.cpp"
         "oplibraries/tensorflow/v2/peropallocdevice.cpp"
         "oplibraries/tensorflow/v2/exectask.cpp"

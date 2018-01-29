@@ -34,14 +34,15 @@
 #include <tensorflow/core/common_runtime/pending_counts.h>
 #include <tensorflow/core/common_runtime/shape_refiner.h>
 #include <tensorflow/core/common_runtime/step_stats_collector.h>
+#include <tensorflow/core/distributed_runtime/master_env.h>
+#include <tensorflow/core/distributed_runtime/session_mgr.h>
+#include <tensorflow/core/distributed_runtime/worker_cache.h>
 #include <tensorflow/core/distributed_runtime/zrpc/exechelper/graphview.h>
 #include <tensorflow/core/distributed_runtime/zrpc/exechelper/mdgraphmgr.h>
 #include <tensorflow/core/distributed_runtime/zrpc/exechelper/memorytypes.h>
 #include <tensorflow/core/distributed_runtime/zrpc/exechelper/tfoplibraryproxy.h>
 #include <tensorflow/core/distributed_runtime/zrpc/exechelper/allocators.h>
 #include <tensorflow/core/distributed_runtime/zrpc/exechelper/paginghelper.h>
-#include <tensorflow/core/distributed_runtime/zrpc/zrpc_wrapped_devicecontext.h>
-#include <tensorflow/core/distributed_runtime/zrpc/zrpc_rendezvous_mgr.h>
 #include <tensorflow/core/framework/allocator.h>
 #include <tensorflow/core/framework/function.h>
 #include <tensorflow/core/framework/function.pb.h>
@@ -55,6 +56,7 @@
 #include <tensorflow/core/graph/algorithm.h>
 #include <tensorflow/core/graph/graph_constructor.h>
 #include <tensorflow/core/lib/core/status.h>
+#include <tensorflow/core/lib/core/threadpool.h>
 #include <tensorflow/core/lib/gtl/flatmap.h>
 #include <tensorflow/core/lib/gtl/flatset.h>
 #include <tensorflow/core/lib/gtl/inlined_vector.h>

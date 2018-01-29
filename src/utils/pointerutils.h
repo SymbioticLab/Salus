@@ -20,6 +20,9 @@
 #ifndef POINTERUTILS_H
 #define POINTERUTILS_H
 
+#include "utils/macros.h"
+#include "utils/type_traits.h"
+
 #include <deque>
 #include <functional>
 #include <memory>
@@ -41,6 +44,14 @@ std::unique_ptr<Derived> dynamic_unique_ptr_cast(std::unique_ptr<Base> &&p)
         return std::unique_ptr<Derived>(result);
     }
     return std::unique_ptr<Derived>(nullptr);
+}
+
+template<typename T>
+auto wrap_unique(T *ptr)
+{
+    static_assert(!std::is_array<T>::value, "array types are unsupported");
+    static_assert(std::is_object<T>::value, "non-object types are unsupported");
+    return std::unique_ptr<T>(ptr);
 }
 
 template<typename T>
@@ -83,14 +94,21 @@ struct ScopedUnref
 private:
     T *obj;
 
-    ScopedUnref(const ScopedUnref &) = delete;
-    ScopedUnref<T> &operator=(const ScopedUnref &) = delete;
+    SALUS_DISALLOW_COPY_AND_ASSIGN(ScopedUnref);
 };
 
 template<typename T, typename... Args>
 auto make_scoped_unref(Args &&... args)
 {
     return ScopedUnref<T>(new T(std::forward<Args>(args)...));
+}
+
+template<typename T>
+auto wrap_unref(T *ptr)
+{
+    static_assert(!std::is_array<T>::value, "array types are unsupported");
+    static_assert(std::is_object<T>::value, "non-object types are unsupported");
+    return ScopedUnref<T>(ptr);
 }
 
 class ScopeGuards
@@ -128,6 +146,43 @@ private:
 
     ScopeGuards(const ScopeGuards &) = delete;
     void operator=(const ScopeGuards &) = delete;
+};
+
+/**
+ * @brief A wrapper class for PIMPL pattern to make sure const correctness.
+ */
+template<typename TPriv>
+class PImpl
+{
+public:
+    template<typename... Args,
+             typename SFINAE = std::enable_if_t<
+                 !(sizeof...(Args) == 1
+                   && std::is_same_v<std::decay_t<::symbiotic::salus::utils::arg_first_t<Args...>>, PImpl>)>>
+    PImpl(Args &&... args)
+        : m_priv(std::forward<Args>(args)...)
+    {
+    }
+
+    /**
+     * @brief Allow move
+     */
+    PImpl(PImpl &&) = default;
+    PImpl &operator=(PImpl &&) = default;
+
+    TPriv *const operator->()
+    {
+        return m_priv.get();
+    }
+    TPriv const *const operator->() const
+    {
+        return m_priv.get();
+    }
+
+private:
+    std::unique_ptr<TPriv> m_priv;
+
+    SALUS_DISALLOW_COPY_AND_ASSIGN(PImpl);
 };
 
 // Following is copied from Microsoft GSL library

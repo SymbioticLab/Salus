@@ -21,7 +21,6 @@
 
 #include "execution/executionengine.h"
 #include "oplibraries/ioplibrary.h"
-
 #include <atomic>
 #include <memory>
 #include <mutex>
@@ -46,6 +45,7 @@ class TFOpLibraryV2 : public IOpLibrary
 {
 public:
     TFOpLibraryV2() = default;
+    ~TFOpLibraryV2();
 
     bool initialize() override;
     void uninitialize() override;

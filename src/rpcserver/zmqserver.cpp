@@ -220,30 +220,33 @@ void ZmqServer::dispatch(zmq::socket_t &sock)
         LOG(ERROR) << "Skipped one iteration due to error while receiving: " << err;
         return;
     }
-    auto pEvenlop = utils::createMessage<executor::EvenlopDef>("executor.EvenlopDef",
-                                                               evenlop.data(), evenlop.size());
-    if (!pEvenlop) {
-        LOG(ERROR) << "Skipped one iteration due to malformatted request evenlop received.";
-        return;
-    }
-    VLOG(2) << "Received request evenlop: " << *pEvenlop;
 
-    // step 1. replace the first frame in identity with the requested identity and make a sender
-    if (!pEvenlop->recvidentity().empty()) {
-        identities->front().rebuild(pEvenlop->recvidentity().data(), pEvenlop->recvidentity().size());
-    }
-    auto sender = std::make_shared<SenderImpl>(*this, pEvenlop->seq(), std::move(identities));
+    m_iopool.post([this, evenlop = std::move(evenlop), identities = std::move(identities)]() mutable {
+        auto pEvenlop = utils::createMessage<executor::EvenlopDef>("executor.EvenlopDef",
+                                                                evenlop.data(), evenlop.size());
+        if (!pEvenlop) {
+            LOG(ERROR) << "Skipped one iteration due to malformatted request evenlop received.";
+            return;
+        }
+        VLOG(2) << "Received request evenlop: " << *pEvenlop;
 
-    // step 2. create request object
-    auto pRequest = utils::createMessage(pEvenlop->type(), body.data(), body.size());
-    if (!pRequest) {
-        LOG(ERROR) << "Skipped one iteration due to malformatted request received.";
-        return;
-    }
-    VLOG(2) << "Received request body byte array size " << body.size();
+        // step 1. replace the first frame in identity with the requested identity and make a sender
+        if (!pEvenlop->recvidentity().empty()) {
+            identities->front().rebuild(pEvenlop->recvidentity().data(), pEvenlop->recvidentity().size());
+        }
+        auto sender = std::make_shared<SenderImpl>(*this, pEvenlop->seq(), std::move(identities));
 
-    // step 3. dispatch
-    m_pLogic->dispatch(sender, *pEvenlop, *pRequest);
+        // step 2. create request object
+        auto pRequest = utils::createMessage(pEvenlop->type(), body.data(), body.size());
+        if (!pRequest) {
+            LOG(ERROR) << "Skipped one iteration due to malformatted request received.";
+            return;
+        }
+        VLOG(2) << "Received request body byte array size " << body.size();
+
+        // step 3. dispatch
+        m_pLogic->dispatch(std::move(sender), *pEvenlop, *pRequest);
+    });
 }
 
 ZmqServer::SenderImpl::SenderImpl(ZmqServer &server, uint64_t seq, MultiPartMessage &&identities)

@@ -26,7 +26,7 @@
 #include "exectask.h"
 
 #include "execution/devices.h"
-#include "oplibraries/tensorflow/v2/md_rendezvous.h"
+#include "oplibraries/tensorflow/v2/local_wrapper_rendezvous.h"
 #include "oplibraries/tensorflow/v2/peropallocdevice.h"
 #include "oplibraries/tensorflow/v2/tfallocator.h"
 #include "utils/macros.h"
@@ -346,7 +346,7 @@ void ExecTask::run(Callbacks cbs)
 
     params.device = ditem.device.get();
 
-    auto localRendez = new MultiDeviceRendezvous(ditem.device, rendez);
+    auto localRendez = new LocalWrapperRendezvous(ditem.device, rendez);
     params.rendezvous = localRendez;
     params.record_tensor_accesses = ditem.device_record_tensor_access;
     params.function_library = ditem.function_library.get();

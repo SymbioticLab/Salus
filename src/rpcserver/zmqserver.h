@@ -20,6 +20,7 @@
 #ifndef ZMQSERVER_H
 #define ZMQSERVER_H
 
+#include "rpcserver/iothreadpool.h"
 #include "utils/protoutils.h"
 #include "utils/zmqutils.h"
 
@@ -68,6 +69,18 @@ public:
 
         uint64_t sequenceNumber() const;
 
+        template<typename Func>
+        auto post(Func &&f)
+        {
+            return m_server.m_iopool.post(std::forward<Func>(f));
+        }
+
+        template<typename Func>
+        auto defer(Func &&f)
+        {
+            return m_server.m_iopool.defer(std::forward<Func>(f));
+        }
+
     private:
         ZmqServer &m_server;
         MultiPartMessage m_identities;
@@ -95,6 +108,9 @@ private:
     void dispatch(zmq::socket_t &sock);
 
 private:
+    // Pool to place blocking operations
+    symbiotic::salus::IOThreadPool m_iopool;
+
     // Shared by proxy&recv and send threads
     zmq::context_t m_zmqCtx;
     std::atomic_bool m_keepRunning;
