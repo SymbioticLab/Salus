@@ -578,13 +578,11 @@ def plot_case_preemption(config, local_dir, logs, iters):
                                ax=ax1, show_avg=False, smoother=smoother)
 
     ax0.legend().set_visible(False)
-    ax0.set_title('Scheduled Tasks')
     handles, labels = ax1.get_legend_handles_labels()
     ax1.legend(handles=handles, labels=['alexnet_100', 'inception3_25'], ncol=2,
                loc='upper center', bbox_to_anchor=(0.5, -0.21), frameon=False)
-    ax0.set_ylabel('# of Tasks')
+    ax0.set_ylabel('Scheduled\nTasks')
     ax1.set_xlabel('Time (s)')
-    ax1.set_title('Memory Usage')
     ax1.set_xlim([0, 115 * 1e9])
     ax1.tick_params(axis='x', labelsize=8)
     ax1.tick_params(axis='y', labelsize=8)
@@ -614,13 +612,11 @@ def plot_case_bigsmall_wc(config, local_dir, logs, iters):
     df, _, _ = pl.memory_usage(logs, mem_type='GPU_0_bfc', per_sess=True,
                                ax=ax1, show_avg=False, smoother=smoother)
 
-    ax0.set_title('Scheduled Tasks')
     ax0.legend().set_visible(False)
     handles, labels = ax1.get_legend_handles_labels()
     ax1.legend(handles=handles, labels=['alexnet_100', 'inception3_25'], ncol=2,
                loc='upper center', bbox_to_anchor=(0.5, -0.2), frameon=False)
-    ax0.set_ylabel('# of Tasks')
-    ax1.set_title('Memory Usage')
+    ax0.set_ylabel('Scheduled\nTasks')
     ax1.set_xlabel('Time (s)')
     ax1.set_xlim([0, 115 * 1e9])
     ax1.tick_params(axis='x', labelsize=8)
@@ -643,17 +639,14 @@ def plot_case_study1_diff(config, local_dir, logs, iters):
         })
 
         fig.axes[0].legend().remove()
-        fig.axes[0].set_title('Aggregate Memory Usage')
-        fig.axes[0].set_ylabel('(byte * s)')
+        fig.axes[0].set_ylabel('Aggregate\nMemory Usage\n(byte * s)')
         # fig.axes[0].set_yscale('symlog')
         # fig.axes[0].yaxis.set_major_locator(pu.MaxNLocator(nbins=4, min_n_ticks=2))
 
         fig.axes[1].legend().remove()
-        fig.axes[1].set_title('Scheduled Tasks')
-        fig.axes[1].set_ylabel('# of Tasks')
+        fig.axes[1].set_ylabel('Scheduled\nTasks')
 
-        fig.axes[2].set_title('Pending Tasks')
-        fig.axes[2].set_ylabel('# of Tasks')
+        fig.axes[2].set_ylabel('Pending\nTasks')
 
         ax = fig.axes[-1]
         ax.set_xlabel('Time (s)')
@@ -714,13 +707,11 @@ def plot_paging_inception_of_vgg(config, local_dir, logs, iters):
         df, _, _ = pl.memory_usage(logs, mem_type='GPU_0_bfc', per_sess=True,
                                    ax=ax1, show_avg=False, smoother=smoother)
 
-        ax0.set_title('Scheduled Tasks')
         ax0.legend().set_visible(False)
         handles, labels = ax1.get_legend_handles_labels()
         ax1.legend(handles=handles, labels=['overfeat_100', 'vgg16_25', 'inception3_100'], ncol=3,
                    loc='upper center', bbox_to_anchor=(0.4, -0.2), frameon=False)
-        ax0.set_ylabel('# of Tasks')
-        ax1.set_title('Memory Usage')
+        ax0.set_ylabel('Scheduled\nTasks')
         ax1.set_xlabel('Time (s)')
         ax1.tick_params(axis='x', labelsize=8)
         ax1.tick_params(axis='y', labelsize=8)
