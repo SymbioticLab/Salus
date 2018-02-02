@@ -50,7 +50,6 @@ public:
     explicit TFSession(TFInstance &inst);
     ~TFSession();
 
-
 #define DECLARE_HANDLER(name) \
     void Handle ## name (const name ## Request *req, std::function<void(name ## Response*, Status)> cb);
 
