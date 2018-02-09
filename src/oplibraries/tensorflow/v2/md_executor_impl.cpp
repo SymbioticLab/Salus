@@ -383,7 +383,7 @@ size_t ExecutorImpl::handlePagingRequest(uint64_t oldTicket, std::unique_ptr<Res
 
 void ExecutorImpl::forceEvicted()
 {
-    utils::Guard g(entry_mu_);
+    salus::Guard g(entry_mu_);
     for (auto state : active_states_) {
         state->ForceInterrupt(tf::errors::ResourceExhausted("Forcely killed due to paging"));
     }

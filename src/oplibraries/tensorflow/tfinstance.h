@@ -20,9 +20,12 @@
 #define SYMBIOTIC_SALUS_OPLIB_TENSORFLOW_TFINSTANCE_H
 
 #include "oplibraries/tensorflow/tfutils.h"
+#include "utils/macros.h"
 #include "utils/pointerutils.h"
-#include <exception>
+#include "platform/thread_annotations.h"
 #include <memory>
+#include <mutex>
+#include <unordered_map>
 #include <vector>
 
 namespace tensorflow {
@@ -33,24 +36,28 @@ class Env;
 } // namespace tensorflow
 
 namespace symbiotic::salus::oplib::tensorflow {
-class TFSession;
-
 /**
  * @brief Represents the tensorflow instance used in Salus.
  */
 class TFInstance
 {
-    utils::not_null<::tensorflow::Env *> m_env;
+    utils::not_null<tf::Env *> m_env;
 
-    std::unique_ptr<::tensorflow::DeviceMgr> m_deviceMgr;
+    std::unique_ptr<tf::DeviceMgr> m_deviceMgr;
     // devices in m_devices owned by m_deviceMgr
-    std::vector<::tensorflow::Device *> m_devices;
+    std::vector<tf::Device *> m_devices;
 
     friend class TFSession;
+    std::mutex m_mu;
+    std::unordered_map<std::string, std::shared_ptr<TFSession>> m_sessions GUARDED_BY(m_mu);
+
+    SALUS_DISALLOW_COPY_AND_ASSIGN(TFInstance);
 
 public:
-    explicit TFInstance(const ::tensorflow::ConfigProto &config);
+    explicit TFInstance(const tf::ConfigProto &config);
     ~TFInstance();
+
+    static TFInstance &instance();
 
     static auto namePrefix()
     {
@@ -70,7 +77,25 @@ public:
         return m_devices;
     }
 
-    auto createSession();
+    /**
+     * @brief find session
+     */
+    std::shared_ptr<TFSession> findSession(const std::string &sessHandle);
+
+    /**
+     * @brief find session and remove it from storage
+     */
+    std::shared_ptr<TFSession> popSession(const std::string &sessHandle);
+
+#define DECLARE_HANDLER(name) \
+    void handle ## name (ZmqServer::Sender sender, const tf:: name ## Request &req, tf:: name ## Response &resp, StatusCallback &&cb)
+
+    DECLARE_HANDLER(CreateSession);
+    DECLARE_HANDLER(CloseSession);
+    DECLARE_HANDLER(ListDevices);
+    DECLARE_HANDLER(Reset);
+
+#undef DECLARE_HANDLER
 };
 
 } // namespace symbiotic::salus::oplib::tensorflow

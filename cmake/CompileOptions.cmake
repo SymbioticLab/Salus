@@ -6,6 +6,7 @@ if ("${CMAKE_CXX_COMPILER_ID}" MATCHES "Clang")
     # reasonable and standard
     add_compile_options_with_check(-Weverything)
     add_compile_options_with_check(-Werror)
+    add_compile_options_with_check(-Wfatal-errors)
 
     add_compile_options_with_check(-Wno-c++98-compat)
 
@@ -24,6 +25,7 @@ elseif ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "GNU")
     add_compile_options_with_check(-Wextra)
     add_compile_options_with_check(-pedantic)
     add_compile_options_with_check(-Werror)
+    add_compile_options_with_check(-Wfatal-errors)
 
     add_compile_options_with_check(-Wold-style-cast)
     # helps catch hard to track down memory errors
@@ -34,6 +36,7 @@ elseif ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "GNU")
     add_compile_options_with_check(-Woverloaded-virtual)
 elseif ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "Intel")
     # using Intel C++
+    message(WARNING "Using of Intel C++ is not supported, you are on your own.")
 elseif ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "MSVC")
     # using Visual Studio C++
 

@@ -79,7 +79,7 @@ class ExecutorState;
 class ExecutorImpl : public tf::Executor
 {
 public:
-    ExecutorImpl(const tf::MultiDeviceExecutorParams &p, const tf::Graph *g, ExecutionEngine::Inserter ins);
+    ExecutorImpl(const tf::MultiDeviceExecutorParams &p, const tf::Graph *g, ExecutionContext ins);
 
     ~ExecutorImpl() override;
 
@@ -104,14 +104,14 @@ private:
     void updateBufferTree(Entry *entry, uint64_t ticket);
 
     void saveSucceedUsageForNode(const std::string &name, const Resources &res) {
-        utils::Guard g(usage_mu_);
+        salus::Guard g(usage_mu_);
         if (!resources::contains(cachedUsages_[name], res)) {
             cachedUsages_[name] = res;
         }
     }
 
     utils::optional<Resources> cachedUsageForNode(const std::string &name) {
-        utils::Guard g(usage_mu_);
+        salus::Guard g(usage_mu_);
         return utils::optionalGet(cachedUsages_, name);
     }
 
@@ -174,7 +174,7 @@ private:
     tf::MultiDeviceExecutorParams params_;
     const tf::Graph *graph_;
     GraphView gview_;
-    ExecutionEngine::Inserter inserter_;
+    ExecutionContext inserter_;
 
     // Active entries. Used for handle paging request
     std::mutex entry_mu_;

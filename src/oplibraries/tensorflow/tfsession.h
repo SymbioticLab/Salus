@@ -19,24 +19,11 @@
 #ifndef SYMBIOTIC_SALUS_OPLIB_TENSORFLOW_TFSESSION_H
 #define SYMBIOTIC_SALUS_OPLIB_TENSORFLOW_TFSESSION_H
 
+#include "utils/macros.h"
 #include "utils/pointerutils.h"
+#include "execution/executionengine.h"
+#include "oplibraries/tensorflow/tfutils.h"
 #include <memory>
-
-#define CallWithMasterMethodName(m)                                                                          \
-    m(CreateSession) m(ExtendSession) m(PartialRunSetup) m(CloseSession) m(ListDevices) m(Reset)
-
-#define CallWithAllMethodName(m)                                                                             \
-    CallWithMasterMethodName(m) m(RunStep)
-
-namespace tensorflow {
-#define FWD_DECLARE(name)                                                                                    \
-    class name##Request;                                                                                     \
-    class name##Response;
-
-CallWithAllMethodName(FWD_DECLARE)
-
-#undef FWD_DECLARE
-} // namespace tensorflow
 
 namespace symbiotic::salus::oplib::tensorflow {
 class TFInstance;
@@ -44,23 +31,35 @@ class TFInstance;
 /**
  * @brief One session of job
  */
-class TFSession
+class TFSession : public std::enable_shared_from_this<TFSession>
 {
 public:
-    explicit TFSession(TFInstance &inst);
+    TFSession(TFInstance &inst, ExecutionContext &&ctx, const tf::ConfigProto &config, tf::GraphDef *gdef);
     ~TFSession();
 
-#define DECLARE_HANDLER(name) \
-    void Handle ## name (const name ## Request *req, std::function<void(name ## Response*, Status)> cb);
+    std::string handle() const;
 
-    CallWithMasterMethodName(DECLARE_HANDLER)
-    DECLARE_HANDLER(RunStep)
+    /**
+     * @brief Safely close the session.
+     *
+     * The resource is deleted later when execution engine actually removes internal structure.
+     */
+    void safeClose();
+
+#define DECLARE_HANDLER(name) \
+    void handle ## name (ZmqServer::Sender sender, const tf:: name ## Request &req, tf:: name ## Response &resp, StatusCallback &&cb)
+
+    DECLARE_HANDLER(ExtendSession);
+    DECLARE_HANDLER(PartialRunSetup);
+    DECLARE_HANDLER(RunStep);
 
 #undef DECLARE_HANDLER
 
 private:
     class TFSessionPrivate;
     utils::PImpl<TFSessionPrivate> d;
+
+    SALUS_DISALLOW_COPY_AND_ASSIGN(TFSession);
 };
 
 } // namespace symbiotic::salus::oplib::tensorflow

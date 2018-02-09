@@ -22,24 +22,24 @@
 
 namespace symbiotic::salus {
 
-IOThreadPool::IOThreadPool()
+IOThreadPoolImpl::IOThreadPoolImpl()
     : m_numThreads(std::max(std::hardware_concurrency() / 2, 1))
     , m_context(m_numThreads)
     , m_workguard(boost::asio::make_work_guard(m_context))
 {
     while (m_threads.size() < m_numThreads) {
-        m_threads.create_thread(std::bind(&IOThreadPool::workerLoop, this));
+        m_threads.create_thread(std::bind(&IOThreadPoolImpl::workerLoop, this));
     }
 }
 
-IOThreadPool::~IOThreadPool()
+IOThreadPoolImpl::~IOThreadPoolImpl()
 {
     m_context.stop();
     m_workguard.reset();
     m_threads.join_all();
 }
 
-void IOThreadPool::workerLoop()
+void IOThreadPoolImpl::workerLoop()
 {
     m_context.run();
 }

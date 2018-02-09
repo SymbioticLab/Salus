@@ -25,7 +25,7 @@
 #include <type_traits>
 #include <tuple>
 
-namespace symbiotic::salus::utils {
+namespace symbiotic::salus {
 
 template<typename... Args>
 using arg_first_t = std::tuple_element_t<0, std::tuple<Args...>>;

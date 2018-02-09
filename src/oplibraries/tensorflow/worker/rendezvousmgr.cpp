@@ -31,7 +31,7 @@ tf::BaseRemoteRendezvous *SalusRendezvousMgr::Create(tf::int64 step_id, const tf
 
 bool WorkerRendezvous::FindTensor(const std::string &key, tf::Tensor &t)
 {
-    utils::Guard l(m_mu);
+    salus::Guard l(m_mu);
     auto it = m_tensors.find(key);
     if (it != m_tensors.end()) {
         t = it->second;
@@ -45,7 +45,7 @@ tf::Status WorkerRendezvous::Send(const ParsedKey &key, const Args &args, const 
 {
     // Must not hold lock when calling Send, which in turn may call cb, and requiring lock again
     {
-        utils::Guard l(m_mu);
+        salus::Guard l(m_mu);
         m_tensors.emplace(key.FullKey().ToString(), val);
     }
     return BaseRemoteRendezvous::Send(key, args, val, is_dead);
@@ -58,7 +58,7 @@ void WorkerRendezvous::RecvAsync(const ParsedKey &key, const Args &args, DoneCal
                                                                auto val, auto is_dead)
     {
         {
-            utils::Guard l(mu);
+            salus::Guard l(mu);
             m_tensors.erase(full_key);
         }
         done(s, send_args, recv_args, val, is_dead);
@@ -70,18 +70,15 @@ void WorkerRendezvous::RecvAsync(const ParsedKey &key, const Args &args, DoneCal
 void WorkerRendezvous::RecvFromRemoteAsync(const ParsedKey &, const Args &recv_args, DoneCallback done)
 {
     LOG(ERROR) << "Salus WorkerRendezvous only supports local recv";
-    done(tf::Status::Internal("Salus WorkerRendezvous only supports local recv"), {}, recv_args, {}, false);
+    done(tf::errors::Internal("Salus WorkerRendezvous only supports local recv"), {}, recv_args, {}, false);
 }
 
 void WorkerRendezvous::SameWorkerRecvDone(const ParsedKey &parsed, const Args &send_args,
                                           const Args &recv_args, const tf::Tensor &in, tf::Tensor *out,
                                           tf::StatusCallback done)
 {
-    auto send_wrapper = static_cast<DeviceContextWithDevice *>(send_args.device_context);
-    auto recv_wrapper = static_cast<DeviceContextWithDevice *>(recv_args.device_context);
-
-    auto send_unref = utils::wrap_unref(send_wrapper);
-    auto recv_unref = utils::wrap_unref(recv_wrapper);
+    auto send_wrapper = utils::wrap_unref(static_cast<DeviceContextWithDevice *>(send_args.device_context));
+    auto recv_wrapper = utils::wrap_unref(static_cast<DeviceContextWithDevice *>(recv_args.device_context));
 
     tf::Device *send_dev = nullptr;
     tf::DeviceContext *send_dctx = nullptr;

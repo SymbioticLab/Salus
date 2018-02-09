@@ -61,7 +61,7 @@ void OpLibraryRegistary::registerOpLibrary(executor::OpLibraryType libraryType,
 
 void OpLibraryRegistary::initializeLibraries()
 {
-    utils::Guard g(m_mu);
+    salus::Guard g(m_mu);
     ++initialized;
     if (initialized > 1) {
         return;
@@ -81,7 +81,7 @@ void OpLibraryRegistary::initializeLibraries()
 
 void OpLibraryRegistary::uninitializeLibraries()
 {
-    utils::Guard g(m_mu);
+    salus::Guard g(m_mu);
 
     --initialized;
     if (initialized <= 0) {

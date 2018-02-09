@@ -19,31 +19,46 @@
 #ifndef SYMBIOTIC_SALUS_OPLIB_TENSORFLOW_TFUTILS_H
 #define SYMBIOTIC_SALUS_OPLIB_TENSORFLOW_TFUTILS_H
 
-#include "oplibraries/tensorflow/tensorflow_headers.h"
-#include "utils/macros.h"
+#include <memory>
+#include <functional>
+
+#define CallWithMasterMethodName(m)                                                                          \
+    m(CreateSession) \
+    m(ExtendSession) \
+    m(PartialRunSetup) \
+    m(CloseSession) \
+    m(ListDevices) \
+    m(Reset) \
+    m(RunStep)
+
+namespace tensorflow {
+#define FWD_DECLARE(name)                                                                                    \
+    class name##Request;                                                                                     \
+    class name##Response;
+
+CallWithMasterMethodName(FWD_DECLARE)
+
+#undef FWD_DECLARE
+
+class Status;
+} // namespace tensorflow
 
 namespace symbiotic::salus::oplib::tensorflow {
 
-using Status = ::tensorflow::Status;
+namespace tf = ::tensorflow;
 
-class TFException : std::exception
-{
-    Status m_status;
+using Status = tf::Status;
+using StatusCallback = std::function<void(Status)>;
 
-public:
-    explicit TFException(const Status &code);
-    ~TFException();
+#define DECLARE_USING(name) \
+using P ## name ## Request = std::unique_ptr<tf:: name ## Request>; \
+using P ## name ## Response = std::unique_ptr<tf:: name ## Response>; \
+using name ## Callback = std::function<void(P ## name ## Response &&, Status)>;
 
-    const char *what() const override;
-}
+    CallWithMasterMethodName(DECLARE_USING)
+
+#undef DECLARE_USING
 
 } // namespace symbiotic::salus::oplib::tensorflow
-
-#define SALUS_THROW_IF_ERROR(...)                                                                            \
-    do {                                                                                                     \
-        const ::tensorflow::Status _status = (__VA_ARGS__);                                                  \
-        if (SALUS_PREDICT_FALSE(!_status.ok()))                                                              \
-            throw symbiotic::salus::oplib::tensorflow::TFException(_status);                                 \
-    } while (0)
 
 #endif // SYMBIOTIC_SALUS_OPLIB_TENSORFLOW_TFUTILS_H

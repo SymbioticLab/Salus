@@ -17,19 +17,3 @@
  */
 
 #include "tfutils.h"
-
-namespace symbiotic::salus::oplib::tensorflow {
-
-TFException::TFException(const Status &code)
-    : m_status(code)
-{
-}
-
-TFException::~TFException() = default;
-
-const char *TFException::what() const
-{
-    return m_status.error_message().c_str();
-}
-
-} // namespace symbiotic::salus::oplib::tensorflow

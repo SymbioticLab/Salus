@@ -19,20 +19,10 @@
 #ifndef UTILS_CPP17_H
 #define UTILS_CPP17_H
 
-#include <boost/optional.hpp>
-#include <boost/any.hpp>
-
 #include <system_error>
 #include <string>
 
-namespace utils {
-
-using boost::optional;
-using boost::make_optional;
-extern const boost::none_t &nullopt;
-
-using boost::any;
-using boost::any_cast;
+namespace symbiotic::salus {
 
 // TODO: use macro check
 

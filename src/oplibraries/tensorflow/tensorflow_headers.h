@@ -37,10 +37,9 @@
 #include <tensorflow/core/distributed_runtime/master_env.h>
 #include <tensorflow/core/distributed_runtime/session_mgr.h>
 #include <tensorflow/core/distributed_runtime/worker_cache.h>
+#include <tensorflow/core/distributed_runtime/worker.h>
 #include <tensorflow/core/distributed_runtime/zrpc/exechelper/graphview.h>
-#include <tensorflow/core/distributed_runtime/zrpc/exechelper/mdgraphmgr.h>
 #include <tensorflow/core/distributed_runtime/zrpc/exechelper/memorytypes.h>
-#include <tensorflow/core/distributed_runtime/zrpc/exechelper/tfoplibraryproxy.h>
 #include <tensorflow/core/distributed_runtime/zrpc/exechelper/allocators.h>
 #include <tensorflow/core/distributed_runtime/zrpc/exechelper/paginghelper.h>
 #include <tensorflow/core/framework/allocator.h>
@@ -86,7 +85,7 @@ inline std::ostream &operator<<(std::ostream &os, const tensorflow::AllocatorAtt
 {
     return os << "tensorflow::AllocatorAttributes("
               << "on_host=" << c.on_host() << ", nic_compatible=" << c.nic_compatible()
-              << ", gpu_compatible=" << c.gpu_compatible() << ", track_sizes=" << c.track_sizes() << ")";
+              << ", gpu_compatible=" << c.gpu_compatible() << ")";
 }
 
 inline std::ostream &operator<<(std::ostream &os, const tensorflow::AllocationAttributes &c)

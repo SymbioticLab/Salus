@@ -25,8 +25,12 @@ option(WITH_TESTS "Build test suite in default target" OFF)
 #---------------------------------------------------------------------------------------
 # Find packages
 #---------------------------------------------------------------------------------------
+list(APPEND CMAKE_PREFIX_PATH ${PROJECT_SOURCE_DIR}/spack-packages)
+list(REMOVE_DUPLICATES CMAKE_PREFIX_PATH)
+
 # Protobuf
-find_package(Protobuf 3.2.0 EXACT REQUIRED)
+#set(protobuf_MODULE_COMPATIBLE ON CACHE BOOL "CMake build-in FindProtobuf.cmake module compatible" FORCE)
+find_package(Protobuf 3.4.0 EXACT REQUIRED)
 set_package_properties(Protobuf PROPERTIES TYPE REQUIRED PURPOSE
     "For message serialization, version must match the one used in TensorFlow"
 )

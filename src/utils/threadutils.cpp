@@ -19,7 +19,7 @@
 
 #include "threadutils.h"
 
-namespace utils {
+namespace symbiotic::salus {
 
 void semaphore::notify(uint32_t c)
 {

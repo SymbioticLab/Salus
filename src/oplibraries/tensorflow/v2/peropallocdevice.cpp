@@ -127,7 +127,7 @@ tf::Allocator *PerOpAllocDevice::wrapAllocator(tf::Allocator *alloc, const tf::A
 
     AA key{alloc, attr};
 
-    utils::Guard g(m_mu);
+    salus::Guard g(m_mu);
     auto it = m_wrappedAllocators.find(key);
     if (it != m_wrappedAllocators.end()) {
         return it->second.get();
@@ -150,7 +150,7 @@ tf::Allocator *PerOpAllocDevice::wrapAllocator(tf::Allocator *alloc, const tf::A
 Resources PerOpAllocDevice::failedResourceRequest() const
 {
     Resources res;
-    utils::Guard g(m_mu);
+    salus::Guard g(m_mu);
     for (auto &p : m_wrappedAllocators) {
         auto alloc = p.second.get();
         res[{ResourceType::MEMORY, alloc->resourceContext().spec()}] += alloc->lastFailedAllocSize();

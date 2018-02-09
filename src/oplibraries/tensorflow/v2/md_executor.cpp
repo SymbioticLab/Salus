@@ -60,7 +60,7 @@ void ExecutionEngineRunner(tf::Executor::Args::Closure c)
 } // namespace
 
 tensorflow::Status NewMultiDeviceExecutor(const tensorflow::MultiDeviceExecutorParams &params,
-                                          const tensorflow::Graph *graph, ExecutionEngine::Inserter ins,
+                                          const tensorflow::Graph *graph, ExecutionContext ins,
                                           tf::Executor **executor)
 {
     auto impl = new ExecutorImpl(params, graph, std::move(ins));
@@ -74,7 +74,7 @@ tensorflow::Status NewMultiDeviceExecutor(const tensorflow::MultiDeviceExecutorP
 }
 
 ExecutorImpl::ExecutorImpl(const tf::MultiDeviceExecutorParams &p, const tf::Graph *g,
-                           ExecutionEngine::Inserter ins)
+                           ExecutionContext ins)
     : params_(p)
     , graph_(g)
     , inserter_(std::move(ins))
@@ -308,7 +308,7 @@ ExecutorState::ExecutorState(const tf::Executor::Args &args, ExecutorImpl *impl)
 {
     // Insert ourself into active list
     {
-        utils::Guard g(impl->entry_mu_);
+        salus::Guard g(impl->entry_mu_);
         impl->active_states_.insert(this);
     }
 
@@ -333,7 +333,7 @@ ExecutorState::~ExecutorState()
     // force interupption. In that case the ExecutorImpl takes care
     // of clearing active_states_
     if (!forceInterrupted) {
-        utils::Guard g(impl_->entry_mu_);
+        salus::Guard g(impl_->entry_mu_);
         impl_->active_states_.erase(this);
     }
 

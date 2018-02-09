@@ -1,20 +1,20 @@
 /*
  * <one line to give the library's name and an idea of what it does.>
  * Copyright (C) 2017  Aetf <aetf@unlimitedcodeworks.xyz>
- * 
+ *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation, either version 3 of the License, or
  * (at your option) any later version.
- * 
+ *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
- * 
+ *
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
- * 
+ *
  */
 
 #ifndef PROTOUTILS_H
@@ -38,7 +38,7 @@
 
 using ProtoPtr = std::unique_ptr<::google::protobuf::Message>;
 
-namespace utils {
+namespace symbiotic::salus {
 /**
  * Create the protobuf message of specific type name `type` from a byte buffer `data` of length `len`.
  *
@@ -61,17 +61,18 @@ std::unique_ptr<T> createMessage(const std::string &type, const void *data, size
 ProtoPtr createLenLimitedMessage(const std::string &type, ::google::protobuf::io::CodedInputStream *stream);
 
 template<typename T>
-std::unique_ptr<T> createLenLimitedMessage(const std::string &type, ::google::protobuf::io::CodedInputStream *stream)
+std::unique_ptr<T> createLenLimitedMessage(const std::string &type,
+                                           ::google::protobuf::io::CodedInputStream *stream)
 {
     return static_unique_ptr_cast<T, ::google::protobuf::Message>(createLenLimitedMessage(type, stream));
 }
 
 /**
  * Create an empty message object of specified type name `type`.
- * 
+ *
  * @return created Message, or nullptr if not found.
  */
 ProtoPtr newMessage(const std::string &type);
-}
+} // namespace symbiotic::salus
 
 #endif // PROTOUTILS_H

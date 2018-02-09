@@ -49,8 +49,10 @@ namespace symbiotic::salus::oplib::tensorflow {
 /**
  * @brief Rendezvous manager used by worker.
  * There are three related classes:
- * SalusRendezvousMgr is creates WorkerRendezvous which does the heavey lift to do the job.
- * LocalWrapperRendezvous interceptes Send and Recv call per device and forwards to WorkerRendezvous.
+ * SalusRendezvousMgr creates WorkerRendezvous
+ * WorkerRendezvous is passed to each ExecTask, and does the heavey lift
+ * RendezvousWithHook is created internally inside each ExecTask, intercepting Send and Recv calls per device
+ * and forwarding to WorkerRendezvous.
  */
 class SalusRendezvousMgr : public ::tensorflow::BaseRendezvousMgr
 {

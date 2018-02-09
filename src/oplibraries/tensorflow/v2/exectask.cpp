@@ -346,7 +346,7 @@ void ExecTask::run(Callbacks cbs)
 
     params.device = ditem.device.get();
 
-    auto localRendez = new LocalWrapperRendezvous(ditem.device, rendez);
+    auto localRendez = new RendezvousWithHook(ditem.device, rendez);
     params.rendezvous = localRendez;
     params.record_tensor_accesses = ditem.device_record_tensor_access;
     params.function_library = ditem.function_library.get();

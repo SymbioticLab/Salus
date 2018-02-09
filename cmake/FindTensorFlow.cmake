@@ -63,13 +63,13 @@ find_path(TensorFlow_INCLUDE_DIR
     third_party
 )
 
-find_library(TensorFlow_LIBRARY NAMES tensorflow
+find_library(TensorFlow_LIBRARY NAMES tensorflow_framework
     PATHS ${TENSORFLOW_ROOT}
     PATH_SUFFIXES bazel-bin/tensorflow
     NO_DEFAULT_PATH
 )
 # fall back to system paths
-find_library(TensorFlow_LIBRARY NAMES tensorflow)
+find_library(TensorFlow_LIBRARY NAMES tensorflow_framework)
 
 find_library(TensorFlow_Kernel_LIBRARY NAMES tensorflow_kernels
     PATHS ${TENSORFLOW_ROOT}
@@ -93,6 +93,7 @@ if(TensorFlow_FOUND)
         ${TensorFlow_INCLUDE_DIR}
         ${TensorFlow_INCLUDE_DIR}/bazel-genfiles
         ${TensorFlow_INCLUDE_DIR}/bazel-${tf_repo_name}/external/eigen_archive
+        ${TensorFlow_INCLUDE_DIR}/bazel-${tf_repo_name}/external/nsync/public
     )
     # This is the same as the include dir
     set(TensorFlow_PROTO_DIRS ${TensorFlow_INCLUDE_DIR})

@@ -295,7 +295,7 @@ bool PerOpAllocator::ShouldAllocateEmptyTensors()
 
 void PerOpAllocator::recordSize(void *ptr, size_t size)
 {
-    utils::Guard g(m_mu);
+    salus::Guard g(m_mu);
     m_lastFailedAllocSize = size;
     if (ptr) {
         m_allocated[ptr] = size;
@@ -304,7 +304,7 @@ void PerOpAllocator::recordSize(void *ptr, size_t size)
 
 size_t PerOpAllocator::findSize(void *ptr)
 {
-    utils::Guard g(m_mu);
+    salus::Guard g(m_mu);
     auto it = m_allocated.find(ptr);
     if (it == m_allocated.end()) {
         return 0;

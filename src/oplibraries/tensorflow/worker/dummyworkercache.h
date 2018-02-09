@@ -20,6 +20,7 @@
 #define SYMBIOTIC_SALUS_OPLIB_TENSORFLOW_DUMMYWORKERCACHE_H
 
 #include "oplibraries/tensorflow/tensorflow_headers.h"
+#include "oplibraries/tensorflow/tfutils.h"
 #include <memory>
 
 namespace symbiotic::salus::oplib::tensorflow {
@@ -27,24 +28,23 @@ namespace symbiotic::salus::oplib::tensorflow {
 /**
  * @brief An empty WorkerCache because we don't use remote TF workers.
  */
-class DummyWorkerCache : public ::tensorflow::WorkerCacheInterface
+class DummyWorkerCache : public tf::WorkerCacheInterface
 {
 public:
     ~DummyWorkerCache() override = default;
 
     void ListWorkers(std::vector<std::string> *workers) const override;
 
-    WorkerInterface *CreateWorker(const std::string &target) override;
+    tf::WorkerInterface *CreateWorker(const std::string &target) override;
 
-    bool GetDeviceLocalityNonBlocking(const std::string &device,
-                                      ::tensorflow::DeviceLocality *locality) override;
+    bool GetDeviceLocalityNonBlocking(const std::string &device, tf::DeviceLocality *locality) override;
 
-    void GetDeviceLocalityAsync(const std::string &device, ::tensorflow::DeviceLocality *locality,
-                                ::tensorflow::StatusCallback done) override;
+    void GetDeviceLocalityAsync(const std::string &device, tf::DeviceLocality *locality,
+                                tf::StatusCallback done) override;
 };
 
-::tensorflow::Status DummyWorkerCacheFactory(const ::tensorflow::WorkerCacheFactoryOptions &options,
-                                             ::tensorflow::WorkerCacheInterface **inout);
+tf::Status DummyWorkerCacheFactory(const ::tensorflow::WorkerCacheFactoryOptions &options,
+                                   tf::WorkerCacheInterface **inout);
 
 } // namespace symbiotic::salus::oplib::tensorflow
 

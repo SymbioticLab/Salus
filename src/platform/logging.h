@@ -20,8 +20,6 @@
 #ifndef LOGGING_H
 #define LOGGING_H
 
-#include "utils/cpp17.h"
-
 #ifdef NDEBUG
 #define ELPP_DISABLE_DEBUG_LOGS
 #endif
@@ -29,6 +27,7 @@
 #include "easylogging++.h"
 
 #include <type_traits>
+#include <optional>
 
 #ifdef _WIN32
 
@@ -118,11 +117,11 @@ constexpr const auto kDefTag = "default";
 // logging configurations
 struct Params
 {
-    utils::optional<std::string> configFile;
-    utils::optional<int> verbosity;
-    utils::optional<std::string> vModules;
-    utils::optional<std::string> vLogFile;
-    utils::optional<std::string> pLogFile;
+    std::optional<std::string> configFile;
+    std::optional<int> verbosity;
+    std::optional<std::string> vModules;
+    std::optional<std::string> vLogFile;
+    std::optional<std::string> pLogFile;
 };
 void initialize(const Params &params);
 

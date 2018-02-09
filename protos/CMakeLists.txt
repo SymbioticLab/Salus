@@ -8,8 +8,7 @@ if(USE_TENSORFLOW)
 endif(USE_TENSORFLOW)
 
 # Generated sources
-set(PROTO_SRC_DIR ${CMAKE_CURRENT_BINARY_DIR}/proto-gen)
-file(MAKE_DIRECTORY ${PROTO_SRC_DIR})
+set(PROTO_SRC_DIR ${CMAKE_CURRENT_BINARY_DIR})
 
 set(PROTOBUF_IMPORT_DIRS ${TensorFlow_PROTO_DIRS})
 protobuf_generate_cpp(proto_srcs proto_hdrs ${PROTO_SRC_DIR} ${proto_files})

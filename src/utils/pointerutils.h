@@ -22,12 +22,14 @@
 
 #include "utils/macros.h"
 #include "utils/type_traits.h"
+#include "platform/logging.h"
 
 #include <deque>
 #include <functional>
 #include <memory>
+#include <type_traits>
 
-namespace utils {
+namespace symbiotic::salus {
 
 template<typename Derived, typename Base>
 std::unique_ptr<Derived> static_unique_ptr_cast(std::unique_ptr<Base> &&p)
@@ -155,10 +157,14 @@ template<typename TPriv>
 class PImpl
 {
 public:
+    static_assert(std::is_object_v<TPriv>, "TPriv must not be a function or a reference");
+
+    using DType = std::decay_t<TPriv>;
+
     template<typename... Args,
              typename SFINAE = std::enable_if_t<
                  !(sizeof...(Args) == 1
-                   && std::is_same_v<std::decay_t<::symbiotic::salus::utils::arg_first_t<Args...>>, PImpl>)>>
+                   && std::is_same_v<std::decay_t<arg_first_t<Args...>>, PImpl>)>>
     PImpl(Args &&... args)
         : m_priv(std::forward<Args>(args)...)
     {
@@ -170,17 +176,17 @@ public:
     PImpl(PImpl &&) = default;
     PImpl &operator=(PImpl &&) = default;
 
-    TPriv *const operator->()
+    DType *operator->()
     {
         return m_priv.get();
     }
-    TPriv const *const operator->() const
+    const DType *operator->() const
     {
         return m_priv.get();
     }
 
 private:
-    std::unique_ptr<TPriv> m_priv;
+    std::unique_ptr<DType> m_priv;
 
     SALUS_DISALLOW_COPY_AND_ASSIGN(PImpl);
 };
@@ -339,13 +345,13 @@ not_null<T> operator+(const not_null<T> &, std::ptrdiff_t) = delete;
 template<class T>
 not_null<T> operator+(std::ptrdiff_t, const not_null<T> &) = delete;
 
-} // namespace utils
+} // namespace symbiotic::salus
 
 namespace std {
 template<class T>
-struct hash<utils::not_null<T>>
+struct hash<::symbiotic::salus::not_null<T>>
 {
-    std::size_t operator()(const utils::not_null<T> &value) const
+    std::size_t operator()(const ::symbiotic::salus::not_null<T> &value) const
     {
         return hash<T>{}(value);
     }

@@ -26,17 +26,18 @@
  * with ours.
  */
 #include "oplibraries/tensorflow/tensorflow_headers.h"
+#include "utils/pointerutils.h"
 #include <unordered_map>
 
 /**
- * @brief
+ * @brief Hook the rendez recv and send with device pointer
  */
-class LocalWrapperRendezvous : public tensorflow::Rendezvous
+class RendezvousWithHook : public tensorflow::Rendezvous
 {
 public:
-    explicit LocalWrapperRendezvous(const std::shared_ptr<tensorflow::Device> &device,
-                                   tensorflow::Rendezvous *localRendez);
-    ~LocalWrapperRendezvous() override;
+    explicit RendezvousWithHook(std::shared_ptr<tensorflow::Device> device,
+                                utils::ScopedUnref<tensorflow::Rendezvous> localRendez);
+    ~RendezvousWithHook() override;
 
     tensorflow::Status Send(const ParsedKey& parsed,
                             const Args& send_args,
@@ -49,7 +50,7 @@ public:
 
 private:
     std::shared_ptr<tensorflow::Device> m_device;
-    tensorflow::Rendezvous *m_local;
+    utils::ScopedUnref<tensorflow::Rendezvous> m_local;
 };
 
 #endif // SYMBIOTIC_SALUS_OPLIB_TENSORFLOW_LOCALWRAPPERRENDEZVOUS_H

@@ -21,6 +21,8 @@
 #define SALUS_UTILS_MACROS_H
 
 #include "config.h"
+#include <cstddef>
+#include <functional>
 
 #define UNUSED(x) (void) (x)
 
@@ -54,19 +56,23 @@ public:
 
 // A macro to disallow the copy constructor and operator= functions
 // This is usually placed in the private: declarations for a class.
-#define SALUS_DISALLOW_COPY_AND_ASSIGN(TypeName) \
-  TypeName(const TypeName&) = delete;         \
-  void operator=(const TypeName&) = delete
+#define SALUS_DISALLOW_COPY_AND_ASSIGN(TypeName)                                                             \
+    TypeName(const TypeName &) = delete;                                                                     \
+    void operator=(const TypeName &) = delete
 
-constexpr std::size_t operator "" _sz (unsigned long long n) { return n; }
+constexpr std::size_t operator"" _sz(unsigned long long n)
+{
+    return n;
+}
 
-namespace utils {
-template <class T>
-inline void hash_combine(std::size_t& seed, const T& v)
+namespace symbiotic::salus {
+template<class T>
+inline void hash_combine(std::size_t &seed, const T &v)
 {
     std::hash<T> hasher;
-    seed ^= hasher(v) + 0x9e3779b9 + (seed<<6) + (seed>>2);
+    seed ^= hasher(v) + 0x9e3779b9 + (seed << 6) + (seed >> 2);
 }
-} // namespace utils
+} // namespace symbiotic::salus
+namespace salus = ::symbiotic::salus;
 
 #endif // SALUS_UTILS_MACROS_H

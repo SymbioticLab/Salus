@@ -26,8 +26,7 @@ namespace symbiotic::salus {
 /**
  * @brief Simple blocking IO thread pool made from boost::asio
  */
-template<bool use_moveonly_trick = false>
-class IOThreadPool
+class IOThreadPoolImpl
 {
     size_t m_numThreads;
 
@@ -55,20 +54,25 @@ class IOThreadPool
     }
 
 public:
-    IOThreadPool();
-    ~IOThreadPool();
+    IOThreadPoolImpl();
+    ~IOThreadPoolImpl();
 
+    /*
     template<typename Func, typename SFINAE = std::enable_if<std::is_copy_constructible_v<Func> || !use_moveonly_trick>>
     auto post(Func &&f)
     {
         return boost::asio::post(std::forward<Func>(f));
     }
+    */
 
-    template<typename Func, typename SFINAE = std::enable_if<!std::is_copy_constructible_v<Func> && use_moveonly_trick>>
+    template<typename Func, bool use_moveonly_trick = false>
     auto post(Func &&f)
     {
-        static_assert(use_moveonly_trick);
-        return boost::asio::post(move_handler(f));
+        if constexpr (!std::is_copy_constructible_v<Func> && use_moveonly_trick) {
+            return boost::asio::post(move_handler(f));
+        } else {
+            return boost::asio::post(std::forward<Func>(f));
+        }
     }
 
     template<typename Func>
@@ -80,6 +84,8 @@ public:
 private:
     void workerLoop();
 };
+
+using IOThreadPool = IOThreadPoolImpl;
 
 } // namespace symbiotic::salus
 

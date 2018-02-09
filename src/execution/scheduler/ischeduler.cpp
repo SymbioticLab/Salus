@@ -51,7 +51,7 @@ SchedulerRegistary::~SchedulerRegistary() = default;
 SchedulerRegistary::Register::Register(std::string_view name, SchedulerFactory factory)
 {
     auto &registary = SchedulerRegistary::instance();
-    utils::Guard guard(registary.m_mu);
+    salus::Guard guard(registary.m_mu);
     auto [iter, inserted] = registary.m_schedulers.try_emplace(std::string(name), std::move(factory));
     UNUSED(iter);
     if (!inserted) {
@@ -61,7 +61,7 @@ SchedulerRegistary::Register::Register(std::string_view name, SchedulerFactory f
 
 std::unique_ptr<IScheduler> SchedulerRegistary::create(std::string_view name, ExecutionEngine &engine) const
 {
-    utils::Guard guard(m_mu);
+    salus::Guard guard(m_mu);
     auto iter = m_schedulers.find(name);
     if (iter == m_schedulers.end()) {
         LOG(ERROR) << "No scheduler registered under name: " << name;

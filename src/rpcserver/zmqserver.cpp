@@ -212,8 +212,7 @@ void ZmqServer::dispatch(zmq::socket_t &sock)
             LOG(ERROR) << "Skipped one iteration due to no body message part found after identity frames";
             return;
         }
-        // TODO: handle multi-part body, which is used by RecvTensorResponse
-        // though it's doubtable if we will receive this on executor side.
+        // NOTE: we only assume there's only one body part.
         sock.recv(&body);
         VLOG(2) << "Received body frame: " << body;
     } catch (zmq::error_t &err) {
@@ -221,9 +220,8 @@ void ZmqServer::dispatch(zmq::socket_t &sock)
         return;
     }
 
-    m_iopool.post([this, evenlop = std::move(evenlop), identities = std::move(identities)]() mutable {
-        auto pEvenlop = utils::createMessage<executor::EvenlopDef>("executor.EvenlopDef",
-                                                                evenlop.data(), evenlop.size());
+    m_iopool.post([this, identities{std::move(identities)}, evenlop{std::move(evenlop)}, body{std::move(body)}]() mutable {
+        auto pEvenlop = salus::createMessage<executor::EvenlopDef>("executor.EvenlopDef", evenlop.data(), evenlop.size());
         if (!pEvenlop) {
             LOG(ERROR) << "Skipped one iteration due to malformatted request evenlop received.";
             return;
@@ -237,7 +235,7 @@ void ZmqServer::dispatch(zmq::socket_t &sock)
         auto sender = std::make_shared<SenderImpl>(*this, pEvenlop->seq(), std::move(identities));
 
         // step 2. create request object
-        auto pRequest = utils::createMessage(pEvenlop->type(), body.data(), body.size());
+        auto pRequest = salus::createMessage(pEvenlop->type(), body.data(), body.size());
         if (!pRequest) {
             LOG(ERROR) << "Skipped one iteration due to malformatted request received.";
             return;
