@@ -21,7 +21,7 @@
 
 namespace tf = ::tensorflow;
 
-namespace symbiotic::salus::oplib::tensorflow {
+namespace salus::oplib::tensorflow {
 
 tf::Status MDGraphMgr::InitItem(const std::string &session, const tf::GraphDef &gdef,
                                 const tf::GraphOptions &graph_options, const tf::DebugOptions &debug_options,

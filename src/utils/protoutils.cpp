@@ -35,7 +35,7 @@
 
 namespace protobuf = ::google::protobuf;
 
-namespace symbiotic::salus {
+namespace sstl {
 
 ProtoPtr newMessage(const std::string &type)
 {
@@ -86,4 +86,4 @@ ProtoPtr createLenLimitedMessage(const std::string &type, protobuf::io::CodedInp
     return msg;
 }
 
-} // namespace symbiotic::salus
+} // namespace sstl

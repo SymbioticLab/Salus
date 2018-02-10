@@ -290,11 +290,11 @@ size_t ExecutorImpl::handlePagingRequest(uint64_t oldTicket, std::unique_ptr<Res
     reflocks.reserve(8);
 
     // guard after decl of parts, because we need to use it.
-    utils::ScopeGuards sg;
+    salus::ScopeGuards sg;
     sg += [&totalReleased]() { VLOG(2) << "Paging released " << totalReleased << " bytes of memory"; };
 
     {
-        utils::TGuard g(entry_mu_, "PagingStart");
+        salus::TGuard g(entry_mu_, "PagingStart");
         auto range = active_buffers_.equal_range(oldTicket);
         if (range.first == range.second) {
             LOG(ERROR) << "Requested ticket for paging not found: " << oldTicket;
@@ -320,7 +320,7 @@ size_t ExecutorImpl::handlePagingRequest(uint64_t oldTicket, std::unique_ptr<Res
 
     // Remember to add them back to active entries with updated value when exit
     sg += [this, &parts, oldTicket]() {
-        utils::TGuard g(entry_mu_, "PagingEnd");
+        salus::TGuard g(entry_mu_, "PagingEnd");
         for (auto part : parts) {
             VLOG(2) << "Adding buffer tree of ticket " << part->ticket << " (was " << oldTicket
                     << ") due to paging";
@@ -343,7 +343,7 @@ size_t ExecutorImpl::handlePagingRequest(uint64_t oldTicket, std::unique_ptr<Res
     item.device->setResourceContext(std::move(rctx));
 
     // Lock all buffer, and all read/write should happen after this
-    utils::lock(reflocks.begin(), reflocks.end());
+    salus::lock(reflocks.begin(), reflocks.end());
     std::vector<std::unique_lock<boost::upgrade_mutex>> guards;
     guards.reserve(reflocks.size());
     for (auto l : reflocks) {
@@ -362,7 +362,7 @@ size_t ExecutorImpl::handlePagingRequest(uint64_t oldTicket, std::unique_ptr<Res
 
         auto oldRoot = part->root_buf;
         oldRoot->Ref();
-        utils::ScopedUnref<tf::TensorBuffer> su(oldRoot);
+        salus::ScopedUnref<tf::TensorBuffer> su(oldRoot);
 
         auto size = oldRoot->size();
         auto ok = moveTensorTree(*part, item.device);
@@ -449,7 +449,7 @@ void ExecutorImpl::updateBufferTree(Entry *entry, uint64_t ticket)
     const auto buf = tf::remote::PagingHelper::bufferOf(*entry->RefOrVal());
     const auto root_buf = buf ? buf->root_buffer() : nullptr;
 
-    utils::TGuard g(entry_mu_, "UpdateBufferTree");
+    salus::TGuard g(entry_mu_, "UpdateBufferTree");
     auto &tree = entry->alloc_tree;
     if (!tree) {
         auto range = active_buffers_.equal_range(ticket);
@@ -514,14 +514,14 @@ void ExecutorImpl::removeFromBufferTree(const Entry *entry, EntryVec *needUpdate
         return false;
     };
 
-    utils::TGuard g(entry_mu_, "RemoveFromBufferTree");
+    salus::TGuard g(entry_mu_, "RemoveFromBufferTree");
 
-    if (utils::erase_if(tree->roots, matchRefs)) {
+    if (salus::erase_if(tree->roots, matchRefs)) {
         return;
     }
     // the entry was not found in roots, so it must be in one of the subs
     for (auto &p : tree->subs) {
-        if (utils::erase_if(p.second, matchRefs)) {
+        if (salus::erase_if(p.second, matchRefs)) {
             break;
         }
     }

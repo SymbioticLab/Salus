@@ -22,7 +22,7 @@
 
 namespace tf = ::tensorflow;
 
-namespace symbiotic::salus::oplib::tensorflow {
+namespace salus::oplib::tensorflow {
 
 tf::BaseRemoteRendezvous *SalusRendezvousMgr::Create(tf::int64 step_id, const tf::WorkerEnv *worker_env)
 {
@@ -77,8 +77,8 @@ void WorkerRendezvous::SameWorkerRecvDone(const ParsedKey &parsed, const Args &s
                                           const Args &recv_args, const tf::Tensor &in, tf::Tensor *out,
                                           tf::StatusCallback done)
 {
-    auto send_wrapper = utils::wrap_unref(static_cast<DeviceContextWithDevice *>(send_args.device_context));
-    auto recv_wrapper = utils::wrap_unref(static_cast<DeviceContextWithDevice *>(recv_args.device_context));
+    auto send_wrapper = salus::wrap_unref(static_cast<DeviceContextWithDevice *>(send_args.device_context));
+    auto recv_wrapper = salus::wrap_unref(static_cast<DeviceContextWithDevice *>(recv_args.device_context));
 
     tf::Device *send_dev = nullptr;
     tf::DeviceContext *send_dctx = nullptr;

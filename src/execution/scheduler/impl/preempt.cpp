@@ -54,7 +54,7 @@ std::string PreemptScheduler::name() const
 
 void PreemptScheduler::selectCandidateSessions(const SessionList &sessions,
                                                const SessionChangeSet &changeset,
-                                               utils::not_null<CandidateList*> candidates)
+                                               salus::not_null<CandidateList*> candidates)
 {
     static int priorityCounter = 0;
 

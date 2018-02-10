@@ -513,7 +513,7 @@ bool ExecutionEngine::doPaging()
     size_t released = 0;
     std::string forceEvicitedSess;
 
-    utils::ScopeGuards sg([&now, &released, &forceEvicitedSess]() {
+    salus::ScopeGuards sg([&now, &released, &forceEvicitedSess]() {
         auto dur = system_clock::now() - now;
         CLOG(INFO, logging::kPerfTag)
             << "Paging: "
@@ -522,7 +522,7 @@ bool ExecutionEngine::doPaging()
     });
 
     // Step 1: select candidate sessions
-    std::vector<std::pair<size_t, utils::not_null<SessionItem *>>> candidates;
+    std::vector<std::pair<size_t, salus::not_null<SessionItem *>>> candidates;
     candidates.reserve(m_sessions.size());
 
     // Step 1.1: count total memory usage for each session

@@ -65,14 +65,14 @@ constexpr std::size_t operator"" _sz(unsigned long long n)
     return n;
 }
 
-namespace symbiotic::salus {
+namespace sstl {
 template<class T>
 inline void hash_combine(std::size_t &seed, const T &v)
 {
     std::hash<T> hasher;
     seed ^= hasher(v) + 0x9e3779b9 + (seed << 6) + (seed >> 2);
 }
-} // namespace symbiotic::salus
+} // namespace sstl
 namespace salus = ::symbiotic::salus;
 
 #endif // SALUS_UTILS_MACROS_H

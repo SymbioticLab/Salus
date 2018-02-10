@@ -533,7 +533,7 @@ tf::Status ExecutorState::PrepareInputs(const NodeItem &item, tf::OpKernel *kern
     // all read/write should happen after this
     {
         TIMED_SCOPE_IF(readLockObj, "lock all read", VLOG_IS_ON(1));
-        utils::lock_shared(locks.begin(), locks.end());
+        salus::lock_shared(locks.begin(), locks.end());
     }
 
     buflocks->clear();
@@ -826,7 +826,7 @@ void ExecutorState::ClearInputs(Entry *first, size_t num, BufferLockVec &buflock
             DCHECK(entry->alloc_tree);
             VLOG(2) << "Removing entry " << as_hex(entry) << " of ticket " << entry->alloc_tree->ticket
                     << " due to clearinputs";
-            utils::TGuard g(impl_->entry_mu_, "ClearInputs");
+            salus::TGuard g(impl_->entry_mu_, "ClearInputs");
             auto range = impl_->active_buffers_.equal_range(entry->alloc_tree->ticket);
             for (auto it = range.first; it != range.second; ++it) {
                 if (it->second == entry->alloc_tree) {

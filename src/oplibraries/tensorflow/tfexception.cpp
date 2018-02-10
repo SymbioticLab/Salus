@@ -18,7 +18,7 @@
 
 #include "tfexception.h"
 
-namespace symbiotic::salus::oplib::tensorflow {
+namespace salus::oplib::tensorflow {
 
 TFException::TFException(const Status &code)
     : m_status(code)
@@ -32,4 +32,4 @@ const char *TFException::what() const
     return m_status.error_message().c_str();
 }
 
-} // namespace symbiotic::salus::oplib::tensorflow
+} // namespace salus::oplib::tensorflow

@@ -17,19 +17,19 @@
  *
  */
 
-#ifndef POINTERUTILS_H
-#define POINTERUTILS_H
+#ifndef SALUS_SSTL_POINTERUTILS_H
+#define SALUS_SSTL_POINTERUTILS_H
 
+#include "platform/logging.h"
 #include "utils/macros.h"
 #include "utils/type_traits.h"
-#include "platform/logging.h"
 
 #include <deque>
 #include <functional>
 #include <memory>
 #include <type_traits>
 
-namespace symbiotic::salus {
+namespace sstl {
 
 template<typename Derived, typename Base>
 std::unique_ptr<Derived> static_unique_ptr_cast(std::unique_ptr<Base> &&p)
@@ -163,8 +163,7 @@ public:
 
     template<typename... Args,
              typename SFINAE = std::enable_if_t<
-                 !(sizeof...(Args) == 1
-                   && std::is_same_v<std::decay_t<arg_first_t<Args...>>, PImpl>)>>
+                 !(sizeof...(Args) == 1 && std::is_same_v<std::decay_t<arg_first_t<Args...>>, PImpl>)>>
     PImpl(Args &&... args)
         : m_priv(std::forward<Args>(args)...)
     {
@@ -345,13 +344,13 @@ not_null<T> operator+(const not_null<T> &, std::ptrdiff_t) = delete;
 template<class T>
 not_null<T> operator+(std::ptrdiff_t, const not_null<T> &) = delete;
 
-} // namespace symbiotic::salus
+} // namespace sstl
 
 namespace std {
 template<class T>
-struct hash<::symbiotic::salus::not_null<T>>
+struct hash<::sstl::not_null<T>>
 {
-    std::size_t operator()(const ::symbiotic::salus::not_null<T> &value) const
+    std::size_t operator()(const ::sstl::not_null<T> &value) const
     {
         return hash<T>{}(value);
     }
@@ -359,4 +358,4 @@ struct hash<::symbiotic::salus::not_null<T>>
 
 } // namespace std
 
-#endif // POINTERUTILS_H
+#endif // SALUS_SSTL_POINTERUTILS_H

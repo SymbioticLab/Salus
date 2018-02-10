@@ -23,7 +23,7 @@
 #include "oplibraries/tensorflow/worker/rendezvousmgr.h"
 #include "oplibraries/tensorflow/worker/mdgraphmgr.h"
 
-namespace symbiotic::salus::oplib::tensorflow {
+namespace salus::oplib::tensorflow {
 
 namespace {
 
@@ -56,7 +56,7 @@ public:
     TFInstance &m_inst;
 
     tf::MasterEnv m_masterEnv;
-    utils::ScopedUnref<tf::MasterSession> m_masterSess;
+    salus::ScopedUnref<tf::MasterSession> m_masterSess;
 
     tf::WorkerEnv m_workerEnv;
     std::unique_ptr<tf::Worker> m_worker;
@@ -162,7 +162,7 @@ TFSessionPrivate::TFSessionPrivate(TFInstance &inst, ExecutionContext &&ctx, con
 
     tf::SessionOptions options;
     options.config = config;
-    m_masterSess = utils::wrap_unref(new tf::MasterSession(options, &m_masterEnv,
+    m_masterSess = salus::wrap_unref(new tf::MasterSession(options, &m_masterEnv,
                                                            std::make_unique<std::vector<std::unique_ptr<tf::Device>>>(),
                                                            nullptr, std::move(device_set), tf::CreateNoOpStatsPublisher));
 
@@ -188,18 +188,23 @@ void TFSessionPrivate::safeClose(std::shared_ptr<TFSession> &&self)
 
 void TFSession::handleExtendSession(ZmqServer::Sender sender, const tf::ExtendSessionRequest &req, tf::ExtendSessionResponse &resp, StatusCallback &&cb)
 {
-    // FIXME
+    SALUS_THROW_IF_ERROR(ValidateExternalGraphDefSyntax(req->graph_def()));
+    SALUS_THROW_IF_ERROR(m_masterSess->Extend(req, resp));
+    cb(Status::OK());
 }
 
 void TFSession::handlePartialRunSetup(ZmqServer::Sender sender, const tf::PartialRunSetupRequest &req, tf::PartialRunSetupResponse &resp, StatusCallback &&cb)
 {
-    
-    // FIXME
+    SALUS_THROW_IF_ERROR(m_masterSess->PartialRunSetup(req, resp));
+    cb(Status::OK());
 }
 
 void TFSession::handleRunSetup(ZmqServer::Sender sender, const tf::RunSetupRequest &req, tf::RunSetupResponse &resp, StatusCallback &&cb)
 {
-    
-    // FIXME
+    tf::CallOptions opts;
+    tf::ProtoRunStepRequest wreq(&req);
+    tf::NonOwnedProtoRunStepResponse wresp(&resp);
+    SALUS_THROW_IF_ERROR(m_masterSess->Run(&opts, &wreq, &wresp));
+    cb(Status::OK());
 }
 } // namespace symbiotic::salus::oplib::tensorflow

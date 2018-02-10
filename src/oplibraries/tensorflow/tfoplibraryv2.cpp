@@ -62,7 +62,7 @@ template<> \
 std::pair<std::unique_ptr<tf:: ## name ## Request>, ProtoPtr> \
 prepareTFCall<tf:: ## name ## Request>(const zrpc::CustomRequest &creq) \
 { \
-    auto tfreq = utils::createMessage<tf::## name ## Request>("tensorflow." #name "Request", \
+    auto tfreq = salus::createMessage<tf::## name ## Request>("tensorflow." #name "Request", \
                                                               creq.extra().data(), creq.extra().size()); \
     if (!tfreq) { \
         throw TFException(tf::errors("Failed to parse message as", "tensorflow." #name "Request")); \
@@ -165,7 +165,7 @@ void TFOpLibraryV2::onCustom(ZmqServer::Sender sender, const zrpc::EvenlopDef &e
 void TFOpLibraryV2::handleCloseSession(const std::string &recvId, const executor::CustomRequest &creq,
                                        DoneCallback cb)
 {
-    auto req = utils::createMessage<tf::CloseSessionRequest>("tensorflow.CloseSessionRequest",
+    auto req = salus::createMessage<tf::CloseSessionRequest>("tensorflow.CloseSessionRequest",
                                                              creq.extra().data(), creq.extra().size());
     if (!req) {
         LOG(ERROR) << "Failed to parse message";

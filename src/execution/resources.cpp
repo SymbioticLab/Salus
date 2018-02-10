@@ -551,11 +551,11 @@ std::vector<std::pair<size_t, uint64_t>> ResourceMonitor::sortVictim(
     {
         Guard g(m_mu);
         for (auto &ticket : candidates) {
-            auto usagemap = utils::optionalGet(m_using, ticket);
+            auto usagemap = salus::optionalGet(m_using, ticket);
             if (!usagemap) {
                 continue;
             }
-            auto gpuusage = utils::optionalGet(usagemap, tag);
+            auto gpuusage = salus::optionalGet(usagemap, tag);
             if (!gpuusage || *gpuusage == 0) {
                 continue;
             }
@@ -574,15 +574,15 @@ Resources ResourceMonitor::queryUsages(const std::unordered_set<uint64_t> &ticke
     Guard g(m_mu);
     Resources res;
     for (auto t : tickets) {
-        merge(res, utils::getOrDefault(m_using, t, {}));
+        merge(res, salus::getOrDefault(m_using, t, {}));
     }
     return res;
 }
 
-utils::optional<Resources> ResourceMonitor::queryUsage(uint64_t ticket) const
+salus::optional<Resources> ResourceMonitor::queryUsage(uint64_t ticket) const
 {
     Guard g(m_mu);
-    return utils::optionalGet(m_using, ticket);
+    return salus::optionalGet(m_using, ticket);
 }
 
 bool ResourceMonitor::hasUsage(uint64_t ticket) const

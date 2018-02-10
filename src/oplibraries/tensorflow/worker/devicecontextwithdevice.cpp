@@ -20,7 +20,7 @@
 
 namespace tf = ::tensorflow;
 
-namespace symbiotic::salus::oplib::tensorflow {
+namespace salus::oplib::tensorflow {
 
 DeviceContextWithDevice::DeviceContextWithDevice(std::shared_ptr<tf::Device> dev, ReffedDeviceContext actual)
     : m_device(std::move(dev))

@@ -36,7 +36,7 @@
 
 namespace tf = tensorflow;
 
-ExecTask::ExecTask(ExecutorState *state, utils::semaphore &num_finished_ops,
+ExecTask::ExecTask(ExecutorState *state, salus::semaphore &num_finished_ops,
                    const ExecutorState::TaggedNode &node, const tf::OpKernelContext::Params &initial_params,
                    tf::Rendezvous *rendez, int maxFailures)
     : deleteKernel(state->impl_->params_.delete_kernel)

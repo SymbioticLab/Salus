@@ -144,7 +144,7 @@ void TFAllocator::DeallocateRaw(void *ptr)
 
 PerOpAllocator *PerOpAllocator::downcast(tf::Allocator *alloc)
 {
-    if (utils::startsWith(alloc->Name(), NamePrefix)) {
+    if (salus::startsWith(alloc->Name(), NamePrefix)) {
         return static_cast<PerOpAllocator*>(alloc);
     }
     return nullptr;

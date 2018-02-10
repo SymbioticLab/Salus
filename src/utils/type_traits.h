@@ -19,13 +19,13 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef SYMBIOTIC_SALUS_UTILS_TYPE_TRAITS_H
-#define SYMBIOTIC_SALUS_UTILS_TYPE_TRAITS_H
+#ifndef SALUS_SSTL_TYPE_TRAITS_H
+#define SALUS_SSTL_TYPE_TRAITS_H
 
-#include <type_traits>
 #include <tuple>
+#include <type_traits>
 
-namespace symbiotic::salus {
+namespace sstl {
 
 template<typename... Args>
 using arg_first_t = std::tuple_element_t<0, std::tuple<Args...>>;
@@ -33,6 +33,6 @@ using arg_first_t = std::tuple_element_t<0, std::tuple<Args...>>;
 template<typename... Args>
 using arg_last_t = std::tuple_element_t<sizeof...(Args) - 1, std::tuple<Args...>>;
 
-} // namespace symbiotic::salus::utils
+} // namespace sstl
 
-#endif // SYMBIOTIC_SALUS_UTILS_TYPE_TRAITS_H
+#endif // SALUS_SSTL_TYPE_TRAITS_H

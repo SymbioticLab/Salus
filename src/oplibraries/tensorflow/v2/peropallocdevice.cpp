@@ -133,14 +133,14 @@ tf::Allocator *PerOpAllocDevice::wrapAllocator(tf::Allocator *alloc, const tf::A
         return it->second.get();
     }
 
-    utils::ScopedUnref<PerOpAllocator> a;
+    salus::ScopedUnref<PerOpAllocator> a;
     if (attr.on_host()) {
         assert(alloc->Name() != "GPU_0_bfc");
         DeviceSpec cpuSpec {DeviceType::CPU, 0};
         auto rctx = std::make_unique<ResourceContext>(*m_rctx, cpuSpec);
-        a = utils::make_scoped_unref<PerOpAllocator>(std::move(rctx), alloc);
+        a = salus::make_scoped_unref<PerOpAllocator>(std::move(rctx), alloc);
     } else {
-        a = utils::make_scoped_unref<PerOpAllocator>(m_rctx, alloc);
+        a = salus::make_scoped_unref<PerOpAllocator>(m_rctx, alloc);
     }
     auto pa = a.get();
     m_wrappedAllocators.emplace(key, std::move(a));

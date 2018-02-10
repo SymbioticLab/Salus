@@ -30,7 +30,7 @@ namespace {
 
 uint64_t maxBytesDumpLen()
 {
-    return utils::fromEnvVarCached("EXEC_MAX_BYTES_DUMP_LEN", UINT64_C(20));
+    return salus::fromEnvVarCached("EXEC_MAX_BYTES_DUMP_LEN", UINT64_C(20));
 }
 
 class ThreadSafePerformanceTrackingCallback : public el::PerformanceTrackingCallback
@@ -152,7 +152,7 @@ MAKE_LOGGABLE(executor::EvenlopDef, c, os)
 {
     return os << "EvenlopDef(type='" << c.type() << "', seq=" << c.seq() << ", sess=" << c.sessionid()
               << ", recvId='"
-              << utils::bytesToHexString(reinterpret_cast<const uint8_t *>(c.recvidentity().data()),
+              << salus::bytesToHexString(reinterpret_cast<const uint8_t *>(c.recvidentity().data()),
                                          c.recvidentity().size())
               << "')";
 }
@@ -160,7 +160,7 @@ MAKE_LOGGABLE(executor::EvenlopDef, c, os)
 MAKE_LOGGABLE(zmq::message_t, c, os)
 {
     return os << "zmq::message_t(len=" << c.size() << ", data='"
-              << utils::bytesToHexString(c.data<uint8_t>(), c.size(), maxBytesDumpLen()) << "')";
+              << salus::bytesToHexString(c.data<uint8_t>(), c.size(), maxBytesDumpLen()) << "')";
 }
 
 MAKE_LOGGABLE(zmq::error_t, c, os)

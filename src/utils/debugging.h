@@ -16,12 +16,12 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef UTILS_DEBUGGING_H
-#define UTILS_DEBUGGING_H
+#ifndef SALUS_SSTL_DEBUGGING_H
+#define SALUS_SSTL_DEBUGGING_H
 
 #include <cstdint>
 
-namespace utils {
+namespace sstl {
 class StackSentinel
 {
     static const std::size_t kBufferSize = 16 * 1024;
@@ -32,13 +32,12 @@ public:
     ~StackSentinel();
 };
 
-
-} // namespace utils
+} // namespace sstl
 
 #if !defined(NDEBUG)
-#define STACK_SENTINEL ::utils::StackSentinel ss
+#define STACK_SENTINEL ::sstl::StackSentinel ss
 #else
-#define STACK_SENTINEL (void)0
+#define STACK_SENTINEL (void) 0
 #endif
 
-#endif // UTILS_DEBUGGING_H
+#endif // SALUS_SSTL_DEBUGGING_H

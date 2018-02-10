@@ -21,7 +21,7 @@
 
 namespace tf = ::tensorflow;
 
-namespace symbiotic::salus::oplib::tensorflow {
+namespace salus::oplib::tensorflow {
 
 tf::Status DummyWorkerCacheFactory(const tf::WorkerCacheFactoryOptions &, tf::WorkerCacheInterface **inout)
 {

@@ -16,15 +16,15 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef CONTAINERUTILS_H
-#define CONTAINERUTILS_H
+#ifndef SALUS_SSTL_CONTAINERUTILS_H
+#define SALUS_SSTL_CONTAINERUTILS_H
 
 #include <boost/range/adaptor/reversed.hpp>
 
 #include <atomic>
 #include <optional>
 
-namespace symbiotic::salus {
+namespace sstl {
 
 template<typename C>
 auto optionalGet(const C &c, const typename C::key_type &k) -> std::optional<typename C::mapped_type>
@@ -105,6 +105,6 @@ struct MutableAtom
     }
 };
 
-} // namespace symbiotic::salus
+} // namespace sstl
 
-#endif // CONTAINERUTILS_H
+#endif // SALUS_SSTL_CONTAINERUTILS_H

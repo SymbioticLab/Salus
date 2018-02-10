@@ -17,8 +17,8 @@
  *
  */
 
-#ifndef PROTOUTILS_H
-#define PROTOUTILS_H
+#ifndef SALUS_SSTL_PROTOUTILS_H
+#define SALUS_SSTL_PROTOUTILS_H
 
 #include "utils/pointerutils.h"
 
@@ -38,9 +38,9 @@
 
 using ProtoPtr = std::unique_ptr<::google::protobuf::Message>;
 
-namespace symbiotic::salus {
+namespace sstl {
 /**
- * Create the protobuf message of specific type name `type` from a byte buffer `data` of length `len`.
+ * @brief Create the protobuf message of specific type name `type` from a byte buffer `data` of length `len`.
  *
  * @return created Message, or nullptr if specified type not found or data is malformatted.
  */
@@ -53,7 +53,7 @@ std::unique_ptr<T> createMessage(const std::string &type, const void *data, size
 }
 
 /**
- * Create the protobuf message from a coded input stream. The stream is expected to contains first a
+ * @brief Create the protobuf message from a coded input stream. The stream is expected to contains first a
  * varint of length and followed by that length of bytes as the message.
  *
  * @return created Message, or nullptr if specified type not found or data is malformatted.
@@ -73,6 +73,6 @@ std::unique_ptr<T> createLenLimitedMessage(const std::string &type,
  * @return created Message, or nullptr if not found.
  */
 ProtoPtr newMessage(const std::string &type);
-} // namespace symbiotic::salus
+} // namespace sstl
 
-#endif // PROTOUTILS_H
+#endif // SALUS_SSTL_PROTOUTILS_H

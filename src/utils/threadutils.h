@@ -17,8 +17,8 @@
  *
  */
 
-#ifndef THREADUTILS_H
-#define THREADUTILS_H
+#ifndef SALUS_SSTL_THREADUTILS_H
+#define SALUS_SSTL_THREADUTILS_H
 
 #include "platform/logging.h"
 
@@ -34,7 +34,7 @@
 #include <mutex>
 #include <type_traits>
 
-namespace symbiotic::salus {
+namespace sstl {
 
 using Guard = std::lock_guard<std::mutex>;
 using UGuard = std::unique_lock<std::mutex>;
@@ -93,21 +93,20 @@ public:
 #define Guard(x) static_assert(0, "Guard declaration missing variable name");
 #define UGuard(x) static_assert(0, "UGuard declaration missing variable name");
 
-template<typename Iterator>
-typename std::enable_if_t<std::is_pointer<typename std::iterator_traits<Iterator>::value_type>::value> lock(
-    Iterator begin, Iterator end)
+template<typename Iterator, typename SFINAE = std::enable_if_t<
+                                std::is_pointer_v<typename std::iterator_traits<Iterator>::value_type>>>
+void lock(Iterator begin, Iterator end)
 {
     boost::lock(boost::make_indirect_iterator(begin), boost::make_indirect_iterator(end));
 }
 
-template<typename Iterator>
-typename std::enable_if_t<std::is_pointer<typename std::iterator_traits<Iterator>::value_type>::value> lock_shared(
-    Iterator begin, Iterator end);
+template<typename Iterator, typename SFINAE = std::enable_if_t<
+                                std::is_pointer_v<typename std::iterator_traits<Iterator>::value_type>>>
+void lock_shared(Iterator begin, Iterator end);
 
-template<typename Iterator>
-typename std::enable_if_t<
-    std::is_same<typename std::iterator_traits<Iterator>::value_type, boost::shared_mutex>::value>
-lock_shared(Iterator begin, Iterator end);
+template<typename Iterator, typename SFINAE = std::enable_if_t<std::is_same_v<
+                                typename std::iterator_traits<Iterator>::value_type, boost::shared_mutex>>>
+void lock_shared(Iterator begin, Iterator end);
 
 template<typename SharedLockable>
 class shared_mutex_adapter
@@ -171,7 +170,7 @@ public:
     void wait();
 };
 
-} // namespace symbiotic::salus
+} // namespace sstl
 
 namespace boost {
 namespace sync {
@@ -187,7 +186,7 @@ class is_lockable<::symbiotic::salus::shared_mutex_adapter<SharedLockable>> : st
 } // namespace sync
 } // namespace boost
 
-namespace symbiotic::salus {
+namespace sstl {
 
 template<typename Iterator>
 typename std::enable_if_t<std::is_pointer<typename std::iterator_traits<Iterator>::value_type>::value> lock_shared(
@@ -215,6 +214,6 @@ lock_shared(Iterator begin, Iterator end)
     boost::lock(adapters.begin(), adapters.end());
 }
 
-} // namespace symbiotic::salus
+} // namespace sstl
 
-#endif // THREADUTILS_H
+#endif // SALUS_SSTL_THREADUTILS_H

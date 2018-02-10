@@ -29,7 +29,7 @@
 #include "utils/macros.h"
 
 RendezvousWithHook::RendezvousWithHook(std::shared_ptr<tensorflow::Device> device,
-                                       utils::ScopedUnref<tensorflow::Rendezvous> rendez)
+                                       salus::ScopedUnref<tensorflow::Rendezvous> rendez)
     : m_device(std::move(device))
     , m_local(std::move(rendez))
 {
