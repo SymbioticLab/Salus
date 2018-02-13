@@ -25,7 +25,7 @@ elseif ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "GNU")
     add_compile_options_with_check(-Wextra)
     add_compile_options_with_check(-pedantic)
     add_compile_options_with_check(-Werror)
-    add_compile_options_with_check(-Wfatal-errors)
+    #add_compile_options_with_check(-Wfatal-errors)
 
     add_compile_options_with_check(-Wold-style-cast)
     # helps catch hard to track down memory errors

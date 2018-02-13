@@ -34,7 +34,7 @@
 #include <thread>
 #include <list>
 
-using utils::MultiPartMessage;
+using sstl::MultiPartMessage;
 
 class RpcServerCore;
 class ServerWorker;
@@ -109,7 +109,7 @@ private:
 
 private:
     // Pool to place blocking operations
-    symbiotic::salus::IOThreadPool m_iopool;
+    salus::IOThreadPool m_iopool;
 
     // Shared by proxy&recv and send threads
     zmq::context_t m_zmqCtx;

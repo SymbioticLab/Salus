@@ -16,16 +16,17 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef SYMBIOTIC_SALUS_OPLIB_TENSORFLOW_MDGRAPHMGR_H
-#define SYMBIOTIC_SALUS_OPLIB_TENSORFLOW_MDGRAPHMGR_H
+#ifndef SALUS_OPLIB_TENSORFLOW_MDGRAPHMGR_H
+#define SALUS_OPLIB_TENSORFLOW_MDGRAPHMGR_H
 
 #include "oplibraries/tensorflow/tensorflow_headers.h"
+#include "execution/executionengine.h"
 #include "utils/macros.h"
 #include <memory>
 #include <mutex>
 #include <unordered_map>
 
-namespace symbiotic::salus::oplib::tensorflow {
+namespace salus::oplib::tensorflow {
 
 /**
  * @brief MDGraphMgr keeps track of graph execution.
@@ -36,7 +37,7 @@ namespace symbiotic::salus::oplib::tensorflow {
 class MDGraphMgr : public tf::GraphMgr
 {
 public:
-    explicit MDGraphMgr(const tf::WorkerEnv *env, tf::DeviceMgr *device_mgr);
+    explicit MDGraphMgr(const tf::WorkerEnv *env, tf::DeviceMgr *device_mgr, ExecutionContext execCtx);
     ~MDGraphMgr() override;
 
 protected:
@@ -45,20 +46,22 @@ protected:
                         tf::DistributedFunctionLibraryRuntime *cluster_flr, Item *item) override;
 
 private:
+    ExecutionContext m_execCtx;
+
     // Global Resource manager shared by all local devices.
     // NOTE: Must be valid when destorying opsegment, because
     // some op uses this during deconstruction.
-    std::unique_ptr<tf::ResourceMgr> m_resourceMgr;
+    tf::ResourceMgr m_resourceMgr;
 
     // Global Opsegment shared by all local devices on all workers
     // (we have one and only one local worker)
-    std::unique_ptr<tf::OpSegment> m_opseg;
+    tf::OpSegment m_opseg;
 
     // Kernel to device name map
     std::unordered_map<const tf::OpKernel *, std::string> m_kernelToDevice;
     std::mutex m_mu;
 };
 
-} // namespace symbiotic::salus::oplib::tensorflow
+} // namespace salus::oplib::tensorflow
 
-#endif // SYMBIOTIC_SALUS_OPLIB_TENSORFLOW_MDGRAPHMGR_H
+#endif // SALUS_OPLIB_TENSORFLOW_MDGRAPHMGR_H

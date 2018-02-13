@@ -127,6 +127,8 @@ public:
 
     void acceptOffer(const std::string &sessHandle);
 
+    std::optional<ResourceMap> offeredSessionResource() const;
+
     void enqueueOperation(std::unique_ptr<OperationTask> &&task);
 
     void registerPagingCallbacks(PagingCallbacks &&pcb);
@@ -198,7 +200,7 @@ private:
     std::unordered_set<PSessionItem> m_deletedSessions;
     std::mutex m_delMu;
 
-    salus::notification m_note_has_work;
+    sstl::notification m_note_has_work;
     // Use a minimal linked list because the only operation we need is
     // iterate through the whole list, insert at end, and delete.
     // Insert and delete rarely happens, and delete is handled in the same thread

@@ -29,7 +29,7 @@
 #include <optional>
 
 using std::optional;
-using salus::Guard;
+using sstl::Guard;
 
 std::string enumToString(const ResourceType &rt)
 {
@@ -321,7 +321,7 @@ void SessionResourceTracker::acceptAdmission(uint64_t ticket, const std::string 
     m_sessions[ticket].persistantHandle = sessHandle;
 }
 
-salus::optional<ResourceMap> SessionResourceTracker::usage(uint64_t ticket) const
+optional<ResourceMap> SessionResourceTracker::usage(uint64_t ticket) const
 {
     Guard g(m_mu);
 
@@ -551,11 +551,11 @@ std::vector<std::pair<size_t, uint64_t>> ResourceMonitor::sortVictim(
     {
         Guard g(m_mu);
         for (auto &ticket : candidates) {
-            auto usagemap = salus::optionalGet(m_using, ticket);
+            auto usagemap = sstl::optionalGet(m_using, ticket);
             if (!usagemap) {
                 continue;
             }
-            auto gpuusage = salus::optionalGet(usagemap, tag);
+            auto gpuusage = sstl::optionalGet(usagemap, tag);
             if (!gpuusage || *gpuusage == 0) {
                 continue;
             }
@@ -574,15 +574,15 @@ Resources ResourceMonitor::queryUsages(const std::unordered_set<uint64_t> &ticke
     Guard g(m_mu);
     Resources res;
     for (auto t : tickets) {
-        merge(res, salus::getOrDefault(m_using, t, {}));
+        merge(res, sstl::getOrDefault(m_using, t, {}));
     }
     return res;
 }
 
-salus::optional<Resources> ResourceMonitor::queryUsage(uint64_t ticket) const
+optional<Resources> ResourceMonitor::queryUsage(uint64_t ticket) const
 {
     Guard g(m_mu);
-    return salus::optionalGet(m_using, ticket);
+    return sstl::optionalGet(m_using, ticket);
 }
 
 bool ResourceMonitor::hasUsage(uint64_t ticket) const

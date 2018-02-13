@@ -110,6 +110,12 @@ void ExecutionContext::acceptOffer(const std::string &sessHandle)
     m_data->insertIntoEngine();
 }
 
+std::optional<ResourceMap> ExecutionContext::offeredSessionResource() const
+{
+    DCHECK(m_data);
+    return SessionResourceTracker::instance().usage(m_data->resOffer);
+}
+
 void ExecutionEngine::insertSession(PSessionItem item)
 {
     {
@@ -172,7 +178,7 @@ void ExecutionEngine::pushToSessionQueue(POpItem &&opItem)
     }
 
     {
-        salus::Guard g(sess->mu);
+        sstl::Guard g(sess->mu);
         sess->queue.emplace_back(std::move(opItem));
     }
     m_note_has_work.notify();
@@ -244,7 +250,7 @@ void ExecutionEngine::scheduleLoop()
         SessionChangeSet changeset;
         // Fisrt check if there's any pending deletions
         {
-            salus::Guard g(m_delMu);
+            sstl::Guard g(m_delMu);
 
             using std::swap;
             swap(changeset.deletedSessions, m_deletedSessions);
@@ -266,7 +272,7 @@ void ExecutionEngine::scheduleLoop()
 
         // Append any new sessions
         {
-            salus::Guard g(m_newMu);
+            sstl::Guard g(m_newMu);
 
             changeset.numAddedSessions = m_newSessions.size();
 
@@ -286,7 +292,7 @@ void ExecutionEngine::scheduleLoop()
         bool enableOOMProtect = m_sessions.size() > 1;
         for (auto &item : m_sessions) {
             {
-                salus::Guard g(item->mu);
+                sstl::Guard g(item->mu);
                 item->bgQueue.splice(item->bgQueue.end(), item->queue);
             }
             totalRemainingCount += item->bgQueue.size();
@@ -411,7 +417,7 @@ bool ExecutionEngine::maybePreAllocateFor(OperationItem &opItem, const DeviceSpe
         return false;
     }
 
-    salus::Guard g(item->tickets_mu);
+    sstl::Guard g(item->tickets_mu);
     item->tickets.insert(ticket);
     return true;
 }
@@ -513,7 +519,7 @@ bool ExecutionEngine::doPaging()
     size_t released = 0;
     std::string forceEvicitedSess;
 
-    salus::ScopeGuards sg([&now, &released, &forceEvicitedSess]() {
+    sstl::ScopeGuards sg([&now, &released, &forceEvicitedSess]() {
         auto dur = system_clock::now() - now;
         CLOG(INFO, logging::kPerfTag)
             << "Paging: "
@@ -522,7 +528,7 @@ bool ExecutionEngine::doPaging()
     });
 
     // Step 1: select candidate sessions
-    std::vector<std::pair<size_t, salus::not_null<SessionItem *>>> candidates;
+    std::vector<std::pair<size_t, sstl::not_null<SessionItem *>>> candidates;
     candidates.reserve(m_sessions.size());
 
     // Step 1.1: count total memory usage for each session
@@ -557,7 +563,7 @@ bool ExecutionEngine::doPaging()
         auto pSess = candidates[i].second;
         std::vector<std::pair<size_t, uint64_t>> victims;
         {
-            salus::Guard g(pSess->tickets_mu);
+            sstl::Guard g(pSess->tickets_mu);
             if (pSess->tickets.empty()) {
                 // no need to go beyond
                 break;
@@ -569,7 +575,7 @@ bool ExecutionEngine::doPaging()
         // also prevents the executor from clearing the paging callbacks.
         // This should not create deadlock as nothing could finish at this time,
         // thus no new tasks could be submitted.
-        salus::Guard g(pSess->mu);
+        sstl::Guard g(pSess->mu);
         if (!pSess->pagingCb) {
             continue;
         }
@@ -608,7 +614,7 @@ bool ExecutionEngine::doPaging()
 
     // Forcely kill one session
     for (auto[usage, pSess] : candidates) {
-        salus::Guard g(pSess->mu);
+        sstl::Guard g(pSess->mu);
         if (!pSess->pagingCb) {
             continue;
         }
@@ -669,7 +675,7 @@ void ResourceContext::releaseStaging()
 void ResourceContext::removeTicketFromSession() const
 {
     // last resource freed
-    salus::Guard g(session.tickets_mu);
+    sstl::Guard g(session.tickets_mu);
     VLOG(2) << "Removing ticket " << m_ticket << " from session " << session.sessHandle;
     session.tickets.erase(m_ticket);
 }

@@ -26,7 +26,7 @@ SessionItem::~SessionItem()
 
     std::function<void()> cb;
     {
-        salus::Guard g(mu);
+        sstl::Guard g(mu);
         cb = std::move(cleanupCb);
     }
     if (cb) {
@@ -36,13 +36,13 @@ SessionItem::~SessionItem()
 
 void SessionItem::setPagingCallbacks(PagingCallbacks pcb)
 {
-    salus::Guard g(mu);
+    sstl::Guard g(mu);
     pagingCb = std::move(pcb);
 }
 
 void SessionItem::prepareDelete(std::function<void()> cb)
 {
-    salus::Guard g(mu);
+    sstl::Guard g(mu);
     cleanupCb = std::move(cb);
     // clear paging callbacks so the executorImpl won't get called after it is deleted
     // but haven't been removed from session list yet.

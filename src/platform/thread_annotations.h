@@ -138,7 +138,7 @@ limitations under the License.
 // annotations will be ignored by the analysis.
 #define TS_UNCHECKED(x) ""
 
-namespace symbiotic::salus::thread_safety_analysis {
+namespace salus::thread_safety_analysis {
 
 // Takes a reference to a guarded data member, and returns an unguarded
 // reference.
@@ -153,6 +153,6 @@ inline T &ts_unchecked_read(T &v) NO_THREAD_SAFETY_ANALYSIS
 {
     return v;
 }
-} // namespace symbiotic::salus::thread_safety_analysis
+} // namespace salus::thread_safety_analysis
 
 #endif // SALUS_PLATFORM_THREAD_ANNOTATIONS_H_

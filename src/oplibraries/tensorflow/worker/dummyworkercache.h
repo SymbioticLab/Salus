@@ -16,14 +16,14 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef SYMBIOTIC_SALUS_OPLIB_TENSORFLOW_DUMMYWORKERCACHE_H
-#define SYMBIOTIC_SALUS_OPLIB_TENSORFLOW_DUMMYWORKERCACHE_H
+#ifndef SALUS_OPLIB_TENSORFLOW_DUMMYWORKERCACHE_H
+#define SALUS_OPLIB_TENSORFLOW_DUMMYWORKERCACHE_H
 
 #include "oplibraries/tensorflow/tensorflow_headers.h"
 #include "oplibraries/tensorflow/tfutils.h"
 #include <memory>
 
-namespace symbiotic::salus::oplib::tensorflow {
+namespace salus::oplib::tensorflow {
 
 /**
  * @brief An empty WorkerCache because we don't use remote TF workers.
@@ -46,6 +46,6 @@ public:
 tf::Status DummyWorkerCacheFactory(const ::tensorflow::WorkerCacheFactoryOptions &options,
                                    tf::WorkerCacheInterface **inout);
 
-} // namespace symbiotic::salus::oplib::tensorflow
+} // namespace salus::oplib::tensorflow
 
-#endif // SYMBIOTIC_SALUS_OPLIB_TENSORFLOW_DUMMYWORKERCACHE_H
+#endif // SALUS_OPLIB_TENSORFLOW_DUMMYWORKERCACHE_H

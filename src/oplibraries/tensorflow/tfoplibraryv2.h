@@ -19,7 +19,6 @@
 #ifndef TFOPLIBRARYV2_H
 #define TFOPLIBRARYV2_H
 
-#include "execution/executionengine.h"
 #include "oplibraries/ioplibrary.h"
 #include <unordered_map>
 
@@ -27,6 +26,7 @@ namespace executor {
 class CustomRequest;
 } // namespace executor
 
+namespace salus::oplib::tensorflow {
 /**
  * @brief TFOpLibrary that uses TFInstance internally
  */
@@ -34,7 +34,6 @@ class TFOpLibraryV2 : public IOpLibrary
 {
 public:
     TFOpLibraryV2() = default;
-    ~TFOpLibraryV2();
 
     bool initialize() override;
     void uninitialize() override;
@@ -49,15 +48,15 @@ public:
 
     void onRun(ZmqServer::Sender sender, const executor::EvenlopDef &evenlop, const executor::RunRequest &req,
                DoneCallback cb) override;
-
-private:
-    const std::string &sessionFromRecvId(const std::string &recvId);
-
-    // A map for last seen session per client process
-    // recvId -> sessHandle
-    std::unordered_map<std::string, std::string> m_lastSession;
-
-    size_t m_maxOpenSessions;
 };
+
+struct HandlerCallback
+{
+    IOpLibrary::DoneCallback cb;
+    ProtoPtr tfresp;
+    void operator()(const Status &s);
+};
+
+} // namespace salus::oplib::tensorflow
 
 #endif // TFOPLIBRARYV2_H

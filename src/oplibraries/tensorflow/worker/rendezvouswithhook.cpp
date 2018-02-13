@@ -28,8 +28,10 @@
 #include "oplibraries/tensorflow/tfutils.h"
 #include "utils/macros.h"
 
+using namespace salus::oplib::tensorflow;
+
 RendezvousWithHook::RendezvousWithHook(std::shared_ptr<tensorflow::Device> device,
-                                       salus::ScopedUnref<tensorflow::Rendezvous> rendez)
+                                       sstl::ScopedUnref<tensorflow::Rendezvous> rendez)
     : m_device(std::move(device))
     , m_local(std::move(rendez))
 {
@@ -43,7 +45,7 @@ tensorflow::Status RendezvousWithHook::Send(const ParsedKey &parsed, const Args 
     VLOG(2) << "MultiDeviceRendezvous::Send " << parsed.FullKey().ToString();
 
     auto args = send_args;
-    args.device_context = new DeviceContextWithDevice(m_device, send_args.device_context);
+    args.device_context = new DeviceContextWithDevice(m_device, sstl::wrap_unref(send_args.device_context));
 
     return m_local->Send(parsed, args, val, is_dead);
 }
@@ -53,7 +55,7 @@ void RendezvousWithHook::RecvAsync(const ParsedKey &parsed, const Args &recv_arg
     VLOG(2) << "MultiDeviceRendezvous::RecvAsync " << parsed.FullKey().ToString();
 
     auto args = recv_args;
-    args.device_context = new tf::WrapperDeviceContext(m_device, recv_args.device_context);
+    args.device_context = new DeviceContextWithDevice(m_device, sstl::wrap_unref(recv_args.device_context));
 
     m_local->RecvAsync(parsed, args, std::move(done));
 }

@@ -18,10 +18,13 @@
 
 #include "oplibraries/tensorflow/tensorflow_headers.h"
 #include "tfsession.h"
+#include "execution/executionengine.h"
+#include "oplibraries/tensorflow/tfexception.h"
 #include "oplibraries/tensorflow/tfinstance.h"
+#include "oplibraries/tensorflow/worker/dummysessionmgr.h"
 #include "oplibraries/tensorflow/worker/dummyworkercache.h"
-#include "oplibraries/tensorflow/worker/rendezvousmgr.h"
 #include "oplibraries/tensorflow/worker/mdgraphmgr.h"
+#include "oplibraries/tensorflow/worker/rendezvousmgr.h"
 
 namespace salus::oplib::tensorflow {
 
@@ -33,15 +36,18 @@ auto computePool(tf::Env &env)
     return pool.get();
 }
 
-class TFSessionPrivate
+} // namespace
+
+class TFSession::TFSessionPrivate
 {
 public:
-    TFSessionPrivate(TFInstance &inst, ExecutionContext &&ctx, const tf::ConfigProto &config, tf::GraphDef *gdef);
+    TFSessionPrivate(TFInstance &inst, ExecutionContext &&ctx, const tf::ConfigProto &config,
+                     tf::GraphDef *gdef);
 
     ~TFSessionPrivate();
 
-#define DECLARE_HANDLER_PRIV(name) \
-    void handle ## name (P ## name ## Request &&req, name ## Callback cb)
+#define DECLARE_HANDLER_PRIV(name)                                                                           \
+    void handle##name(const tf::name##Request &req, tf::name##Response &resp, HandlerCallback &&cb)
 
     DECLARE_HANDLER_PRIV(ExtendSession);
     DECLARE_HANDLER_PRIV(PartialRunSetup);
@@ -56,23 +62,22 @@ public:
     TFInstance &m_inst;
 
     tf::MasterEnv m_masterEnv;
-    salus::ScopedUnref<tf::MasterSession> m_masterSess;
+    sstl::ScopedUnref<tf::MasterSession> m_masterSess;
 
     tf::WorkerEnv m_workerEnv;
     std::unique_ptr<tf::Worker> m_worker;
 
-    std::unique_ptr<MDGraphMgr> m_graphMgr;
-    std::unique_ptr<SalusRendezvousMgr> m_rendezvousMgr;
+    // owns graph mgr
+    std::unique_ptr<SingleSessionMgr> m_sessMgr;
 
-    tf::ResourceMgr m_resourceMgr;
+    std::unique_ptr<SalusRendezvousMgr> m_rendezvousMgr;
 
     ExecutionContext m_execCtx;
 };
 
-} // namespace
-
-TFSession::TFSession(TFInstance &inst, ExecutionContext &&ctx, const tf::ConfigProto &config, tf::GraphDef *gdef);
-    : d(inst, std::move(ctx), config, gdef)
+TFSession::TFSession(TFInstance &inst, ExecutionContext &&ctx, const tf::ConfigProto &config,
+                     tf::GraphDef *gdef)
+    : d(std::make_unique<TFSessionPrivate>(inst, std::move(ctx), config, gdef))
 {
 }
 
@@ -88,27 +93,29 @@ void TFSession::safeClose()
     return d->safeClose(shared_from_this());
 }
 
-#define IMPL_HANDLER(name) \
-void TFSession::handle ## name (P ## name ## Request &&req, name ## Callback cb) \
-{ \
-    d->handle ## name(std::move(req), std::move(cb)); \
-}
+#define IMPL_HANDLER(name)                                                                                   \
+    void TFSession::handle##name(const tf::name##Request &req, tf::name##Response &resp,                     \
+                                 HandlerCallback &&cb)                                                        \
+    {                                                                                                        \
+        d->handle##name(req, resp, std::move(cb));                                                           \
+    }
 
-    IMPL_HANDLER(ExtendSession)
-    IMPL_HANDLER(PartialRunSetup)
-    IMPL_HANDLER(RunStep)
+IMPL_HANDLER(ExtendSession)
+IMPL_HANDLER(PartialRunSetup)
+IMPL_HANDLER(RunStep)
 
 #undef IMPL_HANDLER
 
-TFSessionPrivate::~TFSessionPrivate() {}
+TFSession::TFSessionPrivate::~TFSessionPrivate() = default;
 
-std::string TFSessionPrivate::handle() const
+std::string TFSession::TFSessionPrivate::handle() const
 {
     DCHECK(m_masterSess);
     return m_masterSess->handle();
 }
 
-TFSessionPrivate::TFSessionPrivate(TFInstance &inst, ExecutionContext &&ctx, const tf::ConfigProto &config, tf::GraphDef *gdef)
+TFSession::TFSessionPrivate::TFSessionPrivate(TFInstance &inst, ExecutionContext &&ctx,
+                                              const tf::ConfigProto &config, tf::GraphDef *gdef)
     : m_inst(inst)
 {
     // Populate master and worker env
@@ -119,34 +126,15 @@ TFSessionPrivate::TFSessionPrivate(TFInstance &inst, ExecutionContext &&ctx, con
     // Configure shared devices between master and worker.
     m_masterEnv.local_devices = m_inst.devices();
     m_workerEnv.device_mgr = &m_inst.deviceMgr();
-    m_workerEnv.worker_name = m_inst.namePrefix();
 
     // Create a dummy worker cache, because we don't use remote TF workers.
-    auto worker_cache = std::make_unique<DummyWorkerCache>();
-    m_masterEnv.worker_cache = worker_cache.get();
+    auto workerCache = std::make_unique<DummyWorkerCache>();
+    m_masterEnv.worker_cache = workerCache.get();
     m_masterEnv.worker_cache_factory = DummyWorkerCacheFactory;
 
-    // Finish setting up master environment.
+    // Finish setting up master environment and create master session
     m_masterEnv.ops = tf::OpRegistry::Global();
     m_masterEnv.master_session_factory = nullptr;
-
-    // Finish setting up worker environment, moving in worker_cache
-    m_workerEnv.worker_cache = m_masterEnv.worker_cache;
-    m_workerEnv.compute_pool = computePool(m_inst.env());
-    m_workerEnv.session_mgr = new tf::SessionMgr(&m_workerEnv, "Salus", std::move(worker_cache),
-                                                 [](auto server_def, auto worker_cache) {
-                                                     tf::WorkerCacheFactoryOptions options(server_def);
-                                                     return DummyWorkerCacheFactory(options, worker_cache);
-                                                 });
-
-    m_rendezvousMgr = std::make_unique<SalusRendezvousMgr>(&m_workerEnv);
-    m_workerEnv.rendezvous_mgr = m_rendezvousMgr.get();
-
-    m_graphMgr = std::make_unique<MDGraphMgr>(&m_workerEnv);
-    m_workerEnv.graph_mgr = m_graphMgr.get();
-
-    // Create worker
-    m_worker = std::make_unique<tf::Worker>(&m_workerEnv);
 
     auto device_set = std::make_unique<tf::DeviceSet>();
     int num_local_devices = 0;
@@ -158,15 +146,38 @@ TFSessionPrivate::TFSessionPrivate(TFInstance &inst, ExecutionContext &&ctx, con
         }
         num_local_devices++;
     }
-    DCHECK(device_set->client_device()) << "No client device found. Missing " << "CPU:0 device?";
+    DCHECK(device_set->client_device()) << "No client device found. Missing "
+                                        << "CPU:0 device?";
 
     tf::SessionOptions options;
     options.config = config;
-    m_masterSess = salus::wrap_unref(new tf::MasterSession(options, &m_masterEnv,
-                                                           std::make_unique<std::vector<std::unique_ptr<tf::Device>>>(),
-                                                           nullptr, std::move(device_set), tf::CreateNoOpStatsPublisher));
+    m_masterSess =
+        sstl::wrap_unref(new tf::MasterSession(options, &m_masterEnv,
+                                               std::make_unique<std::vector<std::unique_ptr<tf::Device>>>(),
+                                               nullptr, std::move(device_set), tf::CreateNoOpStatsPublisher));
 
-    status = m_masterSess->Create(gdef, {});
+    // Finish setting up worker environment, moving in workerCache
+    m_workerEnv.compute_pool = computePool(m_inst.env());
+    // worker session takes ownership of a deviceMgr, so we create shadow devices for it.
+    std::vector<tf::Device *> shadowDevices;
+    for (auto d : m_inst.devices()) {
+        shadowDevices.emplace_back(tf::RenamedDevice::NewRenamedDevice("Salus", d, false, true));
+    }
+    auto workerSess =
+        std::make_unique<tf::WorkerSession>(handle(), "Salus", std::move(workerCache),
+                                            std::make_unique<tf::DeviceMgr>(shadowDevices),
+                                            std::make_unique<MDGraphMgr>(&m_workerEnv, &m_inst.deviceMgr(), ctx));
+    m_sessMgr = std::make_unique<SingleSessionMgr>(std::move(workerSess));
+    m_workerEnv.session_mgr = m_sessMgr.get();
+
+    m_rendezvousMgr = std::make_unique<SalusRendezvousMgr>(&m_workerEnv);
+    m_workerEnv.rendezvous_mgr = m_rendezvousMgr.get();
+
+    // Create worker and worker session
+    m_worker = std::make_unique<tf::Worker>(&m_workerEnv);
+
+    // Call create on master session to finalize
+    auto status = m_masterSess->Create(gdef, {});
     if (!status.ok()) {
         m_masterSess->Close().IgnoreError();
         throw TFException(status);
@@ -177,7 +188,7 @@ TFSessionPrivate::TFSessionPrivate(TFInstance &inst, ExecutionContext &&ctx, con
     m_execCtx = std::move(ctx);
 }
 
-void TFSessionPrivate::safeClose(std::shared_ptr<TFSession> &&self)
+void TFSession::TFSessionPrivate::safeClose(std::shared_ptr<TFSession> &&self)
 {
     DCHECK(m_masterSess);
     SALUS_THROW_IF_ERROR(m_masterSess->Close());
@@ -186,25 +197,29 @@ void TFSessionPrivate::safeClose(std::shared_ptr<TFSession> &&self)
     });
 }
 
-void TFSession::handleExtendSession(ZmqServer::Sender sender, const tf::ExtendSessionRequest &req, tf::ExtendSessionResponse &resp, StatusCallback &&cb)
+void TFSession::TFSessionPrivate::handleExtendSession(const tf::ExtendSessionRequest &req,
+                                                      tf::ExtendSessionResponse &resp, HandlerCallback &&cb)
 {
-    SALUS_THROW_IF_ERROR(ValidateExternalGraphDefSyntax(req->graph_def()));
-    SALUS_THROW_IF_ERROR(m_masterSess->Extend(req, resp));
+    SALUS_THROW_IF_ERROR(tf::ValidateExternalGraphDefSyntax(req.graph_def()));
+    SALUS_THROW_IF_ERROR(m_masterSess->Extend(&req, &resp));
     cb(Status::OK());
 }
 
-void TFSession::handlePartialRunSetup(ZmqServer::Sender sender, const tf::PartialRunSetupRequest &req, tf::PartialRunSetupResponse &resp, StatusCallback &&cb)
+void TFSession::TFSessionPrivate::handlePartialRunSetup(const tf::PartialRunSetupRequest &req,
+                                                        tf::PartialRunSetupResponse &resp,
+                                                        HandlerCallback &&cb)
 {
-    SALUS_THROW_IF_ERROR(m_masterSess->PartialRunSetup(req, resp));
+    SALUS_THROW_IF_ERROR(m_masterSess->PartialRunSetup(&req, &resp));
     cb(Status::OK());
 }
 
-void TFSession::handleRunSetup(ZmqServer::Sender sender, const tf::RunSetupRequest &req, tf::RunSetupResponse &resp, StatusCallback &&cb)
+void TFSession::TFSessionPrivate::handleRunStep(const tf::RunStepRequest &req, tf::RunStepResponse &resp,
+                                                HandlerCallback &&cb)
 {
     tf::CallOptions opts;
     tf::ProtoRunStepRequest wreq(&req);
     tf::NonOwnedProtoRunStepResponse wresp(&resp);
-    SALUS_THROW_IF_ERROR(m_masterSess->Run(&opts, &wreq, &wresp));
+    SALUS_THROW_IF_ERROR(m_masterSess->Run(&opts, wreq, &wresp));
     cb(Status::OK());
 }
-} // namespace symbiotic::salus::oplib::tensorflow
+} // namespace salus::oplib::tensorflow

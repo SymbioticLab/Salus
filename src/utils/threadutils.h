@@ -100,9 +100,9 @@ void lock(Iterator begin, Iterator end)
     boost::lock(boost::make_indirect_iterator(begin), boost::make_indirect_iterator(end));
 }
 
-template<typename Iterator, typename SFINAE = std::enable_if_t<
-                                std::is_pointer_v<typename std::iterator_traits<Iterator>::value_type>>>
-void lock_shared(Iterator begin, Iterator end);
+template<typename Iterator>
+std::enable_if_t<std::is_pointer_v<typename std::iterator_traits<Iterator>::value_type>> lock_shared(
+    Iterator begin, Iterator end);
 
 template<typename Iterator, typename SFINAE = std::enable_if_t<std::is_same_v<
                                 typename std::iterator_traits<Iterator>::value_type, boost::shared_mutex>>>
@@ -175,12 +175,12 @@ public:
 namespace boost {
 namespace sync {
 template<typename SharedLockable>
-class is_basic_lockable<::symbiotic::salus::shared_mutex_adapter<SharedLockable>> : std::true_type
+class is_basic_lockable<sstl::shared_mutex_adapter<SharedLockable>> : std::true_type
 {
 };
 
 template<typename SharedLockable>
-class is_lockable<::symbiotic::salus::shared_mutex_adapter<SharedLockable>> : std::true_type
+class is_lockable<sstl::shared_mutex_adapter<SharedLockable>> : std::true_type
 {
 };
 } // namespace sync
@@ -189,7 +189,7 @@ class is_lockable<::symbiotic::salus::shared_mutex_adapter<SharedLockable>> : st
 namespace sstl {
 
 template<typename Iterator>
-typename std::enable_if_t<std::is_pointer<typename std::iterator_traits<Iterator>::value_type>::value> lock_shared(
+std::enable_if_t<std::is_pointer_v<typename std::iterator_traits<Iterator>::value_type>> lock_shared(
     Iterator begin, Iterator end)
 {
     using PMutex = typename std::iterator_traits<Iterator>::value_type;
@@ -200,10 +200,9 @@ typename std::enable_if_t<std::is_pointer<typename std::iterator_traits<Iterator
     lock_shared(b, e);
 }
 
-template<typename Iterator>
-typename std::enable_if_t<
-    std::is_same<typename std::iterator_traits<Iterator>::value_type, boost::shared_mutex>::value>
-lock_shared(Iterator begin, Iterator end)
+template<typename Iterator, typename SFINAE = std::enable_if_t<std::is_same_v<
+                                typename std::iterator_traits<Iterator>::value_type, boost::shared_mutex>>>
+void lock_shared(Iterator begin, Iterator end)
 {
     using Mutex = typename std::iterator_traits<Iterator>::value_type;
     std::vector<shared_mutex_adapter<Mutex>> adapters;

@@ -18,6 +18,7 @@ set(SRC_LIST
     "execution/threadpool/nonblockingthreadpool.cpp"
     "execution/scheduler/ischeduler.cpp"
 
+    "rpcserver/iothreadpool.cpp"
     "rpcserver/rpcservercore.cpp"
     "rpcserver/zmqserver.cpp"
 
@@ -47,6 +48,7 @@ if(USE_TENSORFLOW)
         "oplibraries/tensorflow/worker/rendezvouswithhook.cpp"
         "oplibraries/tensorflow/worker/devicecontextwithdevice.cpp"
         "oplibraries/tensorflow/worker/dummyworkercache.cpp"
+        "oplibraries/tensorflow/worker/dummysessionmgr.cpp"
         "oplibraries/tensorflow/worker/mdgraphmgr.cpp"
 
         "oplibraries/tensorflow/v2/md_executor.cpp"
@@ -76,6 +78,6 @@ target_link_libraries(executor
 
 if(USE_TENSORFLOW)
     target_link_libraries(executor
-        tensorflow::all
+        tensorflow::kernels
     )
 endif(USE_TENSORFLOW)

@@ -28,32 +28,42 @@
 #include <tensorflow/core/common_runtime/device.h>
 #include <tensorflow/core/common_runtime/device_factory.h>
 #include <tensorflow/core/common_runtime/device_mgr.h>
+#include <tensorflow/core/common_runtime/dma_helper.h>
 #include <tensorflow/core/common_runtime/executor.h>
 #include <tensorflow/core/common_runtime/function.h>
 #include <tensorflow/core/common_runtime/local_device.h>
 #include <tensorflow/core/common_runtime/pending_counts.h>
+#include <tensorflow/core/common_runtime/renamed_device.h>
+#include <tensorflow/core/common_runtime/graph_optimizer.h>
+#include <tensorflow/core/common_runtime/optimization_registry.h>
 #include <tensorflow/core/common_runtime/shape_refiner.h>
+#include <tensorflow/core/common_runtime/memory_types.h>
 #include <tensorflow/core/common_runtime/step_stats_collector.h>
+#include <tensorflow/core/distributed_runtime/base_rendezvous_mgr.h>
 #include <tensorflow/core/distributed_runtime/master_env.h>
-#include <tensorflow/core/distributed_runtime/session_mgr.h>
-#include <tensorflow/core/distributed_runtime/worker_cache.h>
+#include <tensorflow/core/distributed_runtime/master_session.h>
+#include <tensorflow/core/distributed_runtime/session_mgr_interface.h>
 #include <tensorflow/core/distributed_runtime/worker.h>
+#include <tensorflow/core/distributed_runtime/worker_cache.h>
+#include <tensorflow/core/distributed_runtime/zrpc/exechelper/allocators.h>
 #include <tensorflow/core/distributed_runtime/zrpc/exechelper/graphview.h>
 #include <tensorflow/core/distributed_runtime/zrpc/exechelper/memorytypes.h>
-#include <tensorflow/core/distributed_runtime/zrpc/exechelper/allocators.h>
 #include <tensorflow/core/distributed_runtime/zrpc/exechelper/paginghelper.h>
 #include <tensorflow/core/framework/allocator.h>
 #include <tensorflow/core/framework/function.h>
 #include <tensorflow/core/framework/function.pb.h>
+#include <tensorflow/core/framework/graph_def_util.h>
 #include <tensorflow/core/framework/node_def.pb.h>
 #include <tensorflow/core/framework/op_kernel.h>
 #include <tensorflow/core/framework/op_segment.h>
 #include <tensorflow/core/framework/rendezvous.h>
 #include <tensorflow/core/framework/resource_mgr.h>
 #include <tensorflow/core/framework/types.h>
-#include <tensorflow/core/graph/graph.h>
 #include <tensorflow/core/graph/algorithm.h>
+#include <tensorflow/core/graph/graph.h>
 #include <tensorflow/core/graph/graph_constructor.h>
+#include <tensorflow/core/graph/graph_partition.h>
+#include <tensorflow/core/graph/validate.h>
 #include <tensorflow/core/lib/core/status.h>
 #include <tensorflow/core/lib/core/threadpool.h>
 #include <tensorflow/core/lib/gtl/flatmap.h>
@@ -76,7 +86,7 @@
 #undef NEED_UNDEF_NDEBUG
 #endif
 
-namespace tf = tensorflow;
+#include "oplibraries/tensorflow/tfutils.h"
 
 // Include our logging to override TF's logging, and to provide stream operators
 #include "platform/logging.h"

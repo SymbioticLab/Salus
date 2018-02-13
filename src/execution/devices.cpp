@@ -61,7 +61,7 @@ DeviceType deviceTypeFromString(const std::string &rt)
 
     DeviceSpec spec{deviceTypeFromString(str.substr(0, pos))};
 
-    auto fcr = salus::from_chars(str.c_str(), str.c_str() + str.size(), spec.id);
+    auto fcr = sstl::from_chars(str.c_str(), str.c_str() + str.size(), spec.id);
     if (fcr.ec) {
         LOG(ERROR) << "Failed to convert '" << str << "' to DeviceSpec";
     }

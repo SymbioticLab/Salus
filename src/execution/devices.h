@@ -80,8 +80,8 @@ public:
     inline size_t operator()(const DeviceSpec &spec) const
     {
         size_t res = 0;
-        salus::hash_combine(res, spec.type);
-        salus::hash_combine(res, spec.id);
+        sstl::hash_combine(res, spec.type);
+        sstl::hash_combine(res, spec.id);
         return res;
     }
 };

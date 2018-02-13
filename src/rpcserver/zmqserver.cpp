@@ -221,7 +221,7 @@ void ZmqServer::dispatch(zmq::socket_t &sock)
     }
 
     m_iopool.post([this, identities{std::move(identities)}, evenlop{std::move(evenlop)}, body{std::move(body)}]() mutable {
-        auto pEvenlop = salus::createMessage<executor::EvenlopDef>("executor.EvenlopDef", evenlop.data(), evenlop.size());
+        auto pEvenlop = sstl::createMessage<executor::EvenlopDef>("executor.EvenlopDef", evenlop.data(), evenlop.size());
         if (!pEvenlop) {
             LOG(ERROR) << "Skipped one iteration due to malformatted request evenlop received.";
             return;
@@ -235,7 +235,7 @@ void ZmqServer::dispatch(zmq::socket_t &sock)
         auto sender = std::make_shared<SenderImpl>(*this, pEvenlop->seq(), std::move(identities));
 
         // step 2. create request object
-        auto pRequest = salus::createMessage(pEvenlop->type(), body.data(), body.size());
+        auto pRequest = sstl::createMessage(pEvenlop->type(), body.data(), body.size());
         if (!pRequest) {
             LOG(ERROR) << "Skipped one iteration due to malformatted request received.";
             return;

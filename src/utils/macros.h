@@ -73,6 +73,5 @@ inline void hash_combine(std::size_t &seed, const T &v)
     seed ^= hasher(v) + 0x9e3779b9 + (seed << 6) + (seed >> 2);
 }
 } // namespace sstl
-namespace salus = ::symbiotic::salus;
 
 #endif // SALUS_UTILS_MACROS_H

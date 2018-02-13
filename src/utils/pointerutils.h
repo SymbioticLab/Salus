@@ -69,7 +69,7 @@ struct ScopedUnref
             obj->Unref();
     }
 
-    ScopedUnref(ScopedUnref &&other)
+    ScopedUnref(ScopedUnref &&other) noexcept
     {
         obj = other.obj;
         other.obj = nullptr;
@@ -84,8 +84,21 @@ struct ScopedUnref
 
     auto get() const
     {
-        auto a = std::make_unique<int>(1);
         return obj;
+    }
+
+    constexpr operator T*() const
+    {
+        return get();
+    }
+
+    constexpr auto operator->() const
+    {
+        return get();
+    }
+    constexpr decltype(auto) operator*() const
+    {
+        return *get();
     }
 
     operator bool() const
@@ -113,9 +126,20 @@ auto wrap_unref(T *ptr)
     return ScopedUnref<T>(ptr);
 }
 
+template<typename T>
+auto add_ref(T *ptr)
+{
+    static_assert(!std::is_array<T>::value, "array types are unsupported");
+    static_assert(std::is_object<T>::value, "non-object types are unsupported");
+    ptr->Ref();
+    return ScopedUnref<T>(ptr);
+}
+
 class ScopeGuards
 {
 public:
+    SALUS_DISALLOW_COPY_AND_ASSIGN(ScopeGuards);
+
     using CleanupFunction = std::function<void()>;
 
     ScopeGuards() = default;
@@ -145,9 +169,6 @@ public:
 
 private:
     std::deque<CleanupFunction> funcs;
-
-    ScopeGuards(const ScopeGuards &) = delete;
-    void operator=(const ScopeGuards &) = delete;
 };
 
 /**

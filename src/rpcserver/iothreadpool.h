@@ -16,13 +16,13 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef SYMBIOTIC_SALUS_IOTHREADPOOL_H
-#define SYMBIOTIC_SALUS_IOTHREADPOOL_H
+#ifndef SALUS_IOTHREADPOOL_H
+#define SALUS_IOTHREADPOOL_H
 
 #include <boost/asio.hpp>
 #include <boost/thread.hpp>
 
-namespace symbiotic::salus {
+namespace salus {
 /**
  * @brief Simple blocking IO thread pool made from boost::asio
  */
@@ -35,20 +35,23 @@ class IOThreadPoolImpl
 
     boost::thread_group m_threads;
 
-    template <typename F>
+    template<typename F>
     struct move_wrapper : F
     {
-        move_wrapper(F&& f) : F(std::move(f)) {}
+        move_wrapper(F &&f)
+            : F(std::move(f))
+        {
+        }
 
-        move_wrapper(move_wrapper&&) = default;
-        move_wrapper& operator=(move_wrapper&&) = default;
+        move_wrapper(move_wrapper &&) = default;
+        move_wrapper &operator=(move_wrapper &&) = default;
 
-        move_wrapper(const move_wrapper&);
-        move_wrapper& operator=(const move_wrapper&);
+        move_wrapper(const move_wrapper &);
+        move_wrapper &operator=(const move_wrapper &);
     };
 
-    template <typename T>
-    auto move_handler(T&& t) -> move_wrapper<typename std::decay<T>::type>
+    template<typename T>
+    auto move_handler(T &&t) -> move_wrapper<typename std::decay<T>::type>
     {
         return std::move(t);
     }
@@ -58,8 +61,8 @@ public:
     ~IOThreadPoolImpl();
 
     /*
-    template<typename Func, typename SFINAE = std::enable_if<std::is_copy_constructible_v<Func> || !use_moveonly_trick>>
-    auto post(Func &&f)
+    template<typename Func, typename SFINAE = std::enable_if<std::is_copy_constructible_v<Func> ||
+    !use_moveonly_trick>> auto post(Func &&f)
     {
         return boost::asio::post(std::forward<Func>(f));
     }
@@ -87,6 +90,6 @@ private:
 
 using IOThreadPool = IOThreadPoolImpl;
 
-} // namespace symbiotic::salus
+} // namespace salus
 
-#endif // SYMBIOTIC_SALUS_IOTHREADPOOL_H
+#endif // SALUS_IOTHREADPOOL_H

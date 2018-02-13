@@ -78,8 +78,8 @@ public:
     inline size_t operator()(const ResourceTag &tag) const
     {
         size_t res = 0;
-        salus::hash_combine(res, tag.type);
-        salus::hash_combine(res, tag.device);
+        sstl::hash_combine(res, tag.type);
+        sstl::hash_combine(res, tag.device);
         return res;
     }
 };
@@ -212,7 +212,7 @@ public:
 
     struct LockedProxy
     {
-        explicit LockedProxy(salus::not_null<ResourceMonitor*> resMon)
+        explicit LockedProxy(sstl::not_null<ResourceMonitor*> resMon)
             : m_resMonitor(resMon)
         {
             m_resMonitor->m_mu.lock();

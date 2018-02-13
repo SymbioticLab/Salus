@@ -16,8 +16,8 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef SYMBIOTIC_SALUS_OPLIB_TENSORFLOW_TFUTILS_H
-#define SYMBIOTIC_SALUS_OPLIB_TENSORFLOW_TFUTILS_H
+#ifndef SALUS_OPLIB_TENSORFLOW_TFUTILS_H
+#define SALUS_OPLIB_TENSORFLOW_TFUTILS_H
 
 #include <memory>
 #include <functional>
@@ -43,7 +43,7 @@ CallWithMasterMethodName(FWD_DECLARE)
 class Status;
 } // namespace tensorflow
 
-namespace symbiotic::salus::oplib::tensorflow {
+namespace salus::oplib::tensorflow {
 
 namespace tf = ::tensorflow;
 
@@ -59,6 +59,6 @@ using name ## Callback = std::function<void(P ## name ## Response &&, Status)>;
 
 #undef DECLARE_USING
 
-} // namespace symbiotic::salus::oplib::tensorflow
+} // namespace salus::oplib::tensorflow
 
-#endif // SYMBIOTIC_SALUS_OPLIB_TENSORFLOW_TFUTILS_H
+#endif // SALUS_OPLIB_TENSORFLOW_TFUTILS_H

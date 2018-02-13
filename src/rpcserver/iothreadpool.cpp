@@ -20,10 +20,10 @@
 
 #include <thread>
 
-namespace symbiotic::salus {
+namespace salus {
 
 IOThreadPoolImpl::IOThreadPoolImpl()
-    : m_numThreads(std::max(std::hardware_concurrency() / 2, 1))
+    : m_numThreads(std::max(std::thread::hardware_concurrency() / 2, 1u))
     , m_context(m_numThreads)
     , m_workguard(boost::asio::make_work_guard(m_context))
 {
@@ -44,4 +44,4 @@ void IOThreadPoolImpl::workerLoop()
     m_context.run();
 }
 
-} // namespace symbiotic::salus
+} // namespace salus

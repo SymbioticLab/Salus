@@ -54,7 +54,7 @@ std::string PackScheduler::name() const
 
 void PackScheduler::selectCandidateSessions(const SessionList &sessions,
                                             const SessionChangeSet &changeset,
-                                            salus::not_null<CandidateList*> candidates)
+                                            sstl::not_null<CandidateList*> candidates)
 {
     UNUSED(changeset);
 

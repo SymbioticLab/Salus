@@ -16,13 +16,14 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef SYMBIOTIC_SALUS_OPLIB_TENSORFLOW_TFINSTANCE_H
-#define SYMBIOTIC_SALUS_OPLIB_TENSORFLOW_TFINSTANCE_H
+#ifndef SALUS_OPLIB_TENSORFLOW_TFINSTANCE_H
+#define SALUS_OPLIB_TENSORFLOW_TFINSTANCE_H
 
 #include "oplibraries/tensorflow/tfutils.h"
+#include "oplibraries/tensorflow/tfoplibraryv2.h"
+#include "platform/thread_annotations.h"
 #include "utils/macros.h"
 #include "utils/pointerutils.h"
-#include "platform/thread_annotations.h"
 #include <memory>
 #include <mutex>
 #include <unordered_map>
@@ -35,13 +36,16 @@ class DeviceMgr;
 class Env;
 } // namespace tensorflow
 
-namespace symbiotic::salus::oplib::tensorflow {
+namespace salus::oplib::tensorflow {
+
+class TFSession;
+
 /**
  * @brief Represents the tensorflow instance used in Salus.
  */
 class TFInstance
 {
-    utils::not_null<tf::Env *> m_env;
+    sstl::not_null<tf::Env *> m_env;
 
     std::unique_ptr<tf::DeviceMgr> m_deviceMgr;
     // devices in m_devices owned by m_deviceMgr
@@ -51,10 +55,10 @@ class TFInstance
     std::mutex m_mu;
     std::unordered_map<std::string, std::shared_ptr<TFSession>> m_sessions GUARDED_BY(m_mu);
 
+public:
     SALUS_DISALLOW_COPY_AND_ASSIGN(TFInstance);
 
-public:
-    explicit TFInstance(const tf::ConfigProto &config);
+    TFInstance();
     ~TFInstance();
 
     static TFInstance &instance();
@@ -87,8 +91,8 @@ public:
      */
     std::shared_ptr<TFSession> popSession(const std::string &sessHandle);
 
-#define DECLARE_HANDLER(name) \
-    void handle ## name (ZmqServer::Sender sender, const tf:: name ## Request &req, tf:: name ## Response &resp, StatusCallback &&cb)
+#define DECLARE_HANDLER(name)                                                                                \
+    void handle##name(const tf::name##Request &req, tf::name##Response &resp, HandlerCallback &&cb)
 
     DECLARE_HANDLER(CreateSession);
     DECLARE_HANDLER(CloseSession);
@@ -98,6 +102,6 @@ public:
 #undef DECLARE_HANDLER
 };
 
-} // namespace symbiotic::salus::oplib::tensorflow
+} // namespace salus::oplib::tensorflow
 
-#endif // SYMBIOTIC_SALUS_OPLIB_TENSORFLOW_TFINSTANCE_H
+#endif // SALUS_OPLIB_TENSORFLOW_TFINSTANCE_H

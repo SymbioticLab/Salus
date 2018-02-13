@@ -27,7 +27,7 @@ TFException::TFException(const Status &code)
 
 TFException::~TFException() = default;
 
-const char *TFException::what() const
+const char *TFException::what() const noexcept
 {
     return m_status.error_message().c_str();
 }

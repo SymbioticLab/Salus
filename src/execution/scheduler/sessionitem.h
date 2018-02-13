@@ -79,7 +79,7 @@ public:
 
     ~SessionItem();
 
-    salus::MutableAtom::value_type &resourceUsage(const ResourceTag &tag)
+    sstl::MutableAtom::value_type &resourceUsage(const ResourceTag &tag)
     {
         return resUsage.at(tag).get();
     }
@@ -101,7 +101,7 @@ public:
     void prepareDelete(std::function<void()> cb);
 
 private:
-    using AtomicResUsages = std::unordered_map<ResourceTag, utils::MutableAtom>;
+    using AtomicResUsages = std::unordered_map<ResourceTag, sstl::MutableAtom>;
     // must be initialized in constructor
     AtomicResUsages resUsage;
 };

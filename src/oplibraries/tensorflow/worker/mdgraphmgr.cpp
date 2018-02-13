@@ -18,17 +18,26 @@
 
 #include "mdgraphmgr.h"
 #include "oplibraries/tensorflow/v2/md_executor.h"
+#include "utils/pointerutils.h"
 
 namespace tf = ::tensorflow;
 
 namespace salus::oplib::tensorflow {
 
-tf::Status MDGraphMgr::InitItem(const std::string &session, const tf::GraphDef &gdef,
-                                const tf::GraphOptions &graph_options, const tf::DebugOptions &debug_options,
-                                tf::DistributedFunctionLibraryRuntime *cluster_flr, Item *item)
+MDGraphMgr::MDGraphMgr(const tf::WorkerEnv *env, tf::DeviceMgr *device_mgr, ExecutionContext execCtx)
+    : GraphMgr(env, device_mgr)
+    , m_execCtx(std::move(execCtx))
+{
+}
+
+MDGraphMgr::~MDGraphMgr() = default;
+
+Status MDGraphMgr::InitItem(const std::string &session, const tf::GraphDef &gdef,
+                            const tf::GraphOptions &graph_options, const tf::DebugOptions &debug_options,
+                            tf::DistributedFunctionLibraryRuntime *cluster_flr, Item *item)
 {
     item->session = session;
-    item->lib_def.reset(new tf::FunctionLibraryDefinition(OpRegistry::Global(), gdef.library()));
+    item->lib_def = std::make_unique<tf::FunctionLibraryDefinition>(tf::OpRegistry::Global(), gdef.library());
 
     if (gdef.versions().producer() >= 5) {
         // Validate the graph: we assume that merging two valid graphs
@@ -36,10 +45,10 @@ tf::Status MDGraphMgr::InitItem(const std::string &session, const tf::GraphDef &
         TF_RETURN_IF_ERROR(tf::graph::ValidateGraphDef(gdef, *item->lib_def));
     }
 
-    item->proc_flr.reset(
-        new tf::ProcessFunctionLibraryRuntime(device_mgr_, worker_env_->env, gdef.versions().producer(),
-                                              item->lib_def.get(), graph_options.optimizer_options(),
-                                              cluster_flr));
+    item->proc_flr =
+        std::make_unique<tf::ProcessFunctionLibraryRuntime>(device_mgr_, worker_env_->env,
+                                                            gdef.versions().producer(), item->lib_def.get(),
+                                                            graph_options.optimizer_options(), cluster_flr);
 
     // Constructs the graph out of "gdef".
     tf::Graph graph(tf::OpRegistry::Global());
@@ -60,10 +69,10 @@ tf::Status MDGraphMgr::InitItem(const std::string &session, const tf::GraphDef &
         return "salus";
     };
     popts.new_name = [this](const auto &prefix) {
-        salus::Guard l(mu_);
+        tf::mutex_lock l(mu_);
         return tf::strings::StrCat(prefix, "_G", next_id_++);
     };
-    popts.get_incarnation = [deviceMgr = device_mgr_](const auto &name)
+    popts.get_incarnation = [deviceMgr = device_mgr_](const auto &name) -> uint64_t
     {
         tf::Device *device = nullptr;
         auto s = deviceMgr->LookupDevice(name, &device);
@@ -97,20 +106,18 @@ tf::Status MDGraphMgr::InitItem(const std::string &session, const tf::GraphDef &
     optimization_options.flib_def = item->lib_def.get();
     optimization_options.partition_graphs = &partition_graphs;
     TF_RETURN_IF_ERROR(
-        tf::OptimizationPassRegistry::Global()->RunGrouping(OptimizationPassRegistry::POST_PARTITIONING,
+        tf::OptimizationPassRegistry::Global()->RunGrouping(tf::OptimizationPassRegistry::POST_PARTITIONING,
                                                             optimization_options));
 
-    MultiDeviceExecutorParams params;
+    MultiDeviceExecutorParams params(*worker_env_->device_mgr, m_resourceMgr);
     params.session = session;
-    params.deviceMgr = worker_env_->device_mgr;
-    params.resourceMgr = m_resourceMgr.get();
 
     item->units.reserve(partitions.size());
     item->graph_mgr = this;
     const auto &optimizer_opts = graph_options.optimizer_options();
     // FIXME: see if anything is done in graph optimizer
     // FIXME: see if MaybeRewriteGraph has done anything
-    GraphOptimizer optimizer(optimizer_opts);
+    tf::GraphOptimizer optimizer(optimizer_opts);
     for (auto & [key, subgraph] : partition_graphs) {
         if (key == "salus") {
             continue;
@@ -135,29 +142,24 @@ tf::Status MDGraphMgr::InitItem(const std::string &session, const tf::GraphDef &
         // to ensure the kernels cached for the session are alive.
         // FIXME: why use global shared op_segment?
         // auto opseg = unit->device->op_segment();
-        auto opseg = m_opseg.get();
-        opseg->AddHold(session);
+        auto &opseg = m_opseg;
+        opseg.AddHold(session);
 
         auto producer = subgraph->versions().producer();
         params.create_fruntime = [worker_env = worker_env_, producer, item, optimizer_opts](auto dev)
         {
             item->Ref();
-            return NewFunctionLibraryRuntime(worker_env->device_mgr, worker_env->env, dev, producer,
-                                             item->lib_def, optimizer_opts);
-        };
-
-        params.delete_fruntime = [item](FunctionLibraryRuntime *r) {
-            delete r;
-            item->Unref();
+            auto flib = tf::NewFunctionLibraryRuntime(worker_env->device_mgr, worker_env->env, dev, producer, item->lib_def.get(), optimizer_opts, item->proc_flr.get());
+            return std::shared_ptr<tf::FunctionLibraryRuntime>(flib.release(), [a = sstl::wrap_unref(item)](auto r) { delete r; });
         };
 
         // Construct the root executor for the subgraph.
-        params.find_kernel = [this, session, opseg](const auto &ndef, auto *devName, auto **kernel) {
+        params.find_kernel = [this, session, &opseg](const auto &ndef, auto *devName, auto **kernel) {
             *kernel = nullptr;
             devName->clear();
 
             bool found = true;
-            auto ok = opseg->FindOrCreate(session, ndef.name(), kernel, [&found](auto) {
+            auto ok = opseg.FindOrCreate(session, ndef.name(), kernel, [&found](auto) {
                 found = false;
                 return tf::Status::OK();
             });
@@ -165,7 +167,7 @@ tf::Status MDGraphMgr::InitItem(const std::string &session, const tf::GraphDef &
                 return ok;
             }
 
-            salus::Guard l(m_mu);
+            sstl::Guard l(m_mu);
             auto it = m_kernelToDevice.find(*kernel);
             if (it == m_kernelToDevice.end()) {
                 return tf::errors::Internal("We've created the kernel, but don't remember its device");
@@ -174,7 +176,7 @@ tf::Status MDGraphMgr::InitItem(const std::string &session, const tf::GraphDef &
             return tf::Status::OK();
         };
 
-        params.create_kernel = [this, session, opseg](const auto &ndef, auto *lib, auto **kernel) {
+        params.create_kernel = [this, session, &opseg](const auto &ndef, auto *lib, auto **kernel) {
             // We do not share the kernel via the OpSegment if the node is
             // stateless, or a function.
             // NOTE(mrry): We must not share function kernels (implemented
@@ -188,14 +190,14 @@ tf::Status MDGraphMgr::InitItem(const std::string &session, const tf::GraphDef &
 
             auto create_fn = [this, lib, &ndef](auto **kernel) {
                 auto s = lib->CreateKernel(ndef, kernel);
-                salus::Guard l(m_mu);
+                sstl::Guard l(m_mu);
                 m_kernelToDevice[*kernel] = lib->device()->name();
                 return s;
             };
             // Kernels created for subgraph nodes need to be cached.  On
             // cache miss, create_fn() is invoked to create a kernel based
             // on the function library here + global op registry.
-            return opseg->FindOrCreate(session, ndef.name(), kernel, create_fn);
+            return opseg.FindOrCreate(session, ndef.name(), kernel, create_fn);
         };
 
         params.delete_kernel = [](auto *kernel, auto *lib) {
@@ -205,11 +207,9 @@ tf::Status MDGraphMgr::InitItem(const std::string &session, const tf::GraphDef &
             }
         };
 
-        unit->lib = NewFunctionLibraryRuntime(worker_env_->device_mgr, worker_env_->env, unit.device,
-                                              subgraph->versions().producer(), item->lib_def,
-                                              graph_options.optimizer_options());
+        unit.lib = item->proc_flr->GetFLR(unit.device->name());
 
-        optimizer.Optimize(unit->lib, worker_env_->env, unit.device, &subgraph, /*shape_map=*/nullptr);
+        optimizer.Optimize(unit.lib, worker_env_->env, unit.device, &subgraph, /*shape_map=*/nullptr);
 
         // EXPERIMENTAL: tfdbg inserts debug nodes (i.e., probes) to the graph.
         if (!debug_options.debug_tensor_watch_opts().empty()) {
@@ -217,17 +217,18 @@ tf::Status MDGraphMgr::InitItem(const std::string &session, const tf::GraphDef &
         }
 
         TF_RETURN_IF_ERROR(
-            EnsureMemoryTypes(DeviceType(unit.device->device_type()), unit.device->name(), subgraph.get()));
-        unit->graph = subgraph.get();
-        unit->build_cost_model = graph_options.build_cost_model();
+            tf::EnsureMemoryTypes(tf::DeviceType(unit.device->device_type()), unit.device->name(), subgraph.get()));
+        unit.graph = subgraph.get();
+        unit.build_cost_model = graph_options.build_cost_model();
 
-        // TODO: Always skip cost models, which causes a deadlock
+        // NOTE: Always skip cost models, which causes a deadlock
         // when calling item->Unref() from delete_fruntime.
         skip_cost_models_ = true;
 
+        params.ins = m_execCtx;
         TF_RETURN_IF_ERROR(NewMultiDeviceExecutor(params, subgraph.release(), &unit.root));
     }
     return tf::Status::OK();
 }
 
-} // namespace symbiotic::salus::oplib::tensorflow
+} // namespace salus::oplib::tensorflow

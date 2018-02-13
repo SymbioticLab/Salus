@@ -16,58 +16,58 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef SYMBIOTIC_SALUS_OPLIB_TENSORFLOW_DEVICECONTEXTWITHDEVICE_H
-#define SYMBIOTIC_SALUS_OPLIB_TENSORFLOW_DEVICECONTEXTWITHDEVICE_H
+#ifndef SALUS_OPLIB_TENSORFLOW_DEVICECONTEXTWITHDEVICE_H
+#define SALUS_OPLIB_TENSORFLOW_DEVICECONTEXTWITHDEVICE_H
 
 #include "oplibraries/tensorflow/tensorflow_headers.h"
 #include "utils/pointerutils.h"
 #include <memory>
 
-namespace symbiotic::salus::oplib::tensorflow {
+namespace salus::oplib::tensorflow {
 
 /**
- * @brief A thin wrapper of ::tensorflow::DeviceContext that also provides a device pointer
+ * @brief A thin wrapper of tf::DeviceContext that also provides a device pointer
  */
-class DeviceContextWithDevice : public ::tensorflow::DeviceContext
+class DeviceContextWithDevice : public tf::DeviceContext
 {
 public:
-    using ReffedDeviceContext = utils::ScopedUnref<DeviceContext>;
+    using ReffedDeviceContext = sstl::ScopedUnref<DeviceContext>;
 
     /**
      * @param actual Takes one ref on actual
      */
-    DeviceContextWithDevice(std::shared_ptr<::tensorflow::Device> dev, ReffedDeviceContext &&actual);
+    DeviceContextWithDevice(std::shared_ptr<tf::Device> dev, ReffedDeviceContext &&actual);
 
     ~DeviceContextWithDevice() override;
 
     perftools::gputools::Stream *stream() const override;
 
-    void MaintainLifetimeOnStream(const ::tensorflow::Tensor *t,
+    void MaintainLifetimeOnStream(const tf::Tensor *t,
                                   perftools::gputools::Stream *stream) const override;
 
-    void CopyCPUTensorToDevice(const ::tensorflow::Tensor *cpu_tensor, ::tensorflow::Device *device,
-                               ::tensorflow::Tensor *device_tensor,
-                               ::tensorflow::StatusCallback done) const override;
+    void CopyCPUTensorToDevice(const tf::Tensor *cpu_tensor, tf::Device *device,
+                               tf::Tensor *device_tensor,
+                               tf::StatusCallback done) const override;
 
-    void CopyDeviceTensorToCPU(const ::tensorflow::Tensor *device_tensor,
-                               ::tensorflow::StringPiece tensor_name, ::tensorflow::Device *device,
-                               ::tensorflow::Tensor *cpu_tensor, ::tensorflow::StatusCallback done) override;
+    void CopyDeviceTensorToCPU(const tf::Tensor *device_tensor,
+                               tf::StringPiece tensor_name, tf::Device *device,
+                               tf::Tensor *cpu_tensor, tf::StatusCallback done) override;
 
-    ::tensorflow::Device *device() const
+    tf::Device *device() const
     {
         return m_device.get();
     }
 
-    ::tensorflow::DeviceContext *wrapped() const
+    tf::DeviceContext *wrapped() const
     {
         return m_actualCtx.get();
     }
 
 private:
-    std::shared_ptr<::tensorflow::Device> m_device;
+    std::shared_ptr<tf::Device> m_device;
     ReffedDeviceContext m_actualCtx;
 };
 
-} // namespace symbiotic::salus::oplib::tensorflow
+} // namespace salus::oplib::tensorflow
 
-#endif // SYMBIOTIC_SALUS_OPLIB_TENSORFLOW_DEVICECONTEXTWITHDEVICE_H
+#endif // SALUS_OPLIB_TENSORFLOW_DEVICECONTEXTWITHDEVICE_H

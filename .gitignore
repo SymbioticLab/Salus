@@ -40,3 +40,6 @@ scripts/**
 .cache
 __pycache__
 *.pyc
+
+# CLion
+.idea

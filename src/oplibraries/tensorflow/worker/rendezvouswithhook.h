@@ -17,8 +17,8 @@
  * 
  */
 
-#ifndef SYMBIOTIC_SALUS_OPLIB_TENSORFLOW_LOCALWRAPPERRENDEZVOUS_H
-#define SYMBIOTIC_SALUS_OPLIB_TENSORFLOW_LOCALWRAPPERRENDEZVOUS_H
+#ifndef SALUS_OPLIB_TENSORFLOW_LOCALWRAPPERRENDEZVOUS_H
+#define SALUS_OPLIB_TENSORFLOW_LOCALWRAPPERRENDEZVOUS_H
 
 /*
  * Make sure tensorflow_headers is included first before
@@ -36,7 +36,7 @@ class RendezvousWithHook : public tensorflow::Rendezvous
 {
 public:
     explicit RendezvousWithHook(std::shared_ptr<tensorflow::Device> device,
-                                utils::ScopedUnref<tensorflow::Rendezvous> localRendez);
+                                sstl::ScopedUnref<tensorflow::Rendezvous> localRendez);
     ~RendezvousWithHook() override;
 
     tensorflow::Status Send(const ParsedKey& parsed,
@@ -50,7 +50,7 @@ public:
 
 private:
     std::shared_ptr<tensorflow::Device> m_device;
-    utils::ScopedUnref<tensorflow::Rendezvous> m_local;
+    sstl::ScopedUnref<tensorflow::Rendezvous> m_local;
 };
 
-#endif // SYMBIOTIC_SALUS_OPLIB_TENSORFLOW_LOCALWRAPPERRENDEZVOUS_H
+#endif // SALUS_OPLIB_TENSORFLOW_LOCALWRAPPERRENDEZVOUS_H

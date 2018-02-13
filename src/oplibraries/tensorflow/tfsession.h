@@ -16,16 +16,17 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef SYMBIOTIC_SALUS_OPLIB_TENSORFLOW_TFSESSION_H
-#define SYMBIOTIC_SALUS_OPLIB_TENSORFLOW_TFSESSION_H
+#ifndef SALUS_OPLIB_TENSORFLOW_TFSESSION_H
+#define SALUS_OPLIB_TENSORFLOW_TFSESSION_H
 
+#include "oplibraries/tensorflow/tfoplibraryv2.h"
+#include "oplibraries/tensorflow/tfutils.h"
 #include "utils/macros.h"
 #include "utils/pointerutils.h"
-#include "execution/executionengine.h"
-#include "oplibraries/tensorflow/tfutils.h"
 #include <memory>
 
-namespace symbiotic::salus::oplib::tensorflow {
+class ExecutionContext;
+namespace salus::oplib::tensorflow {
 class TFInstance;
 
 /**
@@ -34,7 +35,10 @@ class TFInstance;
 class TFSession : public std::enable_shared_from_this<TFSession>
 {
 public:
+    SALUS_DISALLOW_COPY_AND_ASSIGN(TFSession);
+
     TFSession(TFInstance &inst, ExecutionContext &&ctx, const tf::ConfigProto &config, tf::GraphDef *gdef);
+
     ~TFSession();
 
     std::string handle() const;
@@ -46,22 +50,23 @@ public:
      */
     void safeClose();
 
-#define DECLARE_HANDLER(name) \
-    void handle ## name (ZmqServer::Sender sender, const tf:: name ## Request &req, tf:: name ## Response &resp, StatusCallback &&cb)
+#define DECLARE_HANDLER(name)                                                                                \
+    void handle##name(const tf::name##Request &req, tf::name##Response &resp, HandlerCallback &&cb)
 
     DECLARE_HANDLER(ExtendSession);
+
     DECLARE_HANDLER(PartialRunSetup);
+
     DECLARE_HANDLER(RunStep);
 
 #undef DECLARE_HANDLER
 
 private:
     class TFSessionPrivate;
-    utils::PImpl<TFSessionPrivate> d;
 
-    SALUS_DISALLOW_COPY_AND_ASSIGN(TFSession);
+    sstl::PImpl<TFSessionPrivate> d;
 };
 
-} // namespace symbiotic::salus::oplib::tensorflow
+} // namespace salus::oplib::tensorflow
 
-#endif // SYMBIOTIC_SALUS_OPLIB_TENSORFLOW_TFSESSION_H
+#endif // SALUS_OPLIB_TENSORFLOW_TFSESSION_H

@@ -30,14 +30,12 @@ namespace salus::oplib::tensorflow {
     return inst;
 }
 
-TFInstance::TFInstance(const tf::ConfigProto &config)
+TFInstance::TFInstance()
     : m_env(tf::Env::Default())
 {
     tf::SessionOptions sess_opts;
     // Disable old style RPCDevice creation if any.
     (*sess_opts.config.mutable_device_count())["RPC"] = 0;
-
-    sess_opts.config.MergeFrom(config);
 
     // Load devices
     SALUS_THROW_IF_ERROR(tf::DeviceFactory::AddDevices(sess_opts, namePrefix(), &m_devices));
@@ -46,8 +44,8 @@ TFInstance::TFInstance(const tf::ConfigProto &config)
 
 TFInstance::~TFInstance() = default;
 
-void TFInstance::handleCreateSession(ZmqServer::Sender sender, const tf::CreateSessionRequest &req, tf::CreateSessionResponse &resp,
-                                     StatusCallback &&cb)
+void TFInstance::handleCreateSession(const tf::CreateSessionRequest &req, tf::CreateSessionResponse &resp,
+                                     HandlerCallback &&cb)
 {
     // Check session resource
     ResourceMap rm;
@@ -72,20 +70,20 @@ void TFInstance::handleCreateSession(ZmqServer::Sender sender, const tf::CreateS
     auto inserter = ExecutionEngine::instance().createSessionOffer(rm);
     if (!inserter) {
         LOG(WARNING) << "Rejecting session due to unsafe resource usage. Predicted usage: "
-                        << rm.DebugString()
-                        << ", current usage: " << SessionResourceTracker::instance().DebugString();
+                     << rm.DebugString()
+                     << ", current usage: " << SessionResourceTracker::instance().DebugString();
         throw TFException(tf::errors::Internal("Session memory usage unsafe"));
     }
 
     SALUS_THROW_IF_ERROR(ValidateExternalGraphDefSyntax(req.graph_def()));
 
-    auto *gdef = const_cast<CreateSessionRequest &>(req)->mutable_graph_def();
+    auto *gdef = const_cast<tf::CreateSessionRequest &>(req).mutable_graph_def();
     auto session = std::make_shared<TFSession>(*this, std::move(inserter), req.config(), gdef);
 
     resp.set_session_handle(session->handle());
     // Insert into the session map, which takes ownership of the session.
     {
-        salus::Guard l(m_mu);
+        sstl::Guard l(m_mu);
         DCHECK(m_sessions.try_emplace(session->handle(), std::move(session)).second);
     }
 
@@ -94,7 +92,7 @@ void TFInstance::handleCreateSession(ZmqServer::Sender sender, const tf::CreateS
 
 std::shared_ptr<TFSession> TFInstance::findSession(const std::string &sessHandle)
 {
-    salus::Guard g(m_mu);
+    sstl::Guard g(m_mu);
     auto it = m_sessions.find(sessHandle);
     if (it == m_sessions.end()) {
         throw TFException(tf::errors::InvalidArgument("Session ", sessHandle,
@@ -105,7 +103,7 @@ std::shared_ptr<TFSession> TFInstance::findSession(const std::string &sessHandle
 
 std::shared_ptr<TFSession> TFInstance::popSession(const std::string &sessHandle)
 {
-    salus::Guard g(m_mu);
+    sstl::Guard g(m_mu);
     auto nh = m_sessions.extract(sessHandle);
     if (!nh) {
         throw TFException(tf::errors::InvalidArgument("Session ", sessHandle,
@@ -114,31 +112,34 @@ std::shared_ptr<TFSession> TFInstance::popSession(const std::string &sessHandle)
     return std::move(nh.mapped());
 }
 
-void TFInstance::handleCloseSession(ZmqServer::Sender sender, const tf::CloseSessionRequest &req, tf::CloseSessionResponse &resp,
-                                    StatusCallback &&cb)
+void TFInstance::handleCloseSession(const tf::CloseSessionRequest &req, tf::CloseSessionResponse &resp,
+                                    HandlerCallback &&cb)
 {
-    auto sess = popSession(req->session_handle());
+    UNUSED(resp);
+    auto sess = popSession(req.session_handle());
     sess->safeClose();
     cb(Status::OK());
 }
 
-void TFInstance::handleListDevices(ZmqServer::Sender sender, const tf::ListDevicesRequest &req, tf::ListDevicesResponse &resp, StatusCallback &&cb)
+void TFInstance::handleListDevices(const tf::ListDevicesRequest &req, tf::ListDevicesResponse &resp,
+                                   HandlerCallback &&cb)
 {
-    UNUSED(sender);
     UNUSED(req);
     for (auto dev : devices()) {
-        *(resp->add_local_device()) = dev->attributes();
+        *(resp.add_local_device()) = dev->attributes();
     }
     cb(Status::OK());
 }
 
-void TFInstance::handleReset(ZmqServer::Sender sender, const tf::ResetRequest &req, tf::ResetResponse &resp, StatusCallback &&cb)
+void TFInstance::handleReset(const tf::ResetRequest &req, tf::ResetResponse &resp, HandlerCallback &&cb)
 {
+    UNUSED(req);
+    UNUSED(resp);
     std::vector<std::shared_ptr<TFSession>> sessToClose;
     {
-        salus::Guard g(m_mu);
+        sstl::Guard g(m_mu);
         sessToClose.reserve(m_sessions.size());
-        for (auto &[sessHandle, sess] : m_sessions) {
+        for (auto & [sessHandle, sess] : m_sessions) {
             UNUSED(sessHandle);
             sessToClose.emplace_back(std::move(sess));
         }
@@ -157,4 +158,4 @@ void TFInstance::handleReset(ZmqServer::Sender sender, const tf::ResetRequest &r
     cb(s);
 }
 
-} // namespace symbiotic::salus::oplib::tensorflow
+} // namespace salus::oplib::tensorflow

@@ -25,5 +25,6 @@ target_include_directories(protos_gen
 
 if(USE_TENSORFLOW)
     # HACK: we need the proto definition from TensorFlow
+        message(${TensorFlow_INCLUDE_DIRS})
     target_link_libraries(protos_gen tensorflow::headers)
 endif(USE_TENSORFLOW)

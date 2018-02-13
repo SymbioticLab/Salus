@@ -37,7 +37,7 @@ public:
 
     void selectCandidateSessions(const SessionList &sessions,
                                  const SessionChangeSet &changeset,
-                                 utils::not_null<CandidateList*> candidates) override;
+                                 sstl::not_null<CandidateList*> candidates) override;
     std::pair<size_t, bool> maybeScheduleFrom(PSessionItem item) override;
 
     using IScheduler::debugString;

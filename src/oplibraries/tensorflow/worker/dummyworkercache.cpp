@@ -35,7 +35,7 @@ void DummyWorkerCache::ListWorkers(std::vector<std::string> *workers) const
     workers->clear();
 }
 
-tf::WorkerInterface *DummyWorkerCache::CreateWorker(const std::string &target)
+tf::WorkerInterface *DummyWorkerCache::CreateWorker(const std::string &)
 {
     LOG(ERROR) << "DummyWorkerCache::CreateWorker called!!";
     return nullptr;
@@ -54,4 +54,4 @@ void DummyWorkerCache::GetDeviceLocalityAsync(const std::string &, tf::DeviceLoc
     done(tf::errors::Internal("DummyWorkerCache::GetDeviceLocalityAsync called!"));
 }
 
-} // namespace symbiotic::salus::oplib::tensorflow
+} // namespace salus::oplib::tensorflow

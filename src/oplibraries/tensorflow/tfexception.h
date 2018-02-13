@@ -16,14 +16,14 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef SYMBIOTIC_SALUS_OPLIB_TENSORFLOW_TFEXCEPTION_H
-#define SYMBIOTIC_SALUS_OPLIB_TENSORFLOW_TFEXCEPTION_H
+#ifndef SALUS_OPLIB_TENSORFLOW_TFEXCEPTION_H
+#define SALUS_OPLIB_TENSORFLOW_TFEXCEPTION_H
 
 #include "oplibraries/tensorflow/tensorflow_headers.h"
 #include "oplibraries/tensorflow/tfutils.h"
 #include "utils/macros.h"
 
-namespace symbiotic::salus::oplib::tensorflow {
+namespace salus::oplib::tensorflow {
 
 /**
  * @brief an exception encloses a ::tensorflow::Status
@@ -36,18 +36,21 @@ public:
     explicit TFException(const Status &code);
     ~TFException() override;
 
-    const Status &code() const { return m_status; }
+    const Status &code() const
+    {
+        return m_status;
+    }
 
-    const char *what() const override;
+    const char *what() const noexcept override;
 };
 
-} // namespace symbiotic::salus::oplib::tensorflow
+} // namespace salus::oplib::tensorflow
 
 #define SALUS_THROW_IF_ERROR(...)                                                                            \
     do {                                                                                                     \
         const auto _status = (__VA_ARGS__);                                                                  \
         if (SALUS_PREDICT_FALSE(!_status.ok()))                                                              \
-            throw symbiotic::salus::oplib::tensorflow::TFException(_status);                                 \
+            throw ::salus::oplib::tensorflow::TFException(_status);                                 \
     } while (0)
 
-#endif // SYMBIOTIC_SALUS_OPLIB_TENSORFLOW_TFEXCEPTION_H
+#endif // SALUS_OPLIB_TENSORFLOW_TFEXCEPTION_H

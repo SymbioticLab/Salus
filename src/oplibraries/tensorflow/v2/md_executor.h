@@ -22,8 +22,8 @@ limitations under the License.
  * with ours.
  */
 #include "oplibraries/tensorflow/tensorflow_headers.h"
-#include "oplibraries/tensorflow/tfutils.h"
 #include "execution/executionengine.h"
+#include "oplibraries/tensorflow/tfutils.h"
 #include "utils/pointerutils.h"
 #include <functional>
 
@@ -35,21 +35,27 @@ class Device;
 class DeviceMgr;
 } // namespace tensorflow
 
-namespace symbiotic::salus::oplib::tensorflow {
+namespace salus::oplib::tensorflow {
 struct MultiDeviceExecutorParams
 {
+    MultiDeviceExecutorParams(tf::DeviceMgr &deviceMgr, tf::ResourceMgr &resourceMgr)
+        : deviceMgr(deviceMgr)
+        , resourceMgr(resourceMgr)
+    {
+    }
+
     std::string session;
 
+    ExecutionContext ins;
+
     // The devices this executor should use.
-    not_null<tf::DeviceMgr> deviceMgr;
+    tf::DeviceMgr &deviceMgr;
 
     // The resource manager this executor should use.
-    not_null<tf::ResourceMgr> resourceMgr;
+    tf::ResourceMgr &resourceMgr;
 
     // create_fruntime creates function library runtime given device,
-    // caller takes the ownership of the created library runtime.
-    std::function<tf::FunctionLibraryRuntime *(tf::Device *)> create_fruntime;
-    std::function<void(tf::FunctionLibraryRuntime *)> delete_fruntime;
+    std::function<std::shared_ptr<tf::FunctionLibraryRuntime>(tf::Device *)> create_fruntime;
 
     // find_kernel returns an instance of op kernel, which was created on device.
     // create_kernel returns an instance of op kernel based on NodeDef for device d.
@@ -70,9 +76,8 @@ struct MultiDeviceExecutorParams
 // The caller keeps the ownership of "device".
 // The returned executor takes the ownership of "graph".
 // Otherwise, returns an error status.
-Status NewMultiDeviceExecutor(const MultiDeviceExecutorParams &params, const tf::Graph *graph,
-                              ExecutionContext ins, tf::Executor **executor);
+Status NewMultiDeviceExecutor(MultiDeviceExecutorParams params, const tf::Graph *graph, tf::Executor **executor);
 
-} // namespace symbiotic::salus::oplib::tensorflow
+} // namespace salus::oplib::tensorflow
 
 #endif // OPLIBRARIES_TENSORFLOW_MULTI_DEVICE_EXECUTOR_H_
