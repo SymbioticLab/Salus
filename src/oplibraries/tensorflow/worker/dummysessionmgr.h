@@ -6,13 +6,15 @@
 #define SALUS_OPLIB_TENSORFLOW_DUMMYSESSIONMGR_H
 
 #include "oplibraries/tensorflow/tensorflow_headers.h"
+#include <functional>
 
 namespace salus::oplib::tensorflow {
 
-class SingleSessionMgr : public tf::SessionMgrInterface
+class LocalSessionMgr : public tf::SessionMgrInterface
 {
 public:
-    explicit SingleSessionMgr(std::unique_ptr<tf::WorkerSession> &&workerSess);
+    using CreateWorkerSessionFn = std::function<std::unique_ptr<tf::WorkerSession>(const std::string&)>;
+    explicit LocalSessionMgr(CreateWorkerSessionFn fn);
 
     Status CreateSession(const std::string &session, const tf::ServerDef &server_def, bool isolate_session_state) override;
 
@@ -22,6 +24,7 @@ public:
 
 private:
     std::unique_ptr<tf::WorkerSession> m_workerSess;
+    CreateWorkerSessionFn  m_fn;
 };
 
 }

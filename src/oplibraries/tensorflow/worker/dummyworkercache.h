@@ -28,10 +28,10 @@ namespace salus::oplib::tensorflow {
 /**
  * @brief An empty WorkerCache because we don't use remote TF workers.
  */
-class DummyWorkerCache : public tf::WorkerCacheInterface
+class EmptyWorkerCache : public tf::WorkerCacheInterface
 {
 public:
-    ~DummyWorkerCache() override = default;
+    ~EmptyWorkerCache() override = default;
 
     void ListWorkers(std::vector<std::string> *workers) const override;
 
@@ -43,8 +43,24 @@ public:
                                 tf::StatusCallback done) override;
 };
 
-tf::Status DummyWorkerCacheFactory(const ::tensorflow::WorkerCacheFactoryOptions &options,
-                                   tf::WorkerCacheInterface **inout);
+class SingleWorkerCache : public tf::WorkerCacheInterface
+{
+    std::unique_ptr<tf::Worker> m_worker;
+    std::string m_workerName;
+
+public:
+    explicit SingleWorkerCache(std::unique_ptr<tf::Worker> &&worker, const std::string &workerName);
+    ~SingleWorkerCache() override;
+
+    void ListWorkers(std::vector<std::string> *workers) const override;
+
+    tf::WorkerInterface *CreateWorker(const std::string &target) override;
+
+    bool GetDeviceLocalityNonBlocking(const std::string &device, tf::DeviceLocality *locality) override;
+
+    void GetDeviceLocalityAsync(const std::string &device, tf::DeviceLocality *locality,
+                                tf::StatusCallback done) override;
+};
 
 } // namespace salus::oplib::tensorflow
 

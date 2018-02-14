@@ -6,23 +6,29 @@
 
 namespace salus::oplib::tensorflow {
 
-SingleSessionMgr::SingleSessionMgr(std::unique_ptr<tf::WorkerSession> &&workerSess)
-    : m_workerSess(std::move(workerSess))
+LocalSessionMgr::LocalSessionMgr(CreateWorkerSessionFn fn)
+    : m_workerSess(nullptr)
+    , m_fn(std::move(fn))
 {
 }
 
-tf::WorkerSession *SingleSessionMgr::WorkerSessionForSession(const std::string &)
+tf::WorkerSession *LocalSessionMgr::WorkerSessionForSession(const std::string &)
 {
+    DCHECK(m_workerSess);
     return m_workerSess.get();
 }
 
-Status SingleSessionMgr::DeleteSession(const std::string &)
+Status LocalSessionMgr::DeleteSession(const std::string &)
 {
     return Status::OK();
 }
 
-Status SingleSessionMgr::CreateSession(const std::string &, const tf::ServerDef &, bool)
+Status LocalSessionMgr::CreateSession(const std::string &session, const tf::ServerDef &, bool)
 {
+    if (!m_workerSess) {
+        m_workerSess = m_fn(session);
+    }
+
     return Status::OK();
 }
 } // namespace salus::oplib::tensorflow

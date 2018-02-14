@@ -23,35 +23,64 @@ namespace tf = ::tensorflow;
 
 namespace salus::oplib::tensorflow {
 
-tf::Status DummyWorkerCacheFactory(const tf::WorkerCacheFactoryOptions &, tf::WorkerCacheInterface **inout)
-{
-    *inout = new DummyWorkerCache();
-    return tf::Status::OK();
-}
-
-void DummyWorkerCache::ListWorkers(std::vector<std::string> *workers) const
+void EmptyWorkerCache::ListWorkers(std::vector<std::string> *workers) const
 {
     DCHECK(workers);
     workers->clear();
 }
 
-tf::WorkerInterface *DummyWorkerCache::CreateWorker(const std::string &)
+tf::WorkerInterface *EmptyWorkerCache::CreateWorker(const std::string &)
 {
-    LOG(ERROR) << "DummyWorkerCache::CreateWorker called!!";
+    LOG(ERROR) << "EmptyWorkerCache::CreateWorker called!!";
     return nullptr;
 }
 
-bool DummyWorkerCache::GetDeviceLocalityNonBlocking(const std::string &, tf::DeviceLocality *)
+bool EmptyWorkerCache::GetDeviceLocalityNonBlocking(const std::string &, tf::DeviceLocality *)
 {
-    LOG(ERROR) << "DummyWorkerCache::GetDeviceLocalityNonBlocking called!!";
+    LOG(ERROR) << "EmptyWorkerCache::GetDeviceLocalityNonBlocking called!!";
     return false;
 }
 
-void DummyWorkerCache::GetDeviceLocalityAsync(const std::string &, tf::DeviceLocality *,
+void EmptyWorkerCache::GetDeviceLocalityAsync(const std::string &, tf::DeviceLocality *,
                                               tf::StatusCallback done)
 {
-    LOG(ERROR) << "DummyWorkerCache::GetDeviceLocalityAsync called!!";
-    done(tf::errors::Internal("DummyWorkerCache::GetDeviceLocalityAsync called!"));
+    LOG(ERROR) << "EmptyWorkerCache::GetDeviceLocalityAsync called!!";
+    done(tf::errors::Internal("EmptyWorkerCache::GetDeviceLocalityAsync called!"));
+}
+
+SingleWorkerCache::SingleWorkerCache(std::unique_ptr<tf::Worker> &&worker, const std::string &workerName)
+    : m_worker(std::move(worker))
+    , m_workerName(workerName)
+{
+}
+
+SingleWorkerCache::~SingleWorkerCache() = default;
+
+void SingleWorkerCache::ListWorkers(std::vector<std::string> *workers) const
+{
+    DCHECK(workers);
+    workers->clear();
+    workers->emplace_back(m_workerName);
+}
+
+tf::WorkerInterface *SingleWorkerCache::CreateWorker(const std::string &target)
+{
+    DCHECK_EQ(target, m_workerName);
+    return m_worker.get();
+}
+
+bool SingleWorkerCache::GetDeviceLocalityNonBlocking(const std::string &, tf::DeviceLocality *dl)
+{
+    DCHECK(dl);
+    dl->set_bus_id(0);
+    return true;
+}
+
+void SingleWorkerCache::GetDeviceLocalityAsync(const std::string &, tf::DeviceLocality *,
+                                              tf::StatusCallback done)
+{
+    LOG(ERROR) << "SingleWorkerCache::GetDeviceLocalityAsync called!!";
+    done(tf::errors::Internal("SingleWorkerCache::GetDeviceLocalityAsync called!"));
 }
 
 } // namespace salus::oplib::tensorflow

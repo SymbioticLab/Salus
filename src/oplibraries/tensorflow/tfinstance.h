@@ -65,7 +65,7 @@ public:
 
     static auto namePrefix()
     {
-        return "/job:executor/replica:0/task:0";
+        return "/job:salus/replica:0/task:0";
     }
 
     auto &env() const

@@ -61,14 +61,14 @@ public:
 
     TFInstance &m_inst;
 
+    tf::WorkerEnv m_workerEnv;
     tf::MasterEnv m_masterEnv;
+
+    // master session -> worker cache -> worker
     sstl::ScopedUnref<tf::MasterSession> m_masterSess;
 
-    tf::WorkerEnv m_workerEnv;
-    std::unique_ptr<tf::Worker> m_worker;
-
     // owns graph mgr
-    std::unique_ptr<SingleSessionMgr> m_sessMgr;
+    std::unique_ptr<LocalSessionMgr> m_sessMgr;
 
     std::unique_ptr<SalusRendezvousMgr> m_rendezvousMgr;
 
@@ -95,7 +95,7 @@ void TFSession::safeClose()
 
 #define IMPL_HANDLER(name)                                                                                   \
     void TFSession::handle##name(const tf::name##Request &req, tf::name##Response &resp,                     \
-                                 HandlerCallback &&cb)                                                        \
+                                 HandlerCallback &&cb)                                                       \
     {                                                                                                        \
         d->handle##name(req, resp, std::move(cb));                                                           \
     }
@@ -117,24 +117,40 @@ std::string TFSession::TFSessionPrivate::handle() const
 TFSession::TFSessionPrivate::TFSessionPrivate(TFInstance &inst, ExecutionContext &&ctx,
                                               const tf::ConfigProto &config, tf::GraphDef *gdef)
     : m_inst(inst)
+    , m_sessMgr(nullptr)
+    , m_rendezvousMgr(nullptr)
 {
-    // Populate master and worker env
-    // FIXME: move this into its own function
-    m_masterEnv.env = &m_inst.env();
+    // Setup session manager that creates worker session later
+    m_sessMgr = std::make_unique<LocalSessionMgr>([this, ctx](auto sessHandle) {
+        // worker session takes ownership of a deviceMgr, so we create shadow devices for it.
+        std::vector<tf::Device *> shadowDevices;
+        for (auto d : m_inst.devices()) {
+            shadowDevices.emplace_back(tf::RenamedDevice::NewRenamedDevice(m_inst.namePrefix(), d, false, true));
+        }
+
+        return std::make_unique<tf::WorkerSession>(sessHandle, m_inst.namePrefix(),
+                                                   std::make_unique<EmptyWorkerCache>(),
+                                                   std::make_unique<tf::DeviceMgr>(shadowDevices),
+                                                   std::make_unique<MDGraphMgr>(&m_workerEnv,
+                                                                                &m_inst.deviceMgr(), ctx));
+
+    });
+
+    // Populate worker env, which uses the session manager
     m_workerEnv.env = &m_inst.env();
-
-    // Configure shared devices between master and worker.
-    m_masterEnv.local_devices = m_inst.devices();
     m_workerEnv.device_mgr = &m_inst.deviceMgr();
+    m_workerEnv.compute_pool = computePool(m_inst.env());
+    m_workerEnv.session_mgr = m_sessMgr.get();
+    m_rendezvousMgr = std::make_unique<SalusRendezvousMgr>(&m_workerEnv);
+    m_workerEnv.rendezvous_mgr = m_rendezvousMgr.get();
 
-    // Create a dummy worker cache, because we don't use remote TF workers.
-    auto workerCache = std::make_unique<DummyWorkerCache>();
-    m_masterEnv.worker_cache = workerCache.get();
-    m_masterEnv.worker_cache_factory = DummyWorkerCacheFactory;
+    // Create a worker cache, containing the only local worker
+    auto workerCache = std::make_unique<SingleWorkerCache>(std::make_unique<tf::Worker>(&m_workerEnv), m_inst.namePrefix());
 
-    // Finish setting up master environment and create master session
+    // Populate master env
+    m_masterEnv.env = &m_inst.env();
+    m_masterEnv.local_devices = m_inst.devices();
     m_masterEnv.ops = tf::OpRegistry::Global();
-    m_masterEnv.master_session_factory = nullptr;
 
     auto device_set = std::make_unique<tf::DeviceSet>();
     int num_local_devices = 0;
@@ -146,35 +162,14 @@ TFSession::TFSessionPrivate::TFSessionPrivate(TFInstance &inst, ExecutionContext
         }
         num_local_devices++;
     }
-    DCHECK(device_set->client_device()) << "No client device found. Missing "
-                                        << "CPU:0 device?";
+    DCHECK(device_set->client_device()) << "No client device found. Missing CPU:0 device?";
 
     tf::SessionOptions options;
     options.config = config;
-    m_masterSess =
-        sstl::wrap_unref(new tf::MasterSession(options, &m_masterEnv,
-                                               std::make_unique<std::vector<std::unique_ptr<tf::Device>>>(),
-                                               nullptr, std::move(device_set), tf::CreateNoOpStatsPublisher));
-
-    // Finish setting up worker environment, moving in workerCache
-    m_workerEnv.compute_pool = computePool(m_inst.env());
-    // worker session takes ownership of a deviceMgr, so we create shadow devices for it.
-    std::vector<tf::Device *> shadowDevices;
-    for (auto d : m_inst.devices()) {
-        shadowDevices.emplace_back(tf::RenamedDevice::NewRenamedDevice("Salus", d, false, true));
-    }
-    auto workerSess =
-        std::make_unique<tf::WorkerSession>(handle(), "Salus", std::move(workerCache),
-                                            std::make_unique<tf::DeviceMgr>(shadowDevices),
-                                            std::make_unique<MDGraphMgr>(&m_workerEnv, &m_inst.deviceMgr(), ctx));
-    m_sessMgr = std::make_unique<SingleSessionMgr>(std::move(workerSess));
-    m_workerEnv.session_mgr = m_sessMgr.get();
-
-    m_rendezvousMgr = std::make_unique<SalusRendezvousMgr>(&m_workerEnv);
-    m_workerEnv.rendezvous_mgr = m_rendezvousMgr.get();
-
-    // Create worker and worker session
-    m_worker = std::make_unique<tf::Worker>(&m_workerEnv);
+    options.config.set_isolate_session_state(true);
+    m_masterSess = sstl::make_scoped_unref<tf::MasterSession>(
+        options, &m_masterEnv, std::make_unique<std::vector<std::unique_ptr<tf::Device>>>(),
+        std::move(workerCache), std::move(device_set), tf::CreateNoOpStatsPublisher);
 
     // Call create on master session to finalize
     auto status = m_masterSess->Create(gdef, {});
@@ -183,9 +178,9 @@ TFSession::TFSessionPrivate::TFSessionPrivate(TFInstance &inst, ExecutionContext
         throw TFException(status);
     }
 
-    m_execCtx.acceptOffer(handle());
     // Only take passed in ctx after we are sure to succeed
     m_execCtx = std::move(ctx);
+    m_execCtx.acceptOffer(handle());
 }
 
 void TFSession::TFSessionPrivate::safeClose(std::shared_ptr<TFSession> &&self)
