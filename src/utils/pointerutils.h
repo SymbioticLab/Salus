@@ -131,7 +131,9 @@ auto add_ref(T *ptr)
 {
     static_assert(!std::is_array<T>::value, "array types are unsupported");
     static_assert(std::is_object<T>::value, "non-object types are unsupported");
-    ptr->Ref();
+    if (ptr) {
+        ptr->Ref();
+    }
     return ScopedUnref<T>(ptr);
 }
 

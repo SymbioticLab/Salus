@@ -44,6 +44,7 @@ def sess_and_device(target='', dev='', config=None, seed=None):
         np.random.seed(seed)
         with tf.device(dev):
             with tf.Session(target, config=finalCfg) as sess:
+                eprint("Running session {} with device {}".format(target, dev))
                 yield sess
 
 

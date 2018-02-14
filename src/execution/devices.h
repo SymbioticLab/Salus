@@ -67,7 +67,7 @@ inline bool operator!=(const DeviceSpec &lhs, const DeviceSpec &rhs)
 std::ostream &operator<<(std::ostream &os, const DeviceSpec &c);
 
 namespace devices {
-constexpr DeviceSpec CPU0 {DeviceType::GPU, 0};
+constexpr DeviceSpec CPU0 {DeviceType::CPU, 0};
 constexpr DeviceSpec GPU0 {DeviceType::GPU, 0};
 constexpr DeviceSpec GPU1 {DeviceType::GPU, 1};
 } // namespace devices

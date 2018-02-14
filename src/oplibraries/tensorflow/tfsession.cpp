@@ -187,8 +187,11 @@ void TFSession::TFSessionPrivate::safeClose(std::shared_ptr<TFSession> &&self)
 {
     DCHECK(m_masterSess);
     SALUS_THROW_IF_ERROR(m_masterSess->Close());
+    VLOG(3) << "There is still " << self.use_count() << " reference to TFSession@" << as_hex(self);
     m_execCtx.deleteSession([self = std::move(self)](){
         // Retains alive until execution engine actually deletes its internal resources.
+        VLOG(3) << "Finally " << self.use_count() << " reference to TFSession@" << as_hex(self);
+        DCHECK_EQ(self.use_count(), 1);
     });
 }
 

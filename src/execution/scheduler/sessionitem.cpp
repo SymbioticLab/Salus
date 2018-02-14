@@ -31,6 +31,9 @@ SessionItem::~SessionItem()
     }
     if (cb) {
         cb();
+        // reset cb to release anything that may depend on this
+        // before going out of destructor.
+        cb = nullptr;
     }
 }
 

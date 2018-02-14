@@ -32,6 +32,7 @@
 #include <unordered_map>
 #include <memory>
 #include <any>
+#include <utility>
 
 /**
  * @todo write docs
@@ -69,8 +70,8 @@ public:
     UnsafeQueue bgQueue;
     bool forceEvicted{false};
 
-    explicit SessionItem(const std::string &handle)
-        : sessHandle(handle)
+    explicit SessionItem(std::string handle)
+        : sessHandle(std::move(handle))
     {
         // NOTE: add other devices
         resUsage[resources::GPU0Memory].get() = 0;

@@ -52,6 +52,7 @@ SingleWorkerCache::SingleWorkerCache(std::unique_ptr<tf::Worker> &&worker, const
     : m_worker(std::move(worker))
     , m_workerName(workerName)
 {
+    DCHECK(m_worker);
 }
 
 SingleWorkerCache::~SingleWorkerCache() = default;
@@ -66,7 +67,15 @@ void SingleWorkerCache::ListWorkers(std::vector<std::string> *workers) const
 tf::WorkerInterface *SingleWorkerCache::CreateWorker(const std::string &target)
 {
     DCHECK_EQ(target, m_workerName);
+    VLOG(2) << "Creating worker " << as_hex(m_worker) << " from target " << target;
     return m_worker.get();
+}
+
+void SingleWorkerCache::ReleaseWorker(const std::string &target, tf::WorkerInterface *worker)
+{
+    DCHECK_EQ(target, m_workerName);
+    DCHECK_EQ(worker, m_worker.get());
+    // we reuse the worker object, so don't delete it.
 }
 
 bool SingleWorkerCache::GetDeviceLocalityNonBlocking(const std::string &, tf::DeviceLocality *dl)
@@ -82,5 +91,4 @@ void SingleWorkerCache::GetDeviceLocalityAsync(const std::string &, tf::DeviceLo
     LOG(ERROR) << "SingleWorkerCache::GetDeviceLocalityAsync called!!";
     done(tf::errors::Internal("SingleWorkerCache::GetDeviceLocalityAsync called!"));
 }
-
 } // namespace salus::oplib::tensorflow

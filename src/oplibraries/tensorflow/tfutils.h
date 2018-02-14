@@ -19,17 +19,12 @@
 #ifndef SALUS_OPLIB_TENSORFLOW_TFUTILS_H
 #define SALUS_OPLIB_TENSORFLOW_TFUTILS_H
 
-#include <memory>
+#include "execution/devices.h"
 #include <functional>
+#include <memory>
 
 #define CallWithMasterMethodName(m)                                                                          \
-    m(CreateSession) \
-    m(ExtendSession) \
-    m(PartialRunSetup) \
-    m(CloseSession) \
-    m(ListDevices) \
-    m(Reset) \
-    m(RunStep)
+    m(CreateSession) m(ExtendSession) m(PartialRunSetup) m(CloseSession) m(ListDevices) m(Reset) m(RunStep)
 
 namespace tensorflow {
 #define FWD_DECLARE(name)                                                                                    \
@@ -40,7 +35,7 @@ CallWithMasterMethodName(FWD_DECLARE)
 
 #undef FWD_DECLARE
 
-class Status;
+    class Status;
 } // namespace tensorflow
 
 namespace salus::oplib::tensorflow {
@@ -50,14 +45,18 @@ namespace tf = ::tensorflow;
 using Status = tf::Status;
 using StatusCallback = std::function<void(Status)>;
 
-#define DECLARE_USING(name) \
-using P ## name ## Request = std::unique_ptr<tf:: name ## Request>; \
-using P ## name ## Response = std::unique_ptr<tf:: name ## Response>; \
-using name ## Callback = std::function<void(P ## name ## Response &&, Status)>;
+#define DECLARE_USING(name)                                                                                  \
+    using P##name##Request = std::unique_ptr<tf::name##Request>;                                             \
+    using P##name##Response = std::unique_ptr<tf::name##Response>;                                           \
+    using name##Callback = std::function<void(P##name##Response &&, Status)>;
 
-    CallWithMasterMethodName(DECLARE_USING)
+CallWithMasterMethodName(DECLARE_USING)
 
 #undef DECLARE_USING
+
+DeviceSpec tfDeviceNameToSpec(const std::string &name);
+DeviceType tfDeviceTypeToType(const tf::DeviceType &type);
+DeviceType tfDeviceTypeToType(const std::string &type);
 
 } // namespace salus::oplib::tensorflow
 

@@ -16,4 +16,39 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
+#include "oplibraries/tensorflow/tensorflow_headers.h"
 #include "tfutils.h"
+#include "oplibraries/tensorflow/tfexception.h"
+#include <unordered_map>
+
+namespace salus::oplib::tensorflow {
+
+DeviceSpec tfDeviceNameToSpec(const std::string &name)
+{
+
+    tf::DeviceNameUtils::ParsedName parsedName;
+    if (!tf::DeviceNameUtils::ParseFullName(name, &parsedName)) {
+        throw TFException(tf::errors::InvalidArgument("Device name invalid: ", name));
+    }
+    return DeviceSpec{ tfDeviceTypeToType(parsedName.type), parsedName.id };
+}
+
+DeviceType tfDeviceTypeToType(const std::string &type)
+{
+    return tfDeviceTypeToType(tf::DeviceType(type));
+}
+
+DeviceType tfDeviceTypeToType(const tf::DeviceType &type)
+{
+    static std::unordered_map<std::string, DeviceType> mapping{
+        {tf::DEVICE_CPU, DeviceType::CPU},
+        {tf::DEVICE_GPU, DeviceType::GPU},
+    };
+
+    if (auto it = mapping.find(type.type_string()); it != mapping.end()) {
+        return it->second;
+    }
+    throw TFException(tf::errors::InvalidArgument("Unknown tf::DeviceType: ", type.type()));
+}
+
+} // namespace salus::oplib::tensorflow

@@ -77,8 +77,8 @@ ExecutorImpl::ExecutorImpl(MultiDeviceExecutorParams &&p, const tf::Graph *g)
     : params_(std::move(p))
     , graph_(g)
 {
-    DCHECK(p.find_kernel != nullptr);
-    DCHECK(p.create_kernel != nullptr);
+    DCHECK(params_.find_kernel != nullptr);
+    DCHECK(params_.create_kernel != nullptr);
 
     using namespace std::placeholders;
     params_.ins.registerPagingCallbacks({

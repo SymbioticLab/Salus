@@ -22,9 +22,8 @@
  * with ours.
  */
 #include "oplibraries/tensorflow/tensorflow_headers.h"
-
+#include "oplibraries/tensorflow/tfutils.h"
 #include "exectask.h"
-
 #include "execution/devices.h"
 #include "oplibraries/tensorflow/v2/peropallocdevice.h"
 #include "oplibraries/tensorflow/v2/tfallocator.h"
@@ -32,7 +31,6 @@
 #include "oplibraries/tensorflow/worker/rendezvouswithhook.h"
 #include "utils/macros.h"
 #include "utils/threadutils.h"
-
 #include <sstream>
 
 namespace salus::oplib::tensorflow {
@@ -65,25 +63,14 @@ ExecTask::ExecTask(ExecutorState *state, sstl::semaphore &num_finished_ops,
     VLOG(2) << "Op " << tagged_node.node->def() << " supports device:";
     supportedTypes.reserve(tftypes.size());
     for (const auto &tft : tftypes) {
-        if (tft == tf::DEVICE_CPU) {
-            supportedTypes.push_back(DeviceType::CPU);
-            VLOG(2) << "    CPU";
-        } else if (tft == tf::DEVICE_GPU) {
-            supportedTypes.push_back(DeviceType::GPU);
-            VLOG(2) << "    GPU";
-        } else {
-            LOG(ERROR) << "Unknown tf device type: " << tft.type();
-        }
+        supportedTypes.emplace_back(tfDeviceTypeToType(tft));
+        VLOG(2) << "    " << tft.type();
     }
 
     auto device = tagged_node.node->def().device();
     if (!device.empty()) {
         supportedTypes.clear();
-        if (device.find("cpu") != std::string::npos) {
-            supportedTypes.push_back(DeviceType::CPU);
-        } else {
-            supportedTypes.push_back(DeviceType::GPU);
-        }
+        supportedTypes.push_back(tfDeviceNameToSpec(device).type);
     }
     // pre compute estimated usage
     for (auto t : supportedTypes) {
@@ -151,10 +138,12 @@ bool ExecTask::prepare(std::unique_ptr<ResourceContext> &&rctx)
         if (!s.ok()) {
             LOG(ERROR) << "Error when creating kernel for node " << tagged_node.node->name() << ": " << s;
             statusInPrepare.Update(s);
-            done = true;
+            done = false;
         }
         // HACK:
-        owns_kernel = !ditem.function_library->IsStateful(op_kernel->type_string());
+        if (op_kernel) {
+            owns_kernel = !ditem.function_library->IsStateful(op_kernel->type_string());
+        }
     }
 
     if (!done) {
@@ -346,7 +335,6 @@ void ExecTask::run(Callbacks cbs)
 
     params.device = ditem.device.get();
 
-    // FIXME: see if there I added an extraous ref to rendez
     auto localRendez = new RendezvousWithHook(ditem.device, sstl::add_ref(rendez));
     params.rendezvous = localRendez;
     params.record_tensor_accesses = ditem.device_record_tensor_access;

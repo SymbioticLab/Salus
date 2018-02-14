@@ -61,12 +61,8 @@ Status MDGraphMgr::InitItem(const std::string &session, const tf::GraphDef &gdef
     // the other on salus, containing everything else.
     std::unordered_map<std::string, tf::GraphDef> partitions;
     tf::PartitionOptions popts;
-    // FIXME: verify this works by looking into the Partition function
     popts.node_to_loc = [](auto node) {
-        if (node->assigned_device_name() == "cpu:0") {
-            return "cpu:0";
-        }
-        return "salus";
+        return node->assigned_device_name();
     };
     popts.new_name = [this](const auto &prefix) {
         tf::mutex_lock l(mu_);
@@ -115,14 +111,8 @@ Status MDGraphMgr::InitItem(const std::string &session, const tf::GraphDef &gdef
     item->units.reserve(partitions.size());
     item->graph_mgr = this;
     const auto &optimizer_opts = graph_options.optimizer_options();
-    // FIXME: see if anything is done in graph optimizer
-    // FIXME: see if MaybeRewriteGraph has done anything
     tf::GraphOptimizer optimizer(optimizer_opts);
     for (auto & [key, subgraph] : partition_graphs) {
-        if (key == "salus") {
-            continue;
-        }
-
         auto &unit = item->units.emplace_back();
 
         // Find the device.
@@ -141,6 +131,8 @@ Status MDGraphMgr::InitItem(const std::string &session, const tf::GraphDef &gdef
         // kernels. Therefore, as long as the executor is alive, we need
         // to ensure the kernels cached for the session are alive.
         // FIXME: why use global shared op_segment?
+        // NOTE: unit->device->op_segment()->RemoveHold is called in Item destructor.
+        // Though it's not harmful as it doesn't delete things if not found. We should look into this.
         // auto opseg = unit->device->op_segment();
         auto &opseg = m_opseg;
         opseg.AddHold(session);

@@ -55,6 +55,7 @@ public:
     void ListWorkers(std::vector<std::string> *workers) const override;
 
     tf::WorkerInterface *CreateWorker(const std::string &target) override;
+    void ReleaseWorker(const std::string& target, tf::WorkerInterface* worker) override;
 
     bool GetDeviceLocalityNonBlocking(const std::string &device, tf::DeviceLocality *locality) override;
 
