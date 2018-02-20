@@ -80,12 +80,16 @@ void TFInstance::handleCreateSession(const tf::CreateSessionRequest &req, tf::Cr
     auto *gdef = const_cast<tf::CreateSessionRequest &>(req).mutable_graph_def();
     auto session = std::make_shared<TFSession>(*this, std::move(inserter), req.config(), gdef);
 
-    resp.set_session_handle(session->handle());
+    auto handle = session->handle();
+    resp.set_session_handle(handle);
     // Insert into the session map, which takes ownership of the session.
     {
         sstl::Guard l(m_mu);
-        DCHECK(m_sessions.try_emplace(session->handle(), std::move(session)).second);
+        if (!m_sessions.try_emplace(handle, std::move(session)).second) {
+            throw TFException(tf::errors::Internal("Error when inserting session ", handle));
+        }
     }
+    LOG(INFO) << "Accepting and created session " << handle;
 
     cb(Status::OK());
 }
@@ -95,6 +99,10 @@ std::shared_ptr<TFSession> TFInstance::findSession(const std::string &sessHandle
     sstl::Guard g(m_mu);
     auto it = m_sessions.find(sessHandle);
     if (it == m_sessions.end()) {
+        LOG(ERROR) << "Dumping all known sessions: ";
+        for (auto & [h, ptr] : m_sessions) {
+            LOG(ERROR) << " Session " << h << "@" << as_hex(ptr);
+        }
         throw TFException(tf::errors::InvalidArgument("Session ", sessHandle,
                                                       " is not found. Possibly, this master has restarted."));
     }

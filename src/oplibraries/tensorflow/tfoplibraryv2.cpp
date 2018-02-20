@@ -104,7 +104,6 @@ void TFOpLibraryV2::onRun(ZmqServer::Sender sender, const zrpc::EvenlopDef &even
     cb(nullptr);
 }
 
-
 void TFOpLibraryV2::onCustom(ZmqServer::Sender sender, const zrpc::EvenlopDef &evenlop,
                              const zrpc::CustomRequest &creq, DoneCallback cb)
 {
@@ -122,8 +121,7 @@ void TFOpLibraryV2::onCustom(ZmqServer::Sender sender, const zrpc::EvenlopDef &e
         }                                                                                                    \
     }
 
-        INSTANCE_HANDLER(CreateSession),
-        INSTANCE_HANDLER(CloseSession),   INSTANCE_HANDLER(ListDevices),
+        INSTANCE_HANDLER(CreateSession), INSTANCE_HANDLER(CloseSession),   INSTANCE_HANDLER(ListDevices),
         INSTANCE_HANDLER(Reset),
 
 #undef INSTANCE_HANDLER
@@ -154,7 +152,8 @@ void TFOpLibraryV2::onCustom(ZmqServer::Sender sender, const zrpc::EvenlopDef &e
         VLOG(2) << "Dispatching custom task " << it->first << " of seq " << evenlop.seq();
         it->second(creq, std::move(hcb));
     } catch (const TFException &ex) {
-        LOG(ERROR) << ex.what();
+        LOG(ERROR) << "Error when executing custom task " << creq.type() << " of seq " << evenlop.seq()
+                   << ": " << ex.what();
         hcb(ex.code());
     }
 }

@@ -61,6 +61,10 @@ public:
 
     TFInstance &m_inst;
 
+    // execution context must be the last to be destroied.
+    // which also removes the session item from execution engine.
+    ExecutionContext m_execCtx;
+
     tf::WorkerEnv m_workerEnv;
     tf::MasterEnv m_masterEnv;
 
@@ -71,8 +75,6 @@ public:
     std::unique_ptr<LocalSessionMgr> m_sessMgr;
 
     std::unique_ptr<SalusRendezvousMgr> m_rendezvousMgr;
-
-    ExecutionContext m_execCtx;
 };
 
 TFSession::TFSession(TFInstance &inst, ExecutionContext &&ctx, const tf::ConfigProto &config,
@@ -186,13 +188,10 @@ TFSession::TFSessionPrivate::TFSessionPrivate(TFInstance &inst, ExecutionContext
 void TFSession::TFSessionPrivate::safeClose(std::shared_ptr<TFSession> &&self)
 {
     DCHECK(m_masterSess);
+    DCHECK(self);
+
     SALUS_THROW_IF_ERROR(m_masterSess->Close());
     VLOG(3) << "There is still " << self.use_count() << " reference to TFSession@" << as_hex(self);
-    m_execCtx.deleteSession([self = std::move(self)](){
-        // Retains alive until execution engine actually deletes its internal resources.
-        VLOG(3) << "Finally " << self.use_count() << " reference to TFSession@" << as_hex(self);
-        DCHECK_EQ(self.use_count(), 1);
-    });
 }
 
 void TFSession::TFSessionPrivate::handleExtendSession(const tf::ExtendSessionRequest &req,
