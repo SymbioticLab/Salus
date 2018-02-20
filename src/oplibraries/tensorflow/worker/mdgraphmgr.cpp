@@ -61,14 +61,12 @@ Status MDGraphMgr::InitItem(const std::string &session, const tf::GraphDef &gdef
     // the other on salus, containing everything else.
     std::unordered_map<std::string, tf::GraphDef> partitions;
     tf::PartitionOptions popts;
-    popts.node_to_loc = [](auto node) {
-        return node->assigned_device_name();
-    };
+    popts.node_to_loc = [](auto node) { return node->assigned_device_name(); };
     popts.new_name = [this](const auto &prefix) {
         tf::mutex_lock l(mu_);
         return tf::strings::StrCat(prefix, "_G", next_id_++);
     };
-    popts.get_incarnation = [deviceMgr = device_mgr_](const auto &name) -> uint64_t
+    popts.get_incarnation = [deviceMgr = device_mgr_](const auto &name)->uint64_t
     {
         tf::Device *device = nullptr;
         auto s = deviceMgr->LookupDevice(name, &device);
@@ -141,8 +139,13 @@ Status MDGraphMgr::InitItem(const std::string &session, const tf::GraphDef &gdef
         params.create_fruntime = [worker_env = worker_env_, producer, item, optimizer_opts](auto dev)
         {
             item->Ref();
-            auto flib = tf::NewFunctionLibraryRuntime(worker_env->device_mgr, worker_env->env, dev, producer, item->lib_def.get(), optimizer_opts, item->proc_flr.get());
-            return std::shared_ptr<tf::FunctionLibraryRuntime>(flib.release(), [a = sstl::wrap_unref(item)](auto r) { delete r; });
+            auto flib =
+                tf::NewFunctionLibraryRuntime(worker_env->device_mgr, worker_env->env, dev, producer,
+                                              item->lib_def.get(), optimizer_opts, item->proc_flr.get());
+            return std::shared_ptr<tf::FunctionLibraryRuntime>(flib.release(), [item](auto r) {
+                sstl::wrap_unref(item);
+                delete r;
+            });
         };
 
         // Construct the root executor for the subgraph.
@@ -208,8 +211,8 @@ Status MDGraphMgr::InitItem(const std::string &session, const tf::GraphDef &gdef
             TF_RETURN_IF_ERROR(DecorateAndPublishGraphForDebug(debug_options, subgraph.get(), unit.device));
         }
 
-        TF_RETURN_IF_ERROR(
-            tf::EnsureMemoryTypes(tf::DeviceType(unit.device->device_type()), unit.device->name(), subgraph.get()));
+        TF_RETURN_IF_ERROR(tf::EnsureMemoryTypes(tf::DeviceType(unit.device->device_type()),
+                                                 unit.device->name(), subgraph.get()));
         unit.graph = subgraph.get();
         unit.build_cost_model = graph_options.build_cost_model();
 
