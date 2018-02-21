@@ -65,8 +65,7 @@ struct ScopedUnref
     }
     ~ScopedUnref()
     {
-        if (obj)
-            obj->Unref();
+        reset();
     }
 
     ScopedUnref(ScopedUnref &&other) noexcept
@@ -80,6 +79,13 @@ struct ScopedUnref
         obj = other.obj;
         other.obj = nullptr;
         return *this;
+    }
+
+    void reset()
+    {
+        if (obj)
+            obj->Unref();
+        obj = nullptr;
     }
 
     auto get() const

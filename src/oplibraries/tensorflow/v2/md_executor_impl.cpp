@@ -313,7 +313,7 @@ size_t ExecutorImpl::handlePagingRequest(uint64_t oldTicket, std::unique_ptr<Res
         while (it != range.second) {
             auto &tree = it->second;
             DCHECK(tree);
-            if (!tree->paged_out && !tree->empty() && tree->root_buf && tree->root_buf->mark == 0xdeadbeef) {
+            if (!tree->paged_out && !tree->empty() && tree->root_buf) {
                 // candidate
                 reflocks.insert(&tree->buf_mu);
                 parts.push_back(tree);
@@ -369,8 +369,7 @@ size_t ExecutorImpl::handlePagingRequest(uint64_t oldTicket, std::unique_ptr<Res
         }
 
         auto oldRoot = part->root_buf;
-        oldRoot->Ref();
-        sstl::ScopedUnref<tf::TensorBuffer> su(oldRoot);
+        auto su = sstl::add_ref(oldRoot);
 
         auto size = oldRoot->size();
         auto ok = moveTensorTree(*part, item.device);
@@ -481,17 +480,24 @@ void ExecutorImpl::updateBufferTree(Entry *entry, uint64_t ticket)
     VLOG(2) << "Adding entry " << as_hex(entry) << " to tree " << tree << " of buffer " << tree->root_buf
             << " with ticket " << ticket;
 
+    bool added = false;
     if (root_buf == buf) {
         auto it = std::find(tree->roots.begin(), tree->roots.end(), entry);
         if (it == tree->roots.end()) {
+            added = true;
             tree->roots.emplace_back(entry);
         }
     } else {
         auto &sub = tree->subs[buf];
         auto it = std::find(sub.begin(), sub.end(), entry);
         if (it == sub.end()) {
+            added = true;
             sub.emplace_back(entry);
         }
+    }
+
+    if (added && root_buf) {
+        root_buf->Ref();
     }
 }
 
@@ -509,6 +515,9 @@ void ExecutorImpl::removeFromBufferTree(const Entry *entry, EntryVec *needUpdate
         if (e == entry || (needUpdate && entry->ref && e->ref == entry->ref)) {
             VLOG(2) << "Removing entry " << as_hex(e) << " from tree " << entry->alloc_tree << " of buffer "
                     << entry->alloc_tree->root_buf << " with ticket " << entry->alloc_tree->ticket;
+            if (entry->alloc_tree->root_buf) {
+                entry->alloc_tree->root_buf->Unref();
+            }
             e->alloc_tree = nullptr;
             if (needUpdate) {
                 needUpdate->push_back(e);

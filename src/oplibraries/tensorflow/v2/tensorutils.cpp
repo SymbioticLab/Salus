@@ -106,6 +106,15 @@ tf::Status moveTensorTree(TensorBufferTree &tree, const std::shared_ptr<PerOpAll
     tf::TensorBuffer *newRoot = nullptr;
     // Firstly page out root buffer
     for (auto entry : tree.roots) {
+        sstl::ScopeGuards sg([&newRoot, &oldRoot](){
+            // We only do this if we succeeded moved the first entry, i.e. newRoot != nullptr
+            if (newRoot) {
+                // We added one ref for each entry added to the tree, since we are moving out, unref it.
+                oldRoot->Unref();
+                // also remember to add one ref to newRoot
+                newRoot->Ref();
+            }
+        });
         if (!newRoot) {
             // only need to actually move the first in roots
             VLOG(3) << "    Actually move first in roots: entry " << as_hex(entry) << " (ref "
@@ -151,13 +160,16 @@ tf::Status moveTensorTree(TensorBufferTree &tree, const std::shared_ptr<PerOpAll
     // and update subs
     std::unordered_map<tf::TensorBuffer *, std::vector<Entry *>> newSubs;
     newSubs.reserve(tree.subs.size());
-    for (auto &pp : tree.subs) {
-        auto oldSub = pp.first;
-        oldSub->Ref();
+    for (auto &[oldSub, entries] : tree.subs) {
+        auto su = sstl::add_ref(oldSub);
         VLOG(2) << "    Moving subs: sub " << as_hex(oldSub) << " with ticket " << oldTicket;
 
         auto newSub = oldSub->clone(newRoot);
-        for (auto &entry : pp.second) {
+        for (auto &entry : entries) {
+            // Move our hold on oldRoot to newRoot, which was added when adding this entry to the tree.
+            newRoot->Ref();
+            oldRoot->Unref();
+
             entry->CopyProperties(*firstEntry);
 
             VLOG(3) << "    Moving sub entry: entry " << as_hex(entry) << " (ref " << as_hex(entry->ref)
@@ -178,9 +190,8 @@ tf::Status moveTensorTree(TensorBufferTree &tree, const std::shared_ptr<PerOpAll
             }
         }
         DCHECK(oldSub->RefCountIsOne());
-        oldSub->Unref();
 
-        newSubs[newSub] = std::move(pp.second);
+        newSubs[newSub] = std::move(entries);
     }
     using std::swap;
     swap(tree.subs, newSubs);
