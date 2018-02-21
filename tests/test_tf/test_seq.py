@@ -1,6 +1,7 @@
 from __future__ import print_function
 
 import unittest
+from typing import Callable
 
 import numpy as np
 import tensorflow as tf
@@ -43,7 +44,7 @@ def run_seq_ptb(sess, config_name):
             if coord.should_stop():
                 break
 
-            lr_decay = config.lr_decay ** max(i + 1 - config.max_epoch, 0.0)
+            lr_decay = config.lr_decay ** max(i + 1 - config.max_epoch, 0)
             m.assign_lr(sess, config.learning_rate * lr_decay)
 
             print("Epoch: %d Learning rate: %.3f" % (i + 1, sess.run(m.lr)))
@@ -55,38 +56,39 @@ def run_seq_ptb(sess, config_name):
                 print('Average excluding first iteration: %.3f sec/batch' % np.average(speeds[1:]))
 
 
-configs = ['tiny', 'small', 'medium', 'large']
+model_sizes = ['tiny', 'small', 'medium', 'large']
 
 
 class SeqCaseBase(unittest.TestCase):
     def _runner(self):
-        return None
+        # type: () -> Callable
+        raise NotImplementedError
 
-    def _config(self, config_name):
-        return None
+    def _config(self, model_size):
+        raise NotImplementedError
 
     def get_func_to_run(self, config_name):
         return lambda: self._runner()(tf.get_default_session(), config_name)
 
-    @parameterized.expand(configs)
-    def test_gpu(self, config_name):
-        run_on_devices(self.get_func_to_run(config_name), '/device:GPU:0',
+    @parameterized.expand(model_sizes)
+    def test_gpu(self, model_size):
+        run_on_devices(self.get_func_to_run(model_size), '/device:GPU:0',
                        config=tf.ConfigProto(allow_soft_placement=True))
 
-    @parameterized.expand(configs)
+    @parameterized.expand(model_sizes)
     @unittest.skip("No need to run on CPU")
-    def test_cpu(self, config_name):
-        run_on_devices(self.get_func_to_run(config_name), '/device:CPU:0')
+    def test_cpu(self, model_size):
+        run_on_devices(self.get_func_to_run(model_size), '/device:CPU:0')
 
-    @parameterized.expand(configs)
-    def test_rpc(self, config_name):
-        run_on_sessions(self.get_func_to_run(config_name), 'zrpc://tcp://127.0.0.1:5501',
-                        config=self._config(config_name))
+    @parameterized.expand(model_sizes)
+    def test_rpc(self, model_size):
+        run_on_sessions(self.get_func_to_run(model_size), 'zrpc://tcp://127.0.0.1:5501',
+                        config=self._config(model_size))
 
-    @parameterized.expand(configs)
-    def test_correctness(self, config_name):
-        actual, expected = run_on_rpc_and_cpu(self.get_func_to_run(config_name),
-                                              config=self._config(config_name))
+    @parameterized.expand(model_sizes)
+    def test_correctness(self, model_size):
+        actual, expected = run_on_rpc_and_cpu(self.get_func_to_run(model_size),
+                                              config=self._config(model_size))
         self.assertEquals(actual, expected)
 
 
@@ -95,7 +97,7 @@ class TestSeqPtb(SeqCaseBase):
     def _runner(self):
         return run_seq_ptb
 
-    def _config(self, config_name):
+    def _config(self, model_size):
         KB = 1024
         MB = 1024 * KB
         GB = 1024 * MB
@@ -107,8 +109,8 @@ class TestSeqPtb(SeqCaseBase):
         }
 
         config = tf.ConfigProto()
-        config.zmq_options.resource_map.temporary['MEMORY:GPU'] = memusages[config_name][0]
-        config.zmq_options.resource_map.persistant['MEMORY:GPU'] = memusages[config_name][1]
+        config.zmq_options.resource_map.temporary['MEMORY:GPU'] = memusages[model_size][0]
+        config.zmq_options.resource_map.persistant['MEMORY:GPU'] = memusages[model_size][1]
         return config
 
 

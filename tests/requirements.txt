@@ -1,4 +1,6 @@
-numpy==1.12.1
+tensorflow
+numpy==1.14.0
 green==2.11.0
 parameterized==0.6.1
 pathlib2 ; python_version < '3'
+typing ; python_version < '3.5'
