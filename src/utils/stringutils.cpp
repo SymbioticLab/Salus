@@ -21,7 +21,7 @@
 
 #include <algorithm>
 
-namespace utils {
+namespace sstl {
 std::string bytesToHexString(const uint8_t *info, size_t infoLength, size_t maxLen)
 {
     static const char pszNibbleToHex[] = "0123456789ABCDEF";
@@ -71,4 +71,4 @@ bool endsWith(const std::string &str, const std::string &postfix)
     return std::equal(postfix.begin(), postfix.end(), str.end() - postfix.size());
 }
 
-} // namespace utils
+} // namespace sstl

@@ -17,6 +17,7 @@
  */
 
 #include "sessionitem.h"
+#include "utils/pointerutils.h"
 
 SessionItem::~SessionItem()
 {
@@ -25,10 +26,28 @@ SessionItem::~SessionItem()
 
     std::function<void()> cb;
     {
-        utils::Guard g(mu);
+        sstl::Guard g(mu);
         cb = std::move(cleanupCb);
     }
     if (cb) {
         cb();
+        // reset cb to release anything that may depend on this
+        // before going out of destructor.
+        cb = nullptr;
     }
+}
+
+void SessionItem::setPagingCallbacks(PagingCallbacks pcb)
+{
+    sstl::Guard g(mu);
+    pagingCb = std::move(pcb);
+}
+
+void SessionItem::prepareDelete(std::function<void()> cb)
+{
+    sstl::Guard g(mu);
+    cleanupCb = std::move(cb);
+    // clear paging callbacks so the executorImpl won't get called after it is deleted
+    // but haven't been removed from session list yet.
+    pagingCb = {};
 }

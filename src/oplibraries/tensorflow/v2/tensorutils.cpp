@@ -25,12 +25,12 @@
 
 #include "tensorutils.h"
 
-#include "oplibraries/tensorflow/v2/peropallocdevice.h"
 #include "execution/executionengine.h"
+#include "oplibraries/tensorflow/v2/peropallocdevice.h"
 
-tensorflow::Status moveTensor(Entry &entry, const std::shared_ptr<PerOpAllocDevice> &dstDevice,
-                              tensorflow::DeviceContext *dstCtx,
-                              const tensorflow::AllocatorAttributes &attr, const std::string &name)
+namespace salus::oplib::tensorflow {
+Status moveTensor(Entry &entry, const std::shared_ptr<PerOpAllocDevice> &dstDevice, tf::DeviceContext *dstCtx,
+                  const tf::AllocatorAttributes &attr, const std::string &name)
 {
     auto input = entry.RefOrVal();
 
@@ -47,8 +47,7 @@ tensorflow::Status moveTensor(Entry &entry, const std::shared_ptr<PerOpAllocDevi
             dstCtx = dev_info->default_context;
     }
 
-    VLOG(2) << "Src dev context " << as_hex(entry.device_context)
-            << ", dst dev context " << as_hex(dstCtx)
+    VLOG(2) << "Src dev context " << as_hex(entry.device_context) << ", dst dev context " << as_hex(dstCtx)
             << ", source tensor buffer addr: " << as_hex(input->tensor_data().data())
             << ", target tensor buffer addr: " << as_hex(copy.tensor_data().data());
 
@@ -97,20 +96,29 @@ tf::Status moveTensorTree(TensorBufferTree &tree, const std::shared_ptr<PerOpAll
     const auto oldTicket = tree.ticket;
 
     auto oldCount = tf::remote::PagingHelper::refCountOf(*oldRoot);
-    VLOG(2) << "Moving tensor buffer " << as_hex(oldRoot) << " (count " << oldCount
-            << ") with ticket " << oldTicket;
+    VLOG(2) << "Moving tensor buffer " << as_hex(oldRoot) << " (count " << oldCount << ") with ticket "
+            << oldTicket;
 
     tree.ticket = dstDevice->resourceContext().ticket();
 
-    std::unordered_set<tf::Tensor*> movedReferences;
+    std::unordered_set<tf::Tensor *> movedReferences;
     Entry *firstEntry = nullptr;
     tf::TensorBuffer *newRoot = nullptr;
     // Firstly page out root buffer
     for (auto entry : tree.roots) {
+        sstl::ScopeGuards sg([&newRoot, &oldRoot](){
+            // We only do this if we succeeded moved the first entry, i.e. newRoot != nullptr
+            if (newRoot) {
+                // We added one ref for each entry added to the tree, since we are moving out, unref it.
+                oldRoot->Unref();
+                // also remember to add one ref to newRoot
+                newRoot->Ref();
+            }
+        });
         if (!newRoot) {
             // only need to actually move the first in roots
-            VLOG(3) << "    Actually move first in roots: entry " << as_hex(entry)
-                    << " (ref " << as_hex(entry->ref) << ") with ticket " << oldTicket;
+            VLOG(3) << "    Actually move first in roots: entry " << as_hex(entry) << " (ref "
+                    << as_hex(entry->ref) << ") with ticket " << oldTicket;
             auto ok = moveTensor(*entry, dstDevice, nullptr, {},
                                  tf::strings::StrCat("Paging tensor of ticket ", oldTicket));
             if (!ok.ok()) {
@@ -125,16 +133,16 @@ tf::Status moveTensorTree(TensorBufferTree &tree, const std::shared_ptr<PerOpAll
             }
             continue;
         }
-        VLOG(3) << "    Move other tensors of same root: entry " << as_hex(entry)
-                << " (ref " << as_hex(entry->ref) << ") with ticket " << oldTicket;
+        VLOG(3) << "    Move other tensors of same root: entry " << as_hex(entry) << " (ref "
+                << as_hex(entry->ref) << ") with ticket " << oldTicket;
 
         entry->CopyProperties(*firstEntry);
         // only one reference entry need to be moved
         if (entry->ref && movedReferences.count(entry->ref) > 0) {
             continue;
         }
-        VLOG(3) << "    Move other tensors of same root: ref " << as_hex(entry->ref)
-                << " ticket " << oldTicket << " not yet moved or this is value";
+        VLOG(3) << "    Move other tensors of same root: ref " << as_hex(entry->ref) << " ticket "
+                << oldTicket << " not yet moved or this is value";
 
         auto t = tf::remote::PagingHelper::cloneWithNewBuffer(*entry->RefOrVal(), newRoot);
         if (entry->ref) {
@@ -150,29 +158,31 @@ tf::Status moveTensorTree(TensorBufferTree &tree, const std::shared_ptr<PerOpAll
 
     // Secondly re-target sub buffers to new root
     // and update subs
-    std::unordered_map<tf::TensorBuffer*, std::vector<Entry*>> newSubs;
+    std::unordered_map<tf::TensorBuffer *, std::vector<Entry *>> newSubs;
     newSubs.reserve(tree.subs.size());
-    for (auto &pp : tree.subs) {
-        auto oldSub = pp.first;
-        oldSub->Ref();
+    for (auto &[oldSub, entries] : tree.subs) {
+        auto su = sstl::add_ref(oldSub);
         VLOG(2) << "    Moving subs: sub " << as_hex(oldSub) << " with ticket " << oldTicket;
 
         auto newSub = oldSub->clone(newRoot);
-        for (auto &entry : pp.second) {
+        for (auto &entry : entries) {
+            // Move our hold on oldRoot to newRoot, which was added when adding this entry to the tree.
+            newRoot->Ref();
+            oldRoot->Unref();
+
             entry->CopyProperties(*firstEntry);
 
-            VLOG(3) << "    Moving sub entry: entry " << as_hex(entry)
-                    << " (ref " << as_hex(entry->ref) << ") with ticket {}" << oldTicket;
+            VLOG(3) << "    Moving sub entry: entry " << as_hex(entry) << " (ref " << as_hex(entry->ref)
+                    << ") with ticket {}" << oldTicket;
             // Only need to move first ref entry
             if (entry->ref && movedReferences.count(entry->ref) > 0) {
                 continue;
             }
 
-            VLOG(3) << "    Actually Moving sub entry: entry " << as_hex(entry)
-                    << " (ref " << as_hex(entry->ref) << ") with ticket " << oldTicket;
+            VLOG(3) << "    Actually Moving sub entry: entry " << as_hex(entry) << " (ref "
+                    << as_hex(entry->ref) << ") with ticket " << oldTicket;
 
-            auto t = tf::remote::PagingHelper::cloneWithNewBuffer(*entry->RefOrVal(),
-                                                                    newSub);
+            auto t = tf::remote::PagingHelper::cloneWithNewBuffer(*entry->RefOrVal(), newSub);
             if (entry->ref) {
                 *entry->ref = std::move(t);
             } else {
@@ -180,12 +190,13 @@ tf::Status moveTensorTree(TensorBufferTree &tree, const std::shared_ptr<PerOpAll
             }
         }
         DCHECK(oldSub->RefCountIsOne());
-        oldSub->Unref();
 
-        newSubs[newSub] = std::move(pp.second);
+        newSubs[newSub] = std::move(entries);
     }
     using std::swap;
     swap(tree.subs, newSubs);
 
     return tf::Status::OK();
 }
+
+} // namespace salus::oplib::tensorflow

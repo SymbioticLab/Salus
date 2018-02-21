@@ -16,21 +16,20 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef CONTAINERUTILS_H
-#define CONTAINERUTILS_H
-
-#include "utils/cpp17.h"
+#ifndef SALUS_SSTL_CONTAINERUTILS_H
+#define SALUS_SSTL_CONTAINERUTILS_H
 
 #include <boost/range/adaptor/reversed.hpp>
 
 #include <atomic>
+#include <optional>
 
-namespace utils {
+namespace sstl {
 
 template<typename C>
-auto optionalGet(const C &c, const typename C::key_type &k) -> optional<typename C::mapped_type>
+auto optionalGet(const C &c, const typename C::key_type &k) -> std::optional<typename C::mapped_type>
 {
-    optional<typename C::mapped_type> res;
+    std::optional<typename C::mapped_type> res;
     auto it = c.find(k);
     if (it != c.end()) {
         res = it->second;
@@ -39,9 +38,10 @@ auto optionalGet(const C &c, const typename C::key_type &k) -> optional<typename
 }
 
 template<typename C>
-auto optionalGet(const optional<C> &c, const typename C::key_type &k) -> optional<typename C::mapped_type>
+auto optionalGet(const std::optional<C> &c, const typename C::key_type &k)
+    -> std::optional<typename C::mapped_type>
 {
-    optional<typename C::mapped_type> res;
+    std::optional<typename C::mapped_type> res;
     auto it = c->find(k);
     if (it != c->end()) {
         res = it->second;
@@ -61,8 +61,8 @@ auto getOrDefault(const C &c, const typename C::key_type &k, const typename C::m
 }
 
 template<typename C>
-auto getOrDefault(const optional<C> &c, const typename C::key_type &k, const typename C::mapped_type &defv) ->
-    typename C::mapped_type
+auto getOrDefault(const std::optional<C> &c, const typename C::key_type &k,
+                  const typename C::mapped_type &defv) -> typename C::mapped_type
 {
     auto it = c->find(k);
     if (it == c->end()) {
@@ -105,6 +105,6 @@ struct MutableAtom
     }
 };
 
-} // namespace utils
+} // namespace sstl
 
-#endif // CONTAINERUTILS_H
+#endif // SALUS_SSTL_CONTAINERUTILS_H

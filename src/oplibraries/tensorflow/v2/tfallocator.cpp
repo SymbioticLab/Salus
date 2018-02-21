@@ -30,8 +30,10 @@
 #include "memorymgr/memorymgr.h"
 #include "platform/logging.h"
 #include "utils/macros.h"
-#include "utils/threadutils.h"
 #include "utils/stringutils.h"
+#include "utils/threadutils.h"
+
+namespace salus::oplib::tensorflow {
 
 namespace {
 void checkMemory(void *ptr, size_t num_bytes)
@@ -45,8 +47,8 @@ void checkMemory(void *ptr, size_t num_bytes)
     uint8_t *pend = pbegin + num_bytes;
     for (auto p = pbegin; p != pend; ++p) {
         *p = 0xde;
-        DCHECK_EQ(*p, 0xde) << "Something wrong at address " << as_hex(p)
-                            << ", which belongs to block " << as_hex(pbegin);
+        DCHECK_EQ(*p, 0xde) << "Something wrong at address " << as_hex(p) << ", which belongs to block "
+                            << as_hex(pbegin);
     }
 #else
     UNUSED(ptr);
@@ -64,7 +66,7 @@ std::string nameOrNull(tf::Allocator *alloc)
 
 } // namespace
 
-TFAllocator::TFAllocator(tensorflow::Allocator *other)
+TFAllocator::TFAllocator(tf::Allocator *other)
     : m_actualAlloc(other)
 {
 }
@@ -85,9 +87,9 @@ bool TFAllocator::ShouldAllocateEmptyTensors()
 
 void *TFAllocator::AllocateRaw(size_t alignment, size_t num_bytes)
 {
-    AllocLog(DEBUG) << "TFAllocator allocating " << num_bytes
-                    << " bytes of memory with alignment " << alignment
-                    << " using allocator " << nameOrNull(m_actualAlloc) << "@" << as_hex(m_actualAlloc);
+    AllocLog(DEBUG) << "TFAllocator allocating " << num_bytes << " bytes of memory with alignment "
+                    << alignment << " using allocator " << nameOrNull(m_actualAlloc) << "@"
+                    << as_hex(m_actualAlloc);
 
     void *ptr = nullptr;
     if (m_actualAlloc) {
@@ -96,16 +98,16 @@ void *TFAllocator::AllocateRaw(size_t alignment, size_t num_bytes)
         ptr = MemoryMgr::instance().allocate(alignment, num_bytes);
     }
 
-    AllocLog(INFO) << "TFAllocator allocated " << num_bytes
-                   << " bytes of memory at " << as_hex(ptr) << " with alignment " << alignment
-            << " using allocator " << nameOrNull(m_actualAlloc) << "@" << as_hex(m_actualAlloc);
+    AllocLog(INFO) << "TFAllocator allocated " << num_bytes << " bytes of memory at " << as_hex(ptr)
+                   << " with alignment " << alignment << " using allocator " << nameOrNull(m_actualAlloc)
+                   << "@" << as_hex(m_actualAlloc);
 
     checkMemory(ptr, num_bytes);
     return ptr;
 }
 
 void *TFAllocator::AllocateRaw(size_t alignment, size_t num_bytes,
-                               const tensorflow::AllocationAttributes &allocation_attr)
+                               const tf::AllocationAttributes &allocation_attr)
 {
     auto attr(allocation_attr);
 
@@ -113,8 +115,8 @@ void *TFAllocator::AllocateRaw(size_t alignment, size_t num_bytes,
     attr.no_retry_on_failure = true;
 
     AllocLog(DEBUG) << "TFAllocator allocating attributes " << attr << " of " << num_bytes
-                    << " bytes of memory with alignment " << alignment
-                    << " using allocator " << nameOrNull(m_actualAlloc) << "@" << as_hex(m_actualAlloc);
+                    << " bytes of memory with alignment " << alignment << " using allocator "
+                    << nameOrNull(m_actualAlloc) << "@" << as_hex(m_actualAlloc);
 
     void *ptr = nullptr;
     if (m_actualAlloc) {
@@ -132,8 +134,8 @@ void *TFAllocator::AllocateRaw(size_t alignment, size_t num_bytes,
 
 void TFAllocator::DeallocateRaw(void *ptr)
 {
-    AllocLog(INFO) << "TFAllocator deallocating memory at " << as_hex(ptr)
-                   << " using allocator " << nameOrNull(m_actualAlloc) << "@" << as_hex(m_actualAlloc);
+    AllocLog(INFO) << "TFAllocator deallocating memory at " << as_hex(ptr) << " using allocator "
+                   << nameOrNull(m_actualAlloc) << "@" << as_hex(m_actualAlloc);
 
     if (m_actualAlloc) {
         m_actualAlloc->DeallocateRaw(ptr);
@@ -144,13 +146,13 @@ void TFAllocator::DeallocateRaw(void *ptr)
 
 PerOpAllocator *PerOpAllocator::downcast(tf::Allocator *alloc)
 {
-    if (utils::startsWith(alloc->Name(), NamePrefix)) {
-        return static_cast<PerOpAllocator*>(alloc);
+    if (sstl::startsWith(alloc->Name(), NamePrefix)) {
+        return static_cast<PerOpAllocator *>(alloc);
     }
     return nullptr;
 }
 
-PerOpAllocator::PerOpAllocator(const std::shared_ptr<const ResourceContext> &rctx, tensorflow::Allocator *other)
+PerOpAllocator::PerOpAllocator(const std::shared_ptr<const ResourceContext> &rctx, tf::Allocator *other)
     : m_rctx(rctx)
     , m_actualAlloc(other)
 {
@@ -166,7 +168,7 @@ PerOpAllocator::PerOpAllocator(const std::shared_ptr<const ResourceContext> &rct
     }
 }
 
-PerOpAllocator::PerOpAllocator(std::shared_ptr<const ResourceContext> &&rctx, tensorflow::Allocator *other)
+PerOpAllocator::PerOpAllocator(std::shared_ptr<const ResourceContext> &&rctx, tf::Allocator *other)
     : m_rctx(std::move(rctx))
     , m_actualAlloc(other)
 {
@@ -187,9 +189,9 @@ void *PerOpAllocator::AllocateRaw(size_t alignment, size_t num_bytes)
 {
     TIMED_FUNC(timeObj);
 
-    AllocLog(DEBUG) << "TFAllocator allocating " << num_bytes
-                    << " bytes of memory with alignment " << alignment
-                    << " using allocator " << nameOrNull(m_actualAlloc) << "@" << as_hex(m_actualAlloc);
+    AllocLog(DEBUG) << "TFAllocator allocating " << num_bytes << " bytes of memory with alignment "
+                    << alignment << " using allocator " << nameOrNull(m_actualAlloc) << "@"
+                    << as_hex(m_actualAlloc);
 
     void *ptr = nullptr;
     if (auto scope = m_rctx->allocMemory(num_bytes)) {
@@ -204,7 +206,6 @@ void *PerOpAllocator::AllocateRaw(size_t alignment, size_t num_bytes)
         return nullptr;
     }
 
-
     recordSize(ptr, num_bytes);
 
     if (!ptr) {
@@ -213,15 +214,15 @@ void *PerOpAllocator::AllocateRaw(size_t alignment, size_t num_bytes)
 
     Ref();
 
-    AllocLog(INFO) << "TFAllocator allocated " << num_bytes
-                   << " bytes of memory at " << as_hex(ptr) << " with alignment " << alignment
-                   << " using allocator " << nameOrNull(m_actualAlloc) << "@" << as_hex(m_actualAlloc)
-                   << " with " << *m_rctx;
+    AllocLog(INFO) << "TFAllocator allocated " << num_bytes << " bytes of memory at " << as_hex(ptr)
+                   << " with alignment " << alignment << " using allocator " << nameOrNull(m_actualAlloc)
+                   << "@" << as_hex(m_actualAlloc) << " with " << *m_rctx;
 
     return ptr;
 }
 
-void* PerOpAllocator::AllocateRaw(size_t alignment, size_t num_bytes, const tensorflow::AllocationAttributes& allocation_attr)
+void *PerOpAllocator::AllocateRaw(size_t alignment, size_t num_bytes,
+                                  const tf::AllocationAttributes &allocation_attr)
 {
     TIMED_FUNC(timeObj);
 
@@ -230,8 +231,8 @@ void* PerOpAllocator::AllocateRaw(size_t alignment, size_t num_bytes, const tens
     attr.no_retry_on_failure = true;
 
     AllocLog(DEBUG) << "TFAllocator allocating attributes " << attr << " of " << num_bytes
-                    << " bytes of memory with alignment " << alignment
-                    << " using allocator " << nameOrNull(m_actualAlloc) << "@" << as_hex(m_actualAlloc);
+                    << " bytes of memory with alignment " << alignment << " using allocator "
+                    << nameOrNull(m_actualAlloc) << "@" << as_hex(m_actualAlloc);
 
     void *ptr = nullptr;
     if (auto scope = m_rctx->allocMemory(num_bytes)) {
@@ -261,12 +262,12 @@ void* PerOpAllocator::AllocateRaw(size_t alignment, size_t num_bytes, const tens
     return ptr;
 }
 
-size_t PerOpAllocator::RequestedSize(void* ptr)
+size_t PerOpAllocator::RequestedSize(void *ptr)
 {
     return findSize(ptr);
 }
 
-tf::int64 PerOpAllocator::AllocationId(void* ptr)
+tf::int64 PerOpAllocator::AllocationId(void *ptr)
 {
     return reinterpret_cast<tf::int64>(ptr);
 }
@@ -277,8 +278,7 @@ void PerOpAllocator::DeallocateRaw(void *ptr)
 
     auto num_bytes = RequestedSize(ptr);
 
-    AllocLog(INFO) << "TFAllocator deallocating memory at " << as_hex(ptr)
-                   << " size " << num_bytes
+    AllocLog(INFO) << "TFAllocator deallocating memory at " << as_hex(ptr) << " size " << num_bytes
                    << " using allocator " << nameOrNull(m_actualAlloc) << "@" << as_hex(m_actualAlloc)
                    << " with " << *m_rctx;
 
@@ -295,7 +295,7 @@ bool PerOpAllocator::ShouldAllocateEmptyTensors()
 
 void PerOpAllocator::recordSize(void *ptr, size_t size)
 {
-    utils::Guard g(m_mu);
+    sstl::Guard g(m_mu);
     m_lastFailedAllocSize = size;
     if (ptr) {
         m_allocated[ptr] = size;
@@ -304,10 +304,12 @@ void PerOpAllocator::recordSize(void *ptr, size_t size)
 
 size_t PerOpAllocator::findSize(void *ptr)
 {
-    utils::Guard g(m_mu);
+    sstl::Guard g(m_mu);
     auto it = m_allocated.find(ptr);
     if (it == m_allocated.end()) {
         return 0;
     }
     return it->second;
 }
+
+} // namespace salus::oplib::tensorflow

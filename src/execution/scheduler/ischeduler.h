@@ -56,7 +56,7 @@ public:
     using CandidateList = boost::container::small_vector_base<PSessionItem>;
     virtual void selectCandidateSessions(const SessionList &sessions,
                                          const SessionChangeSet &changeset,
-                                         utils::not_null<CandidateList*> candidates) = 0;
+                                         sstl::not_null<CandidateList*> candidates) = 0;
     /**
      * @brief schedule from a particular session
      * @returns number of tasks scheduled, and whether should continue to next session.

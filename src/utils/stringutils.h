@@ -17,12 +17,12 @@
  *
  */
 
-#ifndef STRINGUTILS_H
-#define STRINGUTILS_H
+#ifndef SALUS_SSTL_STRINGUTILS_H
+#define SALUS_SSTL_STRINGUTILS_H
 
 #include <string>
 
-namespace utils {
+namespace sstl {
 
 std::string bytesToHexString(const uint8_t *info, size_t infoLength, size_t maxLen = 20);
 
@@ -30,6 +30,6 @@ bool startsWith(const std::string &str, const std::string &prefix);
 
 bool endsWith(const std::string &str, const std::string &postfix);
 
-} // namespace utils
+} // namespace sstl
 
-#endif // STRINGUTILS_H
+#endif // SALUS_SSTL_STRINGUTILS_H

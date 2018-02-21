@@ -23,49 +23,44 @@
  * with ours.
  */
 #include "oplibraries/tensorflow/tensorflow_headers.h"
-
-#include "md_rendezvous.h"
-
+#include "oplibraries/tensorflow/worker/rendezvouswithhook.h"
+#include "oplibraries/tensorflow/worker/devicecontextwithdevice.h"
+#include "oplibraries/tensorflow/tfutils.h"
 #include "utils/macros.h"
 
-using tensorflow::Status;
-using tensorflow::Tensor;
+using namespace salus::oplib::tensorflow;
 
-MultiDeviceRendezvous::MultiDeviceRendezvous(const std::shared_ptr<tensorflow::Device> &device,
-                                             tensorflow::Rendezvous *rendez)
-    : m_device(device)
-    , m_local(rendez)
+RendezvousWithHook::RendezvousWithHook(std::shared_ptr<tensorflow::Device> device,
+                                       sstl::ScopedUnref<tensorflow::Rendezvous> rendez)
+    : m_device(std::move(device))
+    , m_local(std::move(rendez))
 {
-    m_local->Ref();
 }
 
-MultiDeviceRendezvous::~MultiDeviceRendezvous()
-{
-    m_local->Unref();
-}
+RendezvousWithHook::~RendezvousWithHook() = default;
 
-tensorflow::Status MultiDeviceRendezvous::Send(const ParsedKey &parsed, const Args &send_args,
-                                      const tensorflow::Tensor &val, const bool is_dead)
+tensorflow::Status RendezvousWithHook::Send(const ParsedKey &parsed, const Args &send_args,
+                                            const tensorflow::Tensor &val, const bool is_dead)
 {
     VLOG(2) << "MultiDeviceRendezvous::Send " << parsed.FullKey().ToString();
 
     auto args = send_args;
-    args.device_context = new tf::WrapperDeviceContext(m_device, send_args.device_context);
+    args.device_context = new DeviceContextWithDevice(m_device, sstl::add_ref(send_args.device_context));
 
     return m_local->Send(parsed, args, val, is_dead);
 }
 
-void MultiDeviceRendezvous::RecvAsync(const ParsedKey &parsed, const Args &recv_args, DoneCallback done)
+void RendezvousWithHook::RecvAsync(const ParsedKey &parsed, const Args &recv_args, DoneCallback done)
 {
     VLOG(2) << "MultiDeviceRendezvous::RecvAsync " << parsed.FullKey().ToString();
 
     auto args = recv_args;
-    args.device_context = new tf::WrapperDeviceContext(m_device, recv_args.device_context);
+    args.device_context = new DeviceContextWithDevice(m_device, sstl::add_ref(recv_args.device_context));
 
     m_local->RecvAsync(parsed, args, std::move(done));
 }
 
-void MultiDeviceRendezvous::StartAbort(const tensorflow::Status &status)
+void RendezvousWithHook::StartAbort(const tensorflow::Status &status)
 {
     return m_local->StartAbort(status);
 }

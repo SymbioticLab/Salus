@@ -63,13 +63,13 @@ find_path(TensorFlow_INCLUDE_DIR
     third_party
 )
 
-find_library(TensorFlow_LIBRARY NAMES tensorflow
+find_library(TensorFlow_LIBRARY NAMES tensorflow_framework
     PATHS ${TENSORFLOW_ROOT}
     PATH_SUFFIXES bazel-bin/tensorflow
     NO_DEFAULT_PATH
 )
 # fall back to system paths
-find_library(TensorFlow_LIBRARY NAMES tensorflow)
+find_library(TensorFlow_LIBRARY NAMES tensorflow_framework)
 
 find_library(TensorFlow_Kernel_LIBRARY NAMES tensorflow_kernels
     PATHS ${TENSORFLOW_ROOT}
@@ -87,33 +87,30 @@ find_package_handle_standard_args(TensorFlow DEFAULT_MSG
 
 # set external variables for usage in CMakeLists.txt
 if(TensorFlow_FOUND)
-    set(TensorFlow_LIBRARIES ${TensorFlow_LIBRARY})
+    set(TensorFlow_LIBRARIES ${TensorFlow_LIBRARY} ${TensorFlow_Kernel_LIBRARY})
     get_filename_component(tf_repo_name ${TensorFlow_INCLUDE_DIR} NAME)
     set(TensorFlow_INCLUDE_DIRS
         ${TensorFlow_INCLUDE_DIR}
         ${TensorFlow_INCLUDE_DIR}/bazel-genfiles
         ${TensorFlow_INCLUDE_DIR}/bazel-${tf_repo_name}/external/eigen_archive
+        ${TensorFlow_INCLUDE_DIR}/bazel-${tf_repo_name}/external/nsync/public
     )
     # This is the same as the include dir
     set(TensorFlow_PROTO_DIRS ${TensorFlow_INCLUDE_DIR})
 
     # Add imported targets
     add_library(tensorflow::headers INTERFACE IMPORTED)
-    set_target_properties(tensorflow::headers PROPERTIES
-        INTERFACE_INCLUDE_DIRECTORIES "${TensorFlow_INCLUDE_DIRS}"
-    )
+    set_property(TARGET tensorflow::headers PROPERTY INTERFACE_INCLUDE_DIRECTORIES ${TensorFlow_INCLUDE_DIRS})
 
-    add_library(tensorflow::all SHARED IMPORTED)
-    set_target_properties(tensorflow::all PROPERTIES
-        INTERFACE_LINK_LIBRARIES tensorflow::headers
-        IMPORTED_LOCATION ${TensorFlow_LIBRARIES}
-    )
+    add_library(tensorflow::framework SHARED IMPORTED)
+    set_property(TARGET tensorflow::framework PROPERTY INTERFACE_LINK_LIBRARIES tensorflow::headers)
+    set_property(TARGET tensorflow::framework PROPERTY IMPORTED_LOCATION ${TensorFlow_LIBRARY})
 
     add_library(tensorflow::kernels SHARED IMPORTED)
-    set_target_properties(tensorflow::kernels PROPERTIES
-        INTERFACE_LINK_LIBRARIES tensorflow::headers
-        IMPORTED_LOCATION ${TensorFlow_Kernel_LIBRARY}
+    set_property(TARGET tensorflow::kernels PROPERTY INTERFACE_LINK_LIBRARIES
+        tensorflow::headers
     )
+    set_property(TARGET tensorflow::kernels PROPERTY IMPORTED_LOCATION ${TensorFlow_Kernel_LIBRARY})
 
 endif()
 

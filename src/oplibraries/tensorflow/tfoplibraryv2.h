@@ -19,28 +19,16 @@
 #ifndef TFOPLIBRARYV2_H
 #define TFOPLIBRARYV2_H
 
-#include "execution/executionengine.h"
 #include "oplibraries/ioplibrary.h"
-
-#include <atomic>
-#include <memory>
-#include <mutex>
-
-namespace tensorflow {
-namespace remote {
-
-class TFOpLibraryProxy;
-class TFSessionProxy;
-
-} // namespace remote
-} // namespace tensorflow
+#include <unordered_map>
 
 namespace executor {
 class CustomRequest;
 } // namespace executor
 
+namespace salus::oplib::tensorflow {
 /**
- * TFOpLibrary that uses MasterSession internally
+ * @brief TFOpLibrary that uses TFInstance internally
  */
 class TFOpLibraryV2 : public IOpLibrary
 {
@@ -60,36 +48,15 @@ public:
 
     void onRun(ZmqServer::Sender sender, const executor::EvenlopDef &evenlop, const executor::RunRequest &req,
                DoneCallback cb) override;
-
-private:
-    using Proxy = tensorflow::remote::TFSessionProxy;
-    struct ProxyAndInserter
-    {
-        std::unique_ptr<Proxy> proxy;
-        ExecutionEngine::Inserter inserter;
-    };
-
-    std::unique_ptr<Proxy> createProxy();
-    Proxy *getProxy(const std::string &sessHandle);
-    ProxyAndInserter deregisterProxy(const std::string &recvId, const std::string &sessHandle);
-    void registerProxy(const std::string &recvId, const std::string &sessHandle,
-                       std::unique_ptr<Proxy> &&proxy, ExecutionEngine::Inserter inserter);
-
-    const std::string &sessionFromRecvId(const std::string &recvId);
-
-    void handleCreateSession(const std::string &recvId, const executor::CustomRequest &, DoneCallback);
-    void handleCloseSession(const std::string &recvId, const executor::CustomRequest &, DoneCallback);
-
-    std::mutex m_mu;
-    std::unordered_map<std::string, ProxyAndInserter> m_proxies;
-
-    std::unique_ptr<tensorflow::remote::TFOpLibraryProxy> m_proxy;
-
-    // A map for last seen session per client process
-    // recvId -> sessHandle
-    std::unordered_map<std::string, std::string> m_lastSession;
-
-    size_t m_maxOpenSessions;
 };
+
+struct HandlerCallback
+{
+    IOpLibrary::DoneCallback cb;
+    ProtoPtr tfresp;
+    void operator()(const Status &s);
+};
+
+} // namespace salus::oplib::tensorflow
 
 #endif // TFOPLIBRARYV2_H

@@ -17,14 +17,19 @@
  *
  */
 
-#ifndef POINTERUTILS_H
-#define POINTERUTILS_H
+#ifndef SALUS_SSTL_POINTERUTILS_H
+#define SALUS_SSTL_POINTERUTILS_H
+
+#include "platform/logging.h"
+#include "utils/macros.h"
+#include "utils/type_traits.h"
 
 #include <deque>
 #include <functional>
 #include <memory>
+#include <type_traits>
 
-namespace utils {
+namespace sstl {
 
 template<typename Derived, typename Base>
 std::unique_ptr<Derived> static_unique_ptr_cast(std::unique_ptr<Base> &&p)
@@ -44,6 +49,14 @@ std::unique_ptr<Derived> dynamic_unique_ptr_cast(std::unique_ptr<Base> &&p)
 }
 
 template<typename T>
+auto wrap_unique(T *ptr)
+{
+    static_assert(!std::is_array<T>::value, "array types are unsupported");
+    static_assert(std::is_object<T>::value, "non-object types are unsupported");
+    return std::unique_ptr<T>(ptr);
+}
+
+template<typename T>
 struct ScopedUnref
 {
     explicit ScopedUnref(T *o = nullptr)
@@ -52,11 +65,10 @@ struct ScopedUnref
     }
     ~ScopedUnref()
     {
-        if (obj)
-            obj->Unref();
+        reset();
     }
 
-    ScopedUnref(ScopedUnref &&other)
+    ScopedUnref(ScopedUnref &&other) noexcept
     {
         obj = other.obj;
         other.obj = nullptr;
@@ -69,10 +81,30 @@ struct ScopedUnref
         return *this;
     }
 
+    void reset()
+    {
+        if (obj)
+            obj->Unref();
+        obj = nullptr;
+    }
+
     auto get() const
     {
-        auto a = std::make_unique<int>(1);
         return obj;
+    }
+
+    constexpr operator T*() const
+    {
+        return get();
+    }
+
+    constexpr auto operator->() const
+    {
+        return get();
+    }
+    constexpr decltype(auto) operator*() const
+    {
+        return *get();
     }
 
     operator bool() const
@@ -83,8 +115,7 @@ struct ScopedUnref
 private:
     T *obj;
 
-    ScopedUnref(const ScopedUnref &) = delete;
-    ScopedUnref<T> &operator=(const ScopedUnref &) = delete;
+    SALUS_DISALLOW_COPY_AND_ASSIGN(ScopedUnref);
 };
 
 template<typename T, typename... Args>
@@ -93,9 +124,30 @@ auto make_scoped_unref(Args &&... args)
     return ScopedUnref<T>(new T(std::forward<Args>(args)...));
 }
 
+template<typename T>
+auto wrap_unref(T *ptr)
+{
+    static_assert(!std::is_array<T>::value, "array types are unsupported");
+    static_assert(std::is_object<T>::value, "non-object types are unsupported");
+    return ScopedUnref<T>(ptr);
+}
+
+template<typename T>
+auto add_ref(T *ptr)
+{
+    static_assert(!std::is_array<T>::value, "array types are unsupported");
+    static_assert(std::is_object<T>::value, "non-object types are unsupported");
+    if (ptr) {
+        ptr->Ref();
+    }
+    return ScopedUnref<T>(ptr);
+}
+
 class ScopeGuards
 {
 public:
+    SALUS_DISALLOW_COPY_AND_ASSIGN(ScopeGuards);
+
     using CleanupFunction = std::function<void()>;
 
     ScopeGuards() = default;
@@ -125,9 +177,46 @@ public:
 
 private:
     std::deque<CleanupFunction> funcs;
+};
 
-    ScopeGuards(const ScopeGuards &) = delete;
-    void operator=(const ScopeGuards &) = delete;
+/**
+ * @brief A wrapper class for PIMPL pattern to make sure const correctness.
+ */
+template<typename TPriv>
+class PImpl
+{
+public:
+    static_assert(std::is_object_v<TPriv>, "TPriv must not be a function or a reference");
+
+    using DType = std::decay_t<TPriv>;
+
+    template<typename... Args,
+             typename SFINAE = std::enable_if_t<
+                 !(sizeof...(Args) == 1 && std::is_same_v<std::decay_t<arg_first_t<Args...>>, PImpl>)>>
+    PImpl(Args &&... args)
+        : m_priv(std::forward<Args>(args)...)
+    {
+    }
+
+    /**
+     * @brief Allow move
+     */
+    PImpl(PImpl &&) = default;
+    PImpl &operator=(PImpl &&) = default;
+
+    DType *operator->()
+    {
+        return m_priv.get();
+    }
+    const DType *operator->() const
+    {
+        return m_priv.get();
+    }
+
+private:
+    std::unique_ptr<DType> m_priv;
+
+    SALUS_DISALLOW_COPY_AND_ASSIGN(PImpl);
 };
 
 // Following is copied from Microsoft GSL library
@@ -284,13 +373,13 @@ not_null<T> operator+(const not_null<T> &, std::ptrdiff_t) = delete;
 template<class T>
 not_null<T> operator+(std::ptrdiff_t, const not_null<T> &) = delete;
 
-} // namespace utils
+} // namespace sstl
 
 namespace std {
 template<class T>
-struct hash<utils::not_null<T>>
+struct hash<::sstl::not_null<T>>
 {
-    std::size_t operator()(const utils::not_null<T> &value) const
+    std::size_t operator()(const ::sstl::not_null<T> &value) const
     {
         return hash<T>{}(value);
     }
@@ -298,4 +387,4 @@ struct hash<utils::not_null<T>>
 
 } // namespace std
 
-#endif // POINTERUTILS_H
+#endif // SALUS_SSTL_POINTERUTILS_H

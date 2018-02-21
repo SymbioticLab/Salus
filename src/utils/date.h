@@ -1,5 +1,5 @@
-#ifndef UTILS_DATE_H
-#define UTILS_DATE_H
+#ifndef SALUS_SSTL_DATE_H
+#define SALUS_SSTL_DATE_H
 
 // The MIT License (MIT)
 //
@@ -7984,4 +7984,4 @@ operator<<(std::basic_ostream<CharT, Traits>& os,
 #endif
 
 
-#endif  // UTILS_DATE_H
+#endif  // SALUS_SSTL_DATE_H

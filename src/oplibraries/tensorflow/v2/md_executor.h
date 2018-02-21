@@ -22,9 +22,9 @@ limitations under the License.
  * with ours.
  */
 #include "oplibraries/tensorflow/tensorflow_headers.h"
-
 #include "execution/executionengine.h"
-
+#include "oplibraries/tensorflow/tfutils.h"
+#include "utils/pointerutils.h"
 #include <functional>
 
 namespace tensorflow {
@@ -33,7 +33,42 @@ class NodeDef;
 class OpKernel;
 class Device;
 class DeviceMgr;
-}
+} // namespace tensorflow
+
+namespace salus::oplib::tensorflow {
+struct MultiDeviceExecutorParams
+{
+    MultiDeviceExecutorParams(tf::DeviceMgr &deviceMgr, tf::ResourceMgr &resourceMgr)
+        : deviceMgr(deviceMgr)
+        , resourceMgr(resourceMgr)
+    {
+    }
+
+    std::string session;
+
+    ExecutionContext ins;
+
+    // The devices this executor should use.
+    tf::DeviceMgr &deviceMgr;
+
+    // The resource manager this executor should use.
+    tf::ResourceMgr &resourceMgr;
+
+    // create_fruntime creates function library runtime given device,
+    std::function<std::shared_ptr<tf::FunctionLibraryRuntime>(tf::Device *)> create_fruntime;
+
+    // find_kernel returns an instance of op kernel, which was created on device.
+    // create_kernel returns an instance of op kernel based on NodeDef for device d.
+    // delete_kernel is called for every kernel used by the executor
+    // when the executor is deleted.
+    std::function<Status(const tf::NodeDef &, std::string *, tf::OpKernel **)> find_kernel;
+
+    std::function<Status(const tf::NodeDef &, tf::FunctionLibraryRuntime *, tf::OpKernel **)> create_kernel;
+
+    std::function<void(tf::OpKernel *, tf::FunctionLibraryRuntime *)> delete_kernel;
+
+    tf::Executor::Args::NodeOutputsCallback node_outputs_cb;
+};
 
 // Creates an Executor that computes the given "graph".
 //
@@ -41,8 +76,8 @@ class DeviceMgr;
 // The caller keeps the ownership of "device".
 // The returned executor takes the ownership of "graph".
 // Otherwise, returns an error status.
-tensorflow::Status NewMultiDeviceExecutor(const tf::MultiDeviceExecutorParams& params,
-                                          const tf::Graph* graph, ExecutionEngine::Inserter ins,
-                                          tf::Executor **executor);
+Status NewMultiDeviceExecutor(MultiDeviceExecutorParams params, const tf::Graph *graph, tf::Executor **executor);
 
-#endif  // OPLIBRARIES_TENSORFLOW_MULTI_DEVICE_EXECUTOR_H_
+} // namespace salus::oplib::tensorflow
+
+#endif // OPLIBRARIES_TENSORFLOW_MULTI_DEVICE_EXECUTOR_H_

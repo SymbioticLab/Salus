@@ -67,7 +67,7 @@ inline bool operator!=(const DeviceSpec &lhs, const DeviceSpec &rhs)
 std::ostream &operator<<(std::ostream &os, const DeviceSpec &c);
 
 namespace devices {
-constexpr DeviceSpec CPU0 {DeviceType::GPU, 0};
+constexpr DeviceSpec CPU0 {DeviceType::CPU, 0};
 constexpr DeviceSpec GPU0 {DeviceType::GPU, 0};
 constexpr DeviceSpec GPU1 {DeviceType::GPU, 1};
 } // namespace devices
@@ -80,8 +80,8 @@ public:
     inline size_t operator()(const DeviceSpec &spec) const
     {
         size_t res = 0;
-        utils::hash_combine(res, spec.type);
-        utils::hash_combine(res, spec.id);
+        sstl::hash_combine(res, spec.type);
+        sstl::hash_combine(res, spec.id);
         return res;
     }
 };

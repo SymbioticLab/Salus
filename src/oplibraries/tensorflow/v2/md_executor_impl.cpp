@@ -27,6 +27,7 @@
 
 #include "oplibraries/tensorflow/v2/peropallocdevice.h"
 #include "oplibraries/tensorflow/v2/tfallocator.h"
+#include "oplibraries/tensorflow/worker/rendezvousmgr.h"
 #include "utils/containerutils.h"
 #include "utils/stringutils.h"
 
@@ -36,19 +37,25 @@
 #include <unordered_set>
 #include <vector>
 
+namespace salus::oplib::tensorflow {
+
+/*
 namespace nodestats {
 void SetScheduled(tf::NodeExecStats *nt, int64_t t)
 {
+    if (!nt) return;
     nt->set_scheduled_micros(t);
 }
 
 void SetAllStart(tf::NodeExecStats *nt)
 {
+    if (!nt) return;
     nt->set_all_start_micros(NowInUsec());
 }
 
 void SetOpStart(tf::NodeExecStats *nt)
 {
+    if (!nt) return;
     DCHECK_NE(nt->all_start_micros(), 0);
     nt->set_op_start_rel_micros(NowInUsec() - nt->all_start_micros());
 }
@@ -159,6 +166,7 @@ bool SetTimelineLabel(tf::NodeExecStats *node_stats, const tf::Node *node)
     return is_transfer_node;
 }
 } // namespace nodestats
+*/
 
 namespace {
 tf::PartialTensorShape fromShapeHandle(tf::shape_inference::InferenceContext *ctx,
@@ -211,7 +219,7 @@ void ExecutorState::fetchRecvShape(const tf::Node *n)
         return;
     }
 
-    auto zr = static_cast<tf::ZrpcRemoteRendezvous *>(rendezvous_); // NOLINT
+    auto zr = static_cast<WorkerRendezvous *>(rendezvous_); // NOLINT
     DCHECK_NOTNULL(zr);
 
     auto key = rendezKey(n, 0, 0);
@@ -290,11 +298,11 @@ size_t ExecutorImpl::handlePagingRequest(uint64_t oldTicket, std::unique_ptr<Res
     reflocks.reserve(8);
 
     // guard after decl of parts, because we need to use it.
-    utils::ScopeGuards sg;
+    sstl::ScopeGuards sg;
     sg += [&totalReleased]() { VLOG(2) << "Paging released " << totalReleased << " bytes of memory"; };
 
     {
-        utils::TGuard g(entry_mu_, "PagingStart");
+        sstl::TGuard g(entry_mu_, "PagingStart");
         auto range = active_buffers_.equal_range(oldTicket);
         if (range.first == range.second) {
             LOG(ERROR) << "Requested ticket for paging not found: " << oldTicket;
@@ -305,7 +313,7 @@ size_t ExecutorImpl::handlePagingRequest(uint64_t oldTicket, std::unique_ptr<Res
         while (it != range.second) {
             auto &tree = it->second;
             DCHECK(tree);
-            if (!tree->paged_out && !tree->empty() && tree->root_buf && tree->root_buf->mark == 0xdeadbeef) {
+            if (!tree->paged_out && !tree->empty() && tree->root_buf) {
                 // candidate
                 reflocks.insert(&tree->buf_mu);
                 parts.push_back(tree);
@@ -320,7 +328,7 @@ size_t ExecutorImpl::handlePagingRequest(uint64_t oldTicket, std::unique_ptr<Res
 
     // Remember to add them back to active entries with updated value when exit
     sg += [this, &parts, oldTicket]() {
-        utils::TGuard g(entry_mu_, "PagingEnd");
+        sstl::TGuard g(entry_mu_, "PagingEnd");
         for (auto part : parts) {
             VLOG(2) << "Adding buffer tree of ticket " << part->ticket << " (was " << oldTicket
                     << ") due to paging";
@@ -343,7 +351,7 @@ size_t ExecutorImpl::handlePagingRequest(uint64_t oldTicket, std::unique_ptr<Res
     item.device->setResourceContext(std::move(rctx));
 
     // Lock all buffer, and all read/write should happen after this
-    utils::lock(reflocks.begin(), reflocks.end());
+    sstl::lock(reflocks.begin(), reflocks.end());
     std::vector<std::unique_lock<boost::upgrade_mutex>> guards;
     guards.reserve(reflocks.size());
     for (auto l : reflocks) {
@@ -361,8 +369,7 @@ size_t ExecutorImpl::handlePagingRequest(uint64_t oldTicket, std::unique_ptr<Res
         }
 
         auto oldRoot = part->root_buf;
-        oldRoot->Ref();
-        utils::ScopedUnref<tf::TensorBuffer> su(oldRoot);
+        auto su = sstl::add_ref(oldRoot);
 
         auto size = oldRoot->size();
         auto ok = moveTensorTree(*part, item.device);
@@ -383,7 +390,7 @@ size_t ExecutorImpl::handlePagingRequest(uint64_t oldTicket, std::unique_ptr<Res
 
 void ExecutorImpl::forceEvicted()
 {
-    utils::Guard g(entry_mu_);
+    sstl::Guard g(entry_mu_);
     for (auto state : active_states_) {
         state->ForceInterrupt(tf::errors::ResourceExhausted("Forcely killed due to paging"));
     }
@@ -410,22 +417,18 @@ tf::Status ExecutorImpl::LookupDevice(const DeviceSpec &spec, DeviceItem *item)
     case DeviceType::GPU:
         name = "GPU:";
         break;
-    default:
-        name = "CPU:";
-        break;
     }
     name += std::to_string(spec.id);
 
     tf::Device *tfdev;
-    auto ok = params_.deviceMgr->LookupDevice(name, &tfdev);
+    auto ok = params_.deviceMgr.LookupDevice(name, &tfdev);
     if (!ok.ok()) {
         LOG(ERROR) << "Cannot find device for " << spec << ": " << ok;
         return ok;
     }
     item->device = CreatePerOpAllocDevice(tfdev);
 
-    auto fruntime = params_.create_fruntime(item->device.get());
-    item->function_library.reset(fruntime, params_.delete_fruntime);
+    item->function_library = params_.create_fruntime(item->device.get());
 
     item->device_record_tensor_access = item->device->RequiresRecordingAccessedTensors();
     return tf::Status::OK();
@@ -449,7 +452,7 @@ void ExecutorImpl::updateBufferTree(Entry *entry, uint64_t ticket)
     const auto buf = tf::remote::PagingHelper::bufferOf(*entry->RefOrVal());
     const auto root_buf = buf ? buf->root_buffer() : nullptr;
 
-    utils::TGuard g(entry_mu_, "UpdateBufferTree");
+    sstl::TGuard g(entry_mu_, "UpdateBufferTree");
     auto &tree = entry->alloc_tree;
     if (!tree) {
         auto range = active_buffers_.equal_range(ticket);
@@ -477,17 +480,24 @@ void ExecutorImpl::updateBufferTree(Entry *entry, uint64_t ticket)
     VLOG(2) << "Adding entry " << as_hex(entry) << " to tree " << tree << " of buffer " << tree->root_buf
             << " with ticket " << ticket;
 
+    bool added = false;
     if (root_buf == buf) {
         auto it = std::find(tree->roots.begin(), tree->roots.end(), entry);
         if (it == tree->roots.end()) {
+            added = true;
             tree->roots.emplace_back(entry);
         }
     } else {
         auto &sub = tree->subs[buf];
         auto it = std::find(sub.begin(), sub.end(), entry);
         if (it == sub.end()) {
+            added = true;
             sub.emplace_back(entry);
         }
+    }
+
+    if (added && root_buf) {
+        root_buf->Ref();
     }
 }
 
@@ -505,6 +515,9 @@ void ExecutorImpl::removeFromBufferTree(const Entry *entry, EntryVec *needUpdate
         if (e == entry || (needUpdate && entry->ref && e->ref == entry->ref)) {
             VLOG(2) << "Removing entry " << as_hex(e) << " from tree " << entry->alloc_tree << " of buffer "
                     << entry->alloc_tree->root_buf << " with ticket " << entry->alloc_tree->ticket;
+            if (entry->alloc_tree->root_buf) {
+                entry->alloc_tree->root_buf->Unref();
+            }
             e->alloc_tree = nullptr;
             if (needUpdate) {
                 needUpdate->push_back(e);
@@ -514,15 +527,17 @@ void ExecutorImpl::removeFromBufferTree(const Entry *entry, EntryVec *needUpdate
         return false;
     };
 
-    utils::TGuard g(entry_mu_, "RemoveFromBufferTree");
+    sstl::TGuard g(entry_mu_, "RemoveFromBufferTree");
 
-    if (utils::erase_if(tree->roots, matchRefs)) {
+    if (sstl::erase_if(tree->roots, matchRefs)) {
         return;
     }
     // the entry was not found in roots, so it must be in one of the subs
     for (auto &p : tree->subs) {
-        if (utils::erase_if(p.second, matchRefs)) {
+        if (sstl::erase_if(p.second, matchRefs)) {
             break;
         }
     }
 }
+
+} // namespace salus::oplib::tensorflow

@@ -26,8 +26,8 @@
 #include "execution/threadpool/threadpool.h"
 #include "platform/logging.h"
 #include "utils/containerutils.h"
-#include "utils/threadutils.h"
 #include "utils/pointerutils.h"
+#include "utils/threadutils.h"
 
 #include <atomic>
 #include <chrono>
@@ -72,11 +72,70 @@ struct PagingCallbacks
 };
 
 /**
-* @todo write docs
-*/
+ * @todo write docs
+ */
 using PSessionItem = std::shared_ptr<SessionItem>;
 using POpItem = std::shared_ptr<OperationItem>;
 class IScheduler;
+class ExecutionEngine;
+class ExecutionContext
+{
+    struct Data
+    {
+
+        Data(PSessionItem &&item, uint64_t resOffer, ExecutionEngine &engine)
+            : item(std::forward<PSessionItem>(item))
+            , resOffer(resOffer)
+            , engine(engine)
+        {}
+
+        ~Data();
+
+        /**
+         * @brief remove from engine and give up our reference of session item
+         */
+        void removeFromEngine();
+        void insertIntoEngine();
+        void enqueueOperation(std::unique_ptr<OperationTask> &&task);
+
+        PSessionItem item;
+        uint64_t resOffer;
+
+    private:
+        ExecutionEngine &engine;
+    };
+
+    friend class ExecutionEngine;
+    std::shared_ptr<Data> m_data;
+
+public:
+    ExecutionContext() = default;
+    ExecutionContext(PSessionItem item, uint64_t resOffer, ExecutionEngine &engine)
+        : m_data(std::make_shared<Data>(std::move(item), resOffer, engine))
+    {
+    }
+
+    ExecutionContext(const ExecutionContext &) = default;
+    ExecutionContext(ExecutionContext &&) = default;
+    ExecutionContext &operator=(const ExecutionContext &) = default;
+    ExecutionContext &operator=(ExecutionContext &&) = default;
+
+    operator bool() const
+    {
+        return m_data != nullptr;
+    }
+
+    void acceptOffer(const std::string &sessHandle);
+
+    std::optional<ResourceMap> offeredSessionResource() const;
+
+    void enqueueOperation(std::unique_ptr<OperationTask> &&task);
+
+    void registerPagingCallbacks(PagingCallbacks &&pcb);
+
+    void deleteSession(std::function<void()> cb);
+};
+
 class ExecutionEngine
 {
 
@@ -85,34 +144,7 @@ public:
 
     ~ExecutionEngine();
 
-    class InserterImpl
-    {
-    public:
-        InserterImpl(InserterImpl &&other)
-            : InserterImpl(std::move(other.m_item), other.m_engine)
-        {
-        }
-        InserterImpl(const PSessionItem &item, ExecutionEngine &engine)
-            : m_item(item)
-            , m_engine(engine)
-        {
-        }
-
-        ~InserterImpl();
-
-        void enqueueOperation(std::unique_ptr<OperationTask> &&task);
-
-        void registerPagingCallbacks(PagingCallbacks &&pcb);
-
-        void deleteSession(std::function<void()> cb);
-
-    private:
-        PSessionItem m_item;
-        ExecutionEngine &m_engine;
-    };
-    using Inserter = std::shared_ptr<InserterImpl>;
-
-    Inserter registerSession(const std::string &sessHandle);
+    ExecutionContext createSessionOffer(ResourceMap rm);
 
     ThreadPool &pool()
     {
@@ -129,7 +161,6 @@ public:
         return m_schedParam;
     }
 
-
 private:
     ExecutionEngine();
 
@@ -143,7 +174,8 @@ private:
 
     // Task life cycle
     friend class IScheduler;
-    std::unique_ptr<ResourceContext> makeResourceContext(SessionItem &sess, const DeviceSpec &spec, const Resources &res);
+    std::unique_ptr<ResourceContext> makeResourceContext(SessionItem &sess, const DeviceSpec &spec,
+                                                         const Resources &res);
     bool maybePreAllocateFor(OperationItem &opItem, const DeviceSpec &spec);
     POpItem submitTask(POpItem &&opItem);
     void taskStopped(OperationItem &opItem, bool failed);
@@ -168,13 +200,14 @@ private:
     std::unordered_set<PSessionItem> m_deletedSessions;
     std::mutex m_delMu;
 
-    utils::notification m_note_has_work;
+    sstl::notification m_note_has_work;
     // Use a minimal linked list because the only operation we need is
     // iterate through the whole list, insert at end, and delete.
     // Insert and delete rarely happens, and delete is handled in the same thread
     // as iteration.
     std::list<PSessionItem> m_sessions;
 
+    friend struct ExecutionContext::Data;
     void insertSession(PSessionItem item);
     void deleteSession(PSessionItem item);
 

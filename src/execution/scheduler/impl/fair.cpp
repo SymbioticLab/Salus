@@ -56,7 +56,7 @@ std::string FairScheduler::name() const
 
 void FairScheduler::selectCandidateSessions(const SessionList &sessions,
                                             const SessionChangeSet &changeset,
-                                            utils::not_null<CandidateList*> candidates)
+                                            sstl::not_null<CandidateList*> candidates)
 {
     static auto lastSnapshotTime = system_clock::now();
 

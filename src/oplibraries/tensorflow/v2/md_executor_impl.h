@@ -1,17 +1,17 @@
 /*
  * <one line to give the library's name and an idea of what it does.>
  * Copyright (C) 2017  Aetf <aetf@unlimitedcodeworks.xyz>
- * 
+ *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation, either version 3 of the License, or
  * (at your option) any later version.
- * 
+ *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
- * 
+ *
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
@@ -25,30 +25,22 @@
  * with ours.
  */
 #include "oplibraries/tensorflow/tensorflow_headers.h"
-
-#include "oplibraries/tensorflow/v2/tensorutils.h"
-
 #include "execution/executionengine.h"
-#include "utils/threadutils.h"
+#include "oplibraries/tensorflow/v2/md_executor.h"
+#include "oplibraries/tensorflow/v2/tensorutils.h"
 #include "utils/containerutils.h"
-
+#include "utils/threadutils.h"
 #include <boost/intrusive/list.hpp>
-
-#include <unordered_set>
+#include <optional>
 #include <unordered_map>
+#include <unordered_set>
 
-namespace tf = tensorflow;
-namespace gtl = tf::gtl;
-using namespace tf::remote;
+namespace gtl = ::tensorflow::gtl;
 
-using TensorValueVec = gtl::InlinedVector<tf::TensorValue, 4>;
-using AllocatorAttributeVec = gtl::InlinedVector<tf::AllocatorAttributes, 4>;
-using DeviceContextVec = gtl::InlinedVector<tf::DeviceContext *, 4>;
-using EntryVec = gtl::InlinedVector<Entry *, 4>;
-//using BufferLockVec = gtl::InlinedVector<boost::shared_lock<boost::upgrade_mutex>, 4>;
-using BufferLockVec = std::vector<boost::shared_lock<boost::upgrade_mutex>>;
-using BufferMutexSet = std::unordered_set<boost::upgrade_mutex*>;
+struct DeviceSpec;
+namespace salus::oplib::tensorflow {
 
+/*
 namespace nodestats {
 inline int64_t NowInUsec()
 {
@@ -71,15 +63,24 @@ void SetMemory(tf::NodeExecStats *nt, tf::OpKernelContext *ctx);
 
 void SetReferencedTensors(tf::NodeExecStats *nt, const tf::TensorReferenceVector &tensors);
 
-bool SetTimelineLabel(tf::NodeExecStats *node_stats, const tf::Node* node);
+bool SetTimelineLabel(tf::NodeExecStats *node_stats, const tf::Node *node);
 } // namespace nodestats
+ */
+
+using TensorValueVec = gtl::InlinedVector<tf::TensorValue, 4>;
+using AllocatorAttributeVec = gtl::InlinedVector<tf::AllocatorAttributes, 4>;
+using DeviceContextVec = gtl::InlinedVector<tf::DeviceContext *, 4>;
+using EntryVec = gtl::InlinedVector<Entry *, 4>;
+// using BufferLockVec = gtl::InlinedVector<boost::shared_lock<boost::upgrade_mutex>, 4>;
+using BufferLockVec = std::vector<boost::shared_lock<boost::upgrade_mutex>>;
+using BufferMutexSet = std::unordered_set<boost::upgrade_mutex *>;
 
 class PerOpAllocDevice;
 class ExecutorState;
 class ExecutorImpl : public tf::Executor
 {
 public:
-    ExecutorImpl(const tf::MultiDeviceExecutorParams &p, const tf::Graph *g, ExecutionEngine::Inserter ins);
+    ExecutorImpl(MultiDeviceExecutorParams &&p, const tf::Graph *g);
 
     ~ExecutorImpl() override;
 
@@ -103,21 +104,23 @@ private:
     void removeFromBufferTree(const Entry *entry, EntryVec *needUpdate);
     void updateBufferTree(Entry *entry, uint64_t ticket);
 
-    void saveSucceedUsageForNode(const std::string &name, const Resources &res) {
-        utils::Guard g(usage_mu_);
+    void saveSucceedUsageForNode(const std::string &name, const Resources &res)
+    {
+        sstl::Guard g(usage_mu_);
         if (!resources::contains(cachedUsages_[name], res)) {
             cachedUsages_[name] = res;
         }
     }
 
-    utils::optional<Resources> cachedUsageForNode(const std::string &name) {
-        utils::Guard g(usage_mu_);
-        return utils::optionalGet(cachedUsages_, name);
+    std::optional<Resources> cachedUsageForNode(const std::string &name)
+    {
+        sstl::Guard g(usage_mu_);
+        return sstl::optionalGet(cachedUsages_, name);
     }
 
     struct DeviceItem
     {
-        std::shared_ptr<PerOpAllocDevice> device = nullptr;
+        std::shared_ptr<salus::oplib::tensorflow::PerOpAllocDevice> device = nullptr;
         std::shared_ptr<tf::FunctionLibraryRuntime> function_library = nullptr;
         bool device_record_tensor_access = false;
     };
@@ -127,7 +130,7 @@ private:
 
     struct ControlFlowInfo
     {
-        gtl::FlatSet<std::string, tf::HashStr> unique_frame_names;
+        gtl::FlatSet<std::string> unique_frame_names;
         std::vector<std::string> frame_names;
     };
 
@@ -171,18 +174,16 @@ private:
     }
 
     // Owned.
-    tf::MultiDeviceExecutorParams params_;
+    MultiDeviceExecutorParams params_;
     const tf::Graph *graph_;
-    GraphView gview_;
-    ExecutionEngine::Inserter inserter_;
+    tf::remote::GraphView gview_;
+    ExecutionContext inserter_;
 
     // Active entries. Used for handle paging request
     std::mutex entry_mu_;
-    boost::intrusive::list<TensorBufferTree,
-        boost::intrusive::constant_time_size<false>
-    > buffer_trees_;
-    std::unordered_multimap<uint64_t, TensorBufferTree*> active_buffers_;
-    std::unordered_set<ExecutorState*> active_states_;
+    boost::intrusive::list<TensorBufferTree, boost::intrusive::constant_time_size<false>> buffer_trees_;
+    std::unordered_multimap<uint64_t, TensorBufferTree *> active_buffers_;
+    std::unordered_set<ExecutorState *> active_states_;
 
     // Root nodes (with no in edges) that should form the initial ready queue
     std::vector<const tf::Node *> root_nodes_;
@@ -193,7 +194,7 @@ private:
     // Mapping from frame name to static information about the frame.
     // TODO(yuanbyu): We could cache it along with the graph so to avoid
     // the overhead of constructing it for each executor instance.
-    gtl::FlatMap<std::string, FrameInfo *, tf::HashStr> frame_info_;
+    gtl::FlatMap<std::string, FrameInfo *> frame_info_;
 
     // Known succeed node resource usage
     std::unordered_map<std::string, Resources> cachedUsages_;
@@ -207,7 +208,6 @@ private:
 // track of how many predecessors of a node have not done (pending_).
 struct DeviceItem;
 class ExecTask;
-struct DeviceSpec;
 class PerOpAllocDevice;
 class ExecutorState
 {
@@ -431,7 +431,8 @@ private:
 
         // Decrement the outstanding op count and clean up the iterations in the
         // frame. Return true iff the execution of the frame is done.
-        inline bool DecrementOutstandingOps(const GraphView *gview, int64_t iter, TaggedNodeSeq *ready)
+        inline bool DecrementOutstandingOps(const tf::remote::GraphView *gview, int64_t iter,
+                                            TaggedNodeSeq *ready)
         {
             tf::mutex_lock l(mu);
             return DecrementOutstandingOpsLocked(gview, iter, ready);
@@ -439,8 +440,8 @@ private:
 
         // Decrement the outstanding op count and clean up the iterations in the
         // frame. Return true iff the execution of the frame is done.
-        inline bool DecrementOutstandingOpsLocked(const GraphView *gview, int64_t iter, TaggedNodeSeq *ready)
-            EXCLUSIVE_LOCKS_REQUIRED(mu)
+        inline bool DecrementOutstandingOpsLocked(const tf::remote::GraphView *gview, int64_t iter,
+                                                  TaggedNodeSeq *ready) EXCLUSIVE_LOCKS_REQUIRED(mu)
         {
             IterationState *istate = GetIteration(iter);
             istate->outstanding_ops--;
@@ -461,27 +462,28 @@ private:
         bool IsIterationDone(int64_t iter) EXCLUSIVE_LOCKS_REQUIRED(mu);
 
         // Increments the iteration id. If this is a new iteration, initialize it.
-        void IncrementIteration(const GraphView *gview, TaggedNodeSeq *ready) EXCLUSIVE_LOCKS_REQUIRED(mu);
+        void IncrementIteration(const tf::remote::GraphView *gview, TaggedNodeSeq *ready)
+            EXCLUSIVE_LOCKS_REQUIRED(mu);
 
         // Activate all the deferred NextIteration nodes in a new iteration.
-        void ActivateNexts(const GraphView *gview, int64_t iter, TaggedNodeSeq *ready)
+        void ActivateNexts(const tf::remote::GraphView *gview, int64_t iter, TaggedNodeSeq *ready)
             EXCLUSIVE_LOCKS_REQUIRED(mu);
 
         // Activate all the current loop invariants in a new iteration.
-        void ActivateLoopInvs(const GraphView *gview, int64_t iter, TaggedNodeSeq *ready)
+        void ActivateLoopInvs(const tf::remote::GraphView *gview, int64_t iter, TaggedNodeSeq *ready)
             EXCLUSIVE_LOCKS_REQUIRED(mu);
 
         // Add a new loop invariant and make it available to all active iterations.
-        void AddLoopInv(const NodeItem *item, const Entry &value, TaggedNodeSeq *ready)
+        void AddLoopInv(const tf::remote::NodeItem *item, const Entry &value, TaggedNodeSeq *ready)
             EXCLUSIVE_LOCKS_REQUIRED(mu);
 
         // Activate the successors of a node. Contents of *outputs are left in an
         // indeterminate state after returning from this method.
-        void ActivateNodes(const NodeItem *item, const bool is_dead, int64_t iter, EntryVector *outputs,
-                           TaggedNodeSeq *ready) EXCLUSIVE_LOCKS_REQUIRED(mu);
+        void ActivateNodes(const tf::remote::NodeItem *item, const bool is_dead, int64_t iter,
+                           EntryVector *outputs, TaggedNodeSeq *ready) EXCLUSIVE_LOCKS_REQUIRED(mu);
 
         // Cleanup iterations of this frame starting from iteration iter.
-        bool CleanupIterations(const GraphView *gview, int64_t iter, TaggedNodeSeq *ready)
+        bool CleanupIterations(const tf::remote::GraphView *gview, int64_t iter, TaggedNodeSeq *ready)
             EXCLUSIVE_LOCKS_REQUIRED(mu);
 
         ~FrameState()
@@ -535,7 +537,7 @@ private:
     // Step-local container.
     tf::ScopedStepContainer *step_container_;
     tf::StepStatsCollector *stats_collector_;
-    tf::FunctionCallFrame *call_frame_;
+    tf::CallFrameInterface *call_frame_;
     ExecutorImpl *impl_;
     tf::CancellationManager *cancellation_manager_;
     tf::Executor::Args::Runner runner_;
@@ -556,21 +558,21 @@ private:
 
     std::atomic_int_fast32_t num_outstanding_ops_;
     std::atomic_int_fast32_t num_emitted_ops_;
-    utils::semaphore num_finished_ops_;
+    sstl::semaphore num_finished_ops_;
 
     tf::mutex mu_;
     tf::Status status_ GUARDED_BY(mu_);
 
     // Contains a value for [node->id()] for the device context assigned by the
     // device at the beginning of a step, for each device
-    std::unordered_map<tf::Device*, tf::DeviceContextMap> m_deviceContextMaps GUARDED_BY(mu_);
+    std::unordered_map<tf::Device *, tf::DeviceContextMap> m_deviceContextMaps GUARDED_BY(mu_);
 
     // Mapping from frame name to outstanding frames. A new frame is created
     // at some iteration of an active frame. So the unique key for the new
     // child frame is composed of the name of the parent frame, the iteration
     // number at which the parent frame is creating the new frame, and the
     // name of the new frame from nodedef.
-    gtl::FlatMap<std::string, FrameState *, tf::HashStr> outstanding_frames_ GUARDED_BY(mu_);
+    gtl::FlatMap<std::string, FrameState *> outstanding_frames_ GUARDED_BY(mu_);
 
     // The unique name of a frame.
     inline std::string MakeFrameName(FrameState *frame, int64_t iter_id, std::string name)
@@ -599,18 +601,15 @@ private:
     tf::DeviceContext *FindDeviceContext(size_t id, tf::Device *dev);
 
     // Before invoking item->kernel, fills in its "inputs".
-    tf::Status PrepareInputs(const NodeItem &item, tf::OpKernel *kernel,
+    tf::Status PrepareInputs(const tf::remote::NodeItem &item, tf::OpKernel *kernel,
                              const std::shared_ptr<PerOpAllocDevice> &device,
-                             tf::DeviceContext *device_context,
-                             Entry *first_input, TensorValueVec *inputs,
-                             BufferLockVec *buflocks,
-                             DeviceContextVec *input_device_contexts,
+                             tf::DeviceContext *device_context, Entry *first_input, TensorValueVec *inputs,
+                             BufferLockVec *buflocks, DeviceContextVec *input_device_contexts,
                              AllocatorAttributeVec *input_alloc_attrs, bool *is_input_dead);
 
     // After item->kernel computation is done, processes its outputs.
-    tf::Status ProcessOutputs(const NodeItem &item, tf::OpKernelContext *ctx,
-                              const std::shared_ptr<PerOpAllocDevice> &device,
-                              EntryVector *outputs, tf::NodeExecStats *stats);
+    tf::Status ProcessOutputs(const tf::remote::NodeItem &item, tf::OpKernelContext *ctx,
+                              const std::shared_ptr<PerOpAllocDevice> &device, EntryVector *outputs);
 
     // After item->kernel computation is done, clear its inputs.
     void ClearInputs(Entry *first, size_t num, BufferLockVec &buflocks);
@@ -618,14 +617,13 @@ private:
     // After processing the outputs, propagates the outputs to their dsts.
     // Contents of *outputs are left in an indeterminate state after
     // returning from this method.
-    void PropagateOutputs(const TaggedNode &tagged_node, const NodeItem *item, EntryVector *outputs,
-                          TaggedNodeSeq *ready);
+    void PropagateOutputs(const TaggedNode &tagged_node, const tf::remote::NodeItem *item,
+                          EntryVector *outputs, TaggedNodeSeq *ready);
 
     // "node" just finishes. Takes ownership of "stats". Returns true if
     // execution has completed.
     bool NodeDone(const tf::Status &s, const tf::Node *node, const tf::Device *device,
-                  tf::Rendezvous *rendezvous, const TaggedNodeSeq &ready,
-                  tf::NodeExecStats *stats);
+                  tf::Rendezvous *rendezvous, const TaggedNodeSeq &ready);
 
     // Schedule all the expensive nodes in 'ready'
     void ScheduleReady(const TaggedNodeSeq &ready);
@@ -636,7 +634,7 @@ private:
         // TODO(misard) Replace with a finer-grain enabling flag once we
         // add better optional debugging support.
         if (vlog_ && VLOG_IS_ON(1)) {
-            const NodeItem *item = impl_->gview_.node(node_id);
+            const auto *item = impl_->gview_.node(node_id);
             tf::mutex_lock l(frame->mu);
             frame->GetIteration(iter)->mark_completed(item->pending_id);
         }
@@ -667,5 +665,7 @@ private:
         return input_frame->GetIteration(input_iter)->input_tensors;
     }
 };
+
+} // namespace salus::oplib::tensorflow
 
 #endif // MULTIDEVICEEXECUTORSTATEIMPL_H

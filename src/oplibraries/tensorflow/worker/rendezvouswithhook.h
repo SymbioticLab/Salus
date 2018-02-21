@@ -17,8 +17,8 @@
  * 
  */
 
-#ifndef MD_RENDEZVOUS_H
-#define MD_RENDEZVOUS_H
+#ifndef SALUS_OPLIB_TENSORFLOW_LOCALWRAPPERRENDEZVOUS_H
+#define SALUS_OPLIB_TENSORFLOW_LOCALWRAPPERRENDEZVOUS_H
 
 /*
  * Make sure tensorflow_headers is included first before
@@ -26,15 +26,18 @@
  * with ours.
  */
 #include "oplibraries/tensorflow/tensorflow_headers.h"
-
+#include "utils/pointerutils.h"
 #include <unordered_map>
 
-class MultiDeviceRendezvous : public tensorflow::Rendezvous
+/**
+ * @brief Hook the rendez recv and send with device pointer
+ */
+class RendezvousWithHook : public tensorflow::Rendezvous
 {
 public:
-    explicit MultiDeviceRendezvous(const std::shared_ptr<tensorflow::Device> &device,
-                                   tensorflow::Rendezvous *localRendez);
-    ~MultiDeviceRendezvous() override;
+    explicit RendezvousWithHook(std::shared_ptr<tensorflow::Device> device,
+                                sstl::ScopedUnref<tensorflow::Rendezvous> localRendez);
+    ~RendezvousWithHook() override;
 
     tensorflow::Status Send(const ParsedKey& parsed,
                             const Args& send_args,
@@ -47,7 +50,7 @@ public:
 
 private:
     std::shared_ptr<tensorflow::Device> m_device;
-    tensorflow::Rendezvous *m_local;
+    sstl::ScopedUnref<tensorflow::Rendezvous> m_local;
 };
 
-#endif // MD_RENDEZVOUS_H
+#endif // SALUS_OPLIB_TENSORFLOW_LOCALWRAPPERRENDEZVOUS_H

@@ -16,8 +16,8 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef TENSORUTILS_H
-#define TENSORUTILS_H
+#ifndef SALUS_OPLIB_TENSORFLOW_TENSORUTILS_H
+#define SALUS_OPLIB_TENSORFLOW_TENSORUTILS_H
 
 /*
  * Make sure tensorflow_headers is included first before
@@ -25,25 +25,26 @@
  * with ours.
  */
 #include "oplibraries/tensorflow/tensorflow_headers.h"
-
 #include <boost/intrusive/list_hook.hpp>
 #include <boost/thread/shared_mutex.hpp>
-
 #include <memory>
 #include <unordered_map>
 
+namespace salus::oplib::tensorflow {
 struct Entry;
 struct TensorBufferTree
-: public boost::intrusive::list_base_hook<boost::intrusive::link_mode<boost::intrusive::auto_unlink>> {
+    : public boost::intrusive::list_base_hook<boost::intrusive::link_mode<boost::intrusive::auto_unlink>>
+{
     tf::TensorBuffer *root_buf = nullptr;
     uint64_t ticket;
     bool paged_out = false;
     boost::upgrade_mutex buf_mu;
 
-    std::vector<Entry*> roots;
-    std::unordered_map<tf::TensorBuffer*, std::vector<Entry*>> subs;
+    std::vector<Entry *> roots;
+    std::unordered_map<tf::TensorBuffer *, std::vector<Entry *>> subs;
 
-    bool empty() const {
+    bool empty() const
+    {
         size_t size = 0;
         for (auto &sub : subs) {
             size += sub.second.size();
@@ -150,9 +151,8 @@ struct Entry
 
     void Dereference()
     {
-        VLOG(2) << "Dereferencing entry " << as_hex(this) << " ref " << as_hex(ref)
-                << " buffer " << as_hex(tf::remote::PagingHelper::bufferOf(*ref))
-                << " of ticket " << alloc_tree->ticket;
+        VLOG(2) << "Dereferencing entry " << as_hex(this) << " ref " << as_hex(ref) << " buffer "
+                << as_hex(tf::remote::PagingHelper::bufferOf(*ref)) << " of ticket " << alloc_tree->ticket;
         {
             tf::mutex_lock l(*ref_mu);
             DCHECK(!val_field_is_set);
@@ -178,8 +178,9 @@ struct Entry
         return val.get();
     }
 
-    template<typename ...Args>
-    void SetVal(Args... args) {
+    template<typename... Args>
+    void SetVal(Args... args)
+    {
         if (val_field_is_set) {
             val.Destroy();
         }
@@ -192,16 +193,20 @@ struct Entry
 
     struct MaybeLock
     {
-        explicit MaybeLock(Entry *en) : mu(en->ref_mu){
+        explicit MaybeLock(Entry *en)
+            : mu(en->ref_mu)
+        {
             if (mu) {
                 mu->lock();
             }
         }
-        ~MaybeLock() {
+        ~MaybeLock()
+        {
             if (mu) {
                 mu->unlock();
             }
         }
+
     private:
         tf::mutex *mu;
     };
@@ -248,4 +253,5 @@ tf::Status moveTensor(Entry &entry, const std::shared_ptr<PerOpAllocDevice> &dst
 
 tf::Status moveTensorTree(TensorBufferTree &, const std::shared_ptr<PerOpAllocDevice> &dstDevice);
 
-#endif // TENSORUTILS_H
+} // namespace salus::oplib::tensorflow
+#endif // SALUS_OPLIB_TENSORFLOW_TENSORUTILS_H

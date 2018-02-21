@@ -20,14 +20,15 @@
 #define EXECUTION_RESOURCES_H
 
 #include "execution/devices.h"
-#include "utils/cpp17.h"
 #include "utils/macros.h"
+#include "utils/pointerutils.h"
 
 #include <list>
 #include <mutex>
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
+#include <optional>
 
 enum class ResourceType
 {
@@ -77,8 +78,8 @@ public:
     inline size_t operator()(const ResourceTag &tag) const
     {
         size_t res = 0;
-        utils::hash_combine(res, tag.type);
-        utils::hash_combine(res, tag.device);
+        sstl::hash_combine(res, tag.type);
+        sstl::hash_combine(res, tag.device);
         return res;
     }
 };
@@ -146,10 +147,9 @@ public:
     void acceptAdmission(uint64_t ticket, const std::string &sessHandle);
 
     // Query the usage of session.
-    utils::optional<ResourceMap> usage(const std::string &sessHandle) const;
+    std::optional<ResourceMap> usage(uint64_t ticket) const;
 
     // Free the session
-    void free(const std::string &sessHandle);
     void free(uint64_t ticket);
 
     std::string DebugString() const;
@@ -163,7 +163,6 @@ private:
 
     Resources m_limits;
 
-    std::unordered_map<std::string, uint64_t> m_sessToTicket;
     std::unordered_map<uint64_t, ResourceMap> m_sessions;
 
     std::list<ResourceMap *> m_peak;
@@ -208,15 +207,14 @@ public:
 
     Resources queryUsages(const std::unordered_set<uint64_t> &tickets) const;
 
-    utils::optional<Resources> queryUsage(uint64_t ticket) const;
+    std::optional<Resources> queryUsage(uint64_t ticket) const;
     bool hasUsage(uint64_t ticket) const;
 
     struct LockedProxy
     {
-        explicit LockedProxy(ResourceMonitor *resMon)
+        explicit LockedProxy(sstl::not_null<ResourceMonitor*> resMon)
             : m_resMonitor(resMon)
         {
-            assert(m_resMonitor);
             m_resMonitor->m_mu.lock();
         }
 

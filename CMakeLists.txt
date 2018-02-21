@@ -25,8 +25,12 @@ option(WITH_TESTS "Build test suite in default target" OFF)
 #---------------------------------------------------------------------------------------
 # Find packages
 #---------------------------------------------------------------------------------------
+list(APPEND CMAKE_PREFIX_PATH ${PROJECT_SOURCE_DIR}/spack-packages)
+list(REMOVE_DUPLICATES CMAKE_PREFIX_PATH)
+
 # Protobuf
-find_package(Protobuf 3.2.0 EXACT REQUIRED)
+#set(protobuf_MODULE_COMPATIBLE ON CACHE BOOL "CMake build-in FindProtobuf.cmake module compatible" FORCE)
+find_package(Protobuf 3.4.0 EXACT REQUIRED)
 set_package_properties(Protobuf PROPERTIES TYPE REQUIRED PURPOSE
     "For message serialization, version must match the one used in TensorFlow"
 )
@@ -50,7 +54,7 @@ find_package(ZeroMQ REQUIRED)
 set_package_properties(ZeroMQ PROPERTIES TYPE REQUIRED PURPOSE "For communication")
 
 # Boost
-find_package(Boost 1.64 EXACT REQUIRED COMPONENTS
+find_package(Boost 1.66 EXACT REQUIRED COMPONENTS
     thread
 )
 set_package_properties(Boost PROPERTIES TYPE REQUIRED PURPOSE "For lock free queue and some utilities")
@@ -80,6 +84,7 @@ include(cmake/CompileOptions.cmake)
 include(cmake/CheckCXXFeature.cmake)
 check_cxx_feature(cxx_enum_hash HAS_CXX_ENUM_HASH)
 check_cxx_feature(cxx_aligned_alloc HAS_CXX_ALIGNED_ALLOC)
+check_cxx_feature(cxx_builtin_expect HAS_CXX_BUILTIN_EXPECT)
 
 configure_file(src/config.h.in ${CMAKE_CURRENT_BINARY_DIR}/config.h)
 include_directories(${CMAKE_CURRENT_BINARY_DIR})

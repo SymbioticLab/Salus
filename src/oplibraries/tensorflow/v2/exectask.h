@@ -16,8 +16,8 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef EXECTASK_H
-#define EXECTASK_H
+#ifndef SALUS_OPLIB_TENSORFLOW_EXECTASK_H
+#define SALUS_OPLIB_TENSORFLOW_EXECTASK_H
 
 /*
  * Make sure tensorflow_headers is included first before
@@ -31,9 +31,11 @@
 #include "execution/operationtask.h"
 #include "utils/pointerutils.h"
 
-namespace utils {
+namespace sstl {
 class semaphore;
-} // namespace utils
+} // namespace sstl
+
+namespace salus::oplib::tensorflow {
 
 /**
  * @todo write docs
@@ -41,7 +43,7 @@ class semaphore;
 class ExecTask : public OperationTask
 {
 public:
-    ExecTask(ExecutorState *state, utils::semaphore &num_finished_ops, const ExecutorState::TaggedNode &node,
+    ExecTask(ExecutorState *state, sstl::semaphore &num_finished_ops, const ExecutorState::TaggedNode &node,
              const tf::OpKernelContext::Params &initial_params, tf::Rendezvous *rendez, int maxFailures = 2);
 
     bool prepare(std::unique_ptr<ResourceContext> &&rctx) override;
@@ -112,13 +114,14 @@ private:
     tf::OpKernelContext::Params params;
     std::unique_ptr<tf::OpKernelContext> pctx;
 
-    tf::NodeExecStats *stats;
-
     // Borrowed from ExecutorState
     tf::Rendezvous *rendez;
-    utils::semaphore &num_finished_ops;
+    sstl::semaphore &num_finished_ops;
 
     ExecutorState *m_state;
 };
 
-#endif // EXECTASK_H
+
+}
+
+#endif // SALUS_OPLIB_TENSORFLOW_EXECTASK_H

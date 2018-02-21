@@ -26,9 +26,10 @@
 #include <functional>
 #include <sstream>
 #include <tuple>
+#include <optional>
 
-using boost::optional;
-using utils::Guard;
+using std::optional;
+using sstl::Guard;
 
 std::string enumToString(const ResourceType &rt)
 {
@@ -317,27 +318,19 @@ void SessionResourceTracker::acceptAdmission(uint64_t ticket, const std::string 
         return;
     }
 
-    m_sessToTicket[sessHandle] = ticket;
     m_sessions[ticket].persistantHandle = sessHandle;
 }
 
-utils::optional<ResourceMap> SessionResourceTracker::usage(const std::string &sessHandle) const
+optional<ResourceMap> SessionResourceTracker::usage(uint64_t ticket) const
 {
     Guard g(m_mu);
 
-    utils::optional<ResourceMap> res;
-    auto it = m_sessToTicket.find(sessHandle);
-    if (it == m_sessToTicket.end()) {
-        return res;
+    auto it = m_sessions.find(ticket);
+    if (it == m_sessions.end()) {
+        return {};
     }
 
-    auto it2 = m_sessions.find(it->second);
-    if (it2 == m_sessions.end()) {
-        return res;
-    }
-
-    res = it2->second;
-    return res;
+    return it->second;
 }
 
 void SessionResourceTracker::freeUnsafe(uint64_t ticket)
@@ -368,24 +361,6 @@ void SessionResourceTracker::free(uint64_t ticket)
     freeUnsafe(ticket);
 }
 
-void SessionResourceTracker::free(const std::string &sessHandle)
-{
-    AllocLog(INFO) << "Free session resource: session=" << sessHandle;
-    Guard g(m_mu);
-
-    if (m_disabled) {
-        return;
-    }
-
-    auto it = m_sessToTicket.find(sessHandle);
-    if (it == m_sessToTicket.end()) {
-        LOG(ERROR) << "SessionResourceTracker: unknown sess handle: " << sessHandle;
-        return;
-    }
-
-    freeUnsafe(it->second);
-}
-
 std::string SessionResourceTracker::DebugString() const
 {
     Guard g(m_mu);
@@ -396,10 +371,6 @@ std::string SessionResourceTracker::DebugString() const
     oss << "    Issued tickets:" << std::endl;
     for (auto &p : m_sessions) {
         oss << "      " << p.first << " -> " << p.second.DebugString();
-    }
-    oss << "    Sessions:" << std::endl;
-    for (auto &p : m_sessToTicket) {
-        oss << "      " << p.first << " -> " << p.second << std::endl;
     }
     return oss.str();
 }
@@ -580,11 +551,11 @@ std::vector<std::pair<size_t, uint64_t>> ResourceMonitor::sortVictim(
     {
         Guard g(m_mu);
         for (auto &ticket : candidates) {
-            auto usagemap = utils::optionalGet(m_using, ticket);
+            auto usagemap = sstl::optionalGet(m_using, ticket);
             if (!usagemap) {
                 continue;
             }
-            auto gpuusage = utils::optionalGet(usagemap, tag);
+            auto gpuusage = sstl::optionalGet(usagemap, tag);
             if (!gpuusage || *gpuusage == 0) {
                 continue;
             }
@@ -603,15 +574,15 @@ Resources ResourceMonitor::queryUsages(const std::unordered_set<uint64_t> &ticke
     Guard g(m_mu);
     Resources res;
     for (auto t : tickets) {
-        merge(res, utils::getOrDefault(m_using, t, {}));
+        merge(res, sstl::getOrDefault(m_using, t, {}));
     }
     return res;
 }
 
-utils::optional<Resources> ResourceMonitor::queryUsage(uint64_t ticket) const
+optional<Resources> ResourceMonitor::queryUsage(uint64_t ticket) const
 {
     Guard g(m_mu);
-    return utils::optionalGet(m_using, ticket);
+    return sstl::optionalGet(m_using, ticket);
 }
 
 bool ResourceMonitor::hasUsage(uint64_t ticket) const

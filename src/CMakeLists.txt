@@ -18,6 +18,7 @@ set(SRC_LIST
     "execution/threadpool/nonblockingthreadpool.cpp"
     "execution/scheduler/ischeduler.cpp"
 
+    "rpcserver/iothreadpool.cpp"
     "rpcserver/rpcservercore.cpp"
     "rpcserver/zmqserver.cpp"
 
@@ -39,8 +40,18 @@ add_subdirectory(platform)
 if(USE_TENSORFLOW)
     list(APPEND SRC_LIST
         "oplibraries/tensorflow/tfoplibraryv2.cpp"
+        "oplibraries/tensorflow/tfexception.cpp"
+        "oplibraries/tensorflow/tfinstance.cpp"
+        "oplibraries/tensorflow/tfsession.cpp"
+        "oplibraries/tensorflow/tfutils.cpp"
+        "oplibraries/tensorflow/worker/rendezvousmgr.cpp"
+        "oplibraries/tensorflow/worker/rendezvouswithhook.cpp"
+        "oplibraries/tensorflow/worker/devicecontextwithdevice.cpp"
+        "oplibraries/tensorflow/worker/dummyworkercache.cpp"
+        "oplibraries/tensorflow/worker/dummysessionmgr.cpp"
+        "oplibraries/tensorflow/worker/mdgraphmgr.cpp"
+
         "oplibraries/tensorflow/v2/md_executor.cpp"
-        "oplibraries/tensorflow/v2/md_rendezvous.cpp"
         "oplibraries/tensorflow/v2/tfallocator.cpp"
         "oplibraries/tensorflow/v2/peropallocdevice.cpp"
         "oplibraries/tensorflow/v2/exectask.cpp"
@@ -67,6 +78,6 @@ target_link_libraries(executor
 
 if(USE_TENSORFLOW)
     target_link_libraries(executor
-        tensorflow::all
+        tensorflow::kernels
     )
 endif(USE_TENSORFLOW)

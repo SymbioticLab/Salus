@@ -22,21 +22,20 @@
  * with ours.
  */
 #include "oplibraries/tensorflow/tensorflow_headers.h"
-
+#include "oplibraries/tensorflow/tfutils.h"
 #include "exectask.h"
-
 #include "execution/devices.h"
-#include "oplibraries/tensorflow/v2/md_rendezvous.h"
 #include "oplibraries/tensorflow/v2/peropallocdevice.h"
 #include "oplibraries/tensorflow/v2/tfallocator.h"
+#include "oplibraries/tensorflow/worker/devicecontextwithdevice.h"
+#include "oplibraries/tensorflow/worker/rendezvouswithhook.h"
 #include "utils/macros.h"
 #include "utils/threadutils.h"
-
 #include <sstream>
 
-namespace tf = tensorflow;
+namespace salus::oplib::tensorflow {
 
-ExecTask::ExecTask(ExecutorState *state, utils::semaphore &num_finished_ops,
+ExecTask::ExecTask(ExecutorState *state, sstl::semaphore &num_finished_ops,
                    const ExecutorState::TaggedNode &node, const tf::OpKernelContext::Params &initial_params,
                    tf::Rendezvous *rendez, int maxFailures)
     : deleteKernel(state->impl_->params_.delete_kernel)
@@ -45,7 +44,6 @@ ExecTask::ExecTask(ExecutorState *state, utils::semaphore &num_finished_ops,
     , has_ref_input(false)
     , tagged_node(node)
     , params(initial_params)
-    , stats(nullptr)
     , rendez(rendez)
     , num_finished_ops(num_finished_ops)
     , m_state(state)
@@ -65,25 +63,14 @@ ExecTask::ExecTask(ExecutorState *state, utils::semaphore &num_finished_ops,
     VLOG(2) << "Op " << tagged_node.node->def() << " supports device:";
     supportedTypes.reserve(tftypes.size());
     for (const auto &tft : tftypes) {
-        if (tft == tf::DEVICE_CPU) {
-            supportedTypes.push_back(DeviceType::CPU);
-            VLOG(2) << "    CPU";
-        } else if (tft == tf::DEVICE_GPU) {
-            supportedTypes.push_back(DeviceType::GPU);
-            VLOG(2) << "    GPU";
-        } else {
-            LOG(ERROR) << "Unknown tf device type: " << tft.type();
-        }
+        supportedTypes.emplace_back(tfDeviceTypeToType(tft));
+        VLOG(2) << "    " << tft.type();
     }
 
     auto device = tagged_node.node->def().device();
     if (!device.empty()) {
         supportedTypes.clear();
-        if (device.find("cpu") != std::string::npos) {
-            supportedTypes.push_back(DeviceType::CPU);
-        } else {
-            supportedTypes.push_back(DeviceType::GPU);
-        }
+        supportedTypes.push_back(tfDeviceNameToSpec(device).type);
     }
     // pre compute estimated usage
     for (auto t : supportedTypes) {
@@ -151,10 +138,12 @@ bool ExecTask::prepare(std::unique_ptr<ResourceContext> &&rctx)
         if (!s.ok()) {
             LOG(ERROR) << "Error when creating kernel for node " << tagged_node.node->name() << ": " << s;
             statusInPrepare.Update(s);
-            done = true;
+            done = false;
         }
         // HACK:
-        owns_kernel = !ditem.function_library->IsStateful(op_kernel->type_string());
+        if (op_kernel) {
+            owns_kernel = !ditem.function_library->IsStateful(op_kernel->type_string());
+        }
     }
 
     if (!done) {
@@ -196,7 +185,7 @@ Resources ExecTask::estimatedUsage(const DeviceSpec &dev)
         }
 
         const auto &sessHandle = m_state->impl_->params_.session;
-        auto rm = SessionResourceTracker::instance().usage(sessHandle);
+        auto rm = m_state->impl_->params_.ins.offeredSessionResource();
         if (rm) {
             auto f = failureTimes;
             if (f > maxFailures) {
@@ -205,7 +194,7 @@ Resources ExecTask::estimatedUsage(const DeviceSpec &dev)
                 LOG(WARNING) << "Estimated usage this time: "
                              << resources::DebugString(rm->temporary, "    ");
             }
-            uint64_t scale = 1 << (maxFailures - f);
+            uint64_t scale = 1u << (maxFailures - f);
             resources::scale(rm->temporary, 1.0 / scale);
 
             // Update cache
@@ -304,7 +293,7 @@ void ExecTask::cancel()
 
     auto s = tf::errors::Cancelled("Cancelled");
     // cancel may be called before prepare, so no device
-    auto completed = m_state->NodeDone(s, nullptr, nullptr, params.rendezvous, ready, nullptr);
+    auto completed = m_state->NodeDone(s, nullptr, nullptr, params.rendezvous, ready);
 
     num_finished_ops.notify();
 
@@ -346,22 +335,15 @@ void ExecTask::run(Callbacks cbs)
 
     params.device = ditem.device.get();
 
-    auto localRendez = new MultiDeviceRendezvous(ditem.device, rendez);
+    auto localRendez = new RendezvousWithHook(ditem.device, sstl::add_ref(rendez));
     params.rendezvous = localRendez;
     params.record_tensor_accesses = ditem.device_record_tensor_access;
     params.function_library = ditem.function_library.get();
     // Set the device_context for this node id, if it exists.
     params.op_device_context = m_state->FindDeviceContext(id, ditem.device.get());
 
+    // Don't track allocations. Not implemented.
     params.track_allocations = false;
-    if (m_state->stats_collector_ && !tagged_node.is_dead) {
-        // track allocations if and only if we are collecting statistics
-        params.track_allocations = true;
-        stats = new tf::NodeExecStats;
-        stats->set_node_name(node->name());
-        nodestats::SetScheduled(stats, nodestats::NowInUsec());
-        nodestats::SetAllStart(stats);
-    }
 
     VLOG(2) << "Process node: " << SummarizeNodeDef(node->def()) << " " << ditem.device->resourceContext();
 
@@ -425,9 +407,6 @@ void ExecTask::run(Callbacks cbs)
         params.eigen_gpu_device = nullptr; // Force allocation
         pctx = std::make_unique<tf::OpKernelContext>(&params, item.num_outputs);
 
-        if (stats) {
-            nodestats::SetOpStart(stats);
-        }
         ditem.device->ComputeAsync(async, pctx.get(), [this, cbs = std::move(cbs), &item]() {
             VLOG(2) << "Async Kernel done: " << SummarizeNodeDef(tagged_node.node->def());
             afterCompute(false, cbs, item);
@@ -436,9 +415,7 @@ void ExecTask::run(Callbacks cbs)
         // Synchronous computes.
         VLOG(2) << "Launch sync kernel";
         pctx = std::make_unique<tf::OpKernelContext>(&params, item.num_outputs);
-        if (stats) {
-            nodestats::SetOpStart(stats);
-        }
+
         DCHECK_NOTNULL(op_kernel);
         ditem.device->Compute(op_kernel, pctx.get());
 
@@ -463,20 +440,12 @@ void ExecTask::afterCompute(bool is_dead, const Callbacks &cbs, const tf::remote
             return;
         }
 
-        if (stats) {
-            nodestats::SetOpEnd(stats);
-        }
-
-        s = m_state->ProcessOutputs(item, pctx.get(), device, &outputs, stats);
+        s = m_state->ProcessOutputs(item, pctx.get(), device, &outputs);
         // clear locks, we don't need them, and they may be deleted when
         // update ref entry
         buflocks.clear();
         // Update ref entry tickets
         updateRefEntryTickets(reffedEntries);
-
-        if (stats) {
-            nodestats::SetMemory(stats, pctx.get());
-        }
     }
 
     // Clears inputs.
@@ -499,9 +468,6 @@ void ExecTask::afterCompute(bool is_dead, const Callbacks &cbs, const tf::remote
         // Get the list of all tensors accessed during the execution
         tf::TensorReferenceVector accessed;
         pctx->retrieve_accessed_tensors(&accessed);
-        if (stats) {
-            nodestats::SetReferencedTensors(stats, accessed);
-        }
         // callee takes ownership of the vector
         device->ConsumeListOfAccessedTensors(pctx->op_device_context(), accessed);
     }
@@ -555,7 +521,7 @@ void ExecTask::afterRun(const tf::Status &s, const Callbacks &cbs)
         m_state->impl_->saveSucceedUsageForNode(tagged_node.node->name(), usage);
     }
     auto completed =
-        m_state->NodeDone(s, tagged_node.node, ditem.device.get(), params.rendezvous, ready, stats);
+        m_state->NodeDone(s, tagged_node.node, ditem.device.get(), params.rendezvous, ready);
 
     num_finished_ops.notify();
 
@@ -606,3 +572,5 @@ ExecTask::~ExecTask()
         deleteKernel(op_kernel, ditem.function_library.get());
     }
 }
+
+} // namespace salus::oplib::tensorflow

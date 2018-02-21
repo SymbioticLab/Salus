@@ -1,18 +1,18 @@
-#include "execution/resources.h"
 #include "execution/executionengine.h"
-#include "rpcserver/zmqserver.h"
+#include "execution/resources.h"
 #include "platform/logging.h"
 #include "platform/signals.h"
-#include "utils/cpp17.h"
+#include "rpcserver/zmqserver.h"
 #include "utils/macros.h"
 
 #include <docopt.h>
 
 #include <iostream>
 #include <memory>
+#include <optional>
+#include <regex>
 #include <string>
 #include <unordered_map>
-#include <regex>
 
 using namespace std;
 using namespace std::string_literals;
@@ -36,7 +36,7 @@ const static auto pLogFile = "--perflog";
 
 // <program-name> [-v | -vv | -vvv | --verbose=<verbosity>] [--vmodule=<vmodules>] [-l <endpoint>]
 static auto kUsage =
-R"(Usage:
+    R"(Usage:
     <program-name> [options]
     <program-name> --help
     <program-name> --version
@@ -81,39 +81,54 @@ static auto kVersion = R"(Salus: Fine-Grained GPU Sharing for DNN version 0.1.0)
 template<typename T, typename R>
 class value_or_helper
 {
-    using docopt_long_t = typename std::result_of<decltype(&docopt::value::asLong)(docopt::value)>::type;
+    using docopt_long_t = typename std::result_of<decltype (&docopt::value::asLong)(docopt::value)>::type;
 
     static constexpr bool is_string = std::is_same<T, std::string>::value;
     static constexpr bool is_bool = std::is_same<T, bool>::value;
-    static constexpr bool is_long = std::is_same<T, long>::value
-                                    || (std::is_integral<T>::value
-                                        && !is_bool
-                                        && sizeof(T) <= sizeof(docopt_long_t));
+    static constexpr bool is_long =
+        std::is_same<T, long>::value
+        || (std::is_integral<T>::value && !is_bool && sizeof(T) <= sizeof(docopt_long_t));
 
     static_assert(is_string || is_bool || is_long, "docopt::value only supports std::string, bool and long");
 
-    struct string_tag {};
-    struct bool_tag {};
-    struct long_tag {};
-    struct dispatcher {
+    struct string_tag
+    {
+    };
+    struct bool_tag
+    {
+    };
+    struct long_tag
+    {
+    };
+    struct dispatcher
+    {
     private:
         using bool_or_string = typename std::conditional<is_bool, bool_tag, string_tag>::type;
+
     public:
         using type = typename std::conditional<is_long, long_tag, bool_or_string>::type;
     };
 
     value_or_helper(const docopt::value &v, const R &def, string_tag)
-        : value(v ? v.asString() : def) { }
+        : value(v ? v.asString() : def)
+    {
+    }
 
     value_or_helper(const docopt::value &v, const R &def, bool_tag)
-        : value(v ? v.asBool() : def) { }
+        : value(v ? v.asBool() : def)
+    {
+    }
 
     value_or_helper(const docopt::value &v, const R &def, long_tag)
-        : value(v ? v.asLong() : def) { }
+        : value(v ? v.asLong() : def)
+    {
+    }
 
 public:
     value_or_helper(const docopt::value &v, const R &def)
-        : value_or_helper(v, def, typename dispatcher::type {}) {}
+        : value_or_helper(v, def, typename dispatcher::type{})
+    {
+    }
 
     typename std::enable_if_t<is_string || is_bool || is_long, R> value;
 };
@@ -125,9 +140,9 @@ inline R value_or(const docopt::value &v, const R &def)
 }
 
 template<typename T>
-inline utils::optional<T> optional_arg(const docopt::value &v)
+inline std::optional<T> optional_arg(const docopt::value &v)
 {
-    return value_or<T, utils::optional<T>>(v, utils::nullopt);
+    return value_or<T, std::optional<T>>(v, std::nullopt);
 }
 
 } // namespace
@@ -175,11 +190,7 @@ void configureExecution(std::map<std::string, docopt::value> &args)
         sched = "pack";
     }
 
-    ExecutionEngine::instance().setSchedulingParam({
-        maxQueueHeadWaiting,
-        !disableWorkConservative,
-        sched
-    });
+    ExecutionEngine::instance().setSchedulingParam({maxQueueHeadWaiting, !disableWorkConservative, sched});
 }
 
 void printConfiguration(std::map<std::string, docopt::value> &)

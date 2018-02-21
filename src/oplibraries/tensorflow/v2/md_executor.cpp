@@ -40,7 +40,8 @@ limitations under the License.
 #include <string>
 #include <unordered_map>
 
-namespace tf = tensorflow;
+namespace salus::oplib::tensorflow {
+
 using namespace tf::remote;
 
 namespace {
@@ -59,11 +60,10 @@ void ExecutionEngineRunner(tf::Executor::Args::Closure c)
 
 } // namespace
 
-tensorflow::Status NewMultiDeviceExecutor(const tensorflow::MultiDeviceExecutorParams &params,
-                                          const tensorflow::Graph *graph, ExecutionEngine::Inserter ins,
-                                          tf::Executor **executor)
+tf::Status NewMultiDeviceExecutor(MultiDeviceExecutorParams params, const tf::Graph *graph,
+                                  tf::Executor **executor)
 {
-    auto impl = new ExecutorImpl(params, graph, std::move(ins));
+    auto impl = new ExecutorImpl(std::move(params), graph);
     auto s = impl->Initialize();
     if (s.ok()) {
         *executor = impl;
@@ -73,17 +73,15 @@ tensorflow::Status NewMultiDeviceExecutor(const tensorflow::MultiDeviceExecutorP
     return s;
 }
 
-ExecutorImpl::ExecutorImpl(const tf::MultiDeviceExecutorParams &p, const tf::Graph *g,
-                           ExecutionEngine::Inserter ins)
-    : params_(p)
+ExecutorImpl::ExecutorImpl(MultiDeviceExecutorParams &&p, const tf::Graph *g)
+    : params_(std::move(p))
     , graph_(g)
-    , inserter_(std::move(ins))
 {
-    DCHECK(p.find_kernel != nullptr);
-    DCHECK(p.create_kernel != nullptr);
+    DCHECK(params_.find_kernel != nullptr);
+    DCHECK(params_.create_kernel != nullptr);
 
     using namespace std::placeholders;
-    inserter_->registerPagingCallbacks({
+    params_.ins.registerPagingCallbacks({
         std::bind(&ExecutorImpl::forceEvicted, this),
         std::bind(&ExecutorImpl::handlePagingRequest, this, _1, _2),
     });
@@ -308,7 +306,7 @@ ExecutorState::ExecutorState(const tf::Executor::Args &args, ExecutorImpl *impl)
 {
     // Insert ourself into active list
     {
-        utils::Guard g(impl->entry_mu_);
+        sstl::Guard g(impl->entry_mu_);
         impl->active_states_.insert(this);
     }
 
@@ -333,7 +331,7 @@ ExecutorState::~ExecutorState()
     // force interupption. In that case the ExecutorImpl takes care
     // of clearing active_states_
     if (!forceInterrupted) {
-        utils::Guard g(impl_->entry_mu_);
+        sstl::Guard g(impl_->entry_mu_);
         impl_->active_states_.erase(this);
     }
 
@@ -388,7 +386,7 @@ void ExecutorState::Process(TaggedNode tagged_node)
     params.step_container = step_container_;
 
     params.runner = &runner_;
-    params.resource_manager = impl_->params_.resourceMgr;
+    params.resource_manager = &impl_->params_.resourceMgr;
 
     // TODO(misard) Replace with a finer-grain enabling flag once we
     // add better optional debugging support.
@@ -405,7 +403,7 @@ void ExecutorState::Process(TaggedNode tagged_node)
 
     num_emitted_ops_ += 1;
 
-    impl_->inserter_->enqueueOperation(std::move(nodeTask));
+    impl_->params_.ins.enqueueOperation(std::move(nodeTask));
 }
 
 tf::Status ExecutorState::SetupKernel(TaggedNode node, const ExecutorImpl::DeviceItem &ditem,
@@ -435,11 +433,11 @@ tf::DeviceContext *ExecutorState::FindDeviceContext(size_t id, tf::Device *devic
 
     auto it = m_deviceContextMaps.end();
     {
-        tensorflow::mutex_lock l(mu_);
+        tf::mutex_lock l(mu_);
 
         it = m_deviceContextMaps.find(device);
         if (it == m_deviceContextMaps.end()) {
-            tensorflow::DeviceContextMap contexts;
+            tf::DeviceContextMap contexts;
             auto ok = device->FillContextMap(impl_->graph_, &contexts);
             if (!ok.ok()) {
                 LOG(ERROR) << "Filling contextmap failed: " << ok;
@@ -454,8 +452,8 @@ tf::DeviceContext *ExecutorState::FindDeviceContext(size_t id, tf::Device *devic
 }
 
 namespace {
-bool onSameDevice(tensorflow::Device *devA, const tensorflow::AllocatorAttributes &attrA,
-                  tensorflow::Device *devB, const tensorflow::AllocatorAttributes &attrB)
+bool onSameDevice(tf::Device *devA, const tf::AllocatorAttributes &attrA, tf::Device *devB,
+                  const tf::AllocatorAttributes &attrB)
 {
     bool cpuA = devA->device_type() == tf::DEVICE_CPU || attrA.on_host();
     bool cpuB = devB->device_type() == tf::DEVICE_CPU || attrB.on_host();
@@ -533,7 +531,7 @@ tf::Status ExecutorState::PrepareInputs(const NodeItem &item, tf::OpKernel *kern
     // all read/write should happen after this
     {
         TIMED_SCOPE_IF(readLockObj, "lock all read", VLOG_IS_ON(1));
-        utils::lock_shared(locks.begin(), locks.end());
+        sstl::lock_shared(locks.begin(), locks.end());
     }
 
     buflocks->clear();
@@ -582,8 +580,8 @@ tf::Status ExecutorState::PrepareInputs(const NodeItem &item, tf::OpKernel *kern
         // 5  noref        noref         same                    get val
         // 8  noref        noref         diff           devcopy, get val
 
-        tensorflow::AllocatorAttributes expected;
-        if (kernel->input_memory_types()[i] == tensorflow::HOST_MEMORY) {
+        tf::AllocatorAttributes expected;
+        if (kernel->input_memory_types()[i] == tf::HOST_MEMORY) {
             expected.set_on_host(true);
         }
         bool on_same_device = onSameDevice(entry->device.get(), entry->alloc_attr, device.get(), expected);
@@ -678,7 +676,7 @@ tf::Status ExecutorState::PrepareInputs(const NodeItem &item, tf::OpKernel *kern
 
 tf::Status ExecutorState::ProcessOutputs(const NodeItem &item, tf::OpKernelContext *ctx,
                                          const std::shared_ptr<PerOpAllocDevice> &device,
-                                         EntryVector *outputs, tf::NodeExecStats *stats)
+                                         EntryVector *outputs)
 {
     TIMED_FUNC_IF(timerObj, VLOG_IS_ON(1));
 
@@ -735,9 +733,6 @@ tf::Status ExecutorState::ProcessOutputs(const NodeItem &item, tf::OpKernelConte
                 dtype = MakeRefType(dtype);
             }
             if (dtype == item.output_type(i)) {
-                if (stats && val.tensor->IsInitialized()) {
-                    nodestats::SetOutput(stats, i, val.tensor);
-                }
                 if (val.is_ref()) {
                     out->has_value = true;
                     out->ref = val.tensor;
@@ -763,13 +758,9 @@ tf::Status ExecutorState::ProcessOutputs(const NodeItem &item, tf::OpKernelConte
                     }
                 }
             } else {
-                s.Update(tf::errors::Internal("Output ",
-                                              i,
-                                              " of type ",
-                                              DataTypeString(dtype),
+                s.Update(tf::errors::Internal("Output ", i, " of type ", DataTypeString(dtype),
                                               " does not match declared output type ",
-                                              DataTypeString(item.output_type(i)),
-                                              " for node ",
+                                              DataTypeString(item.output_type(i)), " for node ",
                                               SummarizeNodeDef(node->def())));
             }
 
@@ -826,7 +817,7 @@ void ExecutorState::ClearInputs(Entry *first, size_t num, BufferLockVec &buflock
             DCHECK(entry->alloc_tree);
             VLOG(2) << "Removing entry " << as_hex(entry) << " of ticket " << entry->alloc_tree->ticket
                     << " due to clearinputs";
-            utils::TGuard g(impl_->entry_mu_, "ClearInputs");
+            sstl::TGuard g(impl_->entry_mu_, "ClearInputs");
             auto range = impl_->active_buffers_.equal_range(entry->alloc_tree->ticket);
             for (auto it = range.first; it != range.second; ++it) {
                 if (it->second == entry->alloc_tree) {
@@ -982,19 +973,11 @@ void ExecutorState::ForceInterrupt(const tf::Status &s)
 }
 
 bool ExecutorState::NodeDone(const tf::Status &s, const tf::Node *node, const tf::Device *device,
-                             tf::Rendezvous *rendezvous, const TaggedNodeSeq &ready, tf::NodeExecStats *stats)
+                             tf::Rendezvous *rendezvous, const TaggedNodeSeq &ready)
 {
     TIMED_FUNC_IF(timerObj, VLOG_IS_ON(1));
-
-    if (stats) {
-        nodestats::SetAllEnd(stats);
-        if (!nodestats::SetTimelineLabel(stats, node)) {
-            // Only record non-transfer nodes.
-            stats_collector_->Save(device->name(), stats);
-        } else {
-            delete stats;
-        }
-    }
+    UNUSED(node);
+    UNUSED(device);
 
     bool abort_run = false;
     if (!s.ok()) {
@@ -1027,7 +1010,7 @@ bool ExecutorState::NodeDone(const tf::Status &s, const tf::Node *node, const tf
     VLOG(3) << "NodeDone s: " << s;
 
     bool completed = false;
-    int ready_size = ready.size();
+    auto ready_size = ready.size();
     if (ready_size == 0 || !s.ok()) {
         auto ops = num_outstanding_ops_.fetch_sub(1);
         VLOG(3) << "NodeDone num_outstanding_ops_: " << ops;
@@ -1557,3 +1540,5 @@ void ExecutorImpl::RunAsync(const Args &args, DoneCallback done)
 {
     (new ExecutorState(args, this))->RunAsync(done);
 }
+
+} // namespace salus::oplib::tensorflow

@@ -22,6 +22,7 @@
 #include "utils/containerutils.h"
 #include "execution/resources.h"
 #include "execution/executionengine.h"
+#include "platform/thread_annotations.h"
 
 #include <list>
 #include <string>
@@ -31,6 +32,7 @@
 #include <unordered_map>
 #include <memory>
 #include <any>
+#include <utility>
 
 /**
  * @todo write docs
@@ -41,9 +43,9 @@ struct SessionItem
     using UnsafeQueue = std::list<POpItem>;
 private:
     // protected by mu (may be accessed both in schedule thread and close session thread)
-    PagingCallbacks pagingCb;
-    std::function<void()> cleanupCb;
-    KernelQueue queue;
+    PagingCallbacks pagingCb GUARDED_BY(mu);
+    std::function<void()> cleanupCb GUARDED_BY(mu);
+    KernelQueue queue GUARDED_BY(mu);
     std::mutex mu;
 
     size_t lastScheduled = 0;
@@ -68,8 +70,8 @@ public:
     UnsafeQueue bgQueue;
     bool forceEvicted{false};
 
-    explicit SessionItem(const std::string &handle)
-        : sessHandle(handle)
+    explicit SessionItem(std::string handle)
+        : sessHandle(std::move(handle))
     {
         // NOTE: add other devices
         resUsage[resources::GPU0Memory].get() = 0;
@@ -78,13 +80,29 @@ public:
 
     ~SessionItem();
 
-    utils::MutableAtom::value_type &resourceUsage(const ResourceTag &tag)
+    sstl::MutableAtom::value_type &resourceUsage(const ResourceTag &tag)
     {
         return resUsage.at(tag).get();
     }
 
+    void setPagingCallbacks(PagingCallbacks pcb);
+
+    /**
+     * @brief prepare to remove session from execution engine.
+     * 
+     * This clears paging callbacks, and setup a cleanup callback that gets called
+     * once the item is actually remove from execution engine.
+     * 
+     * Typical use:
+     * ```
+     * item.finalCleanup(cleanupCallback);
+     * engine.deleteSession(std::move(item));
+     * ```
+     */
+    void prepareDelete(std::function<void()> cb);
+
 private:
-    using AtomicResUsages = std::unordered_map<ResourceTag, utils::MutableAtom>;
+    using AtomicResUsages = std::unordered_map<ResourceTag, sstl::MutableAtom>;
     // must be initialized in constructor
     AtomicResUsages resUsage;
 };
