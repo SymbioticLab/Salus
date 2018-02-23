@@ -22,7 +22,9 @@
 
 #include "rpcserver/zmqserver.h"
 #include "utils/macros.h"
+#include "utils/plugins.h"
 #include "utils/pointerutils.h"
+#include "platform/thread_annotations.h"
 #include "executor.protos.h"
 
 #include <functional>
@@ -75,23 +77,47 @@ public:
     void registerOpLibrary(executor::OpLibraryType libraryType, std::unique_ptr<IOpLibrary> &&library,
                            int priority);
 
+
+    /**
+     * @brief
+     *
+     */
     void initializeLibraries();
+
+    /**
+     * @brief
+     *
+     */
     void uninitializeLibraries();
 
-    IOpLibrary *findOpLibrary(const executor::OpLibraryType libraryType) const;
+    IOpLibrary *findOpLibrary(executor::OpLibraryType libraryType) const;
     IOpLibrary *findSuitableOpLibrary(const executor::OpKernelDef &opdef) const;
 
     static OpLibraryRegistary &instance();
 
 private:
+    /**
+     * @brief discover oplibrary plugins.
+     *
+     * @param pluginDirs additional directories to look into.
+     * @param noDefault don't search default paths.
+     */
+    void discoverLibraryPlugins();
+
     struct LibraryItem
     {
         std::unique_ptr<IOpLibrary> library;
         int priority;
     };
     mutable std::mutex m_mu;
-    std::unordered_map<executor::OpLibraryType, LibraryItem> m_opLibraries;
+    std::unordered_map<executor::OpLibraryType, LibraryItem> m_opLibraries GUARDED_BY(m_mu);
     int initialized;
+
+    sstl::PluginLoader m_ploader;
 };
+
+#define SALUS_IMPLEMENT_OPLIB(name, optype, class, priority) \
+    SSTL_IMPLEMENT_PLUGIN(name, oplib) \
+    OpLibraryRegistary::Register name (executor::optype, std::make_unique<class>(), priority)
 
 #endif // IOPLIBRARY_H

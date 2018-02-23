@@ -32,34 +32,22 @@ namespace sstl {
  * @param def default value in case of error
  * @return the read value or default value
  */
-template<typename T>
-T fromEnvVar(const char *env, const T &def)
+template<typename T, typename R = T>
+R fromEnvVar(const char *env, const T &def)
 {
     const char *env_var_val = std::getenv(env);
     if (!env_var_val) {
         return def;
     }
-    T res;
-    if (!boost::conversion::try_lexical_convert(env_var_val, res))
-        return def;
+    if constexpr (std::is_same_v<R, std::string_view> || std::is_same_v<R, std::string>) {
+        return env_var_val;
+    } else {
+        T res;
+        if (!boost::conversion::try_lexical_convert(env_var_val, res))
+            return def;
 
-    return res;
-}
-
-/**
- * @brief Read a value of type `T` from environment variable. Use `def` as default value in case of
- * error or missing value. The value is only read once from the environment variable. Later call
- * to this function simply returns the cached value.
- *
- * @param env the name of the environment variable
- * @param def default value in case of error
- * @return the read value or default value
- */
-template<typename T>
-T fromEnvVarCached(const char *env, const T &def)
-{
-    static T res = fromEnvVar(env, def);
-    return res;
+        return res;
+    }
 }
 
 } // namespace sstl

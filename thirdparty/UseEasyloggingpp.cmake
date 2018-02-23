@@ -38,4 +38,6 @@ set_property(TARGET easyloggingpp APPEND PROPERTY INCLUDE_DIRECTORIES "${third_p
 set_property(TARGET easyloggingpp APPEND PROPERTY INTERFACE_INCLUDE_DIRECTORIES "${third_party_dir}/${library_name}/src")
 set_property(TARGET easyloggingpp APPEND PROPERTY COMPILE_DEFINITIONS ${macros})
 set_property(TARGET easyloggingpp APPEND PROPERTY INTERFACE_COMPILE_DEFINITIONS ${macros})
+# Since the target is defined inside a nested project() call, global CMAKE_POSITION_INDENPENDENT_CODE has no effect on it.
+# re-enable it here.
 set_property(TARGET easyloggingpp PROPERTY POSITION_INDEPENDENT_CODE ON)

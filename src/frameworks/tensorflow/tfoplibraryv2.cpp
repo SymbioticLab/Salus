@@ -54,10 +54,9 @@ auto prepareTFCall(const zrpc::CustomRequest &creq);
 CallWithMasterMethodName(IMPL_PARSE)
 
 #undef IMPL_PARSE
-
-    OpLibraryRegistary::Register tfoplibraryv2(executor::TENSORFLOW, std::make_unique<TFOpLibraryV2>(), 200);
-
 } // namespace
+
+SALUS_IMPLEMENT_OPLIB(tfoplibraryv2, TENSORFLOW, TFOpLibraryV2, 200);
 
 void HandlerCallback::operator()(const Status &s)
 {
@@ -110,8 +109,6 @@ void TFOpLibraryV2::onCustom(ZmqServer::Sender sender, const zrpc::EvenlopDef &e
 {
     UNUSED(sender);
 
-    using Method = std::function<void(const zrpc::CustomRequest &, HandlerCallback &&)>;
-    static std::unordered_map<std::string, Method> funcs{
 #define INSTANCE_HANDLER(name)                                                                               \
     {                                                                                                        \
         "tensorflow." #name "Request", [](auto creq, auto &&hcb) {                                           \
@@ -121,11 +118,6 @@ void TFOpLibraryV2::onCustom(ZmqServer::Sender sender, const zrpc::EvenlopDef &e
             TFInstance::instance().handle##name(*tfreq, resp, std::move(hcb));                               \
         }                                                                                                    \
     }
-
-        INSTANCE_HANDLER(CreateSession), INSTANCE_HANDLER(CloseSession),   INSTANCE_HANDLER(ListDevices),
-        INSTANCE_HANDLER(Reset),
-
-#undef INSTANCE_HANDLER
 
 #define SESSION_HANDLER(name)                                                                                \
     {                                                                                                        \
@@ -138,9 +130,22 @@ void TFOpLibraryV2::onCustom(ZmqServer::Sender sender, const zrpc::EvenlopDef &e
         }                                                                                                    \
     }
 
-        SESSION_HANDLER(ExtendSession),  SESSION_HANDLER(PartialRunSetup), SESSION_HANDLER(RunStep),
-#undef SESSION_HANDLER
+    using Method = std::function<void(const zrpc::CustomRequest &, HandlerCallback &&)>;
+    static std::unordered_map<std::string, Method> funcs{
+        // clang-format off
+        INSTANCE_HANDLER(CreateSession),
+        INSTANCE_HANDLER(CloseSession),
+        INSTANCE_HANDLER(ListDevices),
+        INSTANCE_HANDLER(Reset),
+
+        SESSION_HANDLER(ExtendSession),
+        SESSION_HANDLER(PartialRunSetup),
+        SESSION_HANDLER(RunStep),
+        // clang-format on
     };
+
+#undef INSTANCE_HANDLER
+#undef SESSION_HANDLER
 
     HandlerCallback hcb{std::move(cb), nullptr};
     try {

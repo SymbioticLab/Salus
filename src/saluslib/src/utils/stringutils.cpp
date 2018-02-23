@@ -20,6 +20,8 @@
 #include "utils/stringutils.h"
 
 #include <algorithm>
+#include <string_view>
+#include <vector>
 
 namespace sstl {
 std::string bytesToHexString(const uint8_t *info, size_t infoLength, size_t maxLen)
@@ -36,7 +38,7 @@ std::string bytesToHexString(const uint8_t *info, size_t infoLength, size_t maxL
 
     // TODO: we should be able to skip some iterations based on maxLen
     for (size_t i = 0; i < infoLength; i++) {
-        int nNibble = info[i] >> 4;
+        auto nNibble = info[i] >> 4;
         result[2 * i] = pszNibbleToHex[nNibble];
         nNibble = info[i] & 0x0F;
         result[2 * i + 1] = pszNibbleToHex[nNibble];
@@ -55,7 +57,7 @@ std::string bytesToHexString(const uint8_t *info, size_t infoLength, size_t maxL
     return result;
 }
 
-bool startsWith(const std::string &str, const std::string &prefix)
+bool startsWith(std::string_view str, std::string_view prefix)
 {
     if (prefix.size() > str.size()) {
         return false;
@@ -63,7 +65,7 @@ bool startsWith(const std::string &str, const std::string &prefix)
     return std::equal(prefix.begin(), prefix.end(), str.begin());
 }
 
-bool endsWith(const std::string &str, const std::string &postfix)
+bool endsWith(std::string_view str, std::string_view postfix)
 {
     if (postfix.size() > str.size()) {
         return false;
@@ -71,4 +73,55 @@ bool endsWith(const std::string &str, const std::string &postfix)
     return std::equal(postfix.begin(), postfix.end(), str.end() - postfix.size());
 }
 
+std::vector<std::string_view> splitsv(std::string_view self, std::string_view Separator)
+{
+    if (Separator.empty()) {
+        return splitsv(self, 0);
+    } else if (Separator.size() <= 1) {
+        return splitsv(self, Separator[0]);
+    }
+
+    std::vector<std::string_view> Result;
+    if (self.empty())
+        return Result;
+
+    std::string_view::size_type p, start = 0;
+    while (true) {
+        p = self.find(Separator, start);
+        if (p == std::string_view::npos) {
+            Result.emplace_back(self.substr(start, std::string_view::npos));
+            return Result;
+        } else {
+            Result.emplace_back(self.substr(start, p - start));
+            start = p + Separator.length();
+        }
+    }
+}
+
+std::vector<std::string_view> splitsv(std::string_view self, std::string_view::value_type Separator)
+{
+    std::vector<std::string_view> Result;
+    if (self.empty())
+        return Result;
+    std::string_view::size_type p = 0, start = 0;
+
+    if (Separator == 0) {
+        for (p = 0; p < self.size(); ++p)
+            Result.emplace_back(self.substr(p, 1));
+        return Result;
+    }
+    while (true) {
+        if (p >= self.size()) {
+            Result.emplace_back(self.substr(start));
+            return Result;
+        }
+        if (self[p] == Separator) {
+            Result.emplace_back(self.substr(start, p - start));
+            ++p;
+            start = p;
+        } else {
+            ++p;
+        }
+    }
+}
 } // namespace sstl

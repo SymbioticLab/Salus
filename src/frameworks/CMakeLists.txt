@@ -16,10 +16,12 @@ function(salus_add_oplib library_name)
 
     add_library(${library_name} MODULE ${SALUS_ADD_OPLIB_SRCS})
     target_link_libraries(${library_name} PRIVATE salus)
-    # Mimic the directory structure in build tree
     set_target_properties(${library_name} PROPERTIES
         PREFIX ""
+        # Mimic the directory structure in build tree
         LIBRARY_OUTPUT_DIRECTORY ${PROJECT_BINARY_DIR}/lib/salus/oplibs
+        CXX_VISIBILITY_PRESET hidden
+        VISIBILITY_INLINES_HIDDEN 1
     )
     # Install
     install(TARGETS ${library_name} DESTINATION ${CMAKE_INSTALL_LIBDIR}/salus/oplibs)

@@ -33,9 +33,13 @@ set_package_properties(ZeroMQ PROPERTIES TYPE REQUIRED PURPOSE "For communicatio
 # Boost
 find_package(Boost 1.66 EXACT REQUIRED COMPONENTS
     thread
+    filesystem
+    system
+    # dll (requires: filesystem, system)
+    # container
 )
 set_package_properties(Boost PROPERTIES TYPE REQUIRED PURPOSE "For lock free queue and some utilities")
-add_definitions(-DBOOST_THREAD_VERSION=4)
+add_definitions(-DBOOST_THREAD_VERSION=4 -DBOOST_FILESYSTEM_NO_DEPRECATED)
 
 # Bundled third party library
 add_subdirectory(${PROJECT_SOURCE_DIR}/thirdparty)

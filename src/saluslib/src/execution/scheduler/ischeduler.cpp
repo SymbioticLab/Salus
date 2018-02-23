@@ -32,7 +32,7 @@ using std::chrono::system_clock;
 namespace {
 bool useGPU()
 {
-    auto use = sstl::fromEnvVar("EXEC_SCHED_USE_GPU", true);
+    static auto use = sstl::fromEnvVar("EXEC_SCHED_USE_GPU", true);
     VLOG(2) << "Scheduling using: " << (use ? "GPU,CPU" : "CPU");
     return use;
 }

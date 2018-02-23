@@ -29,13 +29,14 @@ namespace {
 
 uint64_t maxBytesDumpLen()
 {
-    return sstl::fromEnvVarCached("EXEC_MAX_BYTES_DUMP_LEN", UINT64_C(20));
+    static auto cached = sstl::fromEnvVar("EXEC_MAX_BYTES_DUMP_LEN", UINT64_C(20));
+    return cached;
 }
 
 class ThreadSafePerformanceTrackingCallback : public el::PerformanceTrackingCallback
 {
 protected:
-    void handle(const el::PerformanceTrackingData *data)
+    void handle(const el::PerformanceTrackingData *data) override
     {
         using namespace el;
         base::type::stringstream_t ss;

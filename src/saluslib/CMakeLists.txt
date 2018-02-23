@@ -1,49 +1,49 @@
 set(SRC_LIST
-    "platform/logging.cpp"
+    "src/platform/logging.cpp"
 
-    "oplibraries/ioplibrary.cpp"
+    "src/oplibraries/ioplibrary.cpp"
 
-    "memorymgr/memorymgr.cpp"
+    "src/memorymgr/memorymgr.cpp"
 
-    "execution/scheduler/operationitem.cpp"
-    "execution/scheduler/sessionitem.cpp"
-    "execution/scheduler/ischeduler.cpp"
-    "execution/scheduler/impl/fair.cpp"
-    "execution/scheduler/impl/pack.cpp"
-    "execution/scheduler/impl/preempt.cpp"
-    "execution/executionengine.cpp"
-    "execution/devices.cpp"
-    "execution/operationtask.cpp"
-    "execution/resources.cpp"
-    "execution/threadpool/nonblockingthreadpool.cpp"
-    "execution/scheduler/ischeduler.cpp"
+    "src/execution/scheduler/operationitem.cpp"
+    "src/execution/scheduler/sessionitem.cpp"
+    "src/execution/scheduler/ischeduler.cpp"
+    "src/execution/scheduler/impl/fair.cpp"
+    "src/execution/scheduler/impl/pack.cpp"
+    "src/execution/scheduler/impl/preempt.cpp"
+    "src/execution/executionengine.cpp"
+    "src/execution/devices.cpp"
+    "src/execution/operationtask.cpp"
+    "src/execution/resources.cpp"
+    "src/execution/threadpool/nonblockingthreadpool.cpp"
+    "src/execution/scheduler/ischeduler.cpp"
 
-    "rpcserver/iothreadpool.cpp"
-    "rpcserver/rpcservercore.cpp"
-    "rpcserver/zmqserver.cpp"
+    "src/rpcserver/iothreadpool.cpp"
+    "src/rpcserver/rpcservercore.cpp"
+    "src/rpcserver/zmqserver.cpp"
 
-    "utils/protoutils.cpp"
-    "utils/pointerutils.cpp"
-    "utils/stringutils.cpp"
-    "utils/threadutils.cpp"
-    "utils/envutils.cpp"
-    "utils/zmqutils.cpp"
-    "utils/containerutils.cpp"
-    "utils/cpp17.cpp"
-    "utils/debugging.cpp"
+    "src/utils/protoutils.cpp"
+    "src/utils/pointerutils.cpp"
+    "src/utils/stringutils.cpp"
+    "src/utils/threadutils.cpp"
+    "src/utils/envutils.cpp"
+    "src/utils/zmqutils.cpp"
+    "src/utils/containerutils.cpp"
+    "src/utils/cpp17.cpp"
+    "src/utils/debugging.cpp"
+    "src/utils/plugins.cpp"
 )
 if(WIN32)
     list(APPEND SRC_LIST
-        "platform/windows/memory.cpp"
-        "platform/windows/signals.cpp"
+        "src/platform/windows/memory.cpp"
+        "src/platform/windows/signals.cpp"
     )
 else(WIN32)
     list(APPEND SRC_LIST
-        "platform/posix/memory.cpp"
-        "platform/posix/signals.cpp"
+        "src/platform/posix/memory.cpp"
+        "src/platform/posix/signals.cpp"
     )
 endif(WIN32)
-prepend_each(SRC_LIST src ${SRC_LIST})
 
 # Generated sources
 set(proto_files
@@ -65,14 +65,19 @@ target_include_directories(salus
     PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/src
 )
+target_compile_options(salus
+    INTERFACE
+        -fPIC # while CMAKE_POSITION_INDEPENDENT_CODE enables -fPIC for libraries, we need to propogate this to executables
+)
 # TODO: clean interface
 target_link_libraries(salus
     PUBLIC
-        Boost::thread
         ZeroMQ::zmq
         easyloggingpp
         protobuf::libprotobuf
         Boost::boost
+        Boost::thread
+        Boost::filesystem
     PRIVATE
 )
 set_target_properties(salus PROPERTIES VERSION ${PROJECT_VERSION})

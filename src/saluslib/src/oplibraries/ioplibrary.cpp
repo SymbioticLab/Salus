@@ -30,9 +30,18 @@ OpLibraryRegistary &OpLibraryRegistary::instance()
     return registary;
 }
 
-OpLibraryRegistary::OpLibraryRegistary() = default;
+OpLibraryRegistary::OpLibraryRegistary()
+    : m_ploader("oplib")
+{
+}
 
 OpLibraryRegistary::~OpLibraryRegistary() = default;
+
+void OpLibraryRegistary::discoverLibraryPlugins()
+{
+    auto libs = m_ploader.discoverPlugins("salus/oplibs");
+    LOG(INFO) << "Loaded " << libs.size() << " oplibrary plugin";
+}
 
 OpLibraryRegistary::Register::Register(executor::OpLibraryType libraryType,
                                        std::unique_ptr<IOpLibrary> &&library,
@@ -61,6 +70,9 @@ void OpLibraryRegistary::registerOpLibrary(executor::OpLibraryType libraryType,
 
 void OpLibraryRegistary::initializeLibraries()
 {
+    // First discover any potential plugins
+    discoverLibraryPlugins();
+
     sstl::Guard g(m_mu);
     ++initialized;
     if (initialized > 1) {
@@ -93,7 +105,7 @@ void OpLibraryRegistary::uninitializeLibraries()
     }
 }
 
-IOpLibrary *OpLibraryRegistary::findOpLibrary(const executor::OpLibraryType libraryType) const
+IOpLibrary *OpLibraryRegistary::findOpLibrary(executor::OpLibraryType libraryType) const
 {
     std::lock_guard<std::mutex> guard(m_mu);
     auto iter = m_opLibraries.find(libraryType);

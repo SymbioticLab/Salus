@@ -21,14 +21,20 @@
 #define SALUS_SSTL_STRINGUTILS_H
 
 #include <string>
+#include <string_view>
+#include <vector>
 
 namespace sstl {
 
 std::string bytesToHexString(const uint8_t *info, size_t infoLength, size_t maxLen = 20);
 
-bool startsWith(const std::string &str, const std::string &prefix);
+bool startsWith(std::string_view str, std::string_view prefix);
 
-bool endsWith(const std::string &str, const std::string &postfix);
+bool endsWith(std::string_view str, std::string_view postfix);
+
+std::vector<std::string_view> splitsv(std::string_view self, std::string_view Separator);
+
+std::vector<std::string_view> splitsv(std::string_view self, std::string_view::value_type Separator);
 
 } // namespace sstl
 
