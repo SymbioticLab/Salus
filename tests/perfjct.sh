@@ -2,7 +2,8 @@
 
 export CUDA_VISIBLE_DEVICES=0,1
 
-EXECUTOR=../build/Release/src/executor
+EXECUTOR=../build/Release/bin/executor
+LD_LIBRARY_PATH=../build/Release/lib:$LD_LIBRARY_PATH
 BENCHMARKDIR=$HOME/buildbed/tf_benchmarks/scripts/tf_cnn_benchmarks
 LOGDIR=../scripts/logs/perflogs
 

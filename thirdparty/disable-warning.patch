@@ -1,0 +1,12 @@
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+index 1f7244b..3f3a832 100644
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -1,5 +1,7 @@
+ cmake_minimum_required(VERSION 2.8.12)
+ 
++cmake_policy(SET CMP0048 OLD)
++
+ project(Easyloggingpp CXX)
+ 
+ macro(require_cpp11)

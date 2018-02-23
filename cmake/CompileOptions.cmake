@@ -59,3 +59,11 @@ elseif(${CMAKE_BUILD_TYPE} STREQUAL Release)
 else()
     message(FATAL_ERROR "Unknown build type: ${CMAKE_BUILD_TYPE}")
 endif()
+
+# Use PIC code for all targets by default
+set(CMAKE_POSITION_INDEPENDENT_CODE ON)
+
+# Hide everything by default
+# TODO: enable this
+#set(CMAKE_CXX_VISIBILITY_PRESET hidden)
+#set(CMAKE_VISIBILITY_INLINES_HIDDEN 1)

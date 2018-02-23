@@ -77,16 +77,17 @@ casekey = {
 
 
 def runServer(config):
-    env = os.environ.copy()
-    env['CUDA_VISIBLE_DEVICES'] = '2,3'
-    env['TF_CPP_MIN_LOG_LEVEL'] = '4'
-
     stdout = DEVNULL if config.hide_server_output else None
     stderr = DEVNULL if config.hide_server_output else None
     build_dir = os.path.abspath(config.build_dir)
 
+    env = os.environ.copy()
+    env['CUDA_VISIBLE_DEVICES'] = '2,3'
+    env['TF_CPP_MIN_LOG_LEVEL'] = '4'
+    env['LD_LIBRARY_PATH'] = os.path.join(build_dir, 'Release', 'lib') + ':' + env['LD_LIBRARY_PATH']
+
     serverP = Popen([
-        os.path.join(build_dir, 'Release', 'src', 'executor'),
+        os.path.join(build_dir, 'Release', 'bin', 'executor'),
         '--disable-fairness',
         '--logconf',
         os.path.join(build_dir, config.server_log_config)

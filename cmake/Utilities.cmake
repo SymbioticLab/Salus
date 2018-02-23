@@ -79,3 +79,24 @@ function(print_target_properties tgt)
         endif()
     endforeach(prop)
 endfunction(print_target_properties)
+
+# Helpers for writing shared library
+include(GenerateExportHeader)
+
+# Prepend prefix to each item in a list
+# Example:
+# set(ALIST a.cpp b.cpp)
+# prepend_each(OUTPUT_LIST src ${ALIST})
+#
+# Then OUTPUT_LIST is set to src/a.cpp src/b.cpp
+function(prepend_each var prefix)
+    set(listVar "")
+    foreach(f ${ARGN})
+        file(TO_CMAKE_PATH "${prefix}/${f}" new_path)
+        list(APPEND listVar "${new_path}")
+    endforeach(f)
+    set(${var} "${listVar}" PARENT_SCOPE)
+endfunction(prepend_each)
+
+# Helpers for installation
+include(GNUInstallDirs)
