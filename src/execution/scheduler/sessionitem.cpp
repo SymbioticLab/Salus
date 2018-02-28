@@ -35,6 +35,12 @@ SessionItem::~SessionItem()
         // before going out of destructor.
         cb = nullptr;
     }
+
+    // output stats
+    LOG(DEBUG) << "Stats for Session " << sessHandle << ": "
+               << "totalExecutedOp=" << totalExecutedOp
+               << ", avgOpOverhead=" << avgOpOverhead
+               << ", avgOpJct=" << avgOpJct;
 }
 
 void SessionItem::setPagingCallbacks(PagingCallbacks pcb)

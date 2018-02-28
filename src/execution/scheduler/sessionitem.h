@@ -46,6 +46,13 @@ private:
     PagingCallbacks pagingCb GUARDED_BY(mu);
     std::function<void()> cleanupCb GUARDED_BY(mu);
     KernelQueue queue GUARDED_BY(mu);
+    // total number of executed op in this session
+    uint64_t totalExecutedOp = 0 GUARDED_BY(mu);
+    // ratio over op jct (tQueued - tRunning) / (tQueued - now)
+    double avgOpOverhead = 0.0 GUARDED_BY(mu);
+    // (tQueued - now) in us
+    uint64_t avgOpJct = 0 GUARDED_BY(mu);
+
     std::mutex mu;
 
     size_t lastScheduled = 0;
