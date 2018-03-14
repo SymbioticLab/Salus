@@ -505,6 +505,18 @@ void ExecutionEngine::taskStopped(OperationItem &opItem, bool failed)
         CLOG(INFO, logging::kPerfTag)
             << "OpItem Stat " << opItem.op->DebugString() << " queued: " << opItem.tQueued
             << " scheduled: " << opItem.tScheduled << " finished: " << now;
+        if (VLOG_IS_ON(1)) {
+            if (auto item = opItem.sess.lock(); item) {
+                sstl::Guard g(item->mu);
+                auto opjct = duration_cast<microseconds>(opItem.tQueued - now).count();
+                auto oh = duration_cast<microseconds>(opItem.tQueued - opItem.tRunning).count() / static_cast<double>(opjct);
+                // update session stats
+                auto oldTotal = item->totalExecutedOp;
+                item->avgOpOverhead = (item->avgOpOverhead * oldTotal + oh) / (oldTotal + 1);
+                item->avgOpJct = (item->avgOpJct * oldTotal + opjct) / (oldTotal + 1);
+                ++item->totalExecutedOp;
+            }
+        }
     }
 
     m_runningTasks -= 1;

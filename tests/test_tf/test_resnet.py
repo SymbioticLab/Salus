@@ -137,7 +137,8 @@ class TestResNetFakeData(ResNetCaseBase):
     def _get_func(self, batch_size):
         def func():
             def input_data(*a, **kw):
-                images, labels, num_classes = datasets.fake_data(*a, batch_num=50, height=224, width=224, num_classes=1000, **kw)
+                images, labels, num_classes = datasets.fake_data(*a, batch_num=50, height=224,
+                                                                 width=224, num_classes=1000, **kw)
                 labels = tf.one_hot(labels, num_classes, axis=-1)
                 return images, labels, num_classes
             sess = tf.get_default_session()
