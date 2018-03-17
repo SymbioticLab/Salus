@@ -27,7 +27,10 @@ MNIST_data
 tests/*
 tests/*.output
 tests/verbose.log
-!tests/test_tf/*
+!tests/test_tf
+!tests/test_tf/**
+!tests/driver
+!tests/driver/**
 
 # Scripts
 scripts/**
