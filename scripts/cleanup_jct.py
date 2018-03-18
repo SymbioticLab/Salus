@@ -112,7 +112,7 @@ def generate_csv(logs_dir, output_dir):
         path = os.path.join(logs_dir, name)
         if not os.path.isdir(path):
             continue
-        
+
         if len(name.split('_')) == 2:
             # 20iter
             handle_20iter(baseline_data, name, os.path.join(path, 'gpu.output'))
@@ -159,10 +159,17 @@ def generate_csv(logs_dir, output_dir):
     sdf.to_csv(os.path.join(output_dir, 'jct-salus.csv'), index=False)
 
 
+# Expected names:
+# alexnet_25
+# alexnet_50
+# alexnet_100
+# alexnet_25_1min
+# alexnet_25_5min
+# alexnet_25_10min
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('logdir', help='Directory contains jct logs', default='templogs')
-    parser.add_argument('outputdir', help='Directory for output', default='.')
+    parser.add_argument('--logdir', help='Directory contains jct logs', default='logs/osdi18/jct')
+    parser.add_argument('--outputdir', help='Directory for output', default='.')
     config = parser.parse_args()
 
     generate_csv(config.logdir, config.outputdir)

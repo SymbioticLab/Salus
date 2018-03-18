@@ -4,36 +4,102 @@ OSDI Experiment 15
 
 Have 99 jobs entering the system over the time, using packing scheduling.
 
-Scheduler: packing
+Scheduler: pack
 Work conservation: True
 Collected data: JCT
 """
-from __future__ import absolute_import, print_function, division
+from __future__ import absolute_import, print_function, division, unicode_literals
 
-from benchmarks.driver.server import SalusConfig
+import logging
+from enum import Enum
+from itertools import chain
+import time
+from absl import flags
+from typing import Sequence, Iterable, Union, Tuple
+
+from benchmarks.driver.utils import UsageError, unique, try_with_default
+from benchmarks.driver.server import SalusServer
 from benchmarks.driver.server.config import presets
-from benchmarks.driver.workload import WTL, Executor
-from benchmarks.exps import run_seq, parse_actions_from_cmd, Pause
+from benchmarks.driver.workload import WTL, Executor, RunConfig, Workload
+from benchmarks.exps import run_seq, RunFn, maybe_forced_preset
+
+
+FLAGS = flags.FLAGS
+TBatchSize = Union[str, int]
+logger = logging.getLogger(__name__)
+
+flags.DEFINE_integer('concurrent_jobs', 4, 'Maximum concurrent running jobs', lower_bound=1)
+flags.DEFINE_integer('total_num', 0, 'Only run this number of workloads. If 0, means no limit', lower_bound=0)
+flags.DEFINE_string('select_wl', '', 'Select only to run workloads from the list of canonical names given')
+
+
+class Cases(Enum):
+    Shortest = ('jct', False)
+    Longest = ('jct', True)
+    Smallest = ('mem', False)
+    Largest = ('mem', True)
+
+
+def gen_workload_list(selection):
+    # type: (str) -> Iterable[Tuple[WTL, RunConfig]]
+    """Select workloads based on commandline"""
+    if not selection:
+        names = (
+            (v, bs)
+            for k, v in WTL.known_workloads.items()
+            for bs in v.batch_sizes
+        )
+    else:
+        names = []
+        for cname in unique((cname for cname in selection.split(',')), stable=True):
+            if '_' not in cname:
+                raise UsageError(f"Not a canonical name: {cname}")
+            name, bs = cname.split('_', 1)
+            bs = try_with_default(int, bs, ValueError)(bs)
+            names.append((WTL.from_name(name), bs))
+
+    # Find all available batch_num with JCT and mem data
+    return (
+        (wtl, RunConfig(bs, bn, None))
+        for wtl, bs in names
+        for bn in wtl.avaiable_batch_nums(bs)
+    )
 
 
 def main(argv):
-    scfg = presets.MostEfficient.copy()  # type: SalusConfig
-    scfg.scheduler = 'packing'
+    # type: (Sequence[str]) -> None
+    scfg = maybe_forced_preset(presets.MostEfficient)
+    scfg.scheduler = 'pack'
 
-    if argv:
-        run_seq(scfg.copy(output_dir="templogs"),
-                *parse_actions_from_cmd(argv))
-        return
+    cases = (Cases(c) for c in argv) if argv else Cases
+    templates = gen_workload_list(FLAGS.select_wl)
 
-    # Firstly run concurrently on salus
-    run_seq(scfg.copy(output_dir="templogs/exp15/salus"),
-            WTL.create("resnet50", 50, 530),
-            WTL.create("resnet50", 50, 265),
-            )
+    # Check if workloads have the info we need
+    for wtl, rcfg in templates:
+        for field in ['jct', 'mem']:
+            if wtl.geometry(rcfg, Executor.Salus)[field] is None:
+                raise ValueError(f'Missing {field} data for workload {wtl.canonical_name(rcfg)}')
 
-    # Then run on tf
-    run_seq(scfg.copy(output_dir="templogs/exp15/tf"),
-            WTL.create("resnet50", 50, 530, executor=Executor.TF),
-            Pause.Wait,
-            WTL.create("resnet50", 50, 265, executor=Executor.TF),
-            )
+    for case in cases:
+        logdir = FLAGS.save_dir / "exp15" / case
+
+        # create workload instances
+        workloads = (wtl.create(rcfg, Executor.Salus) for wtl, rcfg in templates)
+        # sort workload according to case
+        key, desc = case.value
+        workloads = sorted(workloads, key=lambda w: w.geometry[key], reverse=desc)
+
+        def limit_concurrent(wls):
+            # type: (Iterable[Workload]) -> None
+            """Wait for something to finish"""
+            gone, alive = SalusServer.wait_workloads(wls, timeout=0)
+            while len(alive) >= FLAGS.concurrent_jobs:
+                gone, alive = SalusServer.wait_workloads(wls, timeout=0)
+                time.sleep(.25)
+
+        actions = chain(*(
+            [w, RunFn(limit_concurrent)]
+            for w in workloads
+        ))
+
+        run_seq(scfg.copy(output_dir=logdir), *actions)

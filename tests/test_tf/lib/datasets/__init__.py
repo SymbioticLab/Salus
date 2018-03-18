@@ -10,15 +10,15 @@ from .. import tfhelper
 slim = tf.contrib.slim
 
 
-def fake_data(batch_size, batch_num, is_train=True, height=256, width=256, num_classes=1000):
+def fake_data(batch_size, batch_num, is_train=True, height=256, width=256, num_classes=1000, depth=3):
     """Generate a fake dataset that matches the dimensions of ImageNet."""
     if not is_train:
         batch_num = 1
         batch_size = 1
     with tf.name_scope('fake_data'):
-        image = tf.Variable(tf.random_normal([height, width, 3], dtype=tf.float32),
+        image = tf.Variable(tf.random_normal([height, width, depth], dtype=tf.float32),
                             name='sample_image', trainable=False)
-        label = tf.Variable(tf.random_uniform([1], minval=0, maxval=1000,
+        label = tf.Variable(tf.random_uniform([1], minval=0, maxval=num_classes,
                                               dtype=tf.int32),
                             name='ground_truth', trainable=False)
 

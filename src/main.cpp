@@ -72,8 +72,8 @@ Options:
     --perflog=<file>            Enable performance logging and log to <file>.
 
 Deprecated options:
-    --disable-fairness          Disable fair sharing in scheduling, having the same effect as
-                                --sched=pack.
+    --disable-fairness          Disable fair sharing in scheduling, having the same effect
+                                as `--sched=pack'.
 )"s;
 
 static auto kVersion = R"(Salus: Fine-Grained GPU Sharing for DNN version 0.1.0)"s;
@@ -181,7 +181,7 @@ void configureExecution(std::map<std::string, docopt::value> &args)
     SessionResourceTracker::instance().setDisabled(disableAdmissionControl);
 
     auto disableFairness = value_or<bool>(args[flags::disableFairness], false);
-    uint64_t maxQueueHeadWaiting = value_or<long>(args[flags::maxHolWaiting], 50);
+    uint64_t maxQueueHeadWaiting = value_or<long>(args[flags::maxHolWaiting], 50u);
     auto disableWorkConservative = value_or<bool>(args[flags::disableWorkConservative], false);
     auto sched = value_or<std::string>(args[flags::scheduler], "fair"s);
 

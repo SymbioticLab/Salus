@@ -8,25 +8,28 @@ Scheduler: preempt
 Work conservation: True
 Collected data: Numer of scheduled tasks over time
 """
-from __future__ import absolute_import, print_function, division
+from __future__ import absolute_import, print_function, division, unicode_literals
 
-from benchmarks.driver.server import SalusConfig
+from absl import flags
+
 from benchmarks.driver.server.config import presets
 from benchmarks.driver.workload import WTL
-from benchmarks.exps import run_seq, parse_actions_from_cmd, Pause
+from benchmarks.exps import run_seq, parse_actions_from_cmd, Pause, maybe_forced_preset
+
+FLAGS = flags.FLAGS
 
 
 def main(argv):
-    scfg = presets.Profiling.copy()  # type: SalusConfig
+    scfg = maybe_forced_preset(presets.Profiling)
     scfg.scheduler = 'preempt'
     scfg.disable_wc = False
 
     if argv:
-        run_seq(scfg.copy(output_dir="templogs"),
+        run_seq(scfg.copy(output_dir=FLAGS.save_dir),
                 *parse_actions_from_cmd(argv))
         return
 
-    run_seq(scfg.copy(output_dir="templogs/exp11"),
+    run_seq(scfg.copy(output_dir=FLAGS.save_dir / "exp11"),
             WTL.create("inception3", 25, 303),
             Pause(60),
             WTL.create("alexnet", 100, 506),

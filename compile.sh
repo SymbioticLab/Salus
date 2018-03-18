@@ -8,7 +8,7 @@ for build_type in ${BUILD_TYPES[@]}; do
     binary_tree=build/$build_type
     [[ -d $binary_tree ]] || cmake -H. -B$binary_tree -DCMAKE_BUILD_TYPE=$build_type \
         -DCMAKE_PREFIX_PATH=spack-packages \
-        -DTENSORFLOW_ROOT=$HOME/develop/c++/tensorflow
+        -DTENSORFLOW_ROOT=../tensorflow
 done
 
 # Build

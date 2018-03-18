@@ -1,20 +1,26 @@
 # -*- coding: future_fstrings -*-
-from __future__ import absolute_import, print_function, division
+from __future__ import absolute_import, print_function, division, unicode_literals
 from builtins import super, str
 
 import os
 import time
+import shutil
+import logging
+import psutil
+from datetime import datetime
 from absl import flags
 from typing import List, Deque
 from contextlib import contextmanager
 from collections import deque
 
 from .config import SalusConfig
-from ..utils.compatiblity import DEVNULL, Path
-from ..utils import ServerError, Popen, execute, kill_tree, kill_hard, remove_prefix
+from ..utils.compatiblity import pathlib, subprocess as sp
+from ..utils import ServerError, Popen, execute, kill_tree, kill_hard, remove_prefix, maybe_path
 
-flags.DEFINE_string('server_endpoint', 'zrpc://tcp://localhost:5501', 'Salus server endpoint to listen on')
+Path = pathlib.Path
 FLAGS = flags.FLAGS
+logger = logging.getLogger(__name__)
+flags.DEFINE_string('server_endpoint', 'zrpc://tcp://127.0.0.1:5501', 'Salus server endpoint to listen on')
 
 
 class SalusServer(object):
@@ -25,13 +31,15 @@ class SalusServer(object):
 
         self.config = cfg
         self.env = os.environ.copy()
-        self.env['CUDA_VISIBLE_DEVICES'] = '2,3'
-        self.env['TF_CPP_MIN_LOG_LEVEL'] = '4'
+        if 'CUDA_VISIBLE_DEVICES' not in self.env:
+            self.env['CUDA_VISIBLE_DEVICES'] = '2,3'
+        if 'TF_CPP_MIN_LOG_LEVEL' not in self.env:
+            self.env['TF_CPP_MIN_LOG_LEVEL'] = '4'
 
         self.endpoint = FLAGS.server_endpoint  # type: str
 
         # normalize build_dir before doing any path finding
-        self.config.build_dir = cfg.build_dir.resolve()
+        self.config.build_dir = cfg.build_dir.resolve(strict=True)
         self._build_cmd()
 
         self.proc = None  # type: Popen
@@ -71,7 +79,7 @@ class SalusServer(object):
         if not logconf_dir.is_dir():
             raise ServerError(f'Logconf dir does not exist: {logconf_dir}')
 
-        logconf = logconf_dir / self.config.logconf + '.config'  # type: Path
+        logconf = (logconf_dir / self.config.logconf).with_suffix('.config')
         if not logconf.exists():
             raise ServerError(f"Requested logconf `{self.config.logconf}'does not exist in logconf_dir: {logconf_dir}")
         return str(logconf)
@@ -109,30 +117,42 @@ class SalusServer(object):
     def run(self):
         # type: () -> Popen
         """Run server"""
-        outputfiles = [Path(p) for p in ['/tmp/server.output', '/tmp/perf.output', '/tmp/alloc.output']]
-        stdout = DEVNULL if self.config.hide_output else None
-        stderr = DEVNULL if self.config.hide_output else None
-        try:
-            # remove any existing output
-            for f in outputfiles:
+        outputfiles = [Path(p) for p in ['/tmp/server.output', '/tmp/perf.output', '/tmp/alloc.output', 'verbose.log']]
+        stdout = sp.PIPE if self.config.hide_output else None
+        stderr = sp.PIPE if self.config.hide_output else None
+        # remove any existing output
+        for f in outputfiles:
+            if f.exists():
                 f.unlink()
 
-            # start
-            self.proc = execute(self.args, env=self.env, stdin=DEVNULL, stdout=stdout, stderr=stderr)
+        # assert output_dir exists
+        assert(self.config.output_dir.is_dir())
+
+        # start
+        self.proc = execute(self.args, env=self.env, stdin=sp.DEVNULL, stdout=stdout, stderr=stderr)
+        # noinspection PyBroadException
+        try:
             # wait for a while for the server to be ready
             # FUTURE: make the server write a pid file when it's ready
             time.sleep(5)
 
+            logger.info(f'Started server with pid: {self.proc.pid}')
+
             # make self the current server
             with self.as_current():
                 yield self.proc
+        except Exception as ex:
+            logger.error(f'Got exception while running the experiment: {ex!s}')
+        finally:
+            self.kill()
 
             # move back server log files
             for f in outputfiles:
                 if f.exists():
-                    f.rename(self.config.output_dir / f.name)
-        finally:
-            self.kill()
+                    if f.stat().st_size == 0:
+                        f.unlink()
+                    else:
+                        shutil.move(str(f), str(self.config.output_dir))
 
     _current = deque()  # type: Deque[SalusServer]
 
@@ -154,17 +174,52 @@ class SalusServer(object):
         # type: () -> None
         """Check that the server is healthy and running"""
         if self.proc is None:
-            raise ServerError('Server not yet started')
+            raise ServerError('Server is not yet started')
         if self.proc.poll() is not None:
-            raise ServerError('Server died unexpectedly with return code: {}', self.proc.returncode)
+            out, err = self.proc.communicate()
+            msg = [f'Server died unexpectedly with return code: {self.proc.returncode}']
+            if out is not None:
+                msg.append(f'\nStandard output:\n{out}')
+            if err is not None:
+                msg.append(f'\nStandard error:\n{err}')
+            raise ServerError('\n'.join(msg))
 
     def kill(self):
         # type: () -> None
         """Kill the server"""
-        self.check()
+        if self.proc is None or self.proc.poll() is not None:
+            logger.warning('Server already died or is not yet started')
+            self.proc = None
+            return
 
+        logger.info(f'Killing server with pid: {self.proc.pid}')
         _, alive = kill_tree(self.proc)
         if alive:
+            logger.info(f'Force killing server with pid: {self.proc.pid}')
             kill_hard(alive)
 
         self.proc = None
+
+    @classmethod
+    def wait_workloads(cls, workloads, timeout=None, callback=None):
+        """Wait workloads, raise if server died"""
+        if callback is None:
+            def done(proc):
+                logger.info(f'Workload {proc.workload.canonical_name} exited with {proc.returncode}')
+
+            callback = done
+
+        gone = []
+        alive = [w.proc for w in workloads]
+        enter = datetime.now()
+        while alive:
+            cs = SalusServer.current_server()
+            if cs is not None:
+                cs.check()
+
+            g, alive = psutil.wait_procs(alive, timeout=.25, callback=callback)
+            gone += g
+
+            if timeout is not None and (datetime.now() - enter).total_seconds() >= timeout:
+                break
+        return [p.workload for p in gone], [p.workload for p in alive]

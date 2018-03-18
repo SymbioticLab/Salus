@@ -1,27 +1,46 @@
-from __future__ import absolute_import, print_function, division
+# -*- coding: future_fstrings -*-
+from __future__ import absolute_import, print_function, division, unicode_literals
 
-try:
-    from subprocess import DEVNULL  # py3k
-except ImportError:
+import sys
+from .utils import is_unix
+
+# Useful for very coarse version differentiation.
+PY2 = sys.version_info[0] == 2
+PY3 = sys.version_info[0] == 3
+
+# Backport subprocess from python 3.2, with timeout parameter from python 3.3
+if is_unix and sys.version_info[0:2] < (3, 3):
+    # noinspection PyUnresolvedReferences
+    import subprocess32 as subprocess
     import os
-    DEVNULL = open(os.devnull, 'wb')  # 2 backport
+    subprocess.DEVNULL = open(os.devnull, 'wb')
     del os
+else:
+    import subprocess
 
-try:
-    from pathlib import Path
-except ImportError:
+# Backport pathlib from python 3
+if sys.version_info[0:2] < (3, 6):
     # noinspection PyPackageRequirements,PyUnresolvedReferences
-    from pathlib2 import Path  # noqa: F401
+    import pathlib2 as pathlib
+else:
+    # noinspection PyUnresolvedReferences
+    import pathlib
 
-try:
-    from tempfile import TemporaryDirectory
-except ImportError:
-    # noinspection PyPackageRequirements,PyUnresolvedReferences
+
+# Backport TemporaryDirectory from python 3
+# noinspection PyPep8
+import tempfile
+if not hasattr(tempfile, 'TemporaryDirectory'):
+    # noinspection PyUnresolvedReferences
     from backports.tempfile import TemporaryDirectory
+    tempfile.TemporaryDirectory = TemporaryDirectory
+    del TemporaryDirectory
 
 
 __all__ = [
-    'DEVNULL',
-    'Path',
-    'TemporaryDirectory',
+    'PY2',
+    'PY3',
+    'subprocess',
+    'pathlib',
+    'tempfile',
 ]

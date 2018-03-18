@@ -1,16 +1,22 @@
 # -*- coding: future_fstrings -*-
-from __future__ import absolute_import, print_function, division
+from __future__ import absolute_import, print_function, division, unicode_literals
 
 import time
-import psutil
 import re
-from typing import Union, Iterable, List
-from absl import app
+import logging
+from absl import flags
+from typing import Union, Iterable, List, TypeVar, Callable
 
+from benchmarks.driver.server.config import presets
 from benchmarks.driver.server import SalusServer, SalusConfig
-from benchmarks.driver.utils import atomic_directory, try_with_default
-from benchmarks.driver.utils.compatiblity import Path
+from benchmarks.driver.utils import atomic_directory, try_with_default, UsageError, kill_tree
+from benchmarks.driver.utils.compatiblity import pathlib
 from benchmarks.driver.workload import Workload, WTL, ResourceGeometry
+
+Path = pathlib.Path
+T = TypeVar('T')
+logger = logging.getLogger(__name__)
+FLAGS = flags.FLAGS
 
 
 class Pause(int):
@@ -20,18 +26,33 @@ class Pause(int):
         if self == Pause.Manual:
             try_with_default(input, ignore=SyntaxError)('Press enter to continue...')
         elif self == Pause.Wait:
-            psutil.wait_procs(w.proc for w in workloads)
+            logger.info(f"Waiting current {len(workloads)} workloads to finish")
+            SalusServer.current_server().wait_workloads(workloads)
         else:
+            logger.info(f"Sleep {self} seconds")
             time.sleep(self)
 
-    """Pause execution and wait for human input"""
-    Manual = -1
 
-    """Wait until previous workloads finishes"""
-    Wait = -2
+Pause.Manual = Pause(-1)
+"""Pause execution and wait for human input"""
+
+Pause.Wait = Pause(-2)
+"""Wait until previous workloads finishes"""
 
 
-TAction = Union[Pause, Workload]
+class RunFn(object):
+    """Represent arbitrary function in an action sequence"""
+    __slots__ = '_fn'
+
+    def __init__(self, fn):
+        # type: (Callable[Iterable[Workload], None]) -> None
+        self._fn = fn
+
+    def run(self, workloads):
+        return self._fn(workloads)
+
+
+TAction = Union[Pause, RunFn, Workload]
 
 
 def run_seq(scfg, *actions):
@@ -39,27 +60,39 @@ def run_seq(scfg, *actions):
     """Run a sequence of actions"""
     workloads = []  # type: List[Workload]
 
-    with atomic_directory(scfg.output_dir) as temp_dir:  # type: Path
-        # start server
-        ss = SalusServer(scfg.copy(output_dir=temp_dir))
-        with ss.run():
-            # Do action specified in seq
-            for act in actions:
-                ss.check()
+    try:
+        with atomic_directory(scfg.output_dir) as temp_dir:  # type: Path
+            # start server
+            ss = SalusServer(scfg.copy(output_dir=temp_dir))
+            with ss.run():
+                # Do action specified in seq
+                for act in actions:
+                    ss.check()
 
-                if isinstance(act, Workload):
-                    output_file = temp_dir / f'{act.output_name}.{act.batch_num}iter.{len(workloads)}.output'
-                    act.run(output_file)
-                    workloads.append(act)
-                elif isinstance(act, Pause):
-                    act.run(workloads)
-                else:
-                    raise ValueError(f"Unexpected value `{act}' passed to run_seq")
+                    if isinstance(act, Workload):
+                        output_file = temp_dir / f'{act.output_name}.{act.batch_num}iter.{len(workloads)}.output'
 
-    psutil.wait_procs(w.proc for w in workloads)
-    # fix workload output_file path
-    for w in workloads:
-        w.output_file = scfg.output_dir / w.output_file.name
+                        act.run(output_file)
+                        workloads.append(act)
+                    elif isinstance(act, (Pause, RunFn)):
+                        act.run(workloads)
+                    else:
+                        raise ValueError(f"Unexpected value `{act}' of {type(act)} passed to run_seq")
+
+                logger.info(f'Waiting all workloads to finish')
+                ss.wait_workloads(workloads)
+    finally:
+        # if there's alive, we are doing cleanup
+        for w in workloads:
+            if w.proc is not None and w.proc.poll() is None:
+                logger.warning(f'Killing workload that is not stopped yet: {w.canonical_name}')
+                kill_tree(w.proc, hard=True)
+
+        # check each workloads and fix workload output_file path
+        for w in workloads:
+            if w.proc.returncode != 0:
+                raise RuntimeError(f'Workload {w.canonical_name} did not finish cleanly: {w.proc.returncode}')
+            w.output_file = scfg.output_dir / w.output_file.name
     return workloads
 
 
@@ -77,12 +110,43 @@ def parse_actions_from_cmd(argv):
             argv.pop(0)
             continue
         try:
-            name, batch_size, batch_num, pause, *argv = argv
+            name, batch_size, batch_num, pause = argv[:4]
+            argv = argv[4:]
             actions.append(WTL.create(name, batch_size, batch_num))
         except ValueError:
-            raise app.UsageError(f'Unexpected sequence of arguments: {argv}')
+            raise UsageError(f'Unexpected sequence of arguments: {argv}')
 
     return actions
+
+
+def maybe_forced_preset(default):
+    # type: (Callable[[], SalusConfig]) -> SalusConfig
+    """Maybe return forced preset"""
+    if FLAGS.force_preset:
+        logger.info(f'Using server config preset: {FLAGS.force_preset}')
+        return getattr(presets, FLAGS.force_preset)()
+    logger.info(f'Using server config preset: {default.__name__}')
+    return default()
+
+
+def parse_output_float(outputfile, pattern, group=1):
+    """Parse outputfile using pattern"""
+    if not outputfile.exists():
+        msg = f'File not found after running: {outputfile}'
+        logger.fatal(msg)
+        raise ValueError(msg)
+
+    ptn = re.compile(pattern)
+    with outputfile.open() as f:
+        for line in f:
+            line = line.rstrip()
+            m = ptn.match(line)
+            if m:
+                try:
+                    return float(m.group(group))
+                except (ValueError, IndexError):
+                    continue
+    raise ValueError(f"Pattern `{pattern}' not found in output file {outputfile}")
 
 
 def update_jct(workload, update_global=False):
@@ -91,18 +155,7 @@ def update_jct(workload, update_global=False):
     if workload.proc is None or workload.proc.returncode != 0:
         raise ValueError(f'Workload {workload.name} not started or terminated in error')
 
-    ptn = re.compile('^JCT: ')
-    with open(workload.output_file) as f:
-        for line in f.readline():
-            if ptn.match(line):
-                try:
-                    jct = float(line.split(' ')[1])
-                    workload.geometry.jct = jct
-                    if update_global:
-                        WTL.from_name(workload.name).add_geometry(workload.rcfg, workload.executor,
-                                                                  ResourceGeometry(jct=jct))
-                    return
-                except (ValueError, IndexError):
-                    continue
-
-    raise ValueError(f'No JCT info found in output file {workload.output_file}')
+    jct = parse_output_float(workload.output_file, r'^JCT: ([0-9.]+) .*')
+    workload.geometry.jct = jct
+    if update_global:
+        WTL.from_name(workload.name).add_geometry(workload.rcfg, workload.executor, ResourceGeometry(jct=jct))

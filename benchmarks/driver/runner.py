@@ -1,24 +1,27 @@
-from __future__ import absolute_import, print_function, division
+# -*- coding: future_fstrings -*-
+from __future__ import absolute_import, print_function, division, unicode_literals
 from builtins import super, str
 from future.utils import with_metaclass
 
 import os
+import logging
 from absl import flags
 from abc import ABCMeta, abstractmethod
 from collections import namedtuple
 from enum import Enum
-from typing import Iterable, Tuple, Union
+from typing import Iterable, Tuple, Union, Any
 
-from . import workload
 from .server import SalusServer
 from .utils import Popen, execute
-from .utils.compatiblity import Path, DEVNULL
+from .utils.compatiblity import pathlib, subprocess as sp
 
+Path = pathlib.Path
 FLAGS = flags.FLAGS
+logger = logging.getLogger(__name__)
 
-flags.DEFINE_string('tfbench_base', '../../tf_benchmarks', 'Base dir of TFBenchmark based workloads')
-flags.DEFINE_string('unit_base', '../tests', 'Base dir of unittest based workloads')
-flags.DEFINE_string('fathom_base', '../../fathom', 'Base dir of Fathom based workloads')
+flags.DEFINE_string('tfbench_base', '../tf_benchmarks', 'Base dir of TFBenchmark based workloads')
+flags.DEFINE_string('unit_base', 'tests', 'Base dir of unittest based workloads')
+flags.DEFINE_string('fathom_base', '../fathom', 'Base dir of Fathom based workloads')
 
 
 RunConfig = namedtuple('RunConfig', [
@@ -46,7 +49,7 @@ def enumerate_rcfgs(batch_sizes, batch_nums):
 class Runner(with_metaclass(ABCMeta, object)):
     """A runner knows how to run a given workload"""
     def __init__(self, wl):
-        # type: (workload.Workload) -> None
+        # type: (Any) -> None
         super().__init__()
         self.wl = wl
         self.env = os.environ.copy()
@@ -63,7 +66,7 @@ class TFBenchmarkRunner(Runner):
     """Run a tf benchmark job"""
 
     def __init__(self, wl, base_dir=None):
-        # type: (workload.Workload, Path) -> None
+        # type: (Any, Path) -> None
         super().__init__(wl)
         self.base_dir = base_dir
         if self.base_dir is None:
@@ -79,21 +82,21 @@ class TFBenchmarkRunner(Runner):
             '--num_gpus=1',
             '--variable_update=parameter_server',
             '--nodistortions',
-            '--executor={}'.format(executor),
+            '--executor={}'.format(executor.value),
             '--num_batches={}'.format(self.wl.batch_num),
             '--batch_size={}'.format(self.wl.batch_size),
             '--model={}'.format(self.wl.name),
         ]
         output_file.parent.mkdir(exist_ok=True, parents=True)
         with output_file.open('w') as f:
-            return execute(cmd, cwd=cwd, env=self.env, stdout=f, stderr=DEVNULL)
+            return execute(cmd, cwd=str(cwd), env=self.env, stdout=f, stderr=sp.STDOUT)
 
 
 class UnittestRunner(Runner):
     """Run a unittest job"""
 
     def __init__(self, wl, base_dir=None):
-        # type: (workload.Workload, Path) -> None
+        # type: (Any, Path) -> None
         super().__init__(wl)
         self.base_dir = base_dir
         if self.base_dir is None:
@@ -101,6 +104,8 @@ class UnittestRunner(Runner):
 
     def __call__(self, executor, output_file):
         # type: (Executor, Path) -> Popen
+        env = self.env.copy()
+        env['EXEC_ITER_NUMBER'] = str(self.wl.batch_num)
         cwd = self.base_dir
         pkg, method = self._construct_test_name(executor)
         cmd = [
@@ -109,7 +114,7 @@ class UnittestRunner(Runner):
         ]
         output_file.parent.mkdir(exist_ok=True, parents=True)
         with output_file.open('w') as f:
-            return execute(cmd, cwd=cwd, env=self.env, stdout=f, stderr=DEVNULL)
+            return execute(cmd, cwd=str(cwd), env=env, stdout=f, stderr=sp.STDOUT)
 
     def _construct_test_name(self, executor):
         # type: (Executor) -> Tuple[str, str]
@@ -119,7 +124,16 @@ class UnittestRunner(Runner):
                 'small': '1_small',
                 'medium': '2_medium',
                 'large': '3_large',
-            })
+            }),
+            'mnistsf': ('test_tf.test_mnist_tf', 'TestMnistSoftmax', {
+                25: '0', 50: '1', 100: '2'
+            }),
+            'mnistcv': ('test_tf.test_mnist_tf', 'TestMnistConv', {
+                25: '0', 50: '1', 100: '2'
+            }),
+            'mnistlg': ('test_tf.test_mnist_tf', 'TestMnistLarge', {
+                25: '0', 50: '1', 100: '2'
+            }),
         }
 
         if executor == Executor.Salus:
@@ -164,4 +178,4 @@ class FathomRunner(Runner):
 
         output_file.parent.mkdir(exist_ok=True, parents=True)
         with output_file.open('w') as f:
-            return execute(cmd, cwd=cwd, env=self.env, stdout=f, stderr=DEVNULL)
+            return execute(cmd, cwd=str(cwd), env=self.env, stdout=f, stderr=sp.STDOUT)
