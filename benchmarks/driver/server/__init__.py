@@ -1,24 +1,23 @@
+# -*- coding: future_fstrings -*-
 from __future__ import absolute_import, print_function, division
 from builtins import super, str
 
 import os
 import time
-import shutil
 from absl import flags
-from typing import List
+from typing import List, Deque
 from contextlib import contextmanager
+from collections import deque
 
 from .config import SalusConfig
-from ..utils.compatiblity import DEVNULL
-from ..utils import Popen, remove_prefix
-from benchmarks.driver.utils import ServerError, execute, kill_tree, kill_hard
+from ..utils.compatiblity import DEVNULL, Path
+from ..utils import ServerError, Popen, execute, kill_tree, kill_hard, remove_prefix
 
 flags.DEFINE_string('server_endpoint', 'zrpc://tcp://localhost:5501', 'Salus server endpoint to listen on')
 FLAGS = flags.FLAGS
 
 
 class SalusServer(object):
-    default_endpoint = FLAGS.server_endpoint
 
     def __init__(self, cfg):
         # type: (SalusConfig) -> None
@@ -29,8 +28,10 @@ class SalusServer(object):
         self.env['CUDA_VISIBLE_DEVICES'] = '2,3'
         self.env['TF_CPP_MIN_LOG_LEVEL'] = '4'
 
+        self.endpoint = FLAGS.server_endpoint  # type: str
+
         # normalize build_dir before doing any path finding
-        self.config.build_dir = os.path.abspath(cfg.build_dir)
+        self.config.build_dir = cfg.build_dir.resolve()
         self._build_cmd()
 
         self.proc = None  # type: Popen
@@ -39,16 +40,17 @@ class SalusServer(object):
         # type: () -> str
         """Find the absolute path to server executable, according to 'config.build_type'"""
         candidates = [
-            os.path.join(self.config.build_dir, self.config.build_type, 'src', 'executor'),
-            os.path.join(self.config.build_dir, self.config.build_type, 'bin', 'executor'),
-            os.path.join(self.config.build_dir, self.config.build_type, 'bin', 'salus-server'),
-            os.path.join(self.config.build_dir, self.config.build_type.lower(), 'src', 'executor'),
-            os.path.join(self.config.build_dir, self.config.build_type.lower(), 'bin', 'executor'),
-            os.path.join(self.config.build_dir, self.config.build_type.lower(), 'bin', 'salus-server'),
+            self.config.build_dir / self.config.build_type / 'src' / 'executor',
+            self.config.build_dir / self.config.build_type / 'bin' / 'executor',
+            self.config.build_dir / self.config.build_type / 'bin' / 'salus-server',
+            self.config.build_dir / self.config.build_type.lower() / 'src' / 'executor',
+            self.config.build_dir / self.config.build_type.lower() / 'bin' / 'executor',
+            self.config.build_dir / self.config.build_type.lower() / 'bin' / 'salus-server',
         ]
         for path in candidates:
-            if os.access(path, os.X_OK):
-                return path
+            if os.access(str(path), os.X_OK):
+                return str(path)
+        raise ServerError(f'Cannot find server executable, examined candidates are: {candidates}')
 
     def _find_logconf(self):
         # type: () -> str
@@ -59,23 +61,20 @@ class SalusServer(object):
         """
         logconf_dir = self.config.logconf_dir
         if logconf_dir is None:
-            # HACK: walk up and find project root dir and then guess log config dir
-            project_dir = self.config.build_dir
-            while not os.path.exists(os.path.join(project_dir, 'README.md')):
-                pardir = os.path.dirname(project_dir)
-                if pardir == project_dir:
-                    raise ServerError('Cannot find logconf dir')
-                project_dir = os.path.dirname(project_dir)
-            logconf_dir = os.path.join(project_dir, 'scripts', 'logconf')
+            for p in self.config.build_dir.parents:
+                if not (p / 'README.md').exists():
+                    continue
+                logconf_dir = p / 'scripts' / 'logconf'
+            if logconf_dir is None:
+                raise ServerError('Cannot find logconf dir')
 
-        if not os.path.isdir(logconf_dir):
-            raise ServerError('Logconf dir does not exist: {}', logconf_dir)
+        if not logconf_dir.is_dir():
+            raise ServerError(f'Logconf dir does not exist: {logconf_dir}')
 
-        logconf = os.path.join(logconf_dir, self.config.logconf) + '.config'
-        if not os.path.exists(logconf):
-            raise ServerError("Requested logconf `{}'does not exist in logconf_dir: {}", self.config.logconf,
-                              self.config.logconf_dir)
-        return logconf
+        logconf = logconf_dir / self.config.logconf + '.config'  # type: Path
+        if not logconf.exists():
+            raise ServerError(f"Requested logconf `{self.config.logconf}'does not exist in logconf_dir: {logconf_dir}")
+        return str(logconf)
 
     def _build_cmd(self):
         # type: () -> List[str]
@@ -85,7 +84,7 @@ class SalusServer(object):
         if self.config.use_nvprof:
             self.args += [
                 'nvprof',
-                '--export-profile', os.path.join(self.config.output_dir, 'profile.sqlite'),
+                '--export-profile', str(self.config.output_dir / 'profile.sqlite'),
                 '-f',
                 '--metrics', 'executed_ipc',
                 '--'
@@ -93,7 +92,7 @@ class SalusServer(object):
 
         self.args += [
             self._find_executable(),
-            '--listen', remove_prefix(SalusServer.default_endpoint, 'zrpc://'),
+            '--listen', remove_prefix(self.endpoint, 'zrpc://'),
             '--logconf', self._find_logconf(),
             '--sched', self.config.scheduler,
         ]
@@ -110,13 +109,13 @@ class SalusServer(object):
     def run(self):
         # type: () -> Popen
         """Run server"""
-        outputfiles = ['/tmp/server.output', '/tmp/perf.output', '/tmp/alloc.output']
+        outputfiles = [Path(p) for p in ['/tmp/server.output', '/tmp/perf.output', '/tmp/alloc.output']]
         stdout = DEVNULL if self.config.hide_output else None
         stderr = DEVNULL if self.config.hide_output else None
         try:
             # remove any existing output
             for f in outputfiles:
-                os.unlink(f)
+                f.unlink()
 
             # start
             self.proc = execute(self.args, env=self.env, stdin=DEVNULL, stdout=stdout, stderr=stderr)
@@ -124,14 +123,32 @@ class SalusServer(object):
             # FUTURE: make the server write a pid file when it's ready
             time.sleep(5)
 
-            yield self.proc
+            # make self the current server
+            with self.as_current():
+                yield self.proc
 
             # move back server log files
-            for f in ['/tmp/server.output', '/tmp/perf.output', '/tmp/alloc.output']:
-                if os.path.exists(f):
-                    shutil.move(f, self.config.output_dir)
+            for f in outputfiles:
+                if f.exists():
+                    f.rename(self.config.output_dir / f.name)
         finally:
             self.kill()
+
+    _current = deque()  # type: Deque[SalusServer]
+
+    @contextmanager
+    def as_current(self):
+        SalusServer._current.append(self)
+        yield self
+        SalusServer._current.pop()
+
+    @classmethod
+    def current_server(cls):
+        # type: () -> SalusServer
+        try:
+            return cls._current[-1]
+        except IndexError:
+            raise ServerError('No current running server')
 
     def check(self):
         # type: () -> None

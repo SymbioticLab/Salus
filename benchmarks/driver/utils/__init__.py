@@ -50,7 +50,7 @@ def eprint(*args, **kwargs):
 def remove_none(d):
     # type: (Mapping[TKey, TValue]) -> Mapping[TKey, TValue]
     """Remove None value from dict"""
-    return {k: v for k, v in d if v is not None}
+    return {k: v for k, v in d.items() if v is not None}
 
 
 def remove_prefix(text, prefix):
