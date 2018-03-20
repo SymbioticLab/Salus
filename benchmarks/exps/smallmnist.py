@@ -33,17 +33,18 @@ def main(argv):
                 *parse_actions_from_cmd(argv))
         return
 
-    logdir = FLAGS.save_dir / "smallmnist"
-
-    # Firstly run concurrently on salus
-    run_seq(scfg.copy(output_dir=logdir / "salus"),
-            WTL.create("mnistlg", 50, 5048),  # 1min
-            WTL.create("mnistlg", 50, 27529),  # 5min
+    logdir = FLAGS.save_dir / "concmnist"
+    run_seq(scfg.copy(output_dir=logdir / "salus" / "1"),
+            WTL.create("mnistsf", 25, 300),
             )
-
-    # Then run on tf
     run_seq(scfg.copy(output_dir=logdir / "tf"),
-            WTL.create("mnistlg", 50, 5048, executor=Executor.TF),  # 1min
+            WTL.create("mnistsf", 25, 200, executor=Executor.TF),  # 1min
             Pause.Wait,
-            WTL.create("mnistlg", 50, 27529, executor=Executor.TF),  # 5min
+            WTL.create("mnistsf", 25, 300, executor=Executor.TF),  # 1min
             )
+    return
+
+    for conc in range(2, 10):
+        actions = [WTL.create("mnistsf", 25, 100) for _ in range(conc)]
+        run_seq(scfg.copy(output_dir=logdir / "salus" / str(conc)), *actions)
+
