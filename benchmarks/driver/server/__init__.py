@@ -15,12 +15,13 @@ from collections import deque
 
 from .config import SalusConfig
 from ..utils.compatiblity import pathlib, subprocess as sp
-from ..utils import ServerError, Popen, execute, kill_tree, kill_hard, remove_prefix, maybe_path
+from ..utils import ServerError, Popen, execute, kill_tree, kill_hard, remove_prefix
 
 Path = pathlib.Path
 FLAGS = flags.FLAGS
 logger = logging.getLogger(__name__)
 flags.DEFINE_string('server_endpoint', 'zrpc://tcp://127.0.0.1:5501', 'Salus server endpoint to listen on')
+flags.DEFINE_boolean('no_server', False, "Don't start Salus server, just print out the command and wait for the user")
 
 
 class SalusServer(object):
@@ -93,7 +94,8 @@ class SalusServer(object):
             self.args += [
                 'nvprof',
                 '--export-profile', str(self.config.output_dir / 'profile.sqlite'),
-                '-f',
+                '--force-overwrite',
+                '--concurrent-kernels', 'on',
                 '--metrics', 'executed_ipc',
                 '--'
             ]
@@ -115,7 +117,7 @@ class SalusServer(object):
 
     @contextmanager
     def run(self):
-        # type: () -> Popen
+        # type: () -> None
         """Run server"""
         outputfiles = [Path(p) for p in ['/tmp/server.output', '/tmp/perf.output', '/tmp/alloc.output', 'verbose.log']]
         stdout = sp.PIPE if self.config.hide_output else None
@@ -128,19 +130,24 @@ class SalusServer(object):
         # assert output_dir exists
         assert(self.config.output_dir.is_dir())
 
-        # start
-        self.proc = execute(self.args, env=self.env, stdin=sp.DEVNULL, stdout=stdout, stderr=stderr)
         # noinspection PyBroadException
         try:
-            # wait for a while for the server to be ready
-            # FUTURE: make the server write a pid file when it's ready
-            time.sleep(5)
+            if FLAGS.no_server:
+                print('Start server with the following command:')
+                print(' '.join(self.args))
+            else:
+                # start
+                self.proc = execute(self.args, env=self.env, stdin=sp.DEVNULL, stdout=stdout, stderr=stderr)
 
-            logger.info(f'Started server with pid: {self.proc.pid}')
+                # wait for a while for the server to be ready
+                # FUTURE: make the server write a pid file when it's ready
+                time.sleep(5)
+
+                logger.info(f'Started server with pid: {self.proc.pid}')
 
             # make self the current server
             with self.as_current():
-                yield self.proc
+                yield
         except Exception as ex:
             logger.error(f'Got exception while running the experiment: {ex!s}')
         finally:
@@ -173,6 +180,9 @@ class SalusServer(object):
     def check(self):
         # type: () -> None
         """Check that the server is healthy and running"""
+        if FLAGS.no_server:
+            return
+
         if self.proc is None:
             raise ServerError('Server is not yet started')
         if self.proc.poll() is not None:
@@ -187,6 +197,9 @@ class SalusServer(object):
     def kill(self):
         # type: () -> None
         """Kill the server"""
+        if FLAGS.no_server:
+            return
+
         if self.proc is None or self.proc.poll() is not None:
             logger.warning('Server already died or is not yet started')
             self.proc = None
