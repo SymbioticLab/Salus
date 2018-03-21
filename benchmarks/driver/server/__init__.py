@@ -15,7 +15,8 @@ from collections import deque
 
 from .config import SalusConfig
 from ..utils.compatiblity import pathlib, subprocess as sp
-from ..utils import ServerError, Popen, execute, kill_tree, kill_hard, remove_prefix
+from ..utils import ServerError, Popen, execute, kill_tree, kill_hard, remove_prefix, try_with_default
+
 
 Path = pathlib.Path
 FLAGS = flags.FLAGS
@@ -135,6 +136,7 @@ class SalusServer(object):
             if FLAGS.no_server:
                 print('Start server with the following command:')
                 print(' '.join(self.args))
+                try_with_default(input, ignore=SyntaxError)('Press enter to continue...')
             else:
                 # start
                 self.proc = execute(self.args, env=self.env, stdin=sp.DEVNULL, stdout=stdout, stderr=stderr)
