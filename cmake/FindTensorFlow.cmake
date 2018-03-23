@@ -128,7 +128,6 @@ if(TensorFlow_FOUND)
 
     add_library(tensorflow::framework SHARED IMPORTED)
     file(STRINGS ${tf_binary_path}/libtensorflow_framework.so-2.params FrameworkLinkLibraries REGEX "^-l")
-    message("${FrameworkLinkLibraries}")
     set_property(TARGET tensorflow::framework PROPERTY INTERFACE_LINK_LIBRARIES
         tensorflow::headers
         ${tf_cuda_link_path_flag}
