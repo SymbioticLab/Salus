@@ -62,13 +62,11 @@ Options:
     -v <level>, --verbose=<level>
                                 Enable verbose logging level <level>.
                                 Valid range: 0-9. (0 means disable)
-                                [default: 0]
     --vmodule=<vmodules>        Specify verbose level per module.
                                 Refer to https://github.com/muflihun/easyloggingpp#vmodule
                                 for syntax.
                                 [default: ]
     --vlogfile=<file>           Verbose logging goes to <file>.
-                                [default: verbose.log]
     --perflog=<file>            Enable performance logging and log to <file>.
 
 Deprecated options:

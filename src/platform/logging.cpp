@@ -95,12 +95,17 @@ void initialize(const Params &params)
     // Verbose logging goes to file only
     conf.set(Level::Verbose, ConfigurationType::ToFile, "true");
     conf.set(Level::Verbose, ConfigurationType::ToStandardOutput, "false");
+    Loggers::setDefaultConfigurations(conf, true /*configureExistingLoggers*/);
+
+    // Read in configuration file
+    if (params.configFile) {
+        Loggers::configureFromGlobal(params.configFile->c_str());
+    }
+
+    // Command line parameters take precedence
     if (params.vLogFile) {
         conf.set(Level::Verbose, ConfigurationType::Filename, *params.vLogFile);
     }
-
-    Loggers::setDefaultConfigurations(conf, true /*configureExistingLoggers*/);
-
     if (params.verbosity) {
         Loggers::setVerboseLevel(*params.verbosity);
     }
@@ -122,11 +127,6 @@ void initialize(const Params &params)
     // in non-performance sensitive code path.
     auto allocLogger = Loggers::getLogger("alloc");
     DCHECK(allocLogger);
-
-    // Read in configuration file
-    if (params.configFile) {
-        Loggers::configureFromGlobal(params.configFile->c_str());
-    }
 }
 
 } // namespace logging
