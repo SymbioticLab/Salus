@@ -32,6 +32,7 @@ namespace {
 
 void registerSalusDeviceFactories()
 {
+    VLOG(1) << "Registering salus devices";
     REGISTER_LOCAL_DEVICE_FACTORY("CPU", SalusCPUDeviceFactory, 999);
     REGISTER_LOCAL_DEVICE_FACTORY("GPU", SalusGPUDeviceFactory, 999);
 }

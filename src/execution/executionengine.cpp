@@ -412,6 +412,11 @@ bool ExecutionEngine::maybePreAllocateFor(OperationItem &opItem, const DeviceSpe
 
     auto usage = opItem.op->estimatedUsage(spec);
 
+    // TODO: use an algorithm to decide streams
+    if (spec.type == DeviceType::GPU) {
+        usage[{ResourceType::GPU_STREAM, spec}] = 1;
+    }
+
     auto rctx = makeResourceContext(*item, spec, usage);
     if (!rctx) {
         return false;

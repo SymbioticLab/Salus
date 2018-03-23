@@ -72,7 +72,11 @@ Status SalusCPUDeviceFactory::CreateDevices(const tf::SessionOptions &options, c
     for (int i = 0; i < n; i++) {
         auto name = tf::strings::StrCat(name_prefix, "/cpu:", i);
         // use tf::cpu_allocator to select from cpu allocatory registary
-        devices->push_back(new SalusCPUDevice(options, name, tf::Bytes(256 << 20), {}, tf::cpu_allocator()));
+        auto dev = new SalusCPUDevice(options, name, tf::Bytes(256 << 20), {}, tf::cpu_allocator());
+        VLOG(1) << "Creating SalusCPUDevice " << as_hex(dev) << " which is a tf::Device "
+                << as_hex(static_cast<tf::Device *>(dev)) << " and also a ISalusDevice "
+                << as_hex(static_cast<ISalusDevice *>(dev));
+        devices->push_back(dev);
     }
 
     return Status::OK();

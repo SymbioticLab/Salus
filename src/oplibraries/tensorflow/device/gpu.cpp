@@ -23,6 +23,7 @@ public:
 
 private:
     NodeStreamMap m_nsMap;
+    int m_defaultStream;
     std::vector<int> m_streams;
 };
 
@@ -54,13 +55,9 @@ Status SalusGPUDevice::FillContextMap(const tf::Graph *graph,
 {
     UNUSED(device_context_map);
 
-    VLOG(2) << "FillContextMap";
+    VLOG(2) << "SalusGPUDevice::FillContextMap";
 
     const auto num_streams = device_contexts_.size();
-    // Special case for single stream.
-    if (num_streams == 1) {
-        return Status::OK();
-    }
 
     NodeStreamMap *node_to_stream_id;
     {
@@ -71,9 +68,16 @@ Status SalusGPUDevice::FillContextMap(const tf::Graph *graph,
         node_to_stream_id = &m_streamAssignCache[graph];
     }
 
+    // Special case for single stream.
+    if (num_streams == 1) {
+        return Status::OK();
+    }
+
     tf::gpu_stream_util::AssignStreamsOpts opts;
     opts.max_streams = static_cast<int>(num_streams);
     TF_RETURN_IF_ERROR(tf::gpu_stream_util::AssignStreams(graph, opts, node_to_stream_id));
+
+    VLOG(2) << "SalusGPUDevice::FillContextMap done";
 
     return Status::OK();
 }
@@ -128,6 +132,7 @@ PerTaskGPUDevice::PerTaskGPUDevice(SalusGPUDevice *base, std::unique_ptr<Resourc
                                    NodeStreamMap nsMap)
     : PerTaskDevice(base, std::move(rctx))
     , m_nsMap(nsMap.size())
+    , m_defaultStream(0)
 {
     // Take and use all gpu streams in staging area
     if (auto scope = resourceContext().alloc(ResourceType::GPU_STREAM)) {
@@ -144,6 +149,8 @@ PerTaskGPUDevice::PerTaskGPUDevice(SalusGPUDevice *base, std::unique_ptr<Resourc
 
     // Map logical stream to physical stream using Round-Robin
     if (!m_streams.empty()) {
+        m_defaultStream = m_streams[0];
+
         std::unordered_map<int, int> lTop;
         lTop.reserve(nsMap.size());
         size_t i = 0;
@@ -157,19 +164,19 @@ PerTaskGPUDevice::PerTaskGPUDevice(SalusGPUDevice *base, std::unique_ptr<Resourc
             }
             m_nsMap[nid] = *phy;
         }
+    } else {
+        LOG(ERROR) << "Unable to get GPU streams, using default stream 0, performance may be significantly degradated";
+        m_defaultStream = 0;
     }
 }
 
 tf::DeviceContext *PerTaskGPUDevice::deviceContextForNode(int id) const
 {
-    auto &device = underlayingDevice<SalusGPUDevice>();
-    auto it = m_nsMap.find(id);
-    if (it == m_nsMap.end()) {
-        return device.device_contexts_[0];
-    }
+    auto stream = sstl::getOrDefault(m_nsMap, id, m_defaultStream);
 
-    DCHECK_LT(it->second, static_cast<int>(device.device_contexts_.size()));
-    return device.device_contexts_[it->second];
+    auto &device = underlayingDevice<SalusGPUDevice>();
+    DCHECK_LT(stream, static_cast<int>(device.device_contexts_.size()));
+    return device.device_contexts_[stream];
 }
 
 PerTaskGPUDevice::~PerTaskGPUDevice()
@@ -184,8 +191,12 @@ tf::BaseGPUDevice *SalusGPUDeviceFactory::CreateGPUDevice(const tf::SessionOptio
                                                           tf::Allocator *gpu_allocator,
                                                           tf::Allocator *cpu_allocator)
 {
-    return new SalusGPUDevice(options, name, memory_limit, locality, gpu_id, physical_device_desc,
-                              gpu_allocator, cpu_allocator);
+    auto dev = new SalusGPUDevice(options, name, memory_limit, locality, gpu_id, physical_device_desc,
+                                  gpu_allocator, cpu_allocator);
+    VLOG(1) << "Creating SalusGPUDevice " << as_hex(dev) << " which is a tf::Device "
+            << as_hex(static_cast<tf::Device *>(dev)) << " and also a ISalusDevice "
+            << as_hex(static_cast<ISalusDevice *>(dev));
+    return dev;
 }
 
 } // namespace salus::oplib::tensorflow
