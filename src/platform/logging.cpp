@@ -97,6 +97,13 @@ void initialize(const Params &params)
     conf.set(Level::Verbose, ConfigurationType::ToStandardOutput, "false");
     Loggers::setDefaultConfigurations(conf, true /*configureExistingLoggers*/);
 
+    // Force to create loggers here with default configuration
+    // in non-performance sensitive code path.
+    for (auto tag : {logging::kAllocTag, logging::kOpTracing, logging::kPerfTag, logging::kDefTag}) {
+        auto logger = Loggers::getLogger(tag);
+        DCHECK(logger);
+    }
+
     // Read in configuration file
     if (params.configFile) {
         Loggers::configureFromGlobal(params.configFile->c_str());
@@ -123,10 +130,6 @@ void initialize(const Params &params)
         Loggers::reconfigureLogger(logging::kPerfTag, ConfigurationType::Enabled, "false");
     }
 
-    // Separate allocation logger, which uses default configuration. Force to create it here
-    // in non-performance sensitive code path.
-    auto allocLogger = Loggers::getLogger("alloc");
-    DCHECK(allocLogger);
 }
 
 } // namespace logging
