@@ -206,27 +206,38 @@ ExecutionContext::Data::~Data()
     }
 }
 
-bool ExecutionEngine::shouldWaitForAWhile(size_t scheduled, nanoseconds &ns)
+bool ExecutionEngine::maybeWaitForAWhile(size_t scheduled)
 {
+    constexpr auto initialSleep = 10ms;
+    constexpr auto getBored = 20ms;
+
     static auto last = system_clock::now();
-    static auto sleep = 10ms;
+    static auto sleep = initialSleep;
 
     auto now = system_clock::now();
 
     if (scheduled > 0) {
         last = now;
-        sleep = 10ms;
+        sleep = initialSleep;
     }
 
     auto idle = now - last;
-    if (idle > 20ms) {
-        VLOG(2) << "No progress for " << duration_cast<milliseconds>(idle).count() << "ms, sleep for "
-                << duration_cast<milliseconds>(sleep).count() << "ms";
-        ns = sleep;
-        sleep *= 2;
-        return true;
+    if (idle <= getBored) {
+        return false;
     }
-    return false;
+
+    VLOG(2) << "No progress for " << duration_cast<milliseconds>(idle).count() << "ms, sleep for "
+            << duration_cast<milliseconds>(sleep).count() << "ms";
+
+    // no progress for a long time.
+    // give out our time slice to avoid using too much cycles
+    //             std::this_thread::yield();
+    std::this_thread::sleep_for(sleep);
+
+    // Next time we'll sleep longer
+    sleep *= 2;
+
+    return true;
 }
 
 void ExecutionEngine::scheduleLoop()
@@ -368,13 +379,7 @@ void ExecutionEngine::scheduleLoop()
 
         PERFORMANCE_CHECKPOINT_WITH_ID(schedIterObj, "without-wait");
 
-        std::chrono::nanoseconds ns;
-        if (shouldWaitForAWhile(scheduled, ns)) {
-            // no progress for a long time.
-            // gie out our time slice to avoid using too much cycles
-            //             std::this_thread::yield();
-            std::this_thread::sleep_for(ns);
-        }
+        maybeWaitForAWhile(scheduled);
 
         if (!totalRemainingCount) {
             VLOG(2) << "Wait on m_note_has_work";
@@ -502,10 +507,14 @@ void ExecutionEngine::taskStopped(OperationItem &opItem, bool failed)
     // For now only count memory usage, and simply add up memory usages on different
     // devices.
     if (!failed) {
-        CLOG(INFO, logging::kPerfTag)
-            << "OpItem Stat " << opItem.op->DebugString() << " queued: " << opItem.tQueued
-            << " scheduled: " << opItem.tScheduled << " finished: " << now;
         if (VLOG_IS_ON(1)) {
+            CVLOG(1, logging::kOpTracing)
+                << "OpItem Stat " << opItem.op->DebugString()
+                << " queued: " << opItem.tQueued
+                << " scheduled: " << opItem.tScheduled
+                << " running: " << opItem.tRunning
+                << " finished: " << now;
+
             if (auto item = opItem.sess.lock(); item) {
                 sstl::Guard g(item->mu);
                 auto opjct = duration_cast<microseconds>(opItem.tQueued - now).count();
@@ -675,7 +684,7 @@ void ResourceContext::releaseStaging()
     if (!hasStaging) {
         return;
     }
-    resMon.free(m_ticket);
+    resMon.freeStaging(m_ticket);
     hasStaging = false;
 
     // clean up session tickets
@@ -697,28 +706,39 @@ ResourceContext::~ResourceContext()
     releaseStaging();
 }
 
-ResourceContext::OperationScope ResourceContext::allocMemory(size_t num_bytes) const
+ResourceContext::OperationScope ResourceContext::alloc(ResourceType type) const
 {
-
     OperationScope scope(*this, resMon.lock());
 
-    scope.res[{ResourceType::MEMORY, m_spec}] = num_bytes;
+    auto staging = scope.proxy.queryStaging(m_ticket);
+    auto num = sstl::optionalGet(staging, {type, m_spec});
+    if (!num) {
+        return scope;
+    }
+
+    scope.res[{type, m_spec}] = *num;
     scope.valid = scope.proxy.allocate(m_ticket, scope.res);
 
     return scope;
 }
 
-void ResourceContext::deallocMemory(size_t num_bytes) const
+ResourceContext::OperationScope ResourceContext::alloc(ResourceType type, size_t num) const
 {
-    ResourceTag tag{ResourceType::MEMORY, m_spec};
-    Resources res{{tag, num_bytes}};
+    OperationScope scope(*this, resMon.lock());
 
-    bool ticketIsEmpty = resMon.free(m_ticket, res);
-    session.resourceUsage(tag) -= num_bytes;
+    scope.res[{type, m_spec}] = num;
+    scope.valid = scope.proxy.allocate(m_ticket, scope.res);
 
-    if (ticketIsEmpty) {
-        removeTicketFromSession();
-    }
+    return scope;
+}
+
+void ResourceContext::dealloc(ResourceType type, size_t num) const
+{
+    ResourceTag tag{type, m_spec};
+    Resources res{{tag, num}};
+
+    resMon.free(m_ticket, res);
+    session.resourceUsage(tag) -= num;
 }
 
 void ResourceContext::OperationScope::rollback()

@@ -53,10 +53,13 @@ if(USE_TENSORFLOW)
 
         "oplibraries/tensorflow/v2/md_executor.cpp"
         "oplibraries/tensorflow/v2/tfallocator.cpp"
-        "oplibraries/tensorflow/v2/peropallocdevice.cpp"
         "oplibraries/tensorflow/v2/exectask.cpp"
         "oplibraries/tensorflow/v2/tensorutils.cpp"
         "oplibraries/tensorflow/v2/md_executor_impl.cpp"
+
+        "oplibraries/tensorflow/device/salusdevices.cpp"
+        "oplibraries/tensorflow/device/cpu.cpp"
+        "oplibraries/tensorflow/device/gpu.cpp"
 #         "oplibraries/tensorflow/tfoplibrary.cpp"
 #         "oplibraries/tensorflow/tfmocks/tfdevice.cpp"
 #         "oplibraries/tensorflow/tfmocks/tfsession.cpp"
@@ -79,5 +82,9 @@ target_link_libraries(executor
 if(USE_TENSORFLOW)
     target_link_libraries(executor
         tensorflow::kernels
+    )
+    target_compile_definitions(executor
+        PRIVATE
+            GOOGLE_CUDA=1
     )
 endif(USE_TENSORFLOW)

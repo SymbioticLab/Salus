@@ -26,7 +26,7 @@ limitations under the License.
 #include "execution/devices.h"
 #include "execution/executionengine.h"
 #include "oplibraries/tensorflow/v2/exectask.h"
-#include "oplibraries/tensorflow/v2/peropallocdevice.h"
+#include "oplibraries/tensorflow/device/salusdevices.h"
 #include "oplibraries/tensorflow/v2/tfallocator.h"
 #include "utils/stringutils.h"
 #include "utils/threadutils.h"
@@ -471,7 +471,7 @@ bool onSameDevice(tf::Device *devA, const tf::AllocatorAttributes &attrA, tf::De
 } // namespace
 
 tf::Status ExecutorState::PrepareInputs(const NodeItem &item, tf::OpKernel *kernel,
-                                        const std::shared_ptr<PerOpAllocDevice> &device,
+                                        const std::shared_ptr<PerTaskDevice> &device,
                                         tf::DeviceContext *device_context, Entry *first_input,
                                         TensorValueVec *inputs, BufferLockVec *buflocks,
                                         DeviceContextVec *input_device_contexts,
@@ -675,7 +675,7 @@ tf::Status ExecutorState::PrepareInputs(const NodeItem &item, tf::OpKernel *kern
 }
 
 tf::Status ExecutorState::ProcessOutputs(const NodeItem &item, tf::OpKernelContext *ctx,
-                                         const std::shared_ptr<PerOpAllocDevice> &device,
+                                         const std::shared_ptr<PerTaskDevice> &device,
                                          EntryVector *outputs)
 {
     TIMED_FUNC_IF(timerObj, VLOG_IS_ON(1));

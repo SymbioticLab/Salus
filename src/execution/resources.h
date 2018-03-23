@@ -34,6 +34,7 @@ enum class ResourceType
 {
     COMPUTE,
     MEMORY,
+    GPU_STREAM,
 
     UNKNOWN = 1000,
 };
@@ -195,7 +196,7 @@ public:
     /**
      * @brief Releases remaining pre-allocated resources from ticket `ticket`.
      */
-    void free(uint64_t ticket);
+    void freeStaging(uint64_t ticket);
 
     /**
      * @brief Frees resources `res` for ticket `ticket`.
@@ -239,6 +240,7 @@ public:
 
         bool allocate(uint64_t ticket, const Resources &res);
         bool free(uint64_t ticket, const Resources &res);
+        std::optional<Resources> queryStaging(uint64_t ticket) const;
 
     private:
         void release()
@@ -264,6 +266,7 @@ public:
 private:
     bool allocateUnsafe(uint64_t ticket, const Resources &res);
     bool freeUnsafe(uint64_t ticket, const Resources &res);
+    std::optional<Resources> queryStagingUnsafe(uint64_t ticket) const;
 
     mutable std::mutex m_mu;
 

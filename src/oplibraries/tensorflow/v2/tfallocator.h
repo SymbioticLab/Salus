@@ -32,27 +32,6 @@
 class ResourceContext;
 
 namespace salus::oplib::tensorflow {
-class TFAllocator : public tf::Allocator
-{
-public:
-    SALUS_DISALLOW_COPY_AND_ASSIGN(TFAllocator);
-
-    explicit TFAllocator(tf::Allocator *other = nullptr);
-
-    ~TFAllocator() override;
-
-    std::string Name() override;
-    void *AllocateRaw(size_t alignment, size_t num_bytes) override;
-    void *AllocateRaw(size_t alignment, size_t num_bytes,
-                      const tf::AllocationAttributes &allocation_attr) override;
-
-    void DeallocateRaw(void *ptr) override;
-    bool ShouldAllocateEmptyTensors() override;
-
-private:
-    tf::Allocator *m_actualAlloc;
-};
-
 class PerOpAllocator : public tf::Allocator, public tf::core::RefCounted
 {
 public:

@@ -31,13 +31,16 @@
 #include <tensorflow/core/common_runtime/dma_helper.h>
 #include <tensorflow/core/common_runtime/executor.h>
 #include <tensorflow/core/common_runtime/function.h>
+#include <tensorflow/core/common_runtime/gpu/gpu_device.h>
+#include <tensorflow/core/common_runtime/gpu/gpu_stream_util.h>
+#include <tensorflow/core/common_runtime/gpu/process_state.h>
+#include <tensorflow/core/common_runtime/graph_optimizer.h>
 #include <tensorflow/core/common_runtime/local_device.h>
+#include <tensorflow/core/common_runtime/memory_types.h>
+#include <tensorflow/core/common_runtime/optimization_registry.h>
 #include <tensorflow/core/common_runtime/pending_counts.h>
 #include <tensorflow/core/common_runtime/renamed_device.h>
-#include <tensorflow/core/common_runtime/graph_optimizer.h>
-#include <tensorflow/core/common_runtime/optimization_registry.h>
 #include <tensorflow/core/common_runtime/shape_refiner.h>
-#include <tensorflow/core/common_runtime/memory_types.h>
 #include <tensorflow/core/common_runtime/step_stats_collector.h>
 #include <tensorflow/core/distributed_runtime/base_rendezvous_mgr.h>
 #include <tensorflow/core/distributed_runtime/master_env.h>
@@ -45,7 +48,6 @@
 #include <tensorflow/core/distributed_runtime/session_mgr_interface.h>
 #include <tensorflow/core/distributed_runtime/worker.h>
 #include <tensorflow/core/distributed_runtime/worker_cache.h>
-#include <tensorflow/core/distributed_runtime/zrpc/exechelper/allocators.h>
 #include <tensorflow/core/distributed_runtime/zrpc/exechelper/graphview.h>
 #include <tensorflow/core/distributed_runtime/zrpc/exechelper/memorytypes.h>
 #include <tensorflow/core/distributed_runtime/zrpc/exechelper/paginghelper.h>

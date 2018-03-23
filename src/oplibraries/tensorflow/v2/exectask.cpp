@@ -22,10 +22,10 @@
  * with ours.
  */
 #include "oplibraries/tensorflow/tensorflow_headers.h"
-#include "oplibraries/tensorflow/tfutils.h"
 #include "exectask.h"
 #include "execution/devices.h"
-#include "oplibraries/tensorflow/v2/peropallocdevice.h"
+#include "oplibraries/tensorflow/device/salusdevices.h"
+#include "oplibraries/tensorflow/tfutils.h"
 #include "oplibraries/tensorflow/v2/tfallocator.h"
 #include "oplibraries/tensorflow/worker/devicecontextwithdevice.h"
 #include "oplibraries/tensorflow/worker/rendezvouswithhook.h"
@@ -87,20 +87,18 @@ bool ExecTask::prepare(std::unique_ptr<ResourceContext> &&rctx)
 {
     statusInPrepare = tf::Status::OK();
 
-    auto &dev = rctx->spec();
+    auto &spec = rctx->spec();
 
-    auto match = [&dev](auto type) { return type == dev.type; };
+    auto match = [&spec](auto type) { return type == spec.type; };
     if (std::none_of(supportedTypes.begin(), supportedTypes.end(), match)) {
         return false;
     }
 
-    auto s = m_state->impl_->LookupDevice(dev, &ditem);
+    auto s = m_state->impl_->LookupDevice(spec, std::move(rctx), &ditem);
     if (!s.ok()) {
         statusInPrepare.Update(s);
         return false;
     }
-
-    ditem.device->setResourceContext(std::move(rctx));
 
     // First check if we already created the kernel on some device
     op_kernel = nullptr;
@@ -229,16 +227,16 @@ void ExecTask::inferUsage(const DeviceSpec &dev)
     ExecutorImpl::DeviceItem ditem;
     tf::MemoryTypeVector input_mtypes;
     tf::MemoryTypeVector output_mtypes;
-    auto mtypeStatus = m_state->impl_->LookupDevice(dev, &ditem);
+    tf::Device *tfdev;
+    auto mtypeStatus = m_state->impl_->LookupTFDevice(dev, &tfdev);
     if (mtypeStatus.ok()) {
         mtypeStatus.Update(tf::remote::MemoryTypesForNode(m_state->impl_->graph_->op_registry(),
-                                                          tf::DeviceType(ditem.device->device_type()),
+                                                          tf::DeviceType(tfdev->device_type()),
                                                           node->def(), &input_mtypes, &output_mtypes));
     }
     if (!mtypeStatus.ok()) {
         LOG(WARNING) << "Kernel not found on device " << dev << ", resource estimation may be inaccurate.";
     }
-    DCHECK(ditem.device);
 
     ResourceTag devTag{ResourceType::MEMORY, dev};
     ResourceTag cpuTag{ResourceType::MEMORY, dev};
@@ -285,11 +283,7 @@ std::string ExecTask::DebugString()
 
 void ExecTask::cancel()
 {
-    auto input_frame = tagged_node.input_frame;
-    int64_t input_iter = tagged_node.input_iter;
-    const size_t id = tagged_node.node->id();
-
-    m_state->MaybeMarkCompleted(input_frame, input_iter, id);
+    m_state->MaybeMarkCompleted(tagged_node.input_frame, tagged_node.input_iter, tagged_node.node->id());
 
     auto s = tf::errors::Cancelled("Cancelled");
     // cancel may be called before prepare, so no device
@@ -307,10 +301,10 @@ void ExecTask::cancel()
 void ExecTask::run(Callbacks cbs)
 {
     const auto &gview = m_state->impl_->gview_;
-    auto node = tagged_node.node;
-    auto input_frame = tagged_node.input_frame;
-    int64_t input_iter = tagged_node.input_iter;
-    const size_t id = node->id();
+    auto *node = tagged_node.node;
+    const auto input_frame = tagged_node.input_frame;
+    const auto input_iter = tagged_node.input_iter;
+    const auto id = node->id();
     const auto &item = *gview.node(id);
 
     // clear early
@@ -340,7 +334,7 @@ void ExecTask::run(Callbacks cbs)
     params.record_tensor_accesses = ditem.device_record_tensor_access;
     params.function_library = ditem.function_library.get();
     // Set the device_context for this node id, if it exists.
-    params.op_device_context = m_state->FindDeviceContext(id, ditem.device.get());
+    params.op_device_context = ditem.device->deviceContextForNode(id);
 
     // Don't track allocations. Not implemented.
     params.track_allocations = false;
@@ -520,8 +514,7 @@ void ExecTask::afterRun(const tf::Status &s, const Callbacks &cbs)
         auto usage = estimatedUsage(ditem.device->resourceContext().spec());
         m_state->impl_->saveSucceedUsageForNode(tagged_node.node->name(), usage);
     }
-    auto completed =
-        m_state->NodeDone(s, tagged_node.node, ditem.device.get(), params.rendezvous, ready);
+    auto completed = m_state->NodeDone(s, tagged_node.node, ditem.device.get(), params.rendezvous, ready);
 
     num_finished_ops.notify();
 

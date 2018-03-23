@@ -26,10 +26,10 @@
 #include "tensorutils.h"
 
 #include "execution/executionengine.h"
-#include "oplibraries/tensorflow/v2/peropallocdevice.h"
+#include "oplibraries/tensorflow/device/salusdevices.h"
 
 namespace salus::oplib::tensorflow {
-Status moveTensor(Entry &entry, const std::shared_ptr<PerOpAllocDevice> &dstDevice, tf::DeviceContext *dstCtx,
+Status moveTensor(Entry &entry, const std::shared_ptr<PerTaskDevice> &dstDevice, tf::DeviceContext *dstCtx,
                   const tf::AllocatorAttributes &attr, const std::string &name)
 {
     auto input = entry.RefOrVal();
@@ -79,7 +79,7 @@ Status moveTensor(Entry &entry, const std::shared_ptr<PerOpAllocDevice> &dstDevi
     return tf::Status::OK();
 }
 
-tf::Status moveTensorTree(TensorBufferTree &tree, const std::shared_ptr<PerOpAllocDevice> &dstDevice)
+tf::Status moveTensorTree(TensorBufferTree &tree, const std::shared_ptr<PerTaskDevice> &dstDevice)
 {
     // No buffer to move, safe to assume we moved *0* bytes
     if (tree.root_buf == nullptr) {

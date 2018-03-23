@@ -170,7 +170,7 @@ private:
     std::atomic<bool> m_shouldExit{false};
     std::unique_ptr<std::thread> m_schedThread;
     void scheduleLoop();
-    bool shouldWaitForAWhile(size_t scheduled, std::chrono::nanoseconds &ns);
+    bool maybeWaitForAWhile(size_t scheduled);
 
     // Task life cycle
     friend class IScheduler;
@@ -241,14 +241,14 @@ public:
     struct OperationScope
     {
         explicit OperationScope(const ResourceContext &context, ResourceMonitor::LockedProxy &&proxy)
-            : valid(true)
+            : valid(false)
             , proxy(std::move(proxy))
             , res()
             , context(context)
         {
         }
 
-        OperationScope(OperationScope &&scope)
+        OperationScope(OperationScope &&scope) noexcept
             : valid(scope.valid)
             , proxy(std::move(scope.proxy))
             , res(std::move(scope.res))
@@ -269,6 +269,11 @@ public:
 
         void rollback();
 
+        const Resources &resources() const
+        {
+            return res;
+        }
+
     private:
         void commit();
 
@@ -280,11 +285,24 @@ public:
         const ResourceContext &context;
     };
 
-    OperationScope allocMemory(size_t num_bytes) const;
-    void deallocMemory(size_t num_bytes) const;
+    /**
+     * @brief Allocate all resource of type `type' in staging area
+     * @param type
+     * @return
+     */
+    OperationScope alloc(ResourceType type) const;
+
+    OperationScope alloc(ResourceType type, size_t num) const;
+
+    void dealloc(ResourceType type, size_t num) const;
+
+    /**
+     * @brief Called by PerOpAllocator when no allocation is hold by the ticket
+     *
+     */
+    void removeTicketFromSession() const;
 
 private:
-    void removeTicketFromSession() const;
 
     SessionItem &session;
     std::atomic<bool> hasStaging;

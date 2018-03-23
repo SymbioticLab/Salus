@@ -38,6 +38,8 @@ std::string enumToString(const ResourceType &rt)
         return "COMPUTE";
     case ResourceType::MEMORY:
         return "MEMORY";
+    case ResourceType::GPU_STREAM:
+        return "GPU_STREAM";
     default:
         return "Unknown ResourceType";
     }
@@ -48,6 +50,7 @@ ResourceType resourceTypeFromString(const std::string &rt)
     static std::unordered_map<std::string, ResourceType> lookup{
         {"COMPUTE", ResourceType::COMPUTE},
         {"MEMORY", ResourceType::MEMORY},
+        {"GPU_STREAM", ResourceType::GPU_STREAM},
     };
 
     auto it = lookup.find(rt);
@@ -380,10 +383,13 @@ void ResourceMonitor::initializeLimits()
     Guard g(m_mu);
 
     // 100 G for CPU
-    m_limits[{ResourceType::MEMORY, DeviceType::CPU}] = 100_sz * 1024 * 1024 * 1024;
+    m_limits[{ResourceType::MEMORY, devices::CPU0}] = 100_sz * 1024 * 1024 * 1024;
 
     // 14 G for GPU 0
-    m_limits[{ResourceType::MEMORY, DeviceType::GPU}] = 14_sz * 1024 * 1024 * 1024;
+    m_limits[{ResourceType::MEMORY, devices::GPU0}] = 14_sz * 1024 * 1024 * 1024;
+
+    // 16 streams for GPU 0
+    m_limits[{ResourceType::GPU_STREAM, devices::GPU0}] = 16;
 }
 
 void ResourceMonitor::initializeLimits(const Resources &cap)
@@ -485,7 +491,7 @@ bool ResourceMonitor::allocateUnsafe(uint64_t ticket, const Resources &res)
 }
 
 // Release remaining pre-allocated resources
-void ResourceMonitor::free(uint64_t ticket)
+void ResourceMonitor::freeStaging(uint64_t ticket)
 {
     if (ticket == 0) {
         LOG(ERROR) << "Invalid ticket 0";
@@ -516,18 +522,24 @@ bool ResourceMonitor::LockedProxy::free(uint64_t ticket, const Resources &res)
     return m_resMonitor->freeUnsafe(ticket, res);
 }
 
+std::optional<Resources> ResourceMonitor::LockedProxy::queryStaging(uint64_t ticket) const
+{
+    DCHECK(m_resMonitor);
+    return m_resMonitor->queryStagingUnsafe(ticket);
+}
+
 bool ResourceMonitor::freeUnsafe(uint64_t ticket, const Resources &res)
 {
     // Ticket can not be 0 when free actual resource to prevent
     // monitor go out of sync of physical usage.
-    assert(ticket != 0);
+    DCHECK_NE(ticket, 0);
 
     merge(m_limits, res);
 
     auto it = m_using.find(ticket);
-    assert(it != m_using.end());
+    DCHECK_NE(it, m_using.end());
 
-    assert(contains(it->second, res));
+    DCHECK(contains(it->second, res));
 
     subtract(it->second, res);
     removeZeros(it->second);
@@ -536,6 +548,12 @@ bool ResourceMonitor::freeUnsafe(uint64_t ticket, const Resources &res)
         return true;
     }
     return false;
+}
+
+std::optional<Resources> ResourceMonitor::queryStagingUnsafe(uint64_t ticket) const
+{
+    DCHECK_NE(ticket, 0);
+    return sstl::optionalGet(m_staging, ticket);
 }
 
 std::vector<std::pair<size_t, uint64_t>> ResourceMonitor::sortVictim(

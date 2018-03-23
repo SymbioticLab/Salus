@@ -96,8 +96,6 @@ class SalusServer(object):
                 'nvprof',
                 '--export-profile', str(self.config.output_dir / 'profile.sqlite'),
                 '--force-overwrite',
-                '--concurrent-kernels', 'on',
-                '--metrics', 'executed_ipc',
                 '--'
             ]
 
