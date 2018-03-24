@@ -94,9 +94,7 @@ class SalusServer(object):
         if self.config.use_nvprof:
             self.args += [
                 'nvprof',
-                '--export-profile', str(self.config.output_dir / 'profile.sqlite'),
-                '--force-overwrite',
-                '--'
+                '--export-profile', '/tmp/profile.prof',
             ]
 
         self.args += [
