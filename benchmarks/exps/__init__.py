@@ -7,6 +7,7 @@ import logging
 from absl import flags
 from typing import Union, Iterable, List, TypeVar, Callable
 
+import benchmarks.driver.utils.prompt as prompt
 from benchmarks.driver.server.config import presets
 from benchmarks.driver.server import SalusServer, SalusConfig
 from benchmarks.driver.utils import atomic_directory, try_with_default, UsageError, kill_tree
@@ -21,10 +22,12 @@ FLAGS = flags.FLAGS
 
 class Pause(int):
     """Represent a pause in an action sequence"""
+    Manual = None  # type: Pause
+    Wait = None  # type: Pause
 
     def run(self, workloads):
         if self == Pause.Manual:
-            try_with_default(input, ignore=SyntaxError)('Press enter to continue...')
+            prompt.pause()
         elif self == Pause.Wait:
             logger.info(f"Waiting current {len(workloads)} workloads to finish")
             SalusServer.current_server().wait_workloads(workloads)

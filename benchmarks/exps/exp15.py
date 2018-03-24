@@ -81,7 +81,7 @@ def main(argv):
                 raise ValueError(f'Missing {field} data for workload {wtl.canonical_name(rcfg)}')
 
     for case in cases:
-        logdir = FLAGS.save_dir / "exp15" / case
+        logdir = FLAGS.save_dir / case
 
         # create workload instances
         workloads = (wtl.create(rcfg, Executor.Salus) for wtl, rcfg in templates)

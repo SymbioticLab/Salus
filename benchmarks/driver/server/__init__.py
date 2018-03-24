@@ -16,6 +16,7 @@ from collections import deque
 from .config import SalusConfig
 from ..utils.compatiblity import pathlib, subprocess as sp
 from ..utils import ServerError, Popen, execute, kill_tree, kill_hard, remove_prefix, try_with_default
+from ..utils import prompt
 
 
 Path = pathlib.Path
@@ -94,7 +95,7 @@ class SalusServer(object):
         if self.config.use_nvprof:
             self.args += [
                 'nvprof',
-                '--export-profile', '/tmp/profile.prof',
+                '--export-profile', str(self.config.output_dir / 'profile.prof'),
             ]
 
         self.args += [
@@ -132,7 +133,7 @@ class SalusServer(object):
             if FLAGS.no_server:
                 print('Start server with the following command:')
                 print(' '.join(self.args))
-                try_with_default(input, ignore=SyntaxError)('Press enter to continue...')
+                prompt.pause()
             else:
                 # start
                 self.proc = execute(self.args, env=self.env, stdin=sp.DEVNULL, stdout=stdout, stderr=stderr)

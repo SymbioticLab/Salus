@@ -87,6 +87,7 @@ class WorkloadTemplate(object):
         self._geometries = ResourceGeometry.default_geometries()  # type: TGeometries
 
         self.create = self._create
+        self.create_from_rcfg = self._create_from_rcfg
 
     def add_geometry(self, rcfg, executor, geometry, overwrite=False):
         # type: (RunConfig, Executor, ResourceGeometry, bool) -> None

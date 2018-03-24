@@ -34,29 +34,10 @@ def main(argv):
                 *parse_actions_from_cmd(argv))
         return
 
-    logdir = FLAGS.save_dir / "multistream"
-    run_seq(scfg.copy(output_dir=logdir / "salus" / "2perf500"),
+    run_seq(scfg.copy(output_dir=FLAGS.save_dir / "5perf500"),
             WTL.create("mnistsf", 25, 500),
             WTL.create("mnistsf", 25, 500),
+            WTL.create("mnistsf", 25, 500),
+            WTL.create("mnistsf", 25, 500),
+            WTL.create("mnistsf", 25, 500),
             )
-    return
-
-    run_seq(scfg.copy(output_dir=logdir / "salus" / "1"),
-            WTL.create("mnistsf", 25, 100),
-            Pause.Wait,
-            WTL.create("mnistsf", 25, 200),
-            Pause.Wait,
-            WTL.create("mnistsf", 25, 300),
-            )
-    run_seq(scfg.copy(output_dir=logdir / "tf"),
-            WTL.create("mnistsf", 25, 100, executor=Executor.TF),  # 1min
-            Pause.Wait,
-            WTL.create("mnistsf", 25, 200, executor=Executor.TF),  # 1min
-            Pause.Wait,
-            WTL.create("mnistsf", 25, 300, executor=Executor.TF),  # 1min
-            )
-
-    for conc in range(2, 10):
-        actions = [WTL.create("mnistsf", 25, 100) for _ in range(conc)]
-        run_seq(scfg.copy(output_dir=logdir / "salus" / str(conc)), *actions)
-

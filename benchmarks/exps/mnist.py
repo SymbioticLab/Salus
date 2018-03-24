@@ -27,21 +27,29 @@ FLAGS = flags.FLAGS
 def main(argv):
     scfg = maybe_forced_preset(presets.MostEfficient)
     scfg.scheduler = 'pack'
+    scfg.logconf = 'disable'
 
     if argv:
         run_seq(scfg.copy(output_dir=FLAGS.save_dir),
                 *parse_actions_from_cmd(argv))
         return
 
-    # Firstly run concurrently on salus
-    run_seq(scfg.copy(output_dir=FLAGS.save_dir / "salus"),
-            WTL.create("vgg19", 50, 94),
-            WTL.create("vgg19", 50, 601),
+    run_seq(scfg.copy(output_dir=FLAGS.save_dir / "salus" / "1"),
+            WTL.create("mnistsf", 25, 100),
+            Pause.Wait,
+            WTL.create("mnistsf", 25, 200),
+            Pause.Wait,
+            WTL.create("mnistsf", 25, 300),
+            )
+    run_seq(scfg.copy(output_dir=FLAGS.save_dir / "tf"),
+            WTL.create("mnistsf", 25, 100, executor=Executor.TF),  # 1min
+            Pause.Wait,
+            WTL.create("mnistsf", 25, 200, executor=Executor.TF),  # 1min
+            Pause.Wait,
+            WTL.create("mnistsf", 25, 300, executor=Executor.TF),  # 1min
             )
 
-    # Then run on tf
-    run_seq(scfg.copy(output_dir=FLAGS.save_dir / "tf"),
-            WTL.create("vgg19", 50, 94, executor=Executor.TF),
-            Pause.Wait,
-            WTL.create("vgg19", 50, 601, executor=Executor.TF),
-            )
+    for conc in range(2, 10):
+        actions = [WTL.create("mnistsf", 25, 100) for _ in range(conc)]
+        run_seq(scfg.copy(output_dir=FLAGS.save_dir / "salus" / str(conc)), *actions)
+
