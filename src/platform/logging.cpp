@@ -95,24 +95,12 @@ void initialize(const Params &params)
     // Verbose logging goes to file only
     conf.set(Level::Verbose, ConfigurationType::ToFile, "true");
     conf.set(Level::Verbose, ConfigurationType::ToStandardOutput, "false");
-    Loggers::setDefaultConfigurations(conf, true /*configureExistingLoggers*/);
-
-    // Force to create loggers here with default configuration
-    // in non-performance sensitive code path.
-    for (auto tag : {logging::kAllocTag, logging::kOpTracing, logging::kPerfTag, logging::kDefTag}) {
-        auto logger = Loggers::getLogger(tag);
-        DCHECK(logger);
-    }
-
-    // Read in configuration file
-    if (params.configFile) {
-        Loggers::configureFromGlobal(params.configFile->c_str());
-    }
-
-    // Command line parameters take precedence
     if (params.vLogFile) {
         conf.set(Level::Verbose, ConfigurationType::Filename, *params.vLogFile);
     }
+
+    Loggers::setDefaultConfigurations(conf, true /*configureExistingLoggers*/);
+
     if (params.verbosity) {
         Loggers::setVerboseLevel(*params.verbosity);
     }
@@ -130,6 +118,17 @@ void initialize(const Params &params)
         Loggers::reconfigureLogger(logging::kPerfTag, ConfigurationType::Enabled, "false");
     }
 
+    // Force to create loggers here with default configuration
+    // in non-performance sensitive code path.
+    for (auto tag : {logging::kAllocTag, logging::kOpTracing, logging::kPerfTag, logging::kDefTag}) {
+        auto logger = Loggers::getLogger(tag);
+        DCHECK(logger);
+    }
+
+    // Read in configuration file
+    if (params.configFile) {
+        Loggers::configureFromGlobal(params.configFile->c_str());
+    }
 }
 
 } // namespace logging
