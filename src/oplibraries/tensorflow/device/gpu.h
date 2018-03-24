@@ -22,7 +22,7 @@ class SalusGPUDevice : public ISalusDevice, public tf::BaseGPUDevice
 public:
     SalusGPUDevice(const tf::SessionOptions &options, const std::string &name, tf::Bytes memory_limit,
                    const tf::DeviceLocality &locality, int gpu_id, const std::string &physical_device_desc,
-                   tf::Allocator *gpu_allocator, tf::Allocator *cpu_allocator, int max_streams = 16);
+                   tf::Allocator *gpu_allocator, tf::Allocator *cpu_allocator, int max_streams = 128);
 
     ~SalusGPUDevice() override = default;
 

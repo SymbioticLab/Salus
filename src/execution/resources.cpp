@@ -388,8 +388,8 @@ void ResourceMonitor::initializeLimits()
     // 14 G for GPU 0
     m_limits[{ResourceType::MEMORY, devices::GPU0}] = 14_sz * 1024 * 1024 * 1024;
 
-    // 16 streams for GPU 0
-    m_limits[{ResourceType::GPU_STREAM, devices::GPU0}] = 16;
+    // 128 streams for GPU 0
+    m_limits[{ResourceType::GPU_STREAM, devices::GPU0}] = 128;
 }
 
 void ResourceMonitor::initializeLimits(const Resources &cap)
