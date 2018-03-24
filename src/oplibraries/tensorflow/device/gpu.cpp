@@ -55,7 +55,7 @@ Status SalusGPUDevice::FillContextMap(const tf::Graph *graph,
 {
     UNUSED(device_context_map);
 
-    VLOG(2) << "SalusGPUDevice::FillContextMap";
+    VLOG(2) << "SalusGPUDevice::FillContextMap on " << name() << " for " << as_hex(graph);
 
     const auto num_streams = device_contexts_.size();
 
@@ -84,6 +84,7 @@ Status SalusGPUDevice::FillContextMap(const tf::Graph *graph,
 
 void SalusGPUDevice::flushCacheFor(const tf::Graph *graph)
 {
+    VLOG(2) << "SalusGPUDevice::flushCacheFor(" << as_hex(graph) << ") on " << name();
     sstl::Guard g(m_muCache);
     m_streamAssignCache.erase(graph);
 }
@@ -92,6 +93,7 @@ std::unique_ptr<PerTaskDevice> SalusGPUDevice::createPerTaskDevice(const tf::Gra
                                                                    std::unique_ptr<ResourceContext> &&rctx)
 {
     sstl::Guard g(m_muCache);
+    VLOG(2) << "SalusGPUDevice::createPerTaskDevice on " << name() << " for " << as_hex(graph);
     return std::make_unique<PerTaskGPUDevice>(this, std::move(rctx), m_streamAssignCache.at(graph));
 }
 
