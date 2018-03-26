@@ -20,7 +20,7 @@
 #include "executionengine.h"
 
 #include "execution/operationtask.h"
-#include "execution/scheduler/ischeduler.h"
+#include "execution/scheduler/basescheduler.h"
 #include "execution/scheduler/operationitem.h"
 #include "execution/scheduler/sessionitem.h"
 #include "platform/logging.h"

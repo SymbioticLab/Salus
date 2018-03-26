@@ -45,7 +45,7 @@ SchedulerRegistary::Register reg("fair", [](auto &engine) {
 
 } // namespace
 
-FairScheduler::FairScheduler(ExecutionEngine &engine) : IScheduler(engine) {}
+FairScheduler::FairScheduler(ExecutionEngine &engine) : BaseScheduler(engine) {}
 
 FairScheduler::~FairScheduler() = default;
 

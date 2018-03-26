@@ -19,7 +19,7 @@
 #ifndef FAIRSCHEDULER_H
 #define FAIRSCHEDULER_H
 
-#include "execution/scheduler/ischeduler.h"
+#include "execution/scheduler/basescheduler.h"
 
 #include <chrono>
 #include <unordered_map>
@@ -27,7 +27,7 @@
 /**
  * @todo write docs
  */
-class FairScheduler : public IScheduler
+class FairScheduler : public BaseScheduler
 {
 public:
     FairScheduler(ExecutionEngine &engine);
@@ -40,7 +40,7 @@ public:
                                  sstl::not_null<CandidateList*> candidates) override;
     std::pair<size_t, bool> maybeScheduleFrom(PSessionItem item) override;
 
-    using IScheduler::debugString;
+    using BaseScheduler::debugString;
     std::string debugString(const PSessionItem &item) const override;
 
 private:

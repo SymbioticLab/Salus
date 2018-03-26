@@ -19,14 +19,14 @@
 #ifndef PACKSCHEDULER_H
 #define PACKSCHEDULER_H
 
-#include "execution/scheduler/ischeduler.h"
+#include "execution/scheduler/basescheduler.h"
 
 #include <chrono>
 
 /**
  * @todo write docs
  */
-class PackScheduler : public IScheduler
+class PackScheduler : public BaseScheduler
 {
 public:
     PackScheduler(ExecutionEngine &engine);

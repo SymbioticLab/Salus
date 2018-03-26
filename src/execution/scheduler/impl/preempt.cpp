@@ -43,7 +43,7 @@ SchedulerRegistary::Register reg("preempt", [](auto &engine) {
 });
 } // namespace
 
-PreemptScheduler::PreemptScheduler(ExecutionEngine &engine) : IScheduler(engine) {}
+PreemptScheduler::PreemptScheduler(ExecutionEngine &engine) : BaseScheduler(engine) {}
 
 PreemptScheduler::~PreemptScheduler() = default;
 

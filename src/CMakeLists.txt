@@ -7,7 +7,7 @@ set(SRC_LIST
 
     "execution/scheduler/operationitem.cpp"
     "execution/scheduler/sessionitem.cpp"
-    "execution/scheduler/ischeduler.cpp"
+    "execution/scheduler/basescheduler.cpp"
     "execution/scheduler/impl/fair.cpp"
     "execution/scheduler/impl/pack.cpp"
     "execution/scheduler/impl/preempt.cpp"
@@ -16,7 +16,7 @@ set(SRC_LIST
     "execution/operationtask.cpp"
     "execution/resources.cpp"
     "execution/threadpool/nonblockingthreadpool.cpp"
-    "execution/scheduler/ischeduler.cpp"
+    "execution/scheduler/basescheduler.cpp"
 
     "rpcserver/iothreadpool.cpp"
     "rpcserver/rpcservercore.cpp"

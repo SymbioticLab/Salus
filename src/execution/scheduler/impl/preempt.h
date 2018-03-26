@@ -19,14 +19,14 @@
 #ifndef PREEMPTSCHEDULER_H
 #define PREEMPTSCHEDULER_H
 
-#include "execution/scheduler/ischeduler.h"
+#include "execution/scheduler/basescheduler.h"
 
 #include <chrono>
 
 /**
  * @brief Always gives new session higher priority
  */
-class PreemptScheduler : public IScheduler
+class PreemptScheduler : public BaseScheduler
 {
 public:
     PreemptScheduler(ExecutionEngine &engine);

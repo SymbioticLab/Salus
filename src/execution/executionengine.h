@@ -76,7 +76,7 @@ struct PagingCallbacks
  */
 using PSessionItem = std::shared_ptr<SessionItem>;
 using POpItem = std::shared_ptr<OperationItem>;
-class IScheduler;
+class BaseScheduler;
 class ExecutionEngine;
 class ExecutionContext
 {
@@ -173,7 +173,7 @@ private:
     bool maybeWaitForAWhile(size_t scheduled);
 
     // Task life cycle
-    friend class IScheduler;
+    friend class BaseScheduler;
     std::unique_ptr<ResourceContext> makeResourceContext(SessionItem &sess, const DeviceSpec &spec,
                                                          const Resources &res);
     bool maybePreAllocateFor(OperationItem &opItem, const DeviceSpec &spec);

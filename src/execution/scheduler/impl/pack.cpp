@@ -43,7 +43,7 @@ SchedulerRegistary::Register reg("pack", [](auto &engine) {
 });
 } // namespace
 
-PackScheduler::PackScheduler(ExecutionEngine &engine) : IScheduler(engine) {}
+PackScheduler::PackScheduler(ExecutionEngine &engine) : BaseScheduler(engine) {}
 
 PackScheduler::~PackScheduler() = default;
 

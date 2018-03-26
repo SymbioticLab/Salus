@@ -68,7 +68,7 @@ private:
 
     friend class ExecutionEngine;
     friend class ResourceContext;
-    friend class IScheduler;
+    friend class BaseScheduler;
 
 public:
     std::string sessHandle;

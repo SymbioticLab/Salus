@@ -16,8 +16,8 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef ISCHEDULER_H
-#define ISCHEDULER_H
+#ifndef SALUS_EXEC_SCHED_BASESCHEDULER_H
+#define SALUS_EXEC_SCHED_BASESCHEDULER_H
 
 #include "sessionitem.h"
 
@@ -45,11 +45,11 @@ struct SessionChangeSet
     SessionList::iterator addedSessionEnd;
 };
 
-class IScheduler
+class BaseScheduler
 {
 public:
-    explicit IScheduler(ExecutionEngine &engine);
-    virtual ~IScheduler();
+    explicit BaseScheduler(ExecutionEngine &engine);
+    virtual ~BaseScheduler();
 
     virtual std::string name() const = 0;
 
@@ -111,13 +111,13 @@ public:
 
     ~SchedulerRegistary();
 
-    using SchedulerFactory = std::function<std::unique_ptr<IScheduler>(ExecutionEngine&)>;
+    using SchedulerFactory = std::function<std::unique_ptr<BaseScheduler>(ExecutionEngine&)>;
     struct Register
     {
         explicit Register(std::string_view name, SchedulerFactory factory);
     };
 
-    std::unique_ptr<IScheduler> create(std::string_view name, ExecutionEngine &engine) const;
+    std::unique_ptr<BaseScheduler> create(std::string_view name, ExecutionEngine &engine) const;
 
     static SchedulerRegistary &instance();
 
@@ -135,4 +135,4 @@ private:
     std::map<std::string, SchedulerItem, std::less<>> m_schedulers;
 };
 
-#endif // ISCHEDULER_H
+#endif // SALUS_EXEC_SCHED_BASESCHEDULER_H
