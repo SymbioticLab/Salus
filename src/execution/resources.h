@@ -16,8 +16,8 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef EXECUTION_RESOURCES_H
-#define EXECUTION_RESOURCES_H
+#ifndef SALUS_EXEC_RESOURCES_H
+#define SALUS_EXEC_RESOURCES_H
 
 #include "execution/devices.h"
 #include "utils/macros.h"
@@ -89,20 +89,57 @@ public:
 using Resources = std::unordered_map<ResourceTag, size_t>;
 
 namespace resources {
-// Return true iff avail contains req
+/**
+ * @brief Whether 'avail' contains 'req'
+ * @param avail
+ * @param req
+ * @return true iff 'avail' contains 'req'
+ */
 bool contains(const Resources &avail, const Resources &req);
 
-// Return true iff lhs's tags is superset of rhs's tags
+/**
+ * @brief Whether 'lhs' contains all resource types in 'rhs'
+ *
+ * @param lhs
+ * @param rhs
+ * @return
+ */
 bool compatible(const Resources &lhs, const Resources &rhs);
 
-// Remove items whose value is 0
-Resources &removeZeros(Resources &lhs);
+/**
+ * @brief Remove resource types with non-positive capacity
+ * @param lhs
+ * @return
+ */
+Resources &removeInvalid(Resources &lhs);
 
+/**
+ * @brief Merge 'rhs' into 'lhs'
+ *
+ * @param lhs
+ * @param rhs
+ * @param skipNonExist Whether to skip resource types that only present in 'rhs'
+ * @return reference to 'lhs'
+ */
 Resources &merge(Resources &lhs, const Resources &rhs, bool skipNonExist = false);
-Resources &subtract(Resources &lhs, const Resources &rhs, bool skipNonExist = false);
-Resources &scale(Resources &lhs, double scale);
 
-size_t totalMemory(Resources &res);
+/**
+ * @brief Subtract 'rhs' from 'lhs'
+ *
+ * @param lhs
+ * @param rhs
+ * @param skipNonExist Whether to skip resource types that only present in 'rhs'
+ * @return reference to 'lhs'
+ */
+Resources &subtract(Resources &lhs, const Resources &rhs, bool skipNonExist = false);
+
+/**
+ * @brief Multiply a scale to every resource type in 'lhs'
+ * @param lhs
+ * @param scale
+ * @return reference to 'lhs'
+ */
+Resources &scale(Resources &lhs, double scale);
 
 std::string DebugString(const Resources &res, const std::string &indent = "");
 
@@ -186,8 +223,14 @@ public:
      */
     void initializeLimits(const Resources &cap);
 
-    // Try pre-allocate resources
-    bool preAllocate(const Resources &cap, uint64_t *ticket);
+    /**
+     * @brief Try pre-allocate resources
+     * @param req Requested resources to pre-allocate
+     * @param missing If not null, contains missing resources that would have make the allocation succeed. Ignored when
+     * the allocation succeed.
+     * @return An ticket when the pre-allocation succeed, otherwise empty.
+     */
+    std::optional<uint64_t> preAllocate(const Resources &req, Resources *missing);
 
     // Allocate resources from pre-allocated resources, if res < reserved, gauranteed to succeed
     // otherwise may return false
@@ -272,11 +315,21 @@ private:
 
     // 0 is invalid ticket
     uint64_t m_nextTicket = 1;
+
+    /**
+     * @brief Available resources
+     */
     Resources m_limits;
 
+    /**
+     * @brief Staging resources
+     */
     std::unordered_map<uint64_t, Resources> m_staging;
 
+    /**
+     * @brief In-use resources
+     */
     std::unordered_map<uint64_t, Resources> m_using;
 };
 
-#endif // EXECUTION_RESOURCES_H
+#endif // SALUS_EXEC_RESOURCES_H

@@ -24,9 +24,9 @@
 namespace sstl {
 std::string bytesToHexString(const uint8_t *info, size_t infoLength, size_t maxLen)
 {
-    static const char pszNibbleToHex[] = "0123456789ABCDEF";
-    static const char ellipses[] = "...";
-    static const size_t ellipsesLen = sizeof(ellipses) / sizeof(char);
+    constexpr char pszNibbleToHex[] = "0123456789ABCDEF";
+    constexpr char ellipses[] = "...";
+    constexpr size_t ellipsesLen = sizeof(ellipses) / sizeof(char);
 
     if (infoLength == 0 || !info) {
         return {};
@@ -34,7 +34,6 @@ std::string bytesToHexString(const uint8_t *info, size_t infoLength, size_t maxL
 
     std::string result(infoLength * 2, ' ');
 
-    // TODO: we should be able to skip some iterations based on maxLen
     for (size_t i = 0; i < infoLength; i++) {
         int nNibble = info[i] >> 4;
         result[2 * i] = pszNibbleToHex[nNibble];

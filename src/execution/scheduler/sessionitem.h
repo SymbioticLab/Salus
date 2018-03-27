@@ -16,8 +16,8 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef SESSIONITEM_H
-#define SESSIONITEM_H
+#ifndef SALUS_EXEC_SESSIONITEM_H
+#define SALUS_EXEC_SESSIONITEM_H
 
 #include "utils/containerutils.h"
 #include "execution/resources.h"
@@ -58,7 +58,7 @@ private:
     size_t lastScheduled = 0;
 
     uint64_t holWaiting = 0;
-    uint64_t queueHeadHash = 0;
+    size_t queueHeadHash = 0;
 
     std::unordered_set<uint64_t> tickets;
     std::mutex tickets_mu;
@@ -120,4 +120,4 @@ using PSessionItem = std::shared_ptr<SessionItem>;
 using SessionList = std::list<PSessionItem>;
 using SessionSet = std::unordered_set<PSessionItem>;
 
-#endif // SESSIONITEM_H
+#endif // SALUS_EXEC_SESSIONITEM_H

@@ -124,7 +124,6 @@ std::string ResourceMonitor::DebugString() const
 }
 
 namespace resources {
-// Return true iff avail contains req
 bool contains(const Resources &avail, const Resources &req)
 {
     auto aend = avail.end();
@@ -187,27 +186,18 @@ Resources &scale(Resources &lhs, double scale)
     return lhs;
 }
 
-Resources &removeZeros(Resources &lhs)
+Resources &removeInvalid(Resources &lhs)
 {
     auto it = lhs.begin();
     auto itend = lhs.end();
     while (it != itend) {
-        if (it->second == 0) {
+        if (it->second <= 0) {
             it = lhs.erase(it);
         } else {
             ++it;
         }
     }
     return lhs;
-}
-
-size_t totalMemory(Resources &res)
-{
-    size_t mem = 0;
-    for (auto p : res) {
-        mem += p.second;
-    }
-    return mem;
 }
 
 std::string DebugString(const Resources &res, const std::string &indent)
@@ -411,20 +401,25 @@ void ResourceMonitor::initializeLimits(const Resources &cap)
     }
 }
 
-bool ResourceMonitor::preAllocate(const Resources &cap, uint64_t *ticket)
+std::optional<uint64_t> ResourceMonitor::preAllocate(const Resources &req, Resources *missing)
 {
     Guard g(m_mu);
-    if (!contains(m_limits, cap)) {
-        return false;
+    if (!contains(m_limits, req)) {
+        if (missing) {
+            *missing = req;
+            subtract(*missing, m_limits, true /* skipNonExist */);
+            removeInvalid(*missing);
+        }
+        return {};
     }
 
-    *ticket = ++m_nextTicket;
+    auto ticket = ++m_nextTicket;
 
     // Allocate
-    subtract(m_limits, cap);
-    m_staging[*ticket] = cap;
+    subtract(m_limits, req);
+    m_staging[ticket] = req;
 
-    return true;
+    return ticket;
 }
 
 bool ResourceMonitor::allocate(uint64_t ticket, const Resources &res)
@@ -465,7 +460,7 @@ bool ResourceMonitor::allocateUnsafe(uint64_t ticket, const Resources &res)
 
     VLOG(2) << "Try allocating from global avail for ticket: " << ticket;
 
-    removeZeros(remaining);
+    removeInvalid(remaining);
 
     // ... then try from global avail
     if (!contains(m_limits, remaining)) {
@@ -476,7 +471,7 @@ bool ResourceMonitor::allocateUnsafe(uint64_t ticket, const Resources &res)
         // actual subtract from staging
         auto fromStaging(res);
         subtract(fromStaging, remaining);
-        removeZeros(fromStaging);
+        removeInvalid(fromStaging);
         assert(contains(it->second, fromStaging));
         subtract(it->second, fromStaging);
     }
@@ -542,7 +537,7 @@ bool ResourceMonitor::freeUnsafe(uint64_t ticket, const Resources &res)
     DCHECK(contains(it->second, res));
 
     subtract(it->second, res);
-    removeZeros(it->second);
+    removeInvalid(it->second);
     if (it->second.empty()) {
         m_using.erase(it);
         return true;

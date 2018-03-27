@@ -245,6 +245,7 @@ void ExecutionEngine::scheduleLoop()
     m_resMonitor.initializeLimits();
     auto scheduler = SchedulerRegistary::instance().create(m_schedParam.scheduler, *this);
     DCHECK(scheduler);
+    VLOG(2) << "Using scheduler: " << scheduler->debugString();
 
     m_runningTasks = 0;
     m_noPagingRunningTasks = 0;
@@ -315,7 +316,7 @@ void ExecutionEngine::scheduleLoop()
         PERFORMANCE_CHECKPOINT_WITH_ID(schedIterObj, "after-accept");
 
         // Select and sort candidates.
-        scheduler->selectCandidateSessions(m_sessions, changeset, &candidates);
+        scheduler->notifyPreSchedulingIteration(m_sessions, changeset, &candidates);
 
         // Deleted sessions are no longer needed, release them.
         changeset.deletedSessions.clear();
@@ -362,20 +363,17 @@ void ExecutionEngine::scheduleLoop()
         PERFORMANCE_CHECKPOINT_WITH_ID(schedIterObj, "after-sched");
 
         // Update conditions and check if we need paging
-        bool noProgress = remainingCount > 0 && scheduled == 0;
-        bool needPaging = (noProgress && m_noPagingRunningTasks == 0);
-        if (needPaging && m_sessions.size() > 1) {
-            if (doPaging()) {
-                // succeed, retry another sched iter immediately
-                continue;
+        bool noProgress = remainingCount > 0 && scheduled == 0 && m_noPagingRunningTasks == 0;
+        bool didPaging = false;
+        // TODO: we currently assume we are paging GPU memory to CPU
+        for (const auto &dev : {devices::GPU0}) {
+            if (noProgress && scheduler->insufficientMemory(dev) && m_sessions.size() > 1) {
+                didPaging = doPaging(dev, devices::CPU0);
             }
-        } else if (needPaging) {
-            // The single session uses too much memory, we continue without failure retry
-            // to let it fail the normal way.
-            DCHECK_EQ(m_sessions.size(), 1);
-            m_sessions.front()->protectOOM = false;
-            continue;
         }
+        // succeed, retry another sched iter immediately
+        if (didPaging)
+            continue;
 
         PERFORMANCE_CHECKPOINT_WITH_ID(schedIterObj, "without-wait");
 
@@ -393,43 +391,14 @@ void ExecutionEngine::scheduleLoop()
 
 std::unique_ptr<ResourceContext> ExecutionEngine::makeResourceContext(SessionItem &sess,
                                                                       const DeviceSpec &spec,
-                                                                      const Resources &res)
+                                                                      const Resources &res,
+                                                                      Resources *missing)
 {
     auto rctx = std::make_unique<ResourceContext>(sess, m_resMonitor);
-    if (!rctx->initializeStaging(spec, res)) {
+    if (!rctx->initializeStaging(spec, res, missing)) {
         logScheduleFailure(res, m_resMonitor);
-        rctx.reset();
     }
     return rctx;
-}
-
-bool ExecutionEngine::maybePreAllocateFor(OperationItem &opItem, const DeviceSpec &spec)
-{
-    auto item = opItem.sess.lock();
-    if (!item) {
-        return false;
-    }
-
-    auto usage = opItem.op->estimatedUsage(spec);
-
-    // TODO: use an algorithm to decide streams
-    if (spec.type == DeviceType::GPU) {
-        usage[{ResourceType::GPU_STREAM, spec}] = 1;
-    }
-
-    auto rctx = makeResourceContext(*item, spec, usage);
-    if (!rctx) {
-        return false;
-    }
-
-    auto ticket = rctx->ticket();
-    if (!opItem.op->prepare(std::move(rctx))) {
-        return false;
-    }
-
-    sstl::Guard g(item->tickets_mu);
-    item->tickets.insert(ticket);
-    return true;
 }
 
 POpItem ExecutionEngine::submitTask(POpItem &&opItem)
@@ -514,16 +483,15 @@ void ExecutionEngine::taskStopped(OperationItem &opItem, bool failed)
     if (!failed) {
         if (VLOG_IS_ON(1)) {
             CVLOG(1, logging::kOpTracing)
-                << "OpItem Stat " << opItem.op->DebugString()
-                << " queued: " << opItem.tQueued
-                << " scheduled: " << opItem.tScheduled
-                << " running: " << opItem.tRunning
+                << "OpItem Stat " << opItem.op->DebugString() << " queued: " << opItem.tQueued
+                << " scheduled: " << opItem.tScheduled << " running: " << opItem.tRunning
                 << " finished: " << now;
 
             if (auto item = opItem.sess.lock(); item) {
                 sstl::Guard g(item->mu);
                 auto opjct = duration_cast<microseconds>(opItem.tQueued - now).count();
-                auto oh = duration_cast<microseconds>(opItem.tQueued - opItem.tRunning).count() / static_cast<double>(opjct);
+                auto oh = duration_cast<microseconds>(opItem.tQueued - opItem.tRunning).count()
+                          / static_cast<double>(opjct);
                 // update session stats
                 auto oldTotal = item->totalExecutedOp;
                 item->avgOpOverhead = (item->avgOpOverhead * oldTotal + oh) / (oldTotal + 1);
@@ -539,7 +507,7 @@ void ExecutionEngine::taskStopped(OperationItem &opItem, bool failed)
     }
 }
 
-bool ExecutionEngine::doPaging()
+bool ExecutionEngine::doPaging(const DeviceSpec &spec, const DeviceSpec &target)
 {
     auto now = system_clock::now();
     size_t released = 0;
@@ -553,20 +521,19 @@ bool ExecutionEngine::doPaging()
             << " released: " << released << " forceevict: '" << forceEvicitedSess << "'";
     });
 
+    const ResourceTag srcTag{ResourceType::MEMORY, spec};
+    const ResourceTag dstTag{ResourceType::MEMORY, target};
+
     // Step 1: select candidate sessions
     std::vector<std::pair<size_t, sstl::not_null<SessionItem *>>> candidates;
     candidates.reserve(m_sessions.size());
 
     // Step 1.1: count total memory usage for each session
-    // TODO: we currently assume we are paging GPU memory to CPU, make it generic to use Resources
-    const static ResourceTag gpuTag{ResourceType::MEMORY, {DeviceType::GPU, 0}};
-    const static ResourceTag cpuTag{ResourceType::MEMORY, {DeviceType::CPU, 0}};
-
     for (auto &pSess : m_sessions) {
-        candidates.emplace_back(pSess->resourceUsage(gpuTag), pSess.get());
+        candidates.emplace_back(pSess->resourceUsage(srcTag), pSess.get());
     }
 
-    // sort in des order
+    // sort in decending order
     std::sort(candidates.begin(), candidates.end(),
               [](const auto &lhs, const auto &rhs) { return lhs.first > rhs.first; });
 
@@ -610,11 +577,11 @@ bool ExecutionEngine::doPaging()
 
         for (auto[usage, victim] : victims) {
             // preallocate some CPU memory for use.
-            Resources res{{cpuTag, usage}};
+            Resources res{{dstTag, usage}};
 
-            auto rctx = makeResourceContext(*pSess, devices::CPU0, res);
-            if (!rctx) {
-                LOG(ERROR) << "No enough CPU memory for paging. Required: " << res[cpuTag] << " bytes";
+            auto rctx = makeResourceContext(*pSess, target, res);
+            if (!rctx->isGood()) {
+                LOG(ERROR) << "No enough CPU memory for paging. Required: " << res[dstTag] << " bytes";
                 return false;
             }
             AllocLog(INFO) << "Pre allocated " << *rctx << " for session=" << pSess->sessHandle;
@@ -676,12 +643,15 @@ ResourceContext::ResourceContext(SessionItem &item, ResourceMonitor &resMon)
 {
 }
 
-bool ResourceContext::initializeStaging(const DeviceSpec &spec, const Resources &res)
+bool ResourceContext::initializeStaging(const DeviceSpec &spec, const Resources &res, Resources *missing)
 {
     this->m_spec = spec;
-    auto ok = resMon.preAllocate(res, &m_ticket);
-    hasStaging = ok;
-    return ok;
+    DCHECK(!hasStaging);
+    if (auto maybeTicket = resMon.preAllocate(res, missing)) {
+        m_ticket = *maybeTicket;
+        hasStaging = true;
+    }
+    return hasStaging;
 }
 
 void ResourceContext::releaseStaging()

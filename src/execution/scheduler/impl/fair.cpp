@@ -54,11 +54,13 @@ std::string FairScheduler::name() const
     return "fair";
 }
 
-void FairScheduler::selectCandidateSessions(const SessionList &sessions,
-                                            const SessionChangeSet &changeset,
-                                            sstl::not_null<CandidateList*> candidates)
+void FairScheduler::notifyPreSchedulingIteration(const SessionList &sessions,
+                                                 const SessionChangeSet &changeset,
+                                                 sstl::not_null<CandidateList *> candidates)
 {
     static auto lastSnapshotTime = system_clock::now();
+
+    BaseScheduler::notifyPreSchedulingIteration(sessions, changeset, candidates);
 
     candidates->clear();
 

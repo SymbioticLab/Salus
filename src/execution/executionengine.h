@@ -17,8 +17,8 @@
  *
  */
 
-#ifndef EXECUTIONENGINE_H
-#define EXECUTIONENGINE_H
+#ifndef SALUS_EXEC_EXECUTIONENGINE_H
+#define SALUS_EXEC_EXECUTIONENGINE_H
 
 #include "devices.h"
 
@@ -71,13 +71,14 @@ struct PagingCallbacks
     }
 };
 
-/**
- * @todo write docs
- */
 using PSessionItem = std::shared_ptr<SessionItem>;
 using POpItem = std::shared_ptr<OperationItem>;
 class BaseScheduler;
 class ExecutionEngine;
+
+/**
+ * @todo write docs
+ */
 class ExecutionContext
 {
     struct Data
@@ -136,6 +137,9 @@ public:
     void deleteSession(std::function<void()> cb);
 };
 
+/**
+ * @brief
+ */
 class ExecutionEngine
 {
 
@@ -175,8 +179,8 @@ private:
     // Task life cycle
     friend class BaseScheduler;
     std::unique_ptr<ResourceContext> makeResourceContext(SessionItem &sess, const DeviceSpec &spec,
-                                                         const Resources &res);
-    bool maybePreAllocateFor(OperationItem &opItem, const DeviceSpec &spec);
+                                                         const Resources &res, Resources *missing=nullptr);
+
     POpItem submitTask(POpItem &&opItem);
     void taskStopped(OperationItem &opItem, bool failed);
     void taskRunning(OperationItem &opItem);
@@ -186,8 +190,13 @@ private:
     std::atomic_int_fast64_t m_runningTasks{0};
     std::atomic_int_fast64_t m_noPagingRunningTasks{0};
 
-    // Paging
-    bool doPaging();
+    /**
+     * @brief Do paging on device 'spec'
+     * @param spec
+     * @param target page out to device 'target'
+     * @return
+     */
+    bool doPaging(const DeviceSpec &spec, const DeviceSpec &target);
 
     // Incoming kernels
     void pushToSessionQueue(POpItem &&opItem);
@@ -231,11 +240,34 @@ public:
         return m_ticket;
     }
 
+    bool isGood() const
+    {
+        return hasStaging;
+    }
+
+    /**
+     * @brief Construct a new resource context with a different spec
+     * @param other
+     * @param spec
+     */
     ResourceContext(const ResourceContext &other, const DeviceSpec &spec);
+
+    /**
+     * @brief Construct a resource context
+     * @param item
+     * @param resMon
+     */
     ResourceContext(SessionItem &item, ResourceMonitor &resMon);
     ~ResourceContext();
 
-    bool initializeStaging(const DeviceSpec &spec, const Resources &res);
+    /**
+     * @brief Initialize staging
+     * @param spec
+     * @param res
+     * @param missing
+     * @return
+     */
+    bool initializeStaging(const DeviceSpec &spec, const Resources &res, Resources *missing);
     void releaseStaging();
 
     struct OperationScope
@@ -309,4 +341,4 @@ private:
 };
 std::ostream &operator<<(std::ostream &os, const ResourceContext &c);
 
-#endif // EXECUTIONENGINE_H
+#endif // SALUS_EXEC_EXECUTIONENGINE_H

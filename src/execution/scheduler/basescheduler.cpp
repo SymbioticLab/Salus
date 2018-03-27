@@ -74,9 +74,60 @@ BaseScheduler::BaseScheduler(ExecutionEngine &engine) : m_engine(engine) {}
 
 BaseScheduler::~BaseScheduler() = default;
 
+void BaseScheduler::notifyPreSchedulingIteration(const SessionList &sessions, const SessionChangeSet &changeset,
+                                                 sstl::not_null<CandidateList *> candidates)
+{
+    UNUSED(sessions);
+    UNUSED(changeset);
+    UNUSED(candidates);
+
+    m_missingRes.clear();
+}
+
 bool BaseScheduler::maybePreAllocateFor(OperationItem &opItem, const DeviceSpec &spec)
 {
-    return m_engine.maybePreAllocateFor(opItem, spec);
+    auto item = opItem.sess.lock();
+    if (!item) {
+        return false;
+    }
+
+    auto usage = opItem.op->estimatedUsage(spec);
+
+    // TODO: use an algorithm to decide streams
+    if (spec.type == DeviceType::GPU) {
+        usage[{ResourceType::GPU_STREAM, spec}] = 1;
+    }
+
+    auto rctx = m_engine.makeResourceContext(*item, spec, usage, &m_missingRes[&opItem]);
+    if (!rctx->isGood()) {
+        // Failed to pre allocate resources
+        return false;
+    }
+
+    auto ticket = rctx->ticket();
+    if (!opItem.op->prepare(std::move(rctx))) {
+        return false;
+    }
+
+    sstl::Guard g(item->tickets_mu);
+    item->tickets.insert(ticket);
+    return true;
+}
+
+bool BaseScheduler::insufficientMemory(const DeviceSpec &spec)
+{
+    // we need paging if all not scheduled opItems in this iteration
+    for (const auto &[pOpItem, missing] : m_missingRes) {
+        UNUSED(pOpItem);
+        for (const auto &[tag, amount] : missing) {
+            UNUSED(amount);
+            auto insufficientMemory = tag.type == ResourceType::MEMORY && tag.device == spec;
+            if (!insufficientMemory) {
+                return false;
+            }
+        }
+    }
+    return true;
 }
 
 std::string BaseScheduler::debugString(const PSessionItem &item) const
@@ -87,7 +138,7 @@ std::string BaseScheduler::debugString(const PSessionItem &item) const
 
 std::string BaseScheduler::debugString() const
 {
-    return {};
+    return name();
 }
 
 POpItem BaseScheduler::submitTask(POpItem &&opItem)

@@ -16,8 +16,8 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef PACKSCHEDULER_H
-#define PACKSCHEDULER_H
+#ifndef SALUS_EXEC_SCHED_PACK_H
+#define SALUS_EXEC_SCHED_PACK_H
 
 #include "execution/scheduler/basescheduler.h"
 
@@ -29,13 +29,13 @@
 class PackScheduler : public BaseScheduler
 {
 public:
-    PackScheduler(ExecutionEngine &engine);
+    explicit PackScheduler(ExecutionEngine &engine);
     ~PackScheduler() override;
 
     std::string name() const override;
 
-    void selectCandidateSessions(const SessionList &sessions, const SessionChangeSet &changeset,
-                                 sstl::not_null<CandidateList *> candidates) override;
+    void notifyPreSchedulingIteration(const SessionList &sessions, const SessionChangeSet &changeset,
+                                      sstl::not_null<CandidateList *> candidates) override;
     std::pair<size_t, bool> maybeScheduleFrom(PSessionItem item) override;
 
 private:
@@ -45,4 +45,4 @@ private:
     }
 };
 
-#endif // PACKSCHEDULER_H
+#endif // SALUS_EXEC_SCHED_PACK_H

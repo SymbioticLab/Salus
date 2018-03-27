@@ -33,9 +33,6 @@
 #include <utility>
 #include <functional>
 
-/**
- * @brief Scheduler interface to schedule
- */
 class ExecutionEngine;
 struct SessionChangeSet
 {
@@ -45,23 +42,47 @@ struct SessionChangeSet
     SessionList::iterator addedSessionEnd;
 };
 
+/**
+ * @brief Scheduler interface used in the execution engine.
+ *
+ * The life time of a scheduler within the scheduling loop:
+ * 1. selectCandidateSessions - beginning of a new scheduling iteration,
+ *                              get notified about any session addition and removal
+ * 2. maybeScheduleFrom - called for each candidate session
+ */
 class BaseScheduler
 {
 public:
     explicit BaseScheduler(ExecutionEngine &engine);
     virtual ~BaseScheduler();
 
+    /**
+     * @brief Name of the scheduler
+     * @return name
+     */
     virtual std::string name() const = 0;
 
     using CandidateList = boost::container::small_vector_base<PSessionItem>;
-    virtual void selectCandidateSessions(const SessionList &sessions,
-                                         const SessionChangeSet &changeset,
-                                         sstl::not_null<CandidateList*> candidates) = 0;
+    virtual void notifyPreSchedulingIteration(const SessionList &sessions,
+                                              const SessionChangeSet &changeset,
+                                              sstl::not_null<CandidateList *> candidates);
     /**
      * @brief schedule from a particular session
      * @returns number of tasks scheduled, and whether should continue to next session.
      */
     virtual std::pair<size_t, bool> maybeScheduleFrom(PSessionItem item) = 0;
+
+    /**
+     * @brief Whether we should do paging in this iteration.
+     *
+     * Not returning true doesn't necesary triggers paging. ExecutionEngine::m_noPagingRunningTask must
+     * be 0 to trigger a paging.
+     *
+     * @param spec Which device to consider
+     *
+     * @returns true if paging is needed
+     */
+    virtual bool insufficientMemory(const DeviceSpec &spec);
 
     /**
      * @brief Per session debug information.
@@ -79,8 +100,12 @@ public:
 protected:
     /**
      * @brief Preallocate resources for task on device
+     *
+     * Also updates internal bookkeeping of failure resources.
+     *
      * @param opItem the task to preallocate
      * @param spec the device to preallocate on
+     * @returns Whether the pre-allocation succeeded.
      */
     bool maybePreAllocateFor(OperationItem &opItem, const DeviceSpec &spec);
 
@@ -100,6 +125,13 @@ protected:
      * @returns number of tasks successfully submitted
      */
     size_t submitAllTaskFromQueue(const PSessionItem &item);
+
+
+    /**
+     * @brief Missing resources per operation in this iteration.
+     *
+     */
+    std::unordered_map<sstl::not_null<OperationItem*>, Resources> m_missingRes;
 
     ExecutionEngine &m_engine;
 };
@@ -127,7 +159,7 @@ private:
         SchedulerFactory factory;
 
         SchedulerItem() = default;
-        explicit SchedulerItem(SchedulerFactory factory) : factory(factory) {}
+        explicit SchedulerItem(SchedulerFactory factory) : factory(std::move(factory)) {}
 
     };
     mutable std::mutex m_mu;
