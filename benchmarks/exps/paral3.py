@@ -25,18 +25,22 @@ FLAGS = flags.FLAGS
 
 
 def main(argv):
-    scfg = maybe_forced_preset(presets.MostEfficient)
+    scfg = maybe_forced_preset(presets.Nvprof)
     scfg.scheduler = 'pack'
 
     # Firstly run concurrently on salus
-    run_seq(scfg.copy(output_dir=FLAGS.save_dir / "salus"),
-            WTL.create("alexnet", 50, 1714),
-            WTL.create("alexnet", 50, 1714),
+    run_seq(scfg.copy(output_dir=FLAGS.save_dir / "conc"),
+            WTL.create("vgg11", 25, 405),
+            WTL.create("vgg11", 25, 405),
+            )
+    return
+    run_seq(scfg.copy(output_dir=FLAGS.save_dir / "seq"),
+            WTL.create("alexnet", 25, 2307),
             )
 
     # Then run on tf
-    run_seq(scfg.copy(output_dir=FLAGS.save_dir / "tf"),
-            WTL.create("alexnet", 50, 1714, executor=Executor.TF),
-            Pause.Wait,
-            WTL.create("alexnet", 50, 1714, executor=Executor.TF),
-            )
+    run_tf(scfg.copy(output_dir=FLAGS.save_dir / "tf"),
+           WTL.create("alexnet", 50, 1714, executor=Executor.TF),
+           Pause.Wait,
+           WTL.create("alexnet", 50, 1714, executor=Executor.TF),
+           )

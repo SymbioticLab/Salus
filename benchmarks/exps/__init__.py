@@ -8,6 +8,7 @@ from absl import flags
 from typing import Union, Iterable, List, TypeVar, Callable
 
 import benchmarks.driver.utils.prompt as prompt
+from benchmarks.driver.runner import Executor
 from benchmarks.driver.server.config import presets
 from benchmarks.driver.server import SalusServer, SalusConfig
 from benchmarks.driver.utils import atomic_directory, try_with_default, UsageError, kill_tree
@@ -56,6 +57,44 @@ class RunFn(object):
 
 
 TAction = Union[Pause, RunFn, Workload]
+
+
+def run_tf(scfg, *actions):
+    # type: (SalusConfig, *TAction) -> List[Workload]
+    """Run a sequence of actions"""
+    workloads = []  # type: List[Workload]
+
+    try:
+        with atomic_directory(scfg.output_dir) as temp_dir:  # type: Path
+            # Do action specified in seq
+            for act in actions:
+                if isinstance(act, Workload):
+                    if act.executor == Executor.TF:
+                        raise ValueError('run_tf can only run TF workloads')
+                    output_file = temp_dir / f'{act.output_name}.{act.batch_num}iter.{len(workloads)}.output'
+
+                    act.run(output_file)
+                    workloads.append(act)
+                elif isinstance(act, (Pause, RunFn)):
+                    act.run(workloads)
+                else:
+                    raise ValueError(f"Unexpected value `{act}' of {type(act)} passed to run_seq")
+
+            logger.info(f'Waiting all workloads to finish')
+            SalusServer.wait_workloads(workloads)
+    finally:
+        # if there's alive, we are doing cleanup
+        for w in workloads:
+            if w.proc is not None and w.proc.poll() is None:
+                logger.warning(f'Killing workload that is not stopped yet: {w.canonical_name}')
+                kill_tree(w.proc, hard=True)
+
+        # check each workloads and fix workload output_file path
+        for w in workloads:
+            if w.proc.returncode != 0:
+                raise RuntimeError(f'Workload {w.canonical_name} did not finish cleanly: {w.proc.returncode}')
+            w.output_file = scfg.output_dir / w.output_file.name
+    return workloads
 
 
 def run_seq(scfg, *actions):

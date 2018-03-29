@@ -34,7 +34,7 @@ def main(argv):
                 *parse_actions_from_cmd(argv))
         return
 
-    run_seq(scfg.copy(output_dir=FLAGS.save_dir / "5perf500"),
+    run_seq(scfg.copy(output_dir=FLAGS.save_dir / "5mnistsf25"),
             WTL.create("mnistsf", 25, 500),
             WTL.create("mnistsf", 25, 500),
             WTL.create("mnistsf", 25, 500),
