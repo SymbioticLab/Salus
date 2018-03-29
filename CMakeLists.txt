@@ -22,6 +22,16 @@ option(WITH_TENSORFLOW "Build TensorFlow operation library" ON)
 
 option(WITH_TESTS "Build test suite in default target" OFF)
 
+option(WITH_ASAN "Build with Address Sanitizer and Undefined beheavior Sanitizer" OFF)
+
+option(WITH_MSAN "Build with Memory Sanitizer" OFF)
+
+option(WITH_TSAN "Build with Thread Sanitizer" OFF)
+
+option(WITH_GPERFTOOLS "Build with gperftools cpu profiler" OFF)
+
+option(WITH_TCMALLOC "Build with tcmalloc" OFF)
+
 #---------------------------------------------------------------------------------------
 # Find packages
 #---------------------------------------------------------------------------------------
@@ -60,6 +70,10 @@ find_package(Boost 1.66 EXACT REQUIRED COMPONENTS
 set_package_properties(Boost PROPERTIES TYPE REQUIRED PURPOSE "For lock free queue and some utilities")
 add_definitions(-DBOOST_THREAD_VERSION=4)
 
+if(WITH_GPERFTOOLS OR WITH_TCMALLOC)
+    find_package(Gperftools REQUIRED)
+endif(WITH_GPERFTOOLS OR WITH_TCMALLOC)
+
 # Easylogging++
 include(thirdparty/UseEasyloggingpp.cmake)
 
@@ -79,6 +93,29 @@ feature_summary(INCLUDE_QUIET_PACKAGES FATAL_ON_MISSING_REQUIRED_PACKAGES WHAT A
 
 # Only set compile options after any inclusion of third party code
 include(cmake/CompileOptions.cmake)
+
+# Address Sanitizer
+if(WITH_ASAN)
+    add_compile_options(-fno-omit-frame-pointer)
+    add_compile_options(-fsanitize=address)
+    add_compile_options(-fsanitize=undefined)
+    set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -fsanitize=address -fsanitize=undefined")
+endif(WITH_ASAN)
+
+if(WITH_MSAN)
+    add_compile_options(-fno-omit-frame-pointer)
+    add_compile_options(-fsanitize=memory)
+    set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -fsanitize=memory")
+endif(WITH_MSAN)
+
+if(WITH_TSAN)
+    if(WITH_ASAN)
+        message(FATAL_ERROR "Thread Sanitizer can not be enabled with Address Sanitizer at the same time!")
+    endif()
+    add_compile_options(-fno-omit-frame-pointer)
+    add_compile_options(-fsanitize=thread)
+    set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -fsanitize=thread")
+endif(WITH_TSAN)
 
 # Detect features
 include(cmake/CheckCXXFeature.cmake)
@@ -101,4 +138,16 @@ if(WITH_TESTS)
     add_subdirectory(tests)
 else()
     add_subdirectory(tests EXCLUDE_FROM_ALL)
+endif()
+
+
+#---------------------------------------------------------------------------------------
+# Instrucment
+#---------------------------------------------------------------------------------------
+if(WITH_GPERFTOOLS AND WITH_TCMALLOC)
+    target_link_libraries(executor gperftools::tcmalloc_and_profiler)
+elseif(WITH_GPERFTOOLS)
+    target_link_libraries(executor gperftools::profiler)
+elseif(WITH_TCMALLOC)
+    target_link_libraries(executor gperftools::tcmalloc)
 endif()
