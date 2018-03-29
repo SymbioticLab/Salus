@@ -156,7 +156,7 @@ bool ExecTask::prepare(std::unique_ptr<ResourceContext> &&rctx)
     return true;
 }
 
-bool ExecTask::allowConcurrentPaging() const
+bool ExecTask::isAsync() const
 {
     return kernel_is_async;
 }
@@ -543,8 +543,10 @@ bool ExecTask::maybeMemoryFailure(const tf::Status &s, const MemFailCallback &me
         resources::merge(failedAlloc, ditem.device->failedResourceRequest());
 
         if (memFailure && memFailure()) {
+            VLOG(1) << "OOM happened and catched by scheduler: " << DebugString();
             return true;
         }
+        VLOG(1) << "OOM happened and propagated: " << DebugString();
     }
     // This is either not a OOM error, or the scheduler is not willing to handle it,
     // just go through normal handling

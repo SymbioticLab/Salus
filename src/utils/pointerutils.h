@@ -157,6 +157,17 @@ public:
         *this += std::forward<CleanupFunction>(func);
     }
 
+    ScopeGuards(ScopeGuards &&other) noexcept
+        :funcs(std::move(other.funcs))
+    {
+    }
+
+    ScopeGuards &operator=(ScopeGuards &&other)
+    {
+        funcs = std::move(other.funcs);
+        return *this;
+    }
+
     template<typename Callable>
     ScopeGuards &operator+=(Callable &&undo_func)
     {

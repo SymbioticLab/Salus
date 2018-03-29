@@ -81,6 +81,7 @@ void BaseScheduler::notifyPreSchedulingIteration(const SessionList &sessions, co
     UNUSED(changeset);
     UNUSED(candidates);
 
+    sstl::Guard g(m_muRes);
     m_missingRes.clear();
 }
 
@@ -98,7 +99,14 @@ bool BaseScheduler::maybePreAllocateFor(OperationItem &opItem, const DeviceSpec 
         usage[{ResourceType::GPU_STREAM, spec}] = 1;
     }
 
-    auto rctx = m_engine.makeResourceContext(*item, spec, usage, &m_missingRes[&opItem]);
+    Resources *missing;
+    {
+        sstl::Guard g(m_muRes);
+        missing = &m_missingRes[&opItem];
+    }
+    DCHECK_NOTNULL(missing);
+
+    auto rctx = m_engine.makeResourceContext(item, spec, usage, missing);
     if (!rctx->isGood()) {
         // Failed to pre allocate resources
         return false;
@@ -116,6 +124,8 @@ bool BaseScheduler::maybePreAllocateFor(OperationItem &opItem, const DeviceSpec 
 
 bool BaseScheduler::insufficientMemory(const DeviceSpec &spec)
 {
+    sstl::Guard g(m_muRes);
+
     // we need paging if all not scheduled opItems in this iteration
     for (const auto &[pOpItem, missing] : m_missingRes) {
         UNUSED(pOpItem);
@@ -154,7 +164,7 @@ POpItem BaseScheduler::submitTask(POpItem &&opItem)
 
     opItem->tInspected = system_clock::now();
     bool scheduled = false;
-    DeviceSpec spec;
+    DeviceSpec spec{};
     for (auto dt : opItem->op->supportedDeviceTypes()) {
         if (dt == DeviceType::GPU && !useGPU()) {
             continue;

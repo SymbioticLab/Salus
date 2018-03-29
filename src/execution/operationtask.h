@@ -55,7 +55,7 @@ public:
     virtual ResourceContext &resourceContext() const = 0;
 
     // If allow paging happen when this task is running.
-    virtual bool allowConcurrentPaging() const = 0;
+    virtual bool isAsync() const = 0;
 
     virtual void run(Callbacks cbs) = 0;
 

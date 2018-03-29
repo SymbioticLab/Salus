@@ -131,7 +131,8 @@ protected:
      * @brief Missing resources per operation in this iteration.
      *
      */
-    std::unordered_map<sstl::not_null<OperationItem*>, Resources> m_missingRes;
+    std::mutex m_muRes;
+    std::unordered_map<sstl::not_null<OperationItem*>, Resources> m_missingRes GUARDED_BY(m_muRes);
 
     ExecutionEngine &m_engine;
 };

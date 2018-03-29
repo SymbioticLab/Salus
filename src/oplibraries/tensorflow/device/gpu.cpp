@@ -14,16 +14,20 @@ namespace salus::oplib::tensorflow {
 class PerTaskGPUDevice : public PerTaskDevice
 {
 public:
-    explicit PerTaskGPUDevice(SalusGPUDevice *base, std::unique_ptr<ResourceContext> &&rctx,
-                              NodeStreamMap nsMap);
+    explicit PerTaskGPUDevice(SalusGPUDevice *base, std::unique_ptr<ResourceContext> &&rctx);
+
+    void Compute(tf::OpKernel *op_kernel, tf::OpKernelContext *context) override;
+
+    void ComputeAsync(tf::AsyncOpKernel *op_kernel, tf::OpKernelContext *context,
+                      tf::AsyncOpKernel::DoneCallback done) override;
 
     tf::DeviceContext *deviceContextForNode(int id) const override;
 
     ~PerTaskGPUDevice() override;
 
 private:
-    NodeStreamMap m_nsMap;
-    int m_defaultStream;
+    sstl::ScopeGuards streamReleaser();
+
     std::vector<int> m_streams;
 };
 
@@ -94,7 +98,7 @@ std::unique_ptr<PerTaskDevice> SalusGPUDevice::createPerTaskDevice(const tf::Gra
 {
     sstl::Guard g(m_muCache);
     VLOG(2) << "SalusGPUDevice::createPerTaskDevice on " << name() << " for " << as_hex(graph);
-    return std::make_unique<PerTaskGPUDevice>(this, std::move(rctx), m_streamAssignCache.at(graph));
+    return std::make_unique<PerTaskGPUDevice>(this, std::move(rctx));
 }
 
 std::vector<int> SalusGPUDevice::allocateStreams(size_t num)
@@ -118,7 +122,7 @@ std::vector<int> SalusGPUDevice::allocateStreams(size_t num)
     return res;
 }
 
-void SalusGPUDevice::freeStreams(const std::vector<int> &streams)
+void SalusGPUDevice::freeStreams(std::vector<int> &&streams)
 {
     if (streams.empty()) {
         return;
@@ -128,63 +132,70 @@ void SalusGPUDevice::freeStreams(const std::vector<int> &streams)
     for (auto i : streams) {
         m_streamUsed[i] = false;
     }
+    streams.clear();
 }
 
-PerTaskGPUDevice::PerTaskGPUDevice(SalusGPUDevice *base, std::unique_ptr<ResourceContext> &&rctx,
-                                   NodeStreamMap nsMap)
+PerTaskGPUDevice::PerTaskGPUDevice(SalusGPUDevice *base, std::unique_ptr<ResourceContext> &&rctx)
     : PerTaskDevice(base, std::move(rctx))
-    , m_nsMap(nsMap.size())
-    , m_defaultStream(0)
+    , m_streams()
 {
-    // Take and use all gpu streams in staging area
-    if (auto scope = resourceContext().alloc(ResourceType::GPU_STREAM)) {
-        auto num = scope.resources().at({ResourceType::GPU_STREAM, resourceContext().spec()});
-        m_streams = underlayingDevice<SalusGPUDevice>().allocateStreams(num);
-        if (m_streams.size() != num) {
-            underlayingDevice<SalusGPUDevice>().freeStreams(m_streams);
+    const auto numStreams = 1;
+    auto &sdev = underlayingDevice<SalusGPUDevice>();
+
+    if (auto scope = resourceContext().alloc(ResourceType::GPU_STREAM, numStreams)) {
+        m_streams = sdev.allocateStreams(numStreams);
+        if (m_streams.size() != numStreams) {
+            LOG(ERROR) << "Can't get enough GPU streams, requested: " << numStreams << " got: " << m_streams.size();
+            sdev.freeStreams(std::move(m_streams));
             scope.rollback();
-
-            LOG(ERROR) << "Can't get enough GPU streams, requested: " << num << " got: " << m_streams.size();
-            m_streams.clear();
         }
-    }
-
-    // Map logical stream to physical stream using Round-Robin
-    if (!m_streams.empty()) {
-        m_defaultStream = m_streams[0];
-
-        std::unordered_map<int, int> lTop;
-        lTop.reserve(nsMap.size());
-        size_t i = 0;
-        for (const auto & [nid, stream] : nsMap) {
-            auto phy = sstl::optionalGet(lTop, stream);
-            if (!phy) {
-                phy = m_streams[i++];
-                if (i >= m_streams.size()) {
-                    i = 0;
-                }
-            }
-            m_nsMap[nid] = *phy;
-        }
-    } else {
-        LOG(ERROR) << "Unable to get GPU streams, using default stream 0, performance may be significantly degradated";
-        m_defaultStream = 0;
     }
 }
 
 tf::DeviceContext *PerTaskGPUDevice::deviceContextForNode(int id) const
 {
-    auto stream = sstl::getOrDefault(m_nsMap, id, m_defaultStream);
+    UNUSED(id);
+    if (m_streams.empty()) {
+        LOG(ERROR) << "No GPU streams available for device context";
+        return nullptr;
+    }
 
-    auto &device = underlayingDevice<SalusGPUDevice>();
-    DCHECK_LT(stream, static_cast<int>(device.device_contexts_.size()));
-    return device.device_contexts_[stream];
+    auto stream = m_streams[0];
+    auto &sdev = underlayingDevice<SalusGPUDevice>();
+
+    DCHECK_LT(stream, static_cast<int>(sdev.device_contexts_.size()));
+    return sdev.device_contexts_[stream];
+}
+
+sstl::ScopeGuards PerTaskGPUDevice::streamReleaser()
+{
+    // release stream when finish
+    return sstl::ScopeGuards([this](){
+        if (auto num = m_streams.size()) {
+            underlayingDevice<SalusGPUDevice>().freeStreams(std::move(m_streams));
+            resourceContext().dealloc(ResourceType::GPU_STREAM, num);
+        }
+    });
+}
+
+void PerTaskGPUDevice::Compute(tf::OpKernel *op_kernel, tf::OpKernelContext *context)
+{
+    auto sr = streamReleaser();
+    PerTaskDevice::Compute(op_kernel, context);
+}
+
+void PerTaskGPUDevice::ComputeAsync(tf::AsyncOpKernel *op_kernel, tf::OpKernelContext *context,
+                                    tf::AsyncOpKernel::DoneCallback done)
+{
+    auto sr = streamReleaser();
+    PerTaskDevice::ComputeAsync(op_kernel, context, done);
 }
 
 PerTaskGPUDevice::~PerTaskGPUDevice()
 {
-    underlayingDevice<SalusGPUDevice>().freeStreams(m_streams);
+    auto sr = streamReleaser();
 }
+
 
 tf::BaseGPUDevice *SalusGPUDeviceFactory::CreateGPUDevice(const tf::SessionOptions &options,
                                                           const std::string &name, tf::Bytes memory_limit,

@@ -178,7 +178,7 @@ private:
 
     // Task life cycle
     friend class BaseScheduler;
-    std::unique_ptr<ResourceContext> makeResourceContext(SessionItem &sess, const DeviceSpec &spec,
+    std::unique_ptr<ResourceContext> makeResourceContext(PSessionItem sess, const DeviceSpec &spec,
                                                          const Resources &res, Resources *missing=nullptr);
 
     POpItem submitTask(POpItem &&opItem);
@@ -257,7 +257,7 @@ public:
      * @param item
      * @param resMon
      */
-    ResourceContext(SessionItem &item, ResourceMonitor &resMon);
+    ResourceContext(PSessionItem item, ResourceMonitor &resMon);
     ~ResourceContext();
 
     /**
@@ -336,7 +336,7 @@ public:
 
 private:
 
-    SessionItem &session;
+    PSessionItem session;
     std::atomic<bool> hasStaging;
 };
 std::ostream &operator<<(std::ostream &os, const ResourceContext &c);

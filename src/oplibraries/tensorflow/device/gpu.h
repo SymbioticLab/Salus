@@ -49,7 +49,7 @@ private:
      * @brief Free streams
      * @param streams
      */
-    void freeStreams(const std::vector<int> &streams);
+    void freeStreams(std::vector<int> &&streams);
 
     friend class PerTaskGPUDevice;
 

@@ -65,7 +65,7 @@ public:
 
     std::string DebugString() override;
 
-    bool allowConcurrentPaging() const override;
+    bool isAsync() const override;
 
     ResourceContext &resourceContext() const override;
 

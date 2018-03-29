@@ -127,6 +127,7 @@ void TFInstance::handleCloseSession(const tf::CloseSessionRequest &req, tf::Clos
 {
     UNUSED(resp);
     auto sess = popSession(req.session_handle());
+    LOG(INFO) << "Closing session " << sess->handle();
     sess->safeClose();
     cb(Status::OK());
 }
