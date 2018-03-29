@@ -497,8 +497,6 @@ void ExecutionEngine::taskStopped(OperationItem &opItem, bool failed)
     auto &rctx = opItem.op->resourceContext();
     rctx.releaseStaging();
 
-    // For now only count memory usage, and simply add up memory usages on different
-    // devices.
     if (!failed) {
         if (VLOG_IS_ON(1)) {
             CVLOG(1, logging::kOpTracing)
