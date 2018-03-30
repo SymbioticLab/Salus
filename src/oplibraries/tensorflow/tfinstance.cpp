@@ -22,6 +22,11 @@
 #include "oplibraries/tensorflow/device/salusdevices.h"
 #include "oplibraries/tensorflow/tfexception.h"
 #include "oplibraries/tensorflow/tfsession.h"
+#include "utils/macros.h"
+
+#if defined(WITH_GPERFTOOLS)
+#include <gperftools/profiler.h>
+#endif
 
 namespace salus::oplib::tensorflow {
 
@@ -42,9 +47,18 @@ TFInstance::TFInstance()
     maybeRegisterSalusDeviceFactories();
     SALUS_THROW_IF_ERROR(tf::DeviceFactory::AddDevices(sess_opts, namePrefix(), &m_devices));
     m_deviceMgr = std::make_unique<tf::DeviceMgr>(m_devices);
+
+#if defined(WITH_GPERFTOOLS)
+    ProfilerStart("/tmp/gperf..output");
+#endif
 }
 
-TFInstance::~TFInstance() = default;
+TFInstance::~TFInstance()
+{
+#if defined(WITH_GPERFTOOLS)
+    ProfilerStop();
+#endif
+}
 
 void TFInstance::handleCreateSession(const tf::CreateSessionRequest &req, tf::CreateSessionResponse &resp,
                                      HandlerCallback &&cb)

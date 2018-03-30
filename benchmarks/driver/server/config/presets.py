@@ -77,11 +77,23 @@ def Nvprof(**kwargs):
     ).update(**kwargs)
 
 
+# noinspection PyPep8Naming
+def Gperf(**kwargs):
+    # type: (...) -> SalusConfig
+    return SalusConfig(
+        build_type='gperf',
+        logconf='disable',
+        hide_output=False,
+        use_gperf=True,
+    ).update(**kwargs)
+
+
 __all__ = [
     'MostEfficient',
     'Debugging',
     'Profiling',
     'AllocProf',
     'Verbose',
-    'Nvprof'
+    'Nvprof',
+    'Gperf'
 ]

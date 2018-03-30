@@ -139,15 +139,3 @@ if(WITH_TESTS)
 else()
     add_subdirectory(tests EXCLUDE_FROM_ALL)
 endif()
-
-
-#---------------------------------------------------------------------------------------
-# Instrucment
-#---------------------------------------------------------------------------------------
-if(WITH_GPERFTOOLS AND WITH_TCMALLOC)
-    target_link_libraries(executor gperftools::tcmalloc_and_profiler)
-elseif(WITH_GPERFTOOLS)
-    target_link_libraries(executor gperftools::profiler)
-elseif(WITH_TCMALLOC)
-    target_link_libraries(executor gperftools::tcmalloc)
-endif()

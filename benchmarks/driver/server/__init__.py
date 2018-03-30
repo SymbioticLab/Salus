@@ -98,6 +98,11 @@ class SalusServer(object):
                 '--export-profile', str(self.config.output_dir / 'profile.prof'),
             ]
 
+        if self.config.use_gperf:
+            self.env['CPUPROFILE'] = '/tmp/gperf.out'
+        else:
+            self.env['CPUPROFILE'] = ''
+
         self.args += [
             self._find_executable(),
             '--listen', remove_prefix(self.endpoint, 'zrpc://'),
@@ -117,7 +122,11 @@ class SalusServer(object):
     def run(self):
         # type: () -> None
         """Run server"""
-        outputfiles = [Path(p) for p in ['/tmp/server.output', '/tmp/perf.output', '/tmp/alloc.output', 'verbose.log']]
+        outputfiles = [Path(p) for p in ['/tmp/server.output',
+                                         '/tmp/perf.output',
+                                         '/tmp/alloc.output',
+                                         '/tmp/gperf.out',
+                                         'verbose.log']]
         stdout = sp.PIPE if self.config.hide_output else None
         stderr = sp.PIPE if self.config.hide_output else None
         # remove any existing output

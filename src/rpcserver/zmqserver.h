@@ -37,7 +37,6 @@
 using sstl::MultiPartMessage;
 
 class RpcServerCore;
-class ServerWorker;
 
 /**
  * @todo write docs

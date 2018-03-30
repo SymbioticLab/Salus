@@ -3,5 +3,6 @@
 
 #cmakedefine HAS_CXX_ENUM_HASH
 #cmakedefine HAS_CXX_ALIGNED_ALLOC
+#cmakedefine WITH_GPERFTOOLS
 
 #endif // EXECUTOR_CONFIG_H
