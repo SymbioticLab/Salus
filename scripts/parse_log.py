@@ -233,6 +233,14 @@ ptn_optracing = re.compile(r"""OpItem\sStat.*name=(?P<op>[^,]+),.*
                                finished: (?P<task_done>.+)$""",
                            re.VERBOSE)
 
+# OpItem Event ExecTask(name=v/affine2/biases/Initializer/Const, type=Const, session=59089c8c075bcd3e, failures=0, inputsize=0) event: queued
+ptn_optracing_evt = re.compile(r"""OpItem\sEvent.*name=(?P<op>[^,]+),.*
+                                   type=(?P<kernel>[^,]+),.*
+                                   session=(?P<sess>[^,]+).*
+                                   step_id=(?P<step>[^,]+).*
+                                   event:\s(?P<evt>[^,]+)$""",
+                               re.VERBOSE)
+
 
 def seq_from_entry(entry):
     map_to_use = thread_seq_map
@@ -433,6 +441,18 @@ def match_exec_content(content, entry):
             'task_ready': m.group('task_ready'),
             'task_sched': m.group('task_sched'),
             'task_done': m.group('task_done')
+        }
+
+    m = ptn_optracing_evt.match(content)
+    if m:
+        sess = m.group('sess')
+        return {
+            'type': 'optracing_evt',
+            'sess': sess,
+            'op': m.group('op'),
+            'kernel': m.group('kernel'),
+            'step': int(m.group('step')),
+            'evt': m.group('evt'),
         }
 
     return {}

@@ -37,9 +37,7 @@ SessionItem::~SessionItem()
     }
 
     // output stats
-    VLOG(1) << "Stats for Session " << sessHandle << ": "
-            << "totalExecutedOp=" << totalExecutedOp << ", avgOpOverhead=" << avgOpOverhead
-            << ", avgOpJct=" << avgOpJct;
+    VLOG(2) << "Stats for Session " << sessHandle << ": totalExecutedOp=" << totalExecutedOp;
 }
 
 void SessionItem::setPagingCallbacks(PagingCallbacks pcb)

@@ -146,7 +146,8 @@ void ExecutionContext::Data::enqueueOperation(std::unique_ptr<OperationTask> &&t
     auto opItem = std::make_shared<OperationItem>();
     opItem->sess = item;
     opItem->op = std::move(task);
-    opItem->tQueued = std::chrono::system_clock::now();
+    CVLOG(1, logging::kOpTracing) << "OpItem Event " << opItem->op->DebugString()
+                                  << " event: queued";
 
     engine.pushToSessionQueue(std::move(opItem));
 }
@@ -428,11 +429,6 @@ POpItem ExecutionEngine::submitTask(POpItem &&opItem)
         return std::move(opItem);
     }
 
-    opItem->tScheduled = system_clock::now();
-
-    VLOG(3) << "Adding to thread pool: opItem in session " << item->sessHandle << ": "
-            << opItem->op->DebugString();
-
     // NOTE: this is waited by schedule thread, so we can't afford running
     // the operation inline. If the thread pool is full, simply consider the
     // opItem as not scheduled.
@@ -483,7 +479,8 @@ POpItem ExecutionEngine::submitTask(POpItem &&opItem)
 
 void ExecutionEngine::taskRunning(OperationItem &opItem)
 {
-    opItem.tRunning = system_clock::now();
+    CVLOG(1, logging::kOpTracing) << "OpItem Event " << opItem.op->DebugString()
+                                  << " event: running";
     m_runningTasks += 1;
     if (!opItem.op->isAsync()) {
         m_noPagingRunningTasks += 1;
@@ -492,27 +489,15 @@ void ExecutionEngine::taskRunning(OperationItem &opItem)
 
 void ExecutionEngine::taskStopped(OperationItem &opItem, bool failed)
 {
-    auto now = system_clock::now();
-
     auto &rctx = opItem.op->resourceContext();
     rctx.releaseStaging();
 
+    CVLOG(1, logging::kOpTracing) << "OpItem Event " << opItem.op->DebugString()
+                                  << " event: done";
     if (!failed) {
-        if (VLOG_IS_ON(1)) {
-            CVLOG(1, logging::kOpTracing)
-                << "OpItem Stat " << opItem.op->DebugString() << " queued: " << opItem.tQueued
-                << " scheduled: " << opItem.tScheduled << " running: " << opItem.tRunning
-                << " finished: " << now;
-
+        if (VLOG_IS_ON(2)) {
             if (auto item = opItem.sess.lock(); item) {
                 sstl::Guard g(item->mu);
-                auto opjct = duration_cast<microseconds>(opItem.tQueued - now).count();
-                auto oh = duration_cast<microseconds>(opItem.tQueued - opItem.tRunning).count()
-                          / static_cast<double>(opjct);
-                // update session stats
-                auto oldTotal = item->totalExecutedOp;
-                item->avgOpOverhead = (item->avgOpOverhead * oldTotal + oh) / (oldTotal + 1);
-                item->avgOpJct = (item->avgOpJct * oldTotal + opjct) / (oldTotal + 1);
                 ++item->totalExecutedOp;
             }
         }

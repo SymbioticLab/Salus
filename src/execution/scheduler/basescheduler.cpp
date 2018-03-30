@@ -25,10 +25,6 @@
 #include "utils/envutils.h"
 #include "platform/logging.h"
 
-#include <chrono>
-
-using std::chrono::system_clock;
-
 namespace {
 bool useGPU()
 {
@@ -162,7 +158,8 @@ POpItem BaseScheduler::submitTask(POpItem &&opItem)
     VLOG(3) << "Scheduling opItem in session " << item->sessHandle << ": " << opItem->op->DebugString();
     TIMED_SCOPE_IF(timerInnerObj, "BaseScheduler::submitTask", VLOG_IS_ON(1));
 
-    opItem->tInspected = system_clock::now();
+    CVLOG(1, logging::kOpTracing) << "OpItem Event " << opItem->op->DebugString()
+                                  << " event: inspected";
     bool scheduled = false;
     DeviceSpec spec{};
     for (auto dt : opItem->op->supportedDeviceTypes()) {
@@ -176,6 +173,9 @@ POpItem BaseScheduler::submitTask(POpItem &&opItem)
             break;
         }
     }
+
+    CVLOG(1, logging::kOpTracing) << "OpItem Event " << opItem->op->DebugString()
+                                  << " event: prealloced";
 
     // Send to thread pool
     if (scheduled) {

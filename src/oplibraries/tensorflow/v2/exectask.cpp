@@ -30,8 +30,20 @@
 #include "oplibraries/tensorflow/worker/devicecontextwithdevice.h"
 #include "oplibraries/tensorflow/worker/rendezvouswithhook.h"
 #include "utils/macros.h"
+#include "utils/date.h"
 #include "utils/threadutils.h"
 #include <sstream>
+
+using std::chrono::duration_cast;
+using std::chrono::microseconds;
+using std::chrono::milliseconds;
+using std::chrono::nanoseconds;
+using std::chrono::seconds;
+using std::chrono::system_clock;
+using FpSeconds = std::chrono::duration<double, seconds::period>;
+using namespace std::chrono_literals;
+using namespace date;
+
 
 namespace salus::oplib::tensorflow {
 
@@ -339,11 +351,14 @@ void ExecTask::run(Callbacks cbs)
     // Don't track allocations. Not implemented.
     params.track_allocations = false;
 
+
     VLOG(2) << "Process node: " << SummarizeNodeDef(node->def()) << " " << ditem.device->resourceContext();
 
     auto input_tensors = m_state->GetInputTensors(input_frame, input_iter);
     first_input = input_tensors + item.input_start;
 
+    CVLOG(1, logging::kOpTracing) << "OpItem Event " << DebugString()
+                                  << " event: afterDevCtx";
     // Only execute this node if it is not dead or it is a send/recv
     // transfer node. For transfer nodes, we need to propagate the "dead"
     // bit even when the node is dead.
@@ -390,6 +405,9 @@ void ExecTask::run(Callbacks cbs)
     params.is_input_dead = is_input_dead;
     params.output_attr_array = item.output_attrs();
 
+    CVLOG(1, logging::kOpTracing) << "OpItem Event " << DebugString()
+                                  << " event: afterPrepInput";
+
     if (kernel_is_async) {
         // Asynchronous computes.
         VLOG(2) << "Launch Async kernel";
@@ -420,6 +438,8 @@ void ExecTask::run(Callbacks cbs)
 
 void ExecTask::afterCompute(bool is_dead, const Callbacks &cbs, const tf::remote::NodeItem &item)
 {
+    CVLOG(1, logging::kOpTracing) << "OpItem Event " << DebugString()
+                                  << " event: afterCompute";
     // `cbs.done` should be called last as `this` would be deleted in it.
     auto &device = ditem.device;
     ExecutorState::EntryVector outputs;
@@ -445,6 +465,9 @@ void ExecTask::afterCompute(bool is_dead, const Callbacks &cbs, const tf::remote
     // Clears inputs.
     m_state->ClearInputs(first_input, item.num_inputs, buflocks);
 
+    CVLOG(1, logging::kOpTracing) << "OpItem Event " << DebugString()
+                                  << " event: afterClearInput";
+
     // Mark completed
     auto input_frame = tagged_node.input_frame;
     const int64_t input_iter = tagged_node.input_iter;
@@ -466,6 +489,8 @@ void ExecTask::afterCompute(bool is_dead, const Callbacks &cbs, const tf::remote
         device->ConsumeListOfAccessedTensors(pctx->op_device_context(), accessed);
     }
 
+    CVLOG(1, logging::kOpTracing) << "OpItem Event " << DebugString()
+                                  << " event: afterPropOut";
     // Post process
     // call node done and cbs.done
     afterRun(s, cbs);

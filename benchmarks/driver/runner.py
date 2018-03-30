@@ -93,7 +93,6 @@ class TFBenchmarkRunner(Runner):
             '--batch_size={}'.format(self.wl.batch_size),
             '--model={}'.format(self.wl.name),
         ]
-        logger.info(f'env is f{self.env}')
         if FLAGS.no_capture:
             return execute(cmd, cwd=str(cwd), env=self.env)
         else:
