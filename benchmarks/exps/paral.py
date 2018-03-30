@@ -1,16 +1,5 @@
 # -*- coding: future_fstrings -*-
 """
-OSDI Experiment 13
-
-Tasks start at begining
-For TF-Salus: JCT of running 2 jobs together, using packing scheduling
-For TF: run the same jobs sequentially.
-
-Show packing can improve JCT
-
-Scheduler: pack
-Work conservation: True
-Collected data: JCT
 """
 from __future__ import absolute_import, print_function, division, unicode_literals
 
@@ -39,7 +28,7 @@ def main(argv):
             )
 
     # Then run on tf
-    run_tf(scfg.copy(output_dir=FLAGS.save_dir / "tf"),
+    run_tf(FLAGS.save_dir / "tf",
            WTL.create("alexnet", 50, 1714, executor=Executor.TF),
            Pause.Wait,
            WTL.create("alexnet", 50, 1714, executor=Executor.TF),

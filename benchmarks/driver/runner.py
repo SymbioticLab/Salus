@@ -9,7 +9,7 @@ from absl import flags
 from abc import ABCMeta, abstractmethod
 from collections import namedtuple
 from enum import Enum
-from typing import Iterable, Tuple, Union, Any
+from typing import Iterable, Tuple, Union, Any, Dict
 
 from .server import SalusServer
 from .utils import Popen, execute
@@ -22,6 +22,7 @@ logger = logging.getLogger(__name__)
 flags.DEFINE_string('tfbench_base', '../tf_benchmarks', 'Base dir of TFBenchmark based workloads')
 flags.DEFINE_string('unit_base', 'tests', 'Base dir of unittest based workloads')
 flags.DEFINE_string('fathom_base', '../fathom', 'Base dir of Fathom based workloads')
+flags.DEFINE_boolean('no_capture', False, 'Do not capture workload outputs')
 
 
 RunConfig = namedtuple('RunConfig', [
@@ -52,9 +53,14 @@ class Runner(with_metaclass(ABCMeta, object)):
         # type: (Any) -> None
         super().__init__()
         self.wl = wl
-        self.env = os.environ.copy()
-        self.env['CUDA_VISIBLE_DEVICES'] = '0,1'
-        self.env['TF_CPP_MIN_LOG_LEVEL'] = '4'
+        self.env = wl.env.copy()  # type: Dict[str, str]
+
+        def set_default(d, key, defval):
+            if key not in d:
+                d[key] = defval
+
+        set_default(self.env, 'CUDA_VISIBLE_DEVICES', '0,1')
+        set_default(self.env, 'TF_CPP_MIN_LOG_LEVEL', '4')
 
     @abstractmethod
     def __call__(self, executor, output_file):
@@ -87,9 +93,13 @@ class TFBenchmarkRunner(Runner):
             '--batch_size={}'.format(self.wl.batch_size),
             '--model={}'.format(self.wl.name),
         ]
-        output_file.parent.mkdir(exist_ok=True, parents=True)
-        with output_file.open('w') as f:
-            return execute(cmd, cwd=str(cwd), env=self.env, stdout=f, stderr=sp.STDOUT)
+        logger.info(f'env is f{self.env}')
+        if FLAGS.no_capture:
+            return execute(cmd, cwd=str(cwd), env=self.env)
+        else:
+            output_file.parent.mkdir(exist_ok=True, parents=True)
+            with output_file.open('w') as f:
+                return execute(cmd, cwd=str(cwd), env=self.env, stdout=f, stderr=sp.STDOUT)
 
 
 class UnittestRunner(Runner):
@@ -112,9 +122,12 @@ class UnittestRunner(Runner):
             'stdbuf', '-o0', '-e0', '--',
             'python', '-m', pkg, method,
         ]
-        output_file.parent.mkdir(exist_ok=True, parents=True)
-        with output_file.open('w') as f:
-            return execute(cmd, cwd=str(cwd), env=env, stdout=f, stderr=sp.STDOUT)
+        if FLAGS.no_capture:
+            return execute(cmd, cwd=str(cwd), env=self.env)
+        else:
+            output_file.parent.mkdir(exist_ok=True, parents=True)
+            with output_file.open('w') as f:
+                return execute(cmd, cwd=str(cwd), env=env, stdout=f, stderr=sp.STDOUT)
 
     def _construct_test_name(self, executor):
         # type: (Executor) -> Tuple[str, str]
@@ -176,6 +189,9 @@ class FathomRunner(Runner):
         else:
             raise ValueError(f'Unknown executor: {executor}')
 
-        output_file.parent.mkdir(exist_ok=True, parents=True)
-        with output_file.open('w') as f:
-            return execute(cmd, cwd=str(cwd), env=self.env, stdout=f, stderr=sp.STDOUT)
+        if FLAGS.no_capture:
+            return execute(cmd, cwd=str(cwd), env=self.env)
+        else:
+            output_file.parent.mkdir(exist_ok=True, parents=True)
+            with output_file.open('w') as f:
+                return execute(cmd, cwd=str(cwd), env=self.env, stdout=f, stderr=sp.STDOUT)

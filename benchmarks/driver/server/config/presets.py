@@ -25,6 +25,17 @@ def Debugging(**kwargs):
 
 
 # noinspection PyPep8Naming
+def OpTracing(**kwargs):
+    # type: (...) -> SalusConfig
+    return SalusConfig(
+        build_type='Release',
+        logconf='optracing',
+        hide_output=False,
+        extra_args=['-v', '1']
+    ).update(**kwargs)
+
+
+# noinspection PyPep8Naming
 def Profiling(**kwargs):
     # type: (...) -> SalusConfig
     return SalusConfig(

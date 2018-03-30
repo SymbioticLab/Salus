@@ -169,6 +169,11 @@ class SalusServer(object):
         SalusServer._current.pop()
 
     @classmethod
+    def has_current(cls):
+        # type: () -> bool
+        return bool(cls._current)
+
+    @classmethod
     def current_server(cls):
         # type: () -> SalusServer
         try:
@@ -225,13 +230,13 @@ class SalusServer(object):
         alive = [w.proc for w in workloads]
         enter = datetime.now()
         while alive:
-            cs = SalusServer.current_server()
-            if cs is not None:
-                cs.check()
+            if SalusServer.has_current():
+                SalusServer.current_server().check()
 
             g, alive = psutil.wait_procs(alive, timeout=.25, callback=callback)
             gone += g
 
             if timeout is not None and (datetime.now() - enter).total_seconds() >= timeout:
                 break
+
         return [p.workload for p in gone], [p.workload for p in alive]

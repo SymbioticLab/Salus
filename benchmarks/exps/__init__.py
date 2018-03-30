@@ -59,17 +59,17 @@ class RunFn(object):
 TAction = Union[Pause, RunFn, Workload]
 
 
-def run_tf(scfg, *actions):
-    # type: (SalusConfig, *TAction) -> List[Workload]
+def run_tf(output_dir, *actions):
+    # type: (Path, *TAction) -> List[Workload]
     """Run a sequence of actions"""
     workloads = []  # type: List[Workload]
 
     try:
-        with atomic_directory(scfg.output_dir) as temp_dir:  # type: Path
+        with atomic_directory(output_dir) as temp_dir:  # type: Path
             # Do action specified in seq
             for act in actions:
                 if isinstance(act, Workload):
-                    if act.executor == Executor.TF:
+                    if act.executor != Executor.TF:
                         raise ValueError('run_tf can only run TF workloads')
                     output_file = temp_dir / f'{act.output_name}.{act.batch_num}iter.{len(workloads)}.output'
 
@@ -82,6 +82,8 @@ def run_tf(scfg, *actions):
 
             logger.info(f'Waiting all workloads to finish')
             SalusServer.wait_workloads(workloads)
+    except Exception:
+        logger.exception("Got exception when running workloads")
     finally:
         # if there's alive, we are doing cleanup
         for w in workloads:
@@ -93,7 +95,8 @@ def run_tf(scfg, *actions):
         for w in workloads:
             if w.proc.returncode != 0:
                 raise RuntimeError(f'Workload {w.canonical_name} did not finish cleanly: {w.proc.returncode}')
-            w.output_file = scfg.output_dir / w.output_file.name
+            w.output_file = output_dir / w.output_file.name
+
     return workloads
 
 

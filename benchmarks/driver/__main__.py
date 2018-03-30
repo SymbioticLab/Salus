@@ -159,9 +159,9 @@ def main():
                 print(f'  {p!s}')
             ch = prompt.choose('What would you like to do?',
                                choices=[
-                                   ('a', 'abort'),
-                                   ('r', 'remove'),
-                                   ('c', 'continue without remove'),
+                                   ('r', 'Remove'),
+                                   ('a', 'Abort'),
+                                   ('s', 'Skip without remove'),
                                ])
             if ch == 'r':
                 shutil.rmtree(str(save_dir))
