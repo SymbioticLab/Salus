@@ -236,7 +236,10 @@ class MnistConvBase(unittest.TestCase):
         return None
 
     def _config(self, **kwargs):
-        return tf.ConfigProto()
+        c = tf.ConfigProto()
+        c.graph_options.optimizer_options.opt_level = tf.OptimizerOptions.L0
+        c.log_device_placement = True
+        return c
 
     @parameterized.expand([(25,), (50,), (100,)])
     def test_gpu(self, batch_size):

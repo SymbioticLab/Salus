@@ -43,7 +43,7 @@ SchedulerRegistary::Register reg("pack", [](auto &engine) {
 });
 } // namespace
 
-PackScheduler::PackScheduler(ExecutionEngine &engine) : IScheduler(engine) {}
+PackScheduler::PackScheduler(ExecutionEngine &engine) : BaseScheduler(engine) {}
 
 PackScheduler::~PackScheduler() = default;
 
@@ -52,11 +52,11 @@ std::string PackScheduler::name() const
     return "pack";
 }
 
-void PackScheduler::selectCandidateSessions(const SessionList &sessions,
-                                            const SessionChangeSet &changeset,
-                                            sstl::not_null<CandidateList*> candidates)
+void PackScheduler::notifyPreSchedulingIteration(const SessionList &sessions,
+                                                 const SessionChangeSet &changeset,
+                                                 sstl::not_null<CandidateList *> candidates)
 {
-    UNUSED(changeset);
+    BaseScheduler::notifyPreSchedulingIteration(sessions, changeset, candidates);
 
     candidates->clear();
     for (auto &sess : sessions) {

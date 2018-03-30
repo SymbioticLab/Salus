@@ -66,84 +66,6 @@ std::string nameOrNull(tf::Allocator *alloc)
 
 } // namespace
 
-TFAllocator::TFAllocator(tf::Allocator *other)
-    : m_actualAlloc(other)
-{
-}
-
-TFAllocator::~TFAllocator() = default;
-
-std::string TFAllocator::Name()
-{
-    return "mock_tf";
-}
-
-bool TFAllocator::ShouldAllocateEmptyTensors()
-{
-    if (m_actualAlloc)
-        return m_actualAlloc->ShouldAllocateEmptyTensors();
-    return true;
-}
-
-void *TFAllocator::AllocateRaw(size_t alignment, size_t num_bytes)
-{
-    AllocLog(DEBUG) << "TFAllocator allocating " << num_bytes << " bytes of memory with alignment "
-                    << alignment << " using allocator " << nameOrNull(m_actualAlloc) << "@"
-                    << as_hex(m_actualAlloc);
-
-    void *ptr = nullptr;
-    if (m_actualAlloc) {
-        ptr = m_actualAlloc->AllocateRaw(alignment, num_bytes);
-    } else {
-        ptr = MemoryMgr::instance().allocate(alignment, num_bytes);
-    }
-
-    AllocLog(INFO) << "TFAllocator allocated " << num_bytes << " bytes of memory at " << as_hex(ptr)
-                   << " with alignment " << alignment << " using allocator " << nameOrNull(m_actualAlloc)
-                   << "@" << as_hex(m_actualAlloc);
-
-    checkMemory(ptr, num_bytes);
-    return ptr;
-}
-
-void *TFAllocator::AllocateRaw(size_t alignment, size_t num_bytes,
-                               const tf::AllocationAttributes &allocation_attr)
-{
-    auto attr(allocation_attr);
-
-    // We should not retry on failure due to the restarting feature
-    attr.no_retry_on_failure = true;
-
-    AllocLog(DEBUG) << "TFAllocator allocating attributes " << attr << " of " << num_bytes
-                    << " bytes of memory with alignment " << alignment << " using allocator "
-                    << nameOrNull(m_actualAlloc) << "@" << as_hex(m_actualAlloc);
-
-    void *ptr = nullptr;
-    if (m_actualAlloc) {
-        ptr = m_actualAlloc->AllocateRaw(alignment, num_bytes, attr);
-        checkMemory(ptr, num_bytes);
-    } else {
-        ptr = MemoryMgr::instance().allocate(alignment, num_bytes);
-    }
-
-    AllocLog(INFO) << "TFAllocator called for attributes " << attr << " of " << num_bytes
-                   << " bytes of memory at " << as_hex(ptr) << " with alignment " << alignment
-                   << " using allocator " << nameOrNull(m_actualAlloc) << "@" << as_hex(m_actualAlloc);
-    return ptr;
-}
-
-void TFAllocator::DeallocateRaw(void *ptr)
-{
-    AllocLog(INFO) << "TFAllocator deallocating memory at " << as_hex(ptr) << " using allocator "
-                   << nameOrNull(m_actualAlloc) << "@" << as_hex(m_actualAlloc);
-
-    if (m_actualAlloc) {
-        m_actualAlloc->DeallocateRaw(ptr);
-    } else {
-        MemoryMgr::instance().deallocate(ptr);
-    }
-}
-
 PerOpAllocator *PerOpAllocator::downcast(tf::Allocator *alloc)
 {
     if (sstl::startsWith(alloc->Name(), NamePrefix)) {
@@ -194,7 +116,7 @@ void *PerOpAllocator::AllocateRaw(size_t alignment, size_t num_bytes)
                     << as_hex(m_actualAlloc);
 
     void *ptr = nullptr;
-    if (auto scope = m_rctx->allocMemory(num_bytes)) {
+    if (auto scope = m_rctx->alloc(ResourceType::MEMORY, num_bytes)) {
         ptr = m_actualAlloc->AllocateRaw(alignment, num_bytes);
         if (!ptr) {
             scope.rollback();
@@ -235,7 +157,7 @@ void *PerOpAllocator::AllocateRaw(size_t alignment, size_t num_bytes,
                     << nameOrNull(m_actualAlloc) << "@" << as_hex(m_actualAlloc);
 
     void *ptr = nullptr;
-    if (auto scope = m_rctx->allocMemory(num_bytes)) {
+    if (auto scope = m_rctx->alloc(ResourceType::MEMORY, num_bytes)) {
         ptr = m_actualAlloc->AllocateRaw(alignment, num_bytes, attr);
         if (!ptr) {
             scope.rollback();
@@ -247,11 +169,11 @@ void *PerOpAllocator::AllocateRaw(size_t alignment, size_t num_bytes,
         return nullptr;
     }
 
-    recordSize(ptr, num_bytes);
-
     if (!ptr) {
         return ptr;
     }
+
+    recordSize(ptr, num_bytes);
 
     Ref();
 
@@ -282,8 +204,16 @@ void PerOpAllocator::DeallocateRaw(void *ptr)
                    << " using allocator " << nameOrNull(m_actualAlloc) << "@" << as_hex(m_actualAlloc)
                    << " with " << *m_rctx;
 
-    m_rctx->deallocMemory(num_bytes);
     m_actualAlloc->DeallocateRaw(ptr);
+    m_rctx->dealloc(ResourceType::MEMORY, num_bytes);
+
+    {
+        sstl::Guard g(m_mu);
+        m_allocated.erase(ptr);
+        if (m_allocated.empty()) {
+            m_rctx->removeTicketFromSession();
+        }
+    }
 
     Unref();
 }

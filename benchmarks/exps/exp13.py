@@ -28,22 +28,15 @@ def main(argv):
     scfg = maybe_forced_preset(presets.MostEfficient)
     scfg.scheduler = 'pack'
 
-    if argv:
-        run_seq(scfg.copy(output_dir=FLAGS.save_dir),
-                *parse_actions_from_cmd(argv))
-        return
-
-    logdir = FLAGS.save_dir / "exp13"
-
     # Firstly run concurrently on salus
-    run_seq(scfg.copy(output_dir=logdir / "salus"),
-            WTL.create("resnet50", 50, 530),
-            WTL.create("resnet50", 50, 265),
+    run_seq(scfg.copy(output_dir=FLAGS.save_dir / "salus"),
+            WTL.create("alexnet", 50, 1714),
+            WTL.create("alexnet", 50, 1714),
             )
 
     # Then run on tf
-    run_seq(scfg.copy(output_dir=logdir / "tf"),
-            WTL.create("resnet50", 50, 530, executor=Executor.TF),
+    run_seq(scfg.copy(output_dir=FLAGS.save_dir / "tf"),
+            WTL.create("alexnet", 50, 1714, executor=Executor.TF),
             Pause.Wait,
-            WTL.create("resnet50", 50, 265, executor=Executor.TF),
+            WTL.create("alexnet", 50, 1714, executor=Executor.TF),
             )

@@ -1,5 +1,7 @@
 # -*- coding: future_fstrings -*-
 from __future__ import absolute_import, print_function, division, unicode_literals
+
+import os
 from builtins import super, str
 
 import csv
@@ -87,6 +89,7 @@ class WorkloadTemplate(object):
         self._geometries = ResourceGeometry.default_geometries()  # type: TGeometries
 
         self.create = self._create
+        self.create_from_rcfg = self._create_from_rcfg
 
     def add_geometry(self, rcfg, executor, geometry, overwrite=False):
         # type: (RunConfig, Executor, ResourceGeometry, bool) -> None
@@ -225,10 +228,10 @@ class Workload(object):
         # type: (WorkloadTemplate, RunConfig, Executor, ResourceGeometry) -> None
         super().__init__()
         self._wtl = wtl
+        self.env = os.environ.copy()
         self.rcfg = rcfg
         self.executor = executor
         self._geo = geo
-        self._runner = self._wtl.runnerCls(self)
         self.proc = None  # type: Popen
         self.output_file = None  # type: Path
 
@@ -272,13 +275,15 @@ class Workload(object):
     def run(self, output_file):
         # type: (Path) -> Popen
         """Run workload on executor"""
+        _runner = self._wtl.runnerCls(self)
+
         if self.proc is not None:
             raise RuntimeError("This workload is already started")
 
         logger.info(f"Starting workload `{self.canonical_name}' on {self.executor.name}"
                     f" with output file: {output_file!s}")
         self.output_file = output_file
-        self.proc = self._runner(self.executor, output_file)
+        self.proc = _runner(self.executor, output_file)
         self.proc.workload = self
         return self.proc
 

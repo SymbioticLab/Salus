@@ -26,7 +26,7 @@ limitations under the License.
 #include "execution/devices.h"
 #include "execution/executionengine.h"
 #include "oplibraries/tensorflow/v2/exectask.h"
-#include "oplibraries/tensorflow/v2/peropallocdevice.h"
+#include "oplibraries/tensorflow/device/salusdevices.h"
 #include "oplibraries/tensorflow/v2/tfallocator.h"
 #include "utils/stringutils.h"
 #include "utils/threadutils.h"
@@ -349,7 +349,20 @@ void ExecutorState::RunAsync(const tf::Executor::DoneCallback &done)
 {
     VLOG(3) << "ExecutorState::RunAsync";
 
-    TaggedNodeSeq ready;
+    // Precompute a contextmap, this is used to setup cache in the device
+    for (auto *tfdev : impl_->params_.deviceMgr.ListDevices()) {
+        auto sdev = ISalusDevice::safe_cast(tfdev);
+        if (!sdev) {
+            continue;
+        }
+        std::vector<tf::DeviceContext*> cmap;
+        tfdev->FillContextMap(impl_->graph_, &cmap);
+
+        // we don't actually use this map, free it
+        for (auto ctx : cmap) {
+            ctx->Unref();
+        }
+    }
 
     // Process all client_terminated recv first for shape inference
     for (const auto *n : impl_->client_recv_nodes_) {
@@ -357,6 +370,7 @@ void ExecutorState::RunAsync(const tf::Executor::DoneCallback &done)
     }
 
     // Initialize the ready queue.
+    TaggedNodeSeq ready;
     for (const auto *n : impl_->root_nodes_) {
         DCHECK(n->in_edges().empty());
         ready.push_back(TaggedNode{n, root_frame_, 0, false});
@@ -471,7 +485,7 @@ bool onSameDevice(tf::Device *devA, const tf::AllocatorAttributes &attrA, tf::De
 } // namespace
 
 tf::Status ExecutorState::PrepareInputs(const NodeItem &item, tf::OpKernel *kernel,
-                                        const std::shared_ptr<PerOpAllocDevice> &device,
+                                        const std::shared_ptr<PerTaskDevice> &device,
                                         tf::DeviceContext *device_context, Entry *first_input,
                                         TensorValueVec *inputs, BufferLockVec *buflocks,
                                         DeviceContextVec *input_device_contexts,
@@ -675,7 +689,7 @@ tf::Status ExecutorState::PrepareInputs(const NodeItem &item, tf::OpKernel *kern
 }
 
 tf::Status ExecutorState::ProcessOutputs(const NodeItem &item, tf::OpKernelContext *ctx,
-                                         const std::shared_ptr<PerOpAllocDevice> &device,
+                                         const std::shared_ptr<PerTaskDevice> &device,
                                          EntryVector *outputs)
 {
     TIMED_FUNC_IF(timerObj, VLOG_IS_ON(1));
@@ -1170,11 +1184,23 @@ void ExecutorState::DumpState()
 
 void ExecutorState::Finish()
 {
+    // Clear cache on every device
+    for (auto *tfdev : impl_->params_.deviceMgr.ListDevices()) {
+        auto sdev = ISalusDevice::safe_cast(tfdev);
+        if (!sdev) {
+            continue;
+        }
+        sdev->flushCacheFor(impl_->graph_);
+    }
+
+    // Get out handlers
     mu_.lock();
     auto status = status_;
     auto done_cb = std::move(done_cb_);
     auto runner = std::move(runner_);
     mu_.unlock();
+
+    // Wait for finish
     if (sync_on_finish_ && status.ok()) {
         // Block until the device has finished all queued operations. For
         // devices like GPUs that continue to execute Ops after their Compute
@@ -1184,13 +1210,11 @@ void ExecutorState::Finish()
         VLOG(3) << "Waiting for " << n << " ops to complete";
         num_finished_ops_.wait(n);
     }
+
     VLOG(2) << "ExecutorState about to delete this";
     delete this;
     DCHECK(done_cb != nullptr);
     runner([=]() { done_cb(status); });
-#if defined(NDEBUG)
-    return;
-#endif
 }
 
 void ExecutorState::FindOrCreateChildFrame(FrameState *frame, int64_t iter, const tf::Node *node,

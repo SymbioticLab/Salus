@@ -25,12 +25,24 @@ def Debugging(**kwargs):
 
 
 # noinspection PyPep8Naming
+def OpTracing(**kwargs):
+    # type: (...) -> SalusConfig
+    return SalusConfig(
+        build_type='Release',
+        logconf='optracing',
+        hide_output=False,
+        extra_args=['-v', '1']
+    ).update(**kwargs)
+
+
+# noinspection PyPep8Naming
 def Profiling(**kwargs):
     # type: (...) -> SalusConfig
     return SalusConfig(
         build_type='Release',
         logconf='perf',
-        hide_output=False
+        hide_output=False,
+        extra_args=['--perflog', '/tmp/perf.output'],
     ).update(**kwargs)
 
 
@@ -59,7 +71,7 @@ def Nvprof(**kwargs):
     # type: (...) -> SalusConfig
     return SalusConfig(
         build_type='Release',
-        logconf='both',
+        logconf='disable',
         hide_output=False,
         use_nvprof=True,
     ).update(**kwargs)

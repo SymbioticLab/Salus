@@ -16,6 +16,7 @@ from collections import deque
 from .config import SalusConfig
 from ..utils.compatiblity import pathlib, subprocess as sp
 from ..utils import ServerError, Popen, execute, kill_tree, kill_hard, remove_prefix, try_with_default
+from ..utils import prompt
 
 
 Path = pathlib.Path
@@ -94,11 +95,7 @@ class SalusServer(object):
         if self.config.use_nvprof:
             self.args += [
                 'nvprof',
-                '--export-profile', str(self.config.output_dir / 'profile.sqlite'),
-                '--force-overwrite',
-                '--concurrent-kernels', 'on',
-                '--metrics', 'executed_ipc',
-                '--'
+                '--export-profile', str(self.config.output_dir / 'profile.prof'),
             ]
 
         self.args += [
@@ -136,7 +133,7 @@ class SalusServer(object):
             if FLAGS.no_server:
                 print('Start server with the following command:')
                 print(' '.join(self.args))
-                try_with_default(input, ignore=SyntaxError)('Press enter to continue...')
+                prompt.pause()
             else:
                 # start
                 self.proc = execute(self.args, env=self.env, stdin=sp.DEVNULL, stdout=stdout, stderr=stderr)
@@ -170,6 +167,11 @@ class SalusServer(object):
         SalusServer._current.append(self)
         yield self
         SalusServer._current.pop()
+
+    @classmethod
+    def has_current(cls):
+        # type: () -> bool
+        return bool(cls._current)
 
     @classmethod
     def current_server(cls):
@@ -228,13 +230,13 @@ class SalusServer(object):
         alive = [w.proc for w in workloads]
         enter = datetime.now()
         while alive:
-            cs = SalusServer.current_server()
-            if cs is not None:
-                cs.check()
+            if SalusServer.has_current():
+                SalusServer.current_server().check()
 
             g, alive = psutil.wait_procs(alive, timeout=.25, callback=callback)
             gone += g
 
             if timeout is not None and (datetime.now() - enter).total_seconds() >= timeout:
                 break
+
         return [p.workload for p in gone], [p.workload for p in alive]

@@ -17,8 +17,11 @@
 
 # Usage Documentation
 #
-# Cache Variables: (not for direct use in CMakeLists.txt)
-#  TENSORFLOW_ROOT
+# User-defined variables:
+#  TENSORFLOW_ROOT - Where to find Tensorflow
+#
+# Cache variables: (not for direct use in CMakeLists.txt)
+#  TensorFlow_HOME
 #  TensorFlow_LIBRARY
 #  TensorFlow_INCLUDE_DIR
 #
@@ -47,7 +50,7 @@ unset(TensorFlow_FOUND)
 
 set(TENSORFLOW_ROOT "${TENSORFLOW_ROOT}" CACHE PATH "Root directory to look in")
 
-find_path(TensorFlow_INCLUDE_DIR
+find_path(TensorFlow_HOME
     NAMES
     tensorflow/core
     tensorflow/cc
@@ -56,7 +59,7 @@ find_path(TensorFlow_INCLUDE_DIR
     NO_DEFAULT_PATH
 )
 # fall back to system paths
-find_path(TensorFlow_INCLUDE_DIR
+find_path(TensorFlow_HOME
     NAMES
     tensorflow/core
     tensorflow/cc
@@ -80,35 +83,64 @@ find_library(TensorFlow_Kernel_LIBRARY NAMES tensorflow_kernels)
 
 # set TensorFlow_FOUND
 find_package_handle_standard_args(TensorFlow DEFAULT_MSG
-    TensorFlow_INCLUDE_DIR
+    TensorFlow_HOME
     TensorFlow_LIBRARY
     TensorFlow_Kernel_LIBRARY
 )
 
 # set external variables for usage in CMakeLists.txt
 if(TensorFlow_FOUND)
+    get_filename_component(tf_repo_name ${TensorFlow_HOME} NAME)
+    set(tf_binary_path ${TensorFlow_HOME}/bazel-bin/tensorflow)
+    set(tf_src_path ${TensorFlow_HOME}/bazel-${tf_repo_name})
+
+    message("-- Found TensorFlow: ${TensorFlow_HOME}")
+
     set(TensorFlow_LIBRARIES ${TensorFlow_LIBRARY} ${TensorFlow_Kernel_LIBRARY})
-    get_filename_component(tf_repo_name ${TensorFlow_INCLUDE_DIR} NAME)
     set(TensorFlow_INCLUDE_DIRS
-        ${TensorFlow_INCLUDE_DIR}
-        ${TensorFlow_INCLUDE_DIR}/bazel-genfiles
-        ${TensorFlow_INCLUDE_DIR}/bazel-${tf_repo_name}/external/eigen_archive
-        ${TensorFlow_INCLUDE_DIR}/bazel-${tf_repo_name}/external/nsync/public
+        ${tf_src_path}
+        ${TensorFlow_HOME}/bazel-genfiles
+        ${tf_src_path}/external/eigen_archive
+        ${tf_src_path}/external/nsync/public
     )
     # This is the same as the include dir
-    set(TensorFlow_PROTO_DIRS ${TensorFlow_INCLUDE_DIR})
+    set(TensorFlow_PROTO_DIRS ${tf_src_path})
+
+    # locate cuda in tensorflow
+    if(EXISTS ${tf_src_path}/external/local_config_cuda/cuda/cuda/cuda_config.h)
+        file(STRINGS ${tf_src_path}/external/local_config_cuda/cuda/cuda/cuda_config.h
+             tf_cuda_config REGEX "TF_CUDA_TOOLKIT_PATH")
+        string(REGEX REPLACE "^#define TF_CUDA_TOOLKIT_PATH \"(.+)\"$" "\\1" tf_cuda_path ${tf_cuda_config})
+        message("-- Found TF CUDA: ${tf_cuda_path}")
+
+        set(tf_cuda_link_path_flag -L${tf_cuda_path}/lib64)
+        list(APPEND TensorFlow_INCLUDE_DIRS ${TensorFlow_HOME}/bazel-${tf_repo_name}/external/local_config_cuda/cuda/)
+    else()
+        message("-- Found TF CUDA: NotFound")
+        set(tf_cuda_link_path_flag "")
+    endif()
 
     # Add imported targets
     add_library(tensorflow::headers INTERFACE IMPORTED)
-    set_property(TARGET tensorflow::headers PROPERTY INTERFACE_INCLUDE_DIRECTORIES ${TensorFlow_INCLUDE_DIRS})
+    set_property(TARGET tensorflow::headers PROPERTY INTERFACE_INCLUDE_DIRECTORIES
+        ${TensorFlow_INCLUDE_DIRS}
+    )
 
     add_library(tensorflow::framework SHARED IMPORTED)
-    set_property(TARGET tensorflow::framework PROPERTY INTERFACE_LINK_LIBRARIES tensorflow::headers)
+    file(STRINGS ${tf_binary_path}/libtensorflow_framework.so-2.params FrameworkLinkLibraries REGEX "^-l")
+    set_property(TARGET tensorflow::framework PROPERTY INTERFACE_LINK_LIBRARIES
+        tensorflow::headers
+        ${tf_cuda_link_path_flag}
+        ${FrameworkLinkLibraries}
+    )
     set_property(TARGET tensorflow::framework PROPERTY IMPORTED_LOCATION ${TensorFlow_LIBRARY})
 
     add_library(tensorflow::kernels SHARED IMPORTED)
+    file(STRINGS ${tf_binary_path}/libtensorflow_kernels.so-2.params KernelLibraries REGEX "^-l")
     set_property(TARGET tensorflow::kernels PROPERTY INTERFACE_LINK_LIBRARIES
         tensorflow::headers
+        ${tf_cuda_link_path_flag}
+        ${KernelLinkLibraries}
     )
     set_property(TARGET tensorflow::kernels PROPERTY IMPORTED_LOCATION ${TensorFlow_Kernel_LIBRARY})
 

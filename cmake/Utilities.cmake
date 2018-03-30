@@ -38,6 +38,7 @@ macro(eval expr)
   file(REMOVE ${_fname})
 endmacro(eval)
 
+# Add a global default compile option
 macro(add_compile_options_with_check flag)
   string(REPLACE "-" "_" retvar "COMPILER_SUPPORT_${flag}")
   check_cxx_compiler_flag(${flag} ${retvar})

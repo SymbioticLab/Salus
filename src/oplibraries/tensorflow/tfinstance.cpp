@@ -19,6 +19,7 @@
 #include "oplibraries/tensorflow/tensorflow_headers.h"
 #include "tfinstance.h"
 #include "execution/executionengine.h"
+#include "oplibraries/tensorflow/device/salusdevices.h"
 #include "oplibraries/tensorflow/tfexception.h"
 #include "oplibraries/tensorflow/tfsession.h"
 
@@ -38,6 +39,7 @@ TFInstance::TFInstance()
     (*sess_opts.config.mutable_device_count())["RPC"] = 0;
 
     // Load devices
+    maybeRegisterSalusDeviceFactories();
     SALUS_THROW_IF_ERROR(tf::DeviceFactory::AddDevices(sess_opts, namePrefix(), &m_devices));
     m_deviceMgr = std::make_unique<tf::DeviceMgr>(m_devices);
 }
@@ -125,6 +127,7 @@ void TFInstance::handleCloseSession(const tf::CloseSessionRequest &req, tf::Clos
 {
     UNUSED(resp);
     auto sess = popSession(req.session_handle());
+    LOG(INFO) << "Closing session " << sess->handle();
     sess->safeClose();
     cb(Status::OK());
 }

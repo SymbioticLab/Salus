@@ -23,7 +23,7 @@ ptn_exec = re.compile(r"""^\[(?P<timestamp>\d+-\d+-\d+\s\d+:\d+:\d+\.\d{6}) (\d{
 ptn_tf = re.compile(r"""^.*(?P<timestamp>\d{4}-\d{2}-\d{2}\s\d{2}:\d{2}:\d{2}\.\d{6}):\s  # time
                          (?P<level>\w)\s
                          (?P<loc>.+)\]\s
-                         \[(?P<thread>\d+)\]\s
+                         (\[(?P<thread>\d+)\]\s)?
                          (?P<content>.*)$""", re.VERBOSE)
 
 
@@ -42,7 +42,8 @@ class Entry(object):
         self.entry_type = entry_type
 
         self.timestamp = datetime.strptime(g['timestamp'], '%Y-%m-%d %H:%M:%S.%f')
-        self.thread = int(g['thread'])
+        if g['thread'] is not None:
+            self.thread = int(g['thread'])
         self.loc = g['loc']
         self.level = g['level']
         self.raw_content = g['content']
@@ -221,10 +222,16 @@ ptn_mem_dealloc = re.compile(r"""TFAllocator\sdeallocating\smemory\sat\s(?P<addr
                              re.VERBOSE)
 ptn_progcnt = re.compile(r"""Progress counter for session (?P<sess>\w+): (?P<cnt>\d+)""")
 
-ptn_tf_vanilla_start = re.compile(r"""\w+ Kernel Compute start: seq=(?P<seq>\d+)""")
-ptn_tf_vanilla_done = re.compile(r"""\w+ Kernel Compute done: seq=(?P<seq>\d+)""")
-ptn_tf_vanilla_start_async = re.compile(r"""\w+ ComputeAsync start: seq=(?P<seq>\d+)""")
-ptn_tf_vanilla_done_async = re.compile(r"""\w+ ComputeAsync done: seq=(?P<seq>\d+)""")
+# OpItem Stat ExecTask(name=v/affine2/biases/Initializer/Const, type=Const, session=59089c8c075bcd3e, failures=0, inputsize=0) queued: 2018-03-29 23:33:53.088091647 scheduled: 2018-03-29 23:33:53.093002944 running: 2018-03-29 23:33:53.093008399 finished: 2018-03-29 23:33:53.093745447
+ptn_optracing = re.compile(r"""OpItem\sStat.*name=(?P<op>[^,]+),.*
+                               type=(?P<kernel>[^,]+),.*
+                               session=(?P<sess>[^,]+).*
+                               step_id=(?P<step>[^,]+).*
+                               queued:\s(?P<task_ready>.+)\s
+                               scheduled:\s(?P<task_sched>.+)\s
+                               running:\s(?P<task_start>.+)\s
+                               finished: (?P<task_done>.+)$""",
+                           re.VERBOSE)
 
 
 def seq_from_entry(entry):
@@ -412,15 +419,43 @@ def match_exec_content(content, entry):
             'type': 'sess_create',
             'sess': sess
         }
+        
+    m = ptn_optracing.match(content)
+    if m:
+        sess = m.group('sess')
+        return {
+            'type': 'optracing',
+            'sess': sess,
+            'op': m.group('op'),
+            'kernel': m.group('kernel'),
+            'step': int(m.group('step')),
+            'task_start': m.group('task_start'),
+            'task_ready': m.group('task_ready'),
+            'task_sched': m.group('task_sched'),
+            'task_done': m.group('task_done')
+        }
 
     return {}
 
 
+ptn_tf_vanilla_start = re.compile(r"""\w+ Kernel Compute start: seq=(?P<seq>\d+)""")
+ptn_tf_vanilla_done = re.compile(r"""\w+ Kernel Compute done: seq=(?P<seq>\d+)""")
+ptn_tf_vanilla_start_async = re.compile(r"""\w+ ComputeAsync start: seq=(?P<seq>\d+)""")
+ptn_tf_vanilla_done_async = re.compile(r"""\w+ ComputeAsync done: seq=(?P<seq>\d+)""")
 ptn_rpc_run = re.compile(r"""RpcClient::run(Async)?\s+calling rpc using rpc stub""")
 ptn_send_evenlop = re.compile(r"""Sending evenlop message_t: executor\.(?P<req_type>\w+) seq (?P<seq>\d+)""")
 ptn_evenlop_sent = re.compile(r"""Message sent for seq: (?P<seq>\d+)""")
 ptn_recv_resp = re.compile(r"""Received evenlop: seq=(?P<seq>\d+) type=executor\.(?P<req_type>\w+)""")
 ptn_rpc_return = re.compile(r"""RpcClient::run(Async)?\s+rpc returned with status:.*""")
+# Process node: 0 step -1 _SOURCE = NoOp[]() is dead: 0
+ptn_tf_process_node = re.compile(
+    r"""Process node: (?P<nid>\d+) step (?P<step>[-\d]+) (?P<op>[\w/]+) = (?P<kernel>[^[]+).*""")
+# NodeDone: 11 step 30 _retval_AssignAdd_0_0 = _Retval[T=DT_INT64, index=0, _device="/job:localhost/replica:0/task:0/device:CPU:0"](AssignAdd)
+ptn_tf_node_done = re.compile(
+    r"""NodeDone: (?P<nid>\d+) step (?P<step>[-\d]+) (?P<op>[\w/]+) = (?P<kernel>[^[]+).*""")
+# NodeReady: 11 step 30 _retval_AssignAdd_0_0 = _Retval[T=DT_INT64, index=0, _device="/job:localhost/replica:0/task:0/device:CPU:0"](AssignAdd)
+ptn_tf_node_ready = re.compile(
+    r"""NodeReady: (?P<nid>\d+) step (?P<step>[-\d]+) (?P<op>[\w/]+) = (?P<kernel>[^[]+).*""")
 
 
 def match_tf_content(content, entry):
@@ -510,6 +545,39 @@ def match_tf_content(content, entry):
             'type': 'compute_done',
             'seq': seq,
             'compute_time': (entry.timestamp - info['tf_vanilla_start'].timestamp).total_seconds()
+        }
+
+    m = ptn_tf_process_node.match(content)
+    if m:
+        nid = int(m.group('nid'))
+        return {
+            'type': 'task_start',
+            'nid': nid,
+            'step': int(m.group('step')),
+            'op': m.group('op'),
+            'kernel': m.group('kernel'),
+        }
+
+    m = ptn_tf_node_ready.match(content)
+    if m:
+        nid = int(m.group('nid'))
+        return {
+            'type': 'task_ready',
+            'nid': nid,
+            'step': int(m.group('step')),
+            'op': m.group('op'),
+            'kernel': m.group('kernel'),
+        }
+
+    m = ptn_tf_node_done.match(content)
+    if m:
+        nid = int(m.group('nid'))
+        return {
+            'type': 'task_done',
+            'nid': nid,
+            'step': int(m.group('step')),
+            'op': m.group('op'),
+            'kernel': m.group('kernel'),
         }
 
     return {}

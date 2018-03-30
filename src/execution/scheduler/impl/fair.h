@@ -16,10 +16,10 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef FAIRSCHEDULER_H
-#define FAIRSCHEDULER_H
+#ifndef SALUS_EXEC_SCHED_FAIR_H
+#define SALUS_EXEC_SCHED_FAIR_H
 
-#include "execution/scheduler/ischeduler.h"
+#include "execution/scheduler/basescheduler.h"
 
 #include <chrono>
 #include <unordered_map>
@@ -27,20 +27,20 @@
 /**
  * @todo write docs
  */
-class FairScheduler : public IScheduler
+class FairScheduler : public BaseScheduler
 {
 public:
-    FairScheduler(ExecutionEngine &engine);
+    explicit FairScheduler(ExecutionEngine &engine);
     ~FairScheduler() override;
 
     std::string name() const override;
 
-    void selectCandidateSessions(const SessionList &sessions,
-                                 const SessionChangeSet &changeset,
-                                 sstl::not_null<CandidateList*> candidates) override;
+    void notifyPreSchedulingIteration(const SessionList &sessions,
+                                      const SessionChangeSet &changeset,
+                                      sstl::not_null<CandidateList *> candidates) override;
     std::pair<size_t, bool> maybeScheduleFrom(PSessionItem item) override;
 
-    using IScheduler::debugString;
+    using BaseScheduler::debugString;
     std::string debugString(const PSessionItem &item) const override;
 
 private:
@@ -49,4 +49,4 @@ private:
     std::unordered_map<std::string, double> aggResUsages;
 };
 
-#endif // FAIRSCHEDULER_H
+#endif // SALUS_EXEC_SCHED_FAIR_H

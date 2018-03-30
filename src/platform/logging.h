@@ -112,6 +112,7 @@ inline const char *thread_id(const el::LogMessage *)
 // logger ids
 constexpr const auto kAllocTag = "alloc";
 constexpr const auto kPerfTag = "performance";
+constexpr const auto kOpTracing = "optracing";
 constexpr const auto kDefTag = "default";
 
 // logging configurations

@@ -16,27 +16,27 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef PREEMPTSCHEDULER_H
-#define PREEMPTSCHEDULER_H
+#ifndef SALUS_EXEC_SCHED_PREEMPT_H
+#define SALUS_EXEC_SCHED_PREEMPT_H
 
-#include "execution/scheduler/ischeduler.h"
+#include "execution/scheduler/basescheduler.h"
 
 #include <chrono>
 
 /**
  * @brief Always gives new session higher priority
  */
-class PreemptScheduler : public IScheduler
+class PreemptScheduler : public BaseScheduler
 {
 public:
-    PreemptScheduler(ExecutionEngine &engine);
+    explicit PreemptScheduler(ExecutionEngine &engine);
     ~PreemptScheduler() override;
 
     std::string name() const override;
 
-    void selectCandidateSessions(const SessionList &sessions,
-                                 const SessionChangeSet &changeset,
-                                 sstl::not_null<CandidateList*> candidates) override;
+    void notifyPreSchedulingIteration(const SessionList &sessions,
+                                      const SessionChangeSet &changeset,
+                                      sstl::not_null<CandidateList *> candidates) override;
     std::pair<size_t, bool> maybeScheduleFrom(PSessionItem item) override;
 
 private:
@@ -45,4 +45,4 @@ private:
     std::unordered_map<std::string, int> priorities;
 };
 
-#endif // PREEMPTSCHEDULER_H
+#endif // SALUS_EXEC_SCHED_PREEMPT_H

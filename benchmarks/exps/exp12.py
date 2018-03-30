@@ -29,7 +29,7 @@ def main(argv):
                 *parse_actions_from_cmd(argv))
         return
 
-    run_seq(scfg.copy(output_dir=FLAGS.save_dir / "exp12"),
+    run_seq(scfg.copy(output_dir=FLAGS.save_dir),
             WTL.create("inception3", 25, 303),
             Pause(60),
             WTL.create("alexnet", 100, 506),

@@ -1,0 +1,12 @@
+---
+Checks:
+'clang-diagnostic-*,clang-analyzer-*,*,-cert-env33-c,-cert-dcl50-cpp,-cert-dcl59-cpp,-cppcoreguidelines-no-malloc,-cppcoreguidelines-pro-bounds-constant-array-index,-cppcoreguidelines-pro-bounds-pointer-arithmetic,-cppcoreguidelines-pro-bounds-array-to-pointer-decay,-cppcoreguidelines-pro-type-const-cast,-cppcoreguidelines-pro-type-cstyle-cast,-cppcoreguidelines-pro-type-reinterpret-cast,-cppcoreguidelines-pro-type-union-access,-cppcoreguidelines-pro-type-vararg,-cppcoreguidelines-special-member-functions,-fuchsia-default-arguments,-google-*,google-explicit-constructor,google-runtime-member-string-references,google-runtime-memset,google-runtime-operator,-hicpp-named-parameter,-hicpp-no-assembler,-hicpp-function-size,-hicpp-special-member-functions,-hicpp-vararg,-hicpp-no-array-decay,-llvm-*,-readability-else-after-return,-readability-implicit-bool-cast,-readability-named-parameter,-readability-simplify-boolean-expr,-readability-braces-around-statements,-readability-identifier-naming,-readability-function-size,-readability-redundant-member-init,-misc-bool-pointer-implicit-conversion,-misc-definitions-in-headers,-misc-unused-alias-decls,-misc-unused-parameters,-misc-unused-using-decls,-modernize-use-using,-modernize-use-default-member-init,-clang-diagnostic-*,-clang-analyzer-*,-modernize-use-bool-literals'
+WarningsAsErrors: ''
+HeaderFilterRegex: ''
+AnalyzeTemporaryDtors: false
+FormatStyle: 'file'
+CheckOptions:
+    - key: readability-implicit-bool-conversion.AllowIntegerConditions
+      value: 1
+    - key: readability-implicit-bool-conversion.AllowPointerConditions
+      value: 1

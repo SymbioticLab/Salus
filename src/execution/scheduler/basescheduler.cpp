@@ -16,7 +16,7 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include "ischeduler.h"
+#include "basescheduler.h"
 
 #include "execution/operationtask.h"
 #include "execution/scheduler/operationitem.h"
@@ -59,7 +59,7 @@ SchedulerRegistary::Register::Register(std::string_view name, SchedulerFactory f
     }
 }
 
-std::unique_ptr<IScheduler> SchedulerRegistary::create(std::string_view name, ExecutionEngine &engine) const
+std::unique_ptr<BaseScheduler> SchedulerRegistary::create(std::string_view name, ExecutionEngine &engine) const
 {
     sstl::Guard guard(m_mu);
     auto iter = m_schedulers.find(name);
@@ -70,27 +70,88 @@ std::unique_ptr<IScheduler> SchedulerRegistary::create(std::string_view name, Ex
     return iter->second.factory(engine);
 }
 
-IScheduler::IScheduler(ExecutionEngine &engine) : m_engine(engine) {}
+BaseScheduler::BaseScheduler(ExecutionEngine &engine) : m_engine(engine) {}
 
-IScheduler::~IScheduler() = default;
+BaseScheduler::~BaseScheduler() = default;
 
-bool IScheduler::maybePreAllocateFor(OperationItem &opItem, const DeviceSpec &spec)
+void BaseScheduler::notifyPreSchedulingIteration(const SessionList &sessions, const SessionChangeSet &changeset,
+                                                 sstl::not_null<CandidateList *> candidates)
 {
-    return m_engine.maybePreAllocateFor(opItem, spec);
+    UNUSED(sessions);
+    UNUSED(changeset);
+    UNUSED(candidates);
+
+    sstl::Guard g(m_muRes);
+    m_missingRes.clear();
 }
 
-std::string IScheduler::debugString(const PSessionItem &item) const
+bool BaseScheduler::maybePreAllocateFor(OperationItem &opItem, const DeviceSpec &spec)
+{
+    auto item = opItem.sess.lock();
+    if (!item) {
+        return false;
+    }
+
+    auto usage = opItem.op->estimatedUsage(spec);
+
+    // TODO: use an algorithm to decide streams
+    if (spec.type == DeviceType::GPU) {
+        usage[{ResourceType::GPU_STREAM, spec}] = 1;
+    }
+
+    Resources *missing;
+    {
+        sstl::Guard g(m_muRes);
+        missing = &m_missingRes[&opItem];
+    }
+    DCHECK_NOTNULL(missing);
+
+    auto rctx = m_engine.makeResourceContext(item, spec, usage, missing);
+    if (!rctx->isGood()) {
+        // Failed to pre allocate resources
+        return false;
+    }
+
+    auto ticket = rctx->ticket();
+    if (!opItem.op->prepare(std::move(rctx))) {
+        return false;
+    }
+
+    sstl::Guard g(item->tickets_mu);
+    item->tickets.insert(ticket);
+    return true;
+}
+
+bool BaseScheduler::insufficientMemory(const DeviceSpec &spec)
+{
+    sstl::Guard g(m_muRes);
+
+    // we need paging if all not scheduled opItems in this iteration
+    for (const auto &[pOpItem, missing] : m_missingRes) {
+        UNUSED(pOpItem);
+        for (const auto &[tag, amount] : missing) {
+            UNUSED(amount);
+            auto insufficientMemory = tag.type == ResourceType::MEMORY && tag.device == spec;
+            if (!insufficientMemory) {
+                return false;
+            }
+        }
+    }
+    return true;
+}
+
+std::string BaseScheduler::debugString(const PSessionItem &item) const
 {
     UNUSED(item);
     return {};
 }
 
-std::string IScheduler::debugString() const
+std::string BaseScheduler::debugString() const
 {
-    return {};
+    return name();
 }
 
-POpItem IScheduler::submitTask(POpItem &&opItem)
+POpItem BaseScheduler::submitTask(POpItem &&opItem)
 {
     auto item = opItem->sess.lock();
     if (!item) {
@@ -99,11 +160,11 @@ POpItem IScheduler::submitTask(POpItem &&opItem)
     }
 
     VLOG(3) << "Scheduling opItem in session " << item->sessHandle << ": " << opItem->op->DebugString();
-    TIMED_SCOPE_IF(timerInnerObj, "IScheduler::submitTask", VLOG_IS_ON(1));
+    TIMED_SCOPE_IF(timerInnerObj, "BaseScheduler::submitTask", VLOG_IS_ON(1));
 
     opItem->tInspected = system_clock::now();
     bool scheduled = false;
-    DeviceSpec spec;
+    DeviceSpec spec{};
     for (auto dt : opItem->op->supportedDeviceTypes()) {
         if (dt == DeviceType::GPU && !useGPU()) {
             continue;
@@ -126,7 +187,7 @@ POpItem IScheduler::submitTask(POpItem &&opItem)
     return opItem;
 }
 
-size_t IScheduler::submitAllTaskFromQueue(const PSessionItem &item)
+size_t BaseScheduler::submitAllTaskFromQueue(const PSessionItem &item)
 {
     auto &queue = item->bgQueue;
     size_t scheduled = 0;

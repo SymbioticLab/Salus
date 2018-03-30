@@ -25,9 +25,9 @@
 
 #include "md_executor_impl.h"
 
-#include "oplibraries/tensorflow/v2/peropallocdevice.h"
 #include "oplibraries/tensorflow/v2/tfallocator.h"
 #include "oplibraries/tensorflow/worker/rendezvousmgr.h"
+#include "oplibraries/tensorflow/device/salusdevices.h"
 #include "utils/containerutils.h"
 #include "utils/stringutils.h"
 
@@ -343,12 +343,11 @@ size_t ExecutorImpl::handlePagingRequest(uint64_t oldTicket, std::unique_ptr<Res
 
     // Create target device
     DeviceItem item;
-    auto ok = LookupDevice(rctx->spec(), &item);
+    auto ok = LookupDevice(rctx->spec(), std::move(rctx), &item);
     if (!ok.ok()) {
         LOG(ERROR) << "Error when looking up device for paging: " << ok;
         return totalReleased;
     }
-    item.device->setResourceContext(std::move(rctx));
 
     // Lock all buffer, and all read/write should happen after this
     sstl::lock(reflocks.begin(), reflocks.end());
@@ -397,36 +396,45 @@ void ExecutorImpl::forceEvicted()
     active_states_.clear();
 }
 
-std::unique_ptr<PerOpAllocDevice> ExecutorImpl::CreatePerOpAllocDevice(tf::Device *dev)
+tf::Status ExecutorImpl::LookupTFDevice(const DeviceSpec &spec, tf::Device **tfdev)
 {
-    TIMED_FUNC_IF(timerObj, VLOG_IS_ON(1));
-
-    // TODO: impliment a free list
-    return std::make_unique<PerOpAllocDevice>(dev);
-}
-
-tf::Status ExecutorImpl::LookupDevice(const DeviceSpec &spec, DeviceItem *item)
-{
-    TIMED_FUNC_IF(timerObj, VLOG_IS_ON(1));
-
     std::string name;
     switch (spec.type) {
-    case DeviceType::CPU:
-        name = "CPU:";
-        break;
-    case DeviceType::GPU:
-        name = "GPU:";
-        break;
+        case DeviceType::CPU:
+            name = "CPU:";
+            break;
+        case DeviceType::GPU:
+            name = "GPU:";
+            break;
     }
     name += std::to_string(spec.id);
 
-    tf::Device *tfdev;
-    auto ok = params_.deviceMgr.LookupDevice(name, &tfdev);
+    auto ok = params_.deviceMgr.LookupDevice(name, tfdev);
     if (!ok.ok()) {
         LOG(ERROR) << "Cannot find device for " << spec << ": " << ok;
         return ok;
     }
-    item->device = CreatePerOpAllocDevice(tfdev);
+
+    return tf::Status::OK();
+}
+
+tf::Status ExecutorImpl::LookupDevice(const DeviceSpec &spec, std::unique_ptr<ResourceContext> &&rctx, DeviceItem *item)
+{
+    TIMED_FUNC_IF(timerObj, VLOG_IS_ON(1));
+
+    tf::Device *tfdev = nullptr;
+    auto ok = LookupTFDevice(spec, &tfdev);
+    if (!ok.ok()) {
+        return ok;
+    }
+
+    auto sdev = ISalusDevice::safe_cast(tfdev);
+    if (!sdev) {
+        ok == tf::errors::Internal(tf::strings::StrCat("Device is not an ISalusDevice: ", spec.DebugString()));
+        return ok;
+    }
+
+    item->device = sdev->createPerTaskDevice(graph_, std::move(rctx));
 
     item->function_library = params_.create_fruntime(item->device.get());
 

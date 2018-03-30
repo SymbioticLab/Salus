@@ -5,6 +5,7 @@ from builtins import super
 import errno
 import sys
 import logging
+import shutil
 from timeit import default_timer
 from importlib import import_module
 from absl import flags, command_name
@@ -13,6 +14,7 @@ from typing import Sequence
 from .workload import WorkloadTemplate
 from .utils import UsageError, eprint, format_secs, reap_children
 from .utils.compatiblity import pathlib
+from .utils import prompt
 
 Path = pathlib.Path
 FLAGS = flags.FLAGS
@@ -49,6 +51,7 @@ class HelpfullFlag(flags.BooleanFlag):
 
 
 flags.DEFINE_string('save_dir', 'scripts/templogs', 'Output direcotry')
+flags.DEFINE_boolean('clear_save', False, 'Remove anything previously in the output directory')
 flags.DEFINE_string('extra_wl', None, 'Path to the CSV containing extra workload info')
 flags.DEFINE_string('force_preset', None, 'Force to use specific server config preset')
 flags.DEFINE_flag(HelpFlag())
@@ -74,7 +77,7 @@ def usage(shorthelp=False, writeto_stdout=False, detailed_error=None,
 
     doc = sys.modules['__main__'].__doc__
     if not doc:
-        doc = f'USAGE: python -m benchmarks.driver [flags]\n\n'
+        doc = f'USAGE: python -m benchmarks.driver <exp> [flags]\n\n'
         doc = flags.text_wrap(doc, indent='       ', firstline_indent='')
     if shorthelp:
         flag_str = FLAGS.main_module_help()
@@ -138,7 +141,9 @@ def main():
     # find first argument not starting with dash
     exp, argv = parse_expname(sys.argv)
 
-    exp = import_module('benchmarks.exps.' + exp)
+    expm = import_module('benchmarks.exps.' + exp)
+    logger.info(f'Running experiment: {expm.__name__}')
+
     # Parse FLAGS now in case any module also defines some,
     progname, argv = parse_flags_with_usage(argv)
 
@@ -146,15 +151,29 @@ def main():
     if FLAGS.extra_wl is not None:
         WorkloadTemplate.load_extra(FLAGS.extra_wl)
 
-    logger.info(f'Saving log files to: {FLAGS.save_dir}')
-    save_dir = Path(FLAGS.save_dir)
+    save_dir = (Path(FLAGS.save_dir) / exp).resolve(strict=False)
+    if save_dir.is_dir() and FLAGS.clear_save:
+            print(f"The following paths will be removed:")
+            print(f'  {save_dir!s}')
+            for p in sorted(save_dir.rglob('*')):
+                print(f'  {p!s}')
+            ch = prompt.choose('What would you like to do?',
+                               choices=[
+                                   ('r', 'Remove'),
+                                   ('a', 'Abort'),
+                                   ('s', 'Skip without remove'),
+                               ])
+            if ch == 'r':
+                shutil.rmtree(str(save_dir))
+            elif ch == 'a':
+                return
+
     save_dir.mkdir(exist_ok=True, parents=True)
     FLAGS.save_dir = save_dir
-
-    logger.info(f'Running experiment: {exp.__name__}')
+    logger.info(f'Saving log files to: {FLAGS.save_dir!s}')
 
     start = default_timer()
-    exp.main(argv)
+    expm.main(argv)
     dur = default_timer() - start
     logger.info(f'Experiment finished in {format_secs(dur)}')
 

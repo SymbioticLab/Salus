@@ -43,7 +43,7 @@ SchedulerRegistary::Register reg("preempt", [](auto &engine) {
 });
 } // namespace
 
-PreemptScheduler::PreemptScheduler(ExecutionEngine &engine) : IScheduler(engine) {}
+PreemptScheduler::PreemptScheduler(ExecutionEngine &engine) : BaseScheduler(engine) {}
 
 PreemptScheduler::~PreemptScheduler() = default;
 
@@ -52,11 +52,13 @@ std::string PreemptScheduler::name() const
     return "preempt";
 }
 
-void PreemptScheduler::selectCandidateSessions(const SessionList &sessions,
-                                               const SessionChangeSet &changeset,
-                                               sstl::not_null<CandidateList*> candidates)
+void PreemptScheduler::notifyPreSchedulingIteration(const SessionList &sessions,
+                                                    const SessionChangeSet &changeset,
+                                                    sstl::not_null<CandidateList *> candidates)
 {
     static int priorityCounter = 0;
+
+    BaseScheduler::notifyPreSchedulingIteration(sessions, changeset, candidates);
 
     candidates->clear();
 

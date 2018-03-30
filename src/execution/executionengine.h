@@ -17,8 +17,8 @@
  *
  */
 
-#ifndef EXECUTIONENGINE_H
-#define EXECUTIONENGINE_H
+#ifndef SALUS_EXEC_EXECUTIONENGINE_H
+#define SALUS_EXEC_EXECUTIONENGINE_H
 
 #include "devices.h"
 
@@ -71,13 +71,14 @@ struct PagingCallbacks
     }
 };
 
+using PSessionItem = std::shared_ptr<SessionItem>;
+using POpItem = std::shared_ptr<OperationItem>;
+class BaseScheduler;
+class ExecutionEngine;
+
 /**
  * @todo write docs
  */
-using PSessionItem = std::shared_ptr<SessionItem>;
-using POpItem = std::shared_ptr<OperationItem>;
-class IScheduler;
-class ExecutionEngine;
 class ExecutionContext
 {
     struct Data
@@ -136,6 +137,9 @@ public:
     void deleteSession(std::function<void()> cb);
 };
 
+/**
+ * @brief
+ */
 class ExecutionEngine
 {
 
@@ -170,13 +174,13 @@ private:
     std::atomic<bool> m_shouldExit{false};
     std::unique_ptr<std::thread> m_schedThread;
     void scheduleLoop();
-    bool shouldWaitForAWhile(size_t scheduled, std::chrono::nanoseconds &ns);
+    bool maybeWaitForAWhile(size_t scheduled);
 
     // Task life cycle
-    friend class IScheduler;
-    std::unique_ptr<ResourceContext> makeResourceContext(SessionItem &sess, const DeviceSpec &spec,
-                                                         const Resources &res);
-    bool maybePreAllocateFor(OperationItem &opItem, const DeviceSpec &spec);
+    friend class BaseScheduler;
+    std::unique_ptr<ResourceContext> makeResourceContext(PSessionItem sess, const DeviceSpec &spec,
+                                                         const Resources &res, Resources *missing=nullptr);
+
     POpItem submitTask(POpItem &&opItem);
     void taskStopped(OperationItem &opItem, bool failed);
     void taskRunning(OperationItem &opItem);
@@ -186,8 +190,13 @@ private:
     std::atomic_int_fast64_t m_runningTasks{0};
     std::atomic_int_fast64_t m_noPagingRunningTasks{0};
 
-    // Paging
-    bool doPaging();
+    /**
+     * @brief Do paging on device 'spec'
+     * @param spec
+     * @param target page out to device 'target'
+     * @return
+     */
+    bool doPaging(const DeviceSpec &spec, const DeviceSpec &target);
 
     // Incoming kernels
     void pushToSessionQueue(POpItem &&opItem);
@@ -231,24 +240,47 @@ public:
         return m_ticket;
     }
 
+    bool isGood() const
+    {
+        return hasStaging;
+    }
+
+    /**
+     * @brief Construct a new resource context with a different spec
+     * @param other
+     * @param spec
+     */
     ResourceContext(const ResourceContext &other, const DeviceSpec &spec);
-    ResourceContext(SessionItem &item, ResourceMonitor &resMon);
+
+    /**
+     * @brief Construct a resource context
+     * @param item
+     * @param resMon
+     */
+    ResourceContext(PSessionItem item, ResourceMonitor &resMon);
     ~ResourceContext();
 
-    bool initializeStaging(const DeviceSpec &spec, const Resources &res);
+    /**
+     * @brief Initialize staging
+     * @param spec
+     * @param res
+     * @param missing
+     * @return
+     */
+    bool initializeStaging(const DeviceSpec &spec, const Resources &res, Resources *missing);
     void releaseStaging();
 
     struct OperationScope
     {
         explicit OperationScope(const ResourceContext &context, ResourceMonitor::LockedProxy &&proxy)
-            : valid(true)
+            : valid(false)
             , proxy(std::move(proxy))
             , res()
             , context(context)
         {
         }
 
-        OperationScope(OperationScope &&scope)
+        OperationScope(OperationScope &&scope) noexcept
             : valid(scope.valid)
             , proxy(std::move(scope.proxy))
             , res(std::move(scope.res))
@@ -269,6 +301,11 @@ public:
 
         void rollback();
 
+        const Resources &resources() const
+        {
+            return res;
+        }
+
     private:
         void commit();
 
@@ -280,15 +317,28 @@ public:
         const ResourceContext &context;
     };
 
-    OperationScope allocMemory(size_t num_bytes) const;
-    void deallocMemory(size_t num_bytes) const;
+    /**
+     * @brief Allocate all resource of type `type' in staging area
+     * @param type
+     * @return
+     */
+    OperationScope alloc(ResourceType type) const;
 
-private:
+    OperationScope alloc(ResourceType type, size_t num) const;
+
+    void dealloc(ResourceType type, size_t num) const;
+
+    /**
+     * @brief Called by PerOpAllocator when no allocation is hold by the ticket
+     *
+     */
     void removeTicketFromSession() const;
 
-    SessionItem &session;
+private:
+
+    PSessionItem session;
     std::atomic<bool> hasStaging;
 };
 std::ostream &operator<<(std::ostream &os, const ResourceContext &c);
 
-#endif // EXECUTIONENGINE_H
+#endif // SALUS_EXEC_EXECUTIONENGINE_H

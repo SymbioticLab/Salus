@@ -118,10 +118,12 @@ void initialize(const Params &params)
         Loggers::reconfigureLogger(logging::kPerfTag, ConfigurationType::Enabled, "false");
     }
 
-    // Separate allocation logger, which uses default configuration. Force to create it here
+    // Force to create loggers here with default configuration
     // in non-performance sensitive code path.
-    auto allocLogger = Loggers::getLogger("alloc");
-    DCHECK(allocLogger);
+    for (auto tag : {logging::kAllocTag, logging::kOpTracing, logging::kPerfTag, logging::kDefTag}) {
+        auto logger = Loggers::getLogger(tag);
+        DCHECK(logger);
+    }
 
     // Read in configuration file
     if (params.configFile) {

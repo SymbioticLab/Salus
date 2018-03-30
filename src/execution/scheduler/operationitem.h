@@ -16,8 +16,8 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef OPERATIONITEM_H
-#define OPERATIONITEM_H
+#ifndef SALUS_EXEC_OPERATIONITEM_H
+#define SALUS_EXEC_OPERATIONITEM_H
 
 #include <memory>
 #include <chrono>
@@ -29,9 +29,9 @@ struct OperationItem
     std::weak_ptr<SessionItem> sess;
     std::unique_ptr<OperationTask> op;
 
-    uint64_t hash() const
+    size_t hash() const
     {
-        return reinterpret_cast<uint64_t>(this);
+        return reinterpret_cast<size_t>(this);
     }
 
     std::chrono::time_point<std::chrono::system_clock> tQueued;
@@ -44,4 +44,4 @@ private:
 };
 using POpItem = std::shared_ptr<OperationItem>;
 
-#endif // OPERATIONITEM_H
+#endif // SALUS_EXEC_OPERATIONITEM_H

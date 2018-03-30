@@ -65,7 +65,7 @@ public:
 
     std::string DebugString() override;
 
-    bool allowConcurrentPaging() const override;
+    bool isAsync() const override;
 
     ResourceContext &resourceContext() const override;
 
@@ -85,8 +85,6 @@ private:
     std::unordered_map<DeviceSpec, Resources> cachedUsage;
     std::vector<DeviceType> supportedTypes;
     std::function<void(tf::OpKernel *, tf::FunctionLibraryRuntime *)> deleteKernel;
-
-    std::unique_ptr<PerOpAllocDevice, std::function<void(PerOpAllocDevice *)>> wrappedDevice;
 
     int failureTimes = 0;
     int maxFailures;
@@ -121,7 +119,6 @@ private:
     ExecutorState *m_state;
 };
 
-
-}
+} // namespace salus::oplib::tensorflow
 
 #endif // SALUS_OPLIB_TENSORFLOW_EXECTASK_H

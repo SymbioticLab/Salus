@@ -63,7 +63,7 @@ def main(argv):
         # run them at once
         logger.info(f'Runing {concurrent} workloads together')
         workloads = [wtl.create_from_rcfg(rcfg) for _ in range(concurrent)]
-        run_seq(scfg.copy(output_dir=FLAGS.save_dir / 'exp18' / f"{concurrent}"), *workloads)
+        run_seq(scfg.copy(output_dir=FLAGS.save_dir / f"{concurrent}"), *workloads)
 
         # calculate average jct
         for w in workloads:

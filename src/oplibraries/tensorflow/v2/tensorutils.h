@@ -235,11 +235,11 @@ struct Entry
     std::shared_ptr<tf::Device> device = nullptr;
 };
 
-class PerOpAllocDevice;
+class PerTaskDevice;
 /**
  * Automatically dereference and move tensor to dstDevice if needed
  */
-tf::Status derefMoveTensor(Entry &entry, const std::shared_ptr<PerOpAllocDevice> &dstDevice,
+tf::Status derefMoveTensor(Entry &entry, const std::shared_ptr<PerTaskDevice> &dstDevice,
                            tf::DeviceContext *dstCtx, const tf::AllocatorAttributes &attr,
                            const std::string &name = "");
 
@@ -247,11 +247,11 @@ tf::Status derefMoveTensor(Entry &entry, const std::shared_ptr<PerOpAllocDevice>
  * Move tensor to dstDevice.
  * Prerequest: entry.ref_mu locked if not null
  */
-tf::Status moveTensor(Entry &entry, const std::shared_ptr<PerOpAllocDevice> &dstDevice,
+tf::Status moveTensor(Entry &entry, const std::shared_ptr<PerTaskDevice> &dstDevice,
                       tf::DeviceContext *dstCtx, const tf::AllocatorAttributes &attr,
                       const std::string &name = "");
 
-tf::Status moveTensorTree(TensorBufferTree &, const std::shared_ptr<PerOpAllocDevice> &dstDevice);
+tf::Status moveTensorTree(TensorBufferTree &, const std::shared_ptr<PerTaskDevice> &dstDevice);
 
 } // namespace salus::oplib::tensorflow
 #endif // SALUS_OPLIB_TENSORFLOW_TENSORUTILS_H

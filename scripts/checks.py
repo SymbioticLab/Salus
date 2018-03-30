@@ -19,6 +19,7 @@ def check_threadpool(path, name='Threadpool'):
 
 def check_pending_ops(path):
     kernels = defaultdict(int)
+    lines = defaultdict(list)
     ptn_st = re.compile(r'''Process node: (?P<node>[^ \[]+) ''')
     ptn_ed = re.compile("Propagate outputs for node: (?P<node>.+)")
     with open(path) as f:
@@ -27,7 +28,7 @@ def check_pending_ops(path):
             m = ptn_st.search(line)
             if m:
                 kernels[m.group('node')] += 1
-
+                lines[m.group('node')].append(line)
             m = ptn_ed.search(line)
             if m:
                 if kernels[m.group('node')] == 0:
@@ -35,7 +36,7 @@ def check_pending_ops(path):
                 kernels[m.group('node')] -= 1
     remaining = [(k, v) for k, v in kernels.items() if v != 0]
     print(remaining)
-    return remaining
+    return remaining, lines
 
 
 def check_kernel_create(path):

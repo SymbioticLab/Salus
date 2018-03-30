@@ -120,11 +120,10 @@ def do_jct_hint(logdir, network, batch_size, per_iter, target, tag):
 
 def main(argv):
     # type: (Sequence[str]) -> None
-    logdir = FLAGS.save_dir / 'jct'
     for network, batch_size in select_workloads(argv):
         print(f"\n**** JCT: {network}_{batch_size} *****\n\n")
         # Do base jct first
-        outputdir = do_jct(logdir, network, batch_size)
+        outputdir = do_jct(FLAGS.save_dir, network, batch_size)
 
         if FLAGS.basic_only:
             continue
@@ -133,4 +132,4 @@ def main(argv):
         per_iter = parse_output_float(outputdir / 'gpu.output', r'^Average excluding[^0-9.]+([0-9.]+).*')
 
         for m in [1, 5, 10]:
-            per_iter = do_jct_hint(logdir, network, batch_size, per_iter, 60 * m, f'{m}min')
+            per_iter = do_jct_hint(FLAGS.save_dir, network, batch_size, per_iter, 60 * m, f'{m}min')

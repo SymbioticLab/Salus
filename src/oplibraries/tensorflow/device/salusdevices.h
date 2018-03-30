@@ -14,59 +14,68 @@
  *
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ *
  */
 
-#ifndef SALUS_OPLIB_TENSORFLOW_PEROPALLOCDEVICE_H
-#define SALUS_OPLIB_TENSORFLOW_PEROPALLOCDEVICE_H
+#ifndef SALUS_OPLIB_TENSORFLOW_SALUSDEVICES
+#define SALUS_OPLIB_TENSORFLOW_SALUSDEVICES
 
-/*
- * Make sure tensorflow_headers is included first before
- * any other headers, so we can correctly override TF logging
- * with ours.
- */
-#include "oplibraries/tensorflow/tensorflow_headers.h"
 #include "execution/resources.h"
-#include "utils/macros.h"
-#include "utils/pointerutils.h"
+#include "oplibraries/tensorflow/v2/tfallocator.h"
 
+#include <functional>
+#include <memory>
 #include <mutex>
+
+namespace tensorflow {
+class Device;
+} // namespace tensorflow
 
 class ResourceContext;
 
 namespace salus::oplib::tensorflow {
 
-class PerOpAllocator;
-class PerOpAllocDevice : public tf::Device
+/**
+ * @brief Per task device knows the resource allocation for the particular task, it actually wrapps another
+ * device
+ *
+ */
+class PerTaskDevice : public tf::Device
 {
 public:
-    explicit PerOpAllocDevice(tf::Device *other);
-    ~PerOpAllocDevice() override;
+    explicit PerTaskDevice(sstl::not_null<tf::Device *> base, std::unique_ptr<ResourceContext> &&rctx);
+    ~PerTaskDevice() override;
 
-    void setResourceContext(std::unique_ptr<ResourceContext> &&rctx);
     ResourceContext &resourceContext() const
     {
         return *m_rctx;
     }
 
-    tf::Device *underlayingDevice() const
+    template<typename T>
+    T &underlayingDevice() const
     {
-        return m_wrapped;
+        return *static_cast<T *>(m_base.get());
+    }
+
+    tf::Device &underlayingDevice() const
+    {
+        return *m_base.get();
     }
 
     Resources failedResourceRequest() const;
 
-    tf::Allocator *GetAllocator(tf::AllocatorAttributes attr) override;
+    virtual tf::DeviceContext *deviceContextForNode(int id) const = 0;
 
+    // Hook allocators
+    tf::Allocator *GetAllocator(tf::AllocatorAttributes attr) override;
     tf::Allocator *GetStepAllocator(tf::AllocatorAttributes attr,
                                     tf::ResourceMgr *step_resource_manager) override;
 
     // Forwarding of DeviceBase methods
     bool RequiresRecordingAccessedTensors() const override;
-
     tf::PerOpGpuDevice *MakeGpuDevice() override;
     void ReinitializeGpuDevice(tf::OpKernelContext *context, tf::PerOpGpuDevice *device,
                                tf::DeviceContext *dc, tf::Allocator *allocator) override;
-
     tf::Status MakeTensorFromProto(const tf::TensorProto &tensor_proto,
                                    const tf::AllocatorAttributes alloc_attrs, tf::Tensor *tensor) override;
 
@@ -80,10 +89,13 @@ public:
     tf::Status MaybeRewriteGraph(std::unique_ptr<tf::Graph> *graph) override;
     tf::Status FillContextMap(const tf::Graph *graph, tf::DeviceContextMap *device_context_map) override;
 
+protected:
+    void setResourceContext(std::unique_ptr<ResourceContext> &&rctx);
+
 private:
     tf::Allocator *wrapAllocator(tf::Allocator *alloc, const tf::AllocatorAttributes &alloc_attrs);
 
-    tf::Device *m_wrapped;
+    sstl::not_null<tf::Device *> m_base;
     std::shared_ptr<ResourceContext> m_rctx;
 
     mutable std::mutex m_mu;
@@ -111,6 +123,35 @@ private:
     std::unordered_map<AA, sstl::ScopedUnref<PerOpAllocator>, AAHasher> m_wrappedAllocators;
 };
 
+/**
+ * @brief We use an extension to tensorflow devices.
+ *
+ * All TF devices should implement this interface.
+ */
+class ISalusDevice
+{
+public:
+    virtual ~ISalusDevice() = default;
+
+    virtual void flushCacheFor(const tf::Graph *graph) = 0;
+
+    virtual std::unique_ptr<PerTaskDevice> createPerTaskDevice(const tf::Graph *g,
+                                                               std::unique_ptr<ResourceContext> &&rctx) = 0;
+
+    /**
+     * @brief Safely cast a tf::Device to ISalusDeivce, w/o dynamic_cast and RTTI.
+     *
+     * It does this by first downcasting to concrete device type and then upcast,
+     * based on the device name and type.
+     *
+     * @param device
+     * @return
+     */
+    static ISalusDevice *safe_cast(tf::Device *device);
+};
+
+void maybeRegisterSalusDeviceFactories();
+
 } // namespace salus::oplib::tensorflow
 
-#endif // SALUS_OPLIB_TENSORFLOW_PEROPALLOCDEVICE_H
+#endif // SALUS_OPLIB_TENSORFLOW_SALUSDEVICES

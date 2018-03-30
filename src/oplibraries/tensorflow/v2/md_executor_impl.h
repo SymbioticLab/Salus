@@ -75,7 +75,7 @@ using EntryVec = gtl::InlinedVector<Entry *, 4>;
 using BufferLockVec = std::vector<boost::shared_lock<boost::upgrade_mutex>>;
 using BufferMutexSet = std::unordered_set<boost::upgrade_mutex *>;
 
-class PerOpAllocDevice;
+class PerTaskDevice;
 class ExecutorState;
 class ExecutorImpl : public tf::Executor
 {
@@ -120,13 +120,14 @@ private:
 
     struct DeviceItem
     {
-        std::shared_ptr<salus::oplib::tensorflow::PerOpAllocDevice> device = nullptr;
+        std::shared_ptr<salus::oplib::tensorflow::PerTaskDevice> device = nullptr;
         std::shared_ptr<tf::FunctionLibraryRuntime> function_library = nullptr;
         bool device_record_tensor_access = false;
     };
 
-    std::unique_ptr<PerOpAllocDevice> CreatePerOpAllocDevice(tf::Device *dev);
-    tf::Status LookupDevice(const DeviceSpec &spec, DeviceItem *item);
+    tf::Status LookupDevice(const DeviceSpec &spec, std::unique_ptr<ResourceContext> &&rctx, DeviceItem *item);
+
+    tf::Status LookupTFDevice(const DeviceSpec &spec, tf::Device **tfdev);
 
     struct ControlFlowInfo
     {
@@ -208,7 +209,7 @@ private:
 // track of how many predecessors of a node have not done (pending_).
 struct DeviceItem;
 class ExecTask;
-class PerOpAllocDevice;
+class PerTaskDevice;
 class ExecutorState
 {
 public:
@@ -602,14 +603,14 @@ private:
 
     // Before invoking item->kernel, fills in its "inputs".
     tf::Status PrepareInputs(const tf::remote::NodeItem &item, tf::OpKernel *kernel,
-                             const std::shared_ptr<PerOpAllocDevice> &device,
+                             const std::shared_ptr<PerTaskDevice> &device,
                              tf::DeviceContext *device_context, Entry *first_input, TensorValueVec *inputs,
                              BufferLockVec *buflocks, DeviceContextVec *input_device_contexts,
                              AllocatorAttributeVec *input_alloc_attrs, bool *is_input_dead);
 
     // After item->kernel computation is done, processes its outputs.
     tf::Status ProcessOutputs(const tf::remote::NodeItem &item, tf::OpKernelContext *ctx,
-                              const std::shared_ptr<PerOpAllocDevice> &device, EntryVector *outputs);
+                              const std::shared_ptr<PerTaskDevice> &device, EntryVector *outputs);
 
     // After item->kernel computation is done, clear its inputs.
     void ClearInputs(Entry *first, size_t num, BufferLockVec &buflocks);

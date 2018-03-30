@@ -26,7 +26,7 @@ def main(argv):
                 *parse_actions_from_cmd(argv))
         return
 
-    run_seq(scfg.copy(output_dir=FLAGS.save_dir / "exp10"),
+    run_seq(scfg.copy(output_dir=FLAGS.save_dir),
             WTL.create("resnet50", 50, 265),
             Pause(10),
             WTL.create("resnet50", 50, 180),
