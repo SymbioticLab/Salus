@@ -231,8 +231,8 @@ void ExecTask::inferUsage(const DeviceSpec &dev)
     auto mtypeStatus = m_state->impl_->LookupTFDevice(dev, &tfdev);
     if (mtypeStatus.ok()) {
         mtypeStatus.Update(tf::remote::MemoryTypesForNode(m_state->impl_->graph_->op_registry(),
-                                                          tf::DeviceType(tfdev->device_type()),
-                                                          node->def(), &input_mtypes, &output_mtypes));
+                                                          tf::DeviceType(tfdev->device_type()), node->def(),
+                                                          &input_mtypes, &output_mtypes));
     }
     if (!mtypeStatus.ok()) {
         LOG(WARNING) << "Kernel not found on device " << dev << ", resource estimation may be inaccurate.";
@@ -276,8 +276,8 @@ std::string ExecTask::DebugString()
 {
     std::ostringstream oss;
     oss << "ExecTask(name=" << tagged_node.node->name() << ", type=" << tagged_node.node->op_def().name()
-        << ", session=" << m_state->impl_->params_.session << ", failures=" << failureTimes
-        << ", inputsize=" << input_size << ")";
+        << ", session=" << m_state->impl_->params_.session << ", step_id=" << m_state->step_id_
+        << ", failures=" << failureTimes << ", inputsize=" << input_size << ")";
     return oss.str();
 }
 
