@@ -89,6 +89,7 @@ private:
     int failureTimes = 0;
     int maxFailures;
     Resources failedAlloc;
+    std::string m_cachedDebugString;
 
     tf::OpKernel *op_kernel = nullptr;
     bool owns_kernel = true;

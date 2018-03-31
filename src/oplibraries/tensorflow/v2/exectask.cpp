@@ -88,6 +88,12 @@ ExecTask::ExecTask(ExecutorState *state, sstl::semaphore &num_finished_ops,
     for (auto t : supportedTypes) {
         inferUsage(t);
     }
+
+    // pre compute debug string
+    std::ostringstream oss;
+    oss << "ExecTask(name=" << tagged_node.node->name() << ", type=" << tagged_node.node->op_def().name()
+        << ", session=" << m_state->impl_->params_.session << ", step_id=" << m_state->step_id_ << ")";
+    m_cachedDebugString = oss.str();
 }
 
 const std::vector<DeviceType> &ExecTask::supportedDeviceTypes() const
@@ -286,11 +292,7 @@ void ExecTask::inferUsage(const DeviceSpec &dev)
 
 std::string ExecTask::DebugString()
 {
-    std::ostringstream oss;
-    oss << "ExecTask(name=" << tagged_node.node->name() << ", type=" << tagged_node.node->op_def().name()
-        << ", session=" << m_state->impl_->params_.session << ", step_id=" << m_state->step_id_
-        << ", failures=" << failureTimes << ", inputsize=" << input_size << ")";
-    return oss.str();
+    return m_cachedDebugString;
 }
 
 void ExecTask::cancel()
