@@ -6,6 +6,7 @@
 #include "oplibraries/tensorflow/device/gpu.h"
 #include "execution/executionengine.h"
 #include "utils/threadutils.h"
+#include "utils/objectpool.h"
 
 #include <utility>
 
@@ -14,7 +15,9 @@ namespace salus::oplib::tensorflow {
 class PerTaskGPUDevice : public PerTaskDevice
 {
 public:
-    explicit PerTaskGPUDevice(SalusGPUDevice *base, std::unique_ptr<ResourceContext> &&rctx);
+    explicit PerTaskGPUDevice(sstl::not_null<tf::Device *> base, std::unique_ptr<ResourceContext> &&rctx);
+
+    void reset(sstl::not_null<tf::Device *> base, std::unique_ptr<ResourceContext> &&rctx) override;
 
     void Compute(tf::OpKernel *op_kernel, tf::OpKernelContext *context) override;
 
@@ -26,7 +29,11 @@ public:
     ~PerTaskGPUDevice() override;
 
 private:
+    void requestStreams();
+
+private:
     sstl::ScopeGuards streamReleaser();
+    void releaseStreams();
 
     std::vector<int> m_streams;
 };
@@ -54,13 +61,10 @@ tf::Allocator *SalusGPUDevice::GetAllocator(tf::AllocatorAttributes attr)
     return gpu_allocator_;
 }
 
-Status SalusGPUDevice::FillContextMap(const tf::Graph *graph,
-                                      std::vector<tf::DeviceContext *> *device_context_map)
+Status SalusGPUDevice::FillContextMap(const tf::Graph *, std::vector<tf::DeviceContext *> *)
 {
-    UNUSED(device_context_map);
-
-    VLOG(2) << "SalusGPUDevice::FillContextMap on " << name() << " for " << as_hex(graph);
-
+    /*
+    VLOG(3) << "SalusGPUDevice::FillContextMap on " << name() << " for " << as_hex(graph);
     const auto num_streams = device_contexts_.size();
 
     NodeStreamMap *node_to_stream_id;
@@ -81,24 +85,24 @@ Status SalusGPUDevice::FillContextMap(const tf::Graph *graph,
     opts.max_streams = static_cast<int>(num_streams);
     TF_RETURN_IF_ERROR(tf::gpu_stream_util::AssignStreams(graph, opts, node_to_stream_id));
 
-    VLOG(2) << "SalusGPUDevice::FillContextMap done";
-
+    VLOG(3) << "SalusGPUDevice::FillContextMap done";
+     */
     return Status::OK();
 }
 
-void SalusGPUDevice::flushCacheFor(const tf::Graph *graph)
+void SalusGPUDevice::flushCacheFor(const tf::Graph *)
 {
-    VLOG(2) << "SalusGPUDevice::flushCacheFor(" << as_hex(graph) << ") on " << name();
-    sstl::Guard g(m_muCache);
-    m_streamAssignCache.erase(graph);
+//    VLOG(3) << "SalusGPUDevice::flushCacheFor(" << as_hex(graph) << ") on " << name();
+//    sstl::Guard g(m_muCache);
+//    m_streamAssignCache.erase(graph);
 }
 
-std::unique_ptr<PerTaskDevice> SalusGPUDevice::createPerTaskDevice(const tf::Graph *graph,
+std::shared_ptr<PerTaskDevice> SalusGPUDevice::createPerTaskDevice(const tf::Graph *graph,
                                                                    std::unique_ptr<ResourceContext> &&rctx)
 {
-    sstl::Guard g(m_muCache);
-    VLOG(2) << "SalusGPUDevice::createPerTaskDevice on " << name() << " for " << as_hex(graph);
-    return std::make_unique<PerTaskGPUDevice>(this, std::move(rctx));
+    thread_local sstl::ObjectPool<PerTaskGPUDevice> pool;
+    VLOG(3) << "SalusGPUDevice::createPerTaskDevice on " << name() << " for " << as_hex(graph);
+    return pool.acquire(this, std::move(rctx));
 }
 
 std::vector<int> SalusGPUDevice::allocateStreams(size_t num)
@@ -135,9 +139,19 @@ void SalusGPUDevice::freeStreams(std::vector<int> &&streams)
     streams.clear();
 }
 
-PerTaskGPUDevice::PerTaskGPUDevice(SalusGPUDevice *base, std::unique_ptr<ResourceContext> &&rctx)
+PerTaskGPUDevice::PerTaskGPUDevice(sstl::not_null<tf::Device *> base, std::unique_ptr<ResourceContext> &&rctx)
     : PerTaskDevice(base, std::move(rctx))
-    , m_streams()
+{
+    requestStreams();
+}
+
+void PerTaskGPUDevice::reset(sstl::not_null<tf::Device *> base, std::unique_ptr<ResourceContext> &&rctx)
+{
+    PerTaskDevice::reset(base, std::move(rctx));
+    requestStreams();
+}
+
+void PerTaskGPUDevice::requestStreams()
 {
     const auto numStreams = 1;
     auto &sdev = underlayingDevice<SalusGPUDevice>();
@@ -163,18 +177,22 @@ tf::DeviceContext *PerTaskGPUDevice::deviceContextForNode(int id) const
     auto stream = m_streams[0];
     auto &sdev = underlayingDevice<SalusGPUDevice>();
 
-    DCHECK_LT(stream, static_cast<int>(sdev.device_contexts_.size()));
-    return sdev.device_contexts_[stream];
+    return sdev.deviceContext(stream).get();
+}
+
+void PerTaskGPUDevice::releaseStreams()
+{
+    if (auto num = m_streams.size()) {
+        underlayingDevice<SalusGPUDevice>().freeStreams(std::move(m_streams));
+        resourceContext().dealloc(ResourceType::GPU_STREAM, num);
+    }
 }
 
 sstl::ScopeGuards PerTaskGPUDevice::streamReleaser()
 {
     // release stream when finish
     return sstl::ScopeGuards([this](){
-        if (auto num = m_streams.size()) {
-            underlayingDevice<SalusGPUDevice>().freeStreams(std::move(m_streams));
-            resourceContext().dealloc(ResourceType::GPU_STREAM, num);
-        }
+        releaseStreams();
     });
 }
 
@@ -193,9 +211,8 @@ void PerTaskGPUDevice::ComputeAsync(tf::AsyncOpKernel *op_kernel, tf::OpKernelCo
 
 PerTaskGPUDevice::~PerTaskGPUDevice()
 {
-    auto sr = streamReleaser();
+    releaseStreams();
 }
-
 
 tf::BaseGPUDevice *SalusGPUDeviceFactory::CreateGPUDevice(const tf::SessionOptions &options,
                                                           const std::string &name, tf::Bytes memory_limit,

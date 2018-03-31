@@ -39,7 +39,7 @@ public:
         UNUSED(graph);
     }
 
-    std::unique_ptr<PerTaskDevice> createPerTaskDevice(const tf::Graph *graph,
+    std::shared_ptr<PerTaskDevice> createPerTaskDevice(const tf::Graph *graph,
                                                        std::unique_ptr<ResourceContext> &&rctx) override;
 
 private:

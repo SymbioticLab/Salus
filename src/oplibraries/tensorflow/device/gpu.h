@@ -33,7 +33,7 @@ public:
 
     void flushCacheFor(const tf::Graph *graph) override;
 
-    std::unique_ptr<PerTaskDevice> createPerTaskDevice(const tf::Graph *graph,
+    std::shared_ptr<PerTaskDevice> createPerTaskDevice(const tf::Graph *graph,
                                                        std::unique_ptr<ResourceContext> &&rctx) override;
 
 private:
@@ -51,10 +51,18 @@ private:
      */
     void freeStreams(std::vector<int> &&streams);
 
-    friend class PerTaskGPUDevice;
+    /**
+     * @brief Get the device context correspond to stream `num'
+     * @param num
+     * @return
+     */
+    sstl::not_null<tf::DeviceContext *> deviceContext(int num) const
+    {
+        DCHECK_LT(num, static_cast<int>(device_contexts_.size()));
+        return device_contexts_[num];
+    }
 
-    // bring up device_contexts_
-    using BaseGPUDevice::device_contexts_;
+    friend class PerTaskGPUDevice;
 
     std::mutex m_muStream;
     std::vector<bool> m_streamUsed;

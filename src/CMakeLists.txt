@@ -31,6 +31,7 @@ set(SRC_LIST
     "utils/containerutils.cpp"
     "utils/cpp17.cpp"
     "utils/debugging.cpp"
+    "utils/objectpool.cpp"
 
     "main.cpp"
 )

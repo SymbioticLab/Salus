@@ -25,7 +25,7 @@
 
 void *mem::alignedAlloc(int minimum_alignment, size_t size)
 {
-#if HAS_CXX_ALIGNED_ALLOC
+#if defined(HAS_CXX_ALIGNED_ALLOC)
     return std::aligned_alloc(minimum_alignment, size);
 #else
     void *ptr = nullptr;
@@ -41,16 +41,16 @@ void *mem::alignedAlloc(int minimum_alignment, size_t size)
     } else {
         return ptr;
     }
-#endif
+#endif // HAS_CXX_ALIGNED_ALLOC
 }
 
 void mem::alignedFree(void *aligned_memory)
 {
-#if HAS_CXX_ALIGNED_ALLOC
+#if defined(HAS_CXX_ALIGNED_ALLOC)
     free(aligned_memory);
 #else
     ::free(aligned_memory);
-#endif
+#endif // HAS_CXX_ALIGNED_ALLOC
 }
 
 void *mem::malloc(size_t size)

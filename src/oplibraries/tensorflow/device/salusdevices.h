@@ -46,6 +46,8 @@ public:
     explicit PerTaskDevice(sstl::not_null<tf::Device *> base, std::unique_ptr<ResourceContext> &&rctx);
     ~PerTaskDevice() override;
 
+    virtual void reset(sstl::not_null<tf::Device *> base, std::unique_ptr<ResourceContext> &&rctx);
+
     ResourceContext &resourceContext() const
     {
         return *m_rctx;
@@ -89,10 +91,9 @@ public:
     tf::Status MaybeRewriteGraph(std::unique_ptr<tf::Graph> *graph) override;
     tf::Status FillContextMap(const tf::Graph *graph, tf::DeviceContextMap *device_context_map) override;
 
-protected:
-    void setResourceContext(std::unique_ptr<ResourceContext> &&rctx);
-
 private:
+    void reinitialize();
+
     tf::Allocator *wrapAllocator(tf::Allocator *alloc, const tf::AllocatorAttributes &alloc_attrs);
 
     sstl::not_null<tf::Device *> m_base;
@@ -135,7 +136,7 @@ public:
 
     virtual void flushCacheFor(const tf::Graph *graph) = 0;
 
-    virtual std::unique_ptr<PerTaskDevice> createPerTaskDevice(const tf::Graph *g,
+    virtual std::shared_ptr<PerTaskDevice> createPerTaskDevice(const tf::Graph *g,
                                                                std::unique_ptr<ResourceContext> &&rctx) = 0;
 
     /**

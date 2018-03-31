@@ -65,20 +65,28 @@ PerTaskDevice::PerTaskDevice(sstl::not_null<tf::Device *> other, std::unique_ptr
     , m_base(other)
     , m_rctx(std::move(rctx))
 {
-    set_tensorflow_cpu_worker_threads(const_cast<CpuWorkerThreads *>(other->tensorflow_cpu_worker_threads()));
-    set_tensorflow_gpu_device_info(const_cast<GpuDeviceInfo *>(other->tensorflow_gpu_device_info()));
-    set_eigen_cpu_device(const_cast<Eigen::ThreadPoolDevice *>(other->eigen_cpu_device()));
+    reinitialize();
+}
+
+void PerTaskDevice::reset(sstl::not_null<tf::Device *> other, std::unique_ptr<ResourceContext> &&rctx)
+{
+    m_base = other;
+    m_rctx = std::move(rctx);
+    m_wrappedAllocators.clear();
+    reinitialize();
+}
+
+void PerTaskDevice::reinitialize()
+{
+    set_tensorflow_cpu_worker_threads(const_cast<CpuWorkerThreads *>(m_base->tensorflow_cpu_worker_threads()));
+    set_tensorflow_gpu_device_info(const_cast<GpuDeviceInfo *>(m_base->tensorflow_gpu_device_info()));
+    set_eigen_cpu_device(const_cast<Eigen::ThreadPoolDevice *>(m_base->eigen_cpu_device()));
 #ifdef TENSORFLOW_USE_SYCL
-    set_eigen_sycl_device(const_cast<Eigen::SyclDevice *>(other->eigen_sycl_device()));
+    set_eigen_sycl_device(const_cast<Eigen::SyclDevice *>(m_base->eigen_sycl_device()));
 #endif
 }
 
 PerTaskDevice::~PerTaskDevice() = default;
-
-void PerTaskDevice::setResourceContext(std::unique_ptr<ResourceContext> &&rctx)
-{
-    m_rctx = std::move(rctx);
-}
 
 bool PerTaskDevice::RequiresRecordingAccessedTensors() const
 {

@@ -4,7 +4,9 @@
 
 #include "oplibraries/tensorflow/tensorflow_headers.h"
 #include "oplibraries/tensorflow/device/cpu.h"
+#include "execution/executionengine.h"
 #include "utils/threadutils.h"
+#include "utils/objectpool.h"
 
 namespace salus::oplib::tensorflow {
 
@@ -53,11 +55,12 @@ Status SalusCPUDevice::MakeTensorFromProto(const tf::TensorProto &tensor_proto,
                                        tf::ProtoDebugString(tensor_proto));
 }
 
-std::unique_ptr<PerTaskDevice> SalusCPUDevice::createPerTaskDevice(const tf::Graph *graph,
+std::shared_ptr<PerTaskDevice> SalusCPUDevice::createPerTaskDevice(const tf::Graph *graph,
                                                                    std::unique_ptr<ResourceContext> &&rctx)
 {
     UNUSED(graph);
-    return std::make_unique<PerTaskCPUDevice>(this, std::move(rctx));
+    thread_local sstl::ObjectPool<PerTaskCPUDevice> pool;
+    return pool.acquire(this, std::move(rctx));
 }
 
 Status SalusCPUDeviceFactory::CreateDevices(const tf::SessionOptions &options, const std::string &name_prefix,
