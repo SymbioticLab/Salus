@@ -23,7 +23,7 @@ FLAGS = flags.FLAGS
 def main(argv):
     scfg = maybe_forced_preset(presets.OpTracing)
     scfg.use_gperf = True
-    scfg.build_type = 'gperf'
+    scfg.build_type = 'Profiling'
     scfg.scheduler = 'pack'
 
     def create_wl(ex):

@@ -2,7 +2,7 @@
 # Version 3.10 required from Boost 1.66.0 for imported target
 cmake_minimum_required(VERSION 3.10.0)
 
-project(executor)
+project(executor VERSION 1.0.0 LANGUAGES C CXX)
 
 #---------------------------------------------------------------------------------------
 # Initial setups
@@ -12,6 +12,9 @@ include(cmake/Utilities.cmake)
 list(APPEND CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR}/cmake)
 # Setup defaults
 include(cmake/Defaults.cmake)
+# Extra build types
+include(cmake/BuildTypes.cmake)
+
 # For feature_summary
 include(FeatureSummary)
 
@@ -21,14 +24,6 @@ include(FeatureSummary)
 option(WITH_TENSORFLOW "Build TensorFlow operation library" ON)
 
 option(WITH_TESTS "Build test suite in default target" OFF)
-
-option(WITH_ASAN "Build with Address Sanitizer and Undefined beheavior Sanitizer" OFF)
-
-option(WITH_MSAN "Build with Memory Sanitizer" OFF)
-
-option(WITH_TSAN "Build with Thread Sanitizer" OFF)
-
-option(WITH_GPERFTOOLS "Build with gperftools cpu profiler" OFF)
 
 option(WITH_TCMALLOC "Build with tcmalloc" OFF)
 
@@ -70,9 +65,9 @@ find_package(Boost 1.66 EXACT REQUIRED COMPONENTS
 set_package_properties(Boost PROPERTIES TYPE REQUIRED PURPOSE "For lock free queue and some utilities")
 add_definitions(-DBOOST_THREAD_VERSION=4)
 
-if(WITH_GPERFTOOLS OR WITH_TCMALLOC)
+if(WITH_TCMALLOC)
     find_package(Gperftools REQUIRED)
-endif(WITH_GPERFTOOLS OR WITH_TCMALLOC)
+endif(WITH_TCMALLOC)
 
 # Easylogging++
 include(thirdparty/UseEasyloggingpp.cmake)
@@ -93,29 +88,6 @@ feature_summary(INCLUDE_QUIET_PACKAGES FATAL_ON_MISSING_REQUIRED_PACKAGES WHAT A
 
 # Only set compile options after any inclusion of third party code
 include(cmake/CompileOptions.cmake)
-
-# Address Sanitizer
-if(WITH_ASAN)
-    add_compile_options(-fno-omit-frame-pointer)
-    add_compile_options(-fsanitize=address)
-    add_compile_options(-fsanitize=undefined)
-    set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -fsanitize=address -fsanitize=undefined")
-endif(WITH_ASAN)
-
-if(WITH_MSAN)
-    add_compile_options(-fno-omit-frame-pointer)
-    add_compile_options(-fsanitize=memory)
-    set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -fsanitize=memory")
-endif(WITH_MSAN)
-
-if(WITH_TSAN)
-    if(WITH_ASAN)
-        message(FATAL_ERROR "Thread Sanitizer can not be enabled with Address Sanitizer at the same time!")
-    endif()
-    add_compile_options(-fno-omit-frame-pointer)
-    add_compile_options(-fsanitize=thread)
-    set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -fsanitize=thread")
-endif(WITH_TSAN)
 
 # Detect features
 include(cmake/CheckCXXFeature.cmake)

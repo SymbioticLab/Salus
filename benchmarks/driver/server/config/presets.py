@@ -81,7 +81,7 @@ def Nvprof(**kwargs):
 def Gperf(**kwargs):
     # type: (...) -> SalusConfig
     return SalusConfig(
-        build_type='gperf',
+        build_type='Profiling',
         logconf='disable',
         hide_output=False,
         use_gperf=True,
