@@ -19,11 +19,19 @@
 #ifndef PLATFORM_SIGNALS_H
 #define PLATFORM_SIGNALS_H
 
+#include <utility>
+
 namespace signals {
+
+enum class SignalAction
+{
+    Exit,
+    Ignore,
+};
 
 void initialize();
 
-void waitForTerminate();
+std::pair<int, SignalAction> waitForTerminate();
 
 using Handler = void (int);
 
