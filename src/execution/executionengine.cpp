@@ -69,13 +69,13 @@ ExecutionEngine &ExecutionEngine::instance()
     return eng;
 }
 
-ExecutionEngine::ExecutionEngine()
+void ExecutionEngine::startScheduler()
 {
     // Start scheduling thread
     m_schedThread = std::make_unique<std::thread>(std::bind(&ExecutionEngine::scheduleLoop, this));
 }
 
-ExecutionEngine::~ExecutionEngine()
+void ExecutionEngine::stopScheduler()
 {
     // stop scheduling thread
     m_shouldExit = true;
@@ -87,6 +87,11 @@ ExecutionEngine::~ExecutionEngine()
     // NOTE: has to be done *after* the scheduling thread exits.
     m_newSessions.clear();
     m_deletedSessions.clear();
+}
+
+ExecutionEngine::~ExecutionEngine()
+{
+    stopScheduler();
 }
 
 ExecutionContext ExecutionEngine::createSessionOffer(ResourceMap rm)

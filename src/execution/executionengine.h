@@ -150,6 +150,9 @@ public:
 
     ExecutionContext createSessionOffer(ResourceMap rm);
 
+    void startScheduler();
+    void stopScheduler();
+
     ThreadPool &pool()
     {
         return m_pool;
@@ -166,7 +169,7 @@ public:
     }
 
 private:
-    ExecutionEngine();
+    ExecutionEngine() = default;
 
     // scheduler parameters
     SchedulingParam m_schedParam;

@@ -235,6 +235,10 @@ int main(int argc, char **argv)
 
     printConfiguration(args);
 
+    // Start scheduling engine
+    ExecutionEngine::instance().startScheduler();
+
+    // Then start server to accept request
     ZmqServer server;
     const auto &listen = (args)[flags::listen].asString();
     LOG(INFO) << "Starting server listening at " << listen;
