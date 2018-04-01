@@ -226,7 +226,7 @@ void ExecutorState::fetchRecvShape(const tf::Node *n)
 
     tf::Tensor t;
     if (zr->FindTensor(key, t)) {
-        tf::mutex_lock l(refinerMu_);
+        sstl::Guard l(refinerMu_);
         sendShapes_[key] = tf::PartialTensorShape(t.shape().dim_sizes());
     } else {
         VLOG(2) << "Recv key not found for a client terminated recv op : " << key;
@@ -235,7 +235,7 @@ void ExecutorState::fetchRecvShape(const tf::Node *n)
 
 void ExecutorState::addNodeToRefiner(const TaggedNode &tn)
 {
-    tf::mutex_lock l(refinerMu_);
+    sstl::Guard l(refinerMu_);
     auto node = tn.node;
 
     if (node->type_string() == "Slice") {

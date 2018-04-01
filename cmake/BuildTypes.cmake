@@ -13,7 +13,7 @@ set(CMAKE_SHARED_LINKER_FLAGS_ASAN "-fsanitize=address -fsanitize=undefined"
     CACHE STRING "Flags used by the shared libraries linker during ASan builds." FORCE)
 
 # Thread sanitizer
-set(CMAKE_CXX_FLAGS_TSAN "-DNDEBUG -g -O1 -fno-omit-frame-pointer -fsanitize=thread"
+set(CMAKE_CXX_FLAGS_TSAN "-DNDEBUG -g -O0 -fno-omit-frame-pointer -fsanitize=thread"
     CACHE STRING "Flags used by the C++ compiler during TSan builds." FORCE)
 
 set(CMAKE_C_FLAGS_TSAN "${CMAKE_CXX_FLAGS_TSAN}"

@@ -32,6 +32,7 @@
 #include "utils/threadutils.h"
 #include <boost/intrusive/list.hpp>
 #include <optional>
+#include <mutex>
 #include <unordered_map>
 #include <unordered_set>
 
@@ -404,7 +405,7 @@ private:
         std::vector<const tf::Node *> *nodes = nullptr;
 
         // Lock ordering: ExecutorState.mu_ < mu.
-        tf::mutex mu;
+        std::mutex mu;
 
         void InitializeFrameInfo(const tf::string &enter_name)
         {
@@ -435,7 +436,7 @@ private:
         inline bool DecrementOutstandingOps(const tf::remote::GraphView *gview, int64_t iter,
                                             TaggedNodeSeq *ready)
         {
-            tf::mutex_lock l(mu);
+            sstl::Guard l(mu);
             return DecrementOutstandingOpsLocked(gview, iter, ready);
         }
 
@@ -518,7 +519,7 @@ private:
 
     tf::ShapeRefiner refiner_;
     std::unordered_map<std::string, tf::PartialTensorShape> sendShapes_;
-    tf::mutex refinerMu_;
+    std::mutex refinerMu_;
 
     void addNodeToRefiner(const TaggedNode &tn);
 
@@ -526,7 +527,7 @@ private:
 
     inline auto shapeForNode(const tf::Node *n)
     {
-        tf::mutex_lock l(refinerMu_);
+        sstl::Guard l(refinerMu_);
         return refiner_.GetContext(n);
     }
 
@@ -561,7 +562,7 @@ private:
     std::atomic_int_fast32_t num_emitted_ops_;
     sstl::semaphore num_finished_ops_;
 
-    tf::mutex mu_;
+    std::mutex mu_;
     tf::Status status_ GUARDED_BY(mu_);
 
     // Contains a value for [node->id()] for the device context assigned by the
@@ -636,7 +637,7 @@ private:
         // add better optional debugging support.
         if (vlog_ && VLOG_IS_ON(1)) {
             const auto *item = impl_->gview_.node(node_id);
-            tf::mutex_lock l(frame->mu);
+            sstl::Guard l(frame->mu);
             frame->GetIteration(iter)->mark_completed(item->pending_id);
         }
     }
