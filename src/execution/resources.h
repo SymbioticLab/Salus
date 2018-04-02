@@ -45,7 +45,7 @@ ResourceType resourceTypeFromString(const std::string &rt);
 struct ResourceTag
 {
     ResourceType type;
-    DeviceSpec device;
+    salus::DeviceSpec device;
 
     static ResourceTag fromString(const std::string &str);
 
@@ -144,9 +144,9 @@ Resources &scale(Resources &lhs, double scale);
 std::string DebugString(const Resources &res, const std::string &indent = "");
 
 // some handy constant
-constexpr ResourceTag CPU0Memory {ResourceType::MEMORY, devices::CPU0};
-constexpr ResourceTag GPU0Memory {ResourceType::MEMORY, devices::GPU0};
-constexpr ResourceTag GPU1Memory {ResourceType::MEMORY, devices::GPU1};
+constexpr ResourceTag CPU0Memory {ResourceType::MEMORY, salus::devices::CPU0};
+constexpr ResourceTag GPU0Memory {ResourceType::MEMORY, salus::devices::GPU0};
+constexpr ResourceTag GPU1Memory {ResourceType::MEMORY, salus::devices::GPU1};
 } // namespace resources
 
 struct ResourceMap

@@ -25,6 +25,8 @@
 #include <sstream>
 #include <unordered_map>
 
+namespace salus {
+
 std::string enumToString(const DeviceType &dt)
 {
     switch (dt) {
@@ -56,7 +58,7 @@ DeviceType deviceTypeFromString(const std::string &rt)
 {
     auto pos = str.find(':');
     if (pos == std::string::npos) {
-        return {deviceTypeFromString(str), 0};
+        return DeviceSpec{deviceTypeFromString(str), 0};
     }
 
     DeviceSpec spec{deviceTypeFromString(str.substr(0, pos))};
@@ -80,3 +82,5 @@ std::ostream &operator<<(std::ostream &os, const DeviceSpec &c)
 {
     return os << enumToString(c.type) << ":" << c.id;
 }
+
+} // namespace salus

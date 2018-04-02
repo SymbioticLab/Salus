@@ -33,6 +33,7 @@
 #include "utils/date.h"
 #include "utils/macros.h"
 #include "utils/threadutils.h"
+#include <boost/range/algorithm.hpp>
 #include <sstream>
 
 using std::chrono::duration_cast;
@@ -49,44 +50,26 @@ namespace salus::oplib::tensorflow {
 
 ExecTask::ExecTask(ExecutorState *state, sstl::semaphore &num_finished_ops,
                    const ExecutorState::TaggedNode &node, const tf::OpKernelContext::Params &initial_params,
-                   tf::Rendezvous *rendez, int maxFailures)
-    : maxFailures(maxFailures)
+                   tf::Rendezvous *rendez, const int maxFailures)
+    : m_state(state)
+    , item(*m_state->impl_->gview_.node(node.node->id()))
+    , rendez(rendez)
+    , num_finished_ops(num_finished_ops)
+    , failureTimes(0)
+    , maxFailures(maxFailures)
+    , tagged_node(node)
     , op_kernel(nullptr, skip_delete_opkernel)
     , kernel_is_async(false)
     , has_ref_input(false)
-    , tagged_node(node)
     , params(initial_params)
-    , rendez(rendez)
-    , num_finished_ops(num_finished_ops)
-    , m_state(state)
 {
     params.inputs = &inputs;
     params.input_device_contexts = &input_device_contexts;
     params.input_alloc_attrs = &input_alloc_attrs;
 
-    tf::DeviceTypeVector tftypes;
-    auto ok =
-        tf::SupportedDeviceTypesForNode({tf::DEVICE_GPU, tf::DEVICE_CPU}, tagged_node.node->def(), &tftypes);
-    if (!ok.ok()) {
-        LOG(ERROR) << "Error while querying supported device for node " << tagged_node.node->name() << ": "
-                   << ok;
-    }
-
-    VLOG(2) << "Op " << tagged_node.node->def() << " supports device:";
-    supportedTypes.reserve(tftypes.size());
-    for (const auto &tft : tftypes) {
-        supportedTypes.emplace_back(tfDeviceTypeToType(tft));
-        VLOG(2) << "    " << tft.type();
-    }
-
-    auto device = tagged_node.node->def().device();
-    if (!device.empty()) {
-        supportedTypes.clear();
-        supportedTypes.push_back(tfDeviceNameToSpec(device).type);
-    }
     // pre compute estimated usage
-    for (auto t : supportedTypes) {
-        calcUsageFromShape(t);
+    for (auto t : item.supported_devices) {
+        calcUsageFromShape(DeviceSpec{t});
     }
 
     // pre compute debug string
@@ -96,9 +79,9 @@ ExecTask::ExecTask(ExecutorState *state, sstl::semaphore &num_finished_ops,
     m_cachedDebugString = oss.str();
 }
 
-const std::vector<DeviceType> &ExecTask::supportedDeviceTypes() const
+ExecTask::DeviceTypes ExecTask::supportedDeviceTypes() const
 {
-    return supportedTypes;
+    return item.supported_devices;
 }
 
 bool ExecTask::prepare(std::unique_ptr<ResourceContext> &&rctx) noexcept
@@ -108,8 +91,12 @@ bool ExecTask::prepare(std::unique_ptr<ResourceContext> &&rctx) noexcept
 
         auto &spec = rctx->spec();
 
-        auto match = [&spec](auto type) { return type == spec.type; };
-        if (std::none_of(supportedTypes.begin(), supportedTypes.end(), match)) {
+        if (boost::range::count(supportedDeviceTypes(), spec.type) == 0) {
+            LOG(ERROR) << "Try to prepare ExecTask on unsupported device type " << spec << " :" << DebugString();
+            LOG(ERROR) << "Supported device types are: ";
+            for (const auto &dt : supportedDeviceTypes()) {
+                LOG(ERROR) << "  " << enumToString(dt);
+            }
             return false;
         }
 
@@ -302,7 +289,6 @@ void ExecTask::run(Callbacks cbs) noexcept
     const auto input_frame = tagged_node.input_frame;
     const auto input_iter = tagged_node.input_iter;
     const auto id = node->id();
-    const auto &item = *gview.node(id);
 
     // clear early
     params.rendezvous = nullptr;
@@ -348,7 +334,7 @@ void ExecTask::run(Callbacks cbs) noexcept
         // transfer node. For transfer nodes, we need to propagate the "dead"
         // bit even when the node is dead.
         if (tagged_node.is_dead && !IsTransferNode(node)) {
-            afterCompute(true, cbs, item);
+            afterCompute(true, cbs);
             return;
         }
 
@@ -404,9 +390,9 @@ void ExecTask::run(Callbacks cbs) noexcept
             params.eigen_gpu_device = nullptr; // Force allocation
             pctx = std::make_unique<tf::OpKernelContext>(&params, item.num_outputs);
 
-            ditem.device->ComputeAsync(async, pctx.get(), [this, cbs = std::move(cbs), &item]() {
+            ditem.device->ComputeAsync(async, pctx.get(), [this, cbs = std::move(cbs)]() {
                 VLOG(2) << "Async Kernel done: " << SummarizeNodeDef(tagged_node.node->def());
-                afterCompute(false, cbs, item);
+                afterCompute(false, cbs);
             });
         } else {
             // Synchronous computes.
@@ -417,7 +403,7 @@ void ExecTask::run(Callbacks cbs) noexcept
             ditem.device->Compute(op_kernel.get(), pctx.get());
 
             VLOG(2) << "Kernel done: " << SummarizeNodeDef(tagged_node.node->def());
-            afterCompute(false, cbs, item);
+            afterCompute(false, cbs);
         } // if (kernel_is_async)
     } catch (const TFException &ex) {
         LOG(ERROR) << "Exception caught when preparing opItem " << DebugString() << ": " << ex.what();
@@ -425,7 +411,7 @@ void ExecTask::run(Callbacks cbs) noexcept
     }
 }
 
-void ExecTask::afterCompute(bool is_dead, const Callbacks &cbs, const NodeItem &item)
+void ExecTask::afterCompute(bool is_dead, const Callbacks &cbs)
 {
     CVLOG(1, logging::kOpTracing) << "OpItem Event " << DebugString() << " event: afterCompute";
     // `cbs.done` should be called last as `this` would be deleted in it.

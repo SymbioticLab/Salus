@@ -115,6 +115,29 @@ void GetMaxPendingCounts(const tf::Node *n, int *max_pending, int *max_dead_coun
     *max_dead_count = num_in_edges;
 }
 
+void FillinSupportedDeviceSpecs(sstl::not_null<NodeItem*> item)
+{
+    const auto &node = *item->node;
+    // A little cheat here, default to use TF device assignment
+    auto device = node.def().device();
+    if (!device.empty()) {
+        item->supported_devices.clear();
+        item->supported_devices.push_back(tfDeviceNameToSpec(device).type);
+        return;
+    }
+
+    tf::DeviceTypeVector tftypes;
+    auto ok = tf::SupportedDeviceTypesForNode({tf::DEVICE_GPU, tf::DEVICE_CPU}, node.def(), &tftypes);
+    if (!ok.ok()) {
+        LOG(ERROR) << "Error while querying supported device for node " << node.name() << ": " << ok;
+    }
+
+    item->supported_devices.reserve(tftypes.size());
+    for (const auto &tft : tftypes) {
+        item->supported_devices.emplace_back(tfDeviceTypeToType(tft));
+    }
+}
+
 tf::Status ExecutorImpl::Initialize()
 {
     gview_.Initialize(graph_.get());
@@ -167,13 +190,7 @@ tf::Status ExecutorImpl::Initialize()
         item->input_start = frame_info->total_inputs;
         frame_info->total_inputs += n->num_inputs();
 
-        // Create a kernel for the node on each possible device
-        /*
-        for (auto *tfdev : params_.deviceMgr.ListDevices()) {
-            SetupKernel(n)
-        }
-         */
-
+        FillinSupportedDeviceSpecs(item);
         // Mark all kernel as expensive to put them in our threadpool.
         item->kernel_is_expensive = true;
         item->is_merge = IsMerge(n);

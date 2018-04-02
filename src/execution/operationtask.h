@@ -16,17 +16,21 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef OPEARTIONTASK_H
-#define OPEARTIONTASK_H
+#ifndef SALUS_EXEC_OPEARTIONTASK_H
+#define SALUS_EXEC_OPEARTIONTASK_H
 
 #include "execution/devices.h"
 #include "execution/resources.h"
+
+#include <boost/range/any_range.hpp>
 
 #include <functional>
 #include <memory>
 #include <vector>
 
 class ResourceContext;
+
+namespace salus {
 class OperationTask
 {
 public:
@@ -46,7 +50,9 @@ public:
     virtual Resources estimatedUsage(const DeviceSpec &dev) = 0;
 
     // All supported device types for this task
-    virtual const std::vector<DeviceType> &supportedDeviceTypes() const = 0;
+    using DeviceTypes =
+        boost::any_range<DeviceType, boost::forward_traversal_tag, DeviceType &, std::ptrdiff_t>;
+    virtual DeviceTypes supportedDeviceTypes() const = 0;
 
     virtual int failedTimes() const = 0;
 
@@ -62,4 +68,6 @@ public:
     virtual void cancel() = 0;
 };
 
-#endif // OPEARTIONTASK_H
+} // namespace salus
+
+#endif // SALUS_EXEC_OPEARTIONTASK_H

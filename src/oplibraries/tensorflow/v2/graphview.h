@@ -21,6 +21,7 @@
 #define SALUS_OPLIB_TENSORFLOW_GRAPHVIEW_H
 
 #include "oplibraries/tensorflow/tensorflow_headers.h"
+#include "execution/devices.h"
 
 #include <memory>
 #include <unordered_map>
@@ -65,6 +66,11 @@ struct NodeItem
     int num_output_edges;
 
     tf::PendingCounts::Handle pending_id;
+
+    /**
+     * Supported devices
+     */
+    tf::gtl::InlinedVector<salus::DeviceType, 4> supported_devices;
 
     const EdgeInfo *output_edge_list() const
     {

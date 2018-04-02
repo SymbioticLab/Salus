@@ -30,6 +30,7 @@
 
 using std::optional;
 using sstl::Guard;
+using namespace salus;
 
 std::string enumToString(const ResourceType &rt)
 {
@@ -64,7 +65,7 @@ ResourceType resourceTypeFromString(const std::string &rt)
 {
     auto pos = str.find(':');
     if (pos == std::string::npos) {
-        return {resourceTypeFromString(str), {DeviceType::CPU, 0}};
+        return {resourceTypeFromString(str), DeviceSpec{DeviceType::CPU, 0}};
     }
 
     ResourceTag tag{};
@@ -224,10 +225,10 @@ using namespace resources;
 SessionResourceTracker::SessionResourceTracker()
 {
     // 100 G for CPU
-    m_limits[{ResourceType::MEMORY, DeviceType::CPU}] = 100_sz * 1024 * 1024 * 1024;
+    m_limits[{ResourceType::MEMORY, devices::CPU0}] = 100_sz * 1024 * 1024 * 1024;
 
     // 14 G for GPU 0
-    m_limits[{ResourceType::MEMORY, DeviceType::GPU}] = 14_sz * 1024 * 1024 * 1024;
+    m_limits[{ResourceType::MEMORY, devices::GPU0}] = 14_sz * 1024 * 1024 * 1024;
 }
 
 SessionResourceTracker::SessionResourceTracker(const Resources &cap)
@@ -560,7 +561,7 @@ std::vector<std::pair<size_t, uint64_t>> ResourceMonitor::sortVictim(
     usages.reserve(candidates.size());
 
     // TODO: currently only select based on GPU memory usage, generalize to all resources
-    ResourceTag tag{ResourceType::MEMORY, {DeviceType::GPU, 0}};
+    ResourceTag tag{ResourceType::MEMORY, devices::GPU0};
     {
         Guard g(m_mu);
         for (auto &ticket : candidates) {

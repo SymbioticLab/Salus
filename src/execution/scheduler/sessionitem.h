@@ -80,8 +80,8 @@ public:
         resUsage[resources::GPU0Memory].get() = 0;
         resUsage[resources::GPU1Memory].get() = 0;
         resUsage[resources::CPU0Memory].get() = 0;
-        resUsage[{ResourceType::GPU_STREAM, devices::GPU0}].get() = 0;
-        resUsage[{ResourceType::GPU_STREAM, devices::GPU1}].get() = 0;
+        resUsage[{ResourceType::GPU_STREAM, salus::devices::GPU0}].get() = 0;
+        resUsage[{ResourceType::GPU_STREAM, salus::devices::GPU1}].get() = 0;
     }
 
     ~SessionItem();

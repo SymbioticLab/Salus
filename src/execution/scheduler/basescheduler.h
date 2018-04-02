@@ -82,7 +82,7 @@ public:
      *
      * @returns true if paging is needed
      */
-    virtual bool insufficientMemory(const DeviceSpec &spec);
+    virtual bool insufficientMemory(const salus::DeviceSpec &spec);
 
     /**
      * @brief Per session debug information.
@@ -107,7 +107,7 @@ protected:
      * @param spec the device to preallocate on
      * @returns Whether the pre-allocation succeeded.
      */
-    bool maybePreAllocateFor(OperationItem &opItem, const DeviceSpec &spec);
+    bool maybePreAllocateFor(OperationItem &opItem, const salus::DeviceSpec &spec);
 
     /**
      * @brief submit task for execution.

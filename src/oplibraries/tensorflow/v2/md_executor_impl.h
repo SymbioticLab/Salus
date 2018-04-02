@@ -16,8 +16,8 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef MULTIDEVICEEXECUTORSTATEIMPL_H
-#define MULTIDEVICEEXECUTORSTATEIMPL_H
+#ifndef SALUS_OPLIB_TENSORFLOW_MD_EXECUTOR_IMPL_H
+#define SALUS_OPLIB_TENSORFLOW_MD_EXECUTOR_IMPL_H
 
 /*
  * Make sure tensorflow_headers is included first before
@@ -41,35 +41,11 @@
 
 namespace gtl = ::tensorflow::gtl;
 
+namespace salus {
 struct DeviceSpec;
+} // namespace salus
+
 namespace salus::oplib::tensorflow {
-
-/*
-namespace nodestats {
-inline int64_t NowInUsec()
-{
-    return tf::Env::Default()->NowMicros();
-}
-
-void SetScheduled(tf::NodeExecStats *nt, int64_t t);
-
-void SetAllStart(tf::NodeExecStats *nt);
-
-void SetOpStart(tf::NodeExecStats *nt);
-
-void SetOpEnd(tf::NodeExecStats *nt);
-
-void SetAllEnd(tf::NodeExecStats *nt);
-
-void SetOutput(tf::NodeExecStats *nt, int slot, const tf::Tensor *v);
-
-void SetMemory(tf::NodeExecStats *nt, tf::OpKernelContext *ctx);
-
-void SetReferencedTensors(tf::NodeExecStats *nt, const tf::TensorReferenceVector &tensors);
-
-bool SetTimelineLabel(tf::NodeExecStats *node_stats, const tf::Node *node);
-} // namespace nodestats
- */
 
 using TensorValueVec = gtl::InlinedVector<tf::TensorValue, 4>;
 using AllocatorAttributeVec = gtl::InlinedVector<tf::AllocatorAttributes, 4>;
@@ -668,4 +644,4 @@ private:
 
 } // namespace salus::oplib::tensorflow
 
-#endif // MULTIDEVICEEXECUTORSTATEIMPL_H
+#endif // SALUS_OPLIB_TENSORFLOW_MD_EXECUTOR_IMPL_H

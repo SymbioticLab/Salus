@@ -22,12 +22,15 @@
 #include <memory>
 #include <chrono>
 
+namespace salus {
 class OperationTask;
+} // namespace salus
+
 struct SessionItem;
 struct OperationItem
 {
     std::weak_ptr<SessionItem> sess;
-    std::unique_ptr<OperationTask> op;
+    std::unique_ptr<salus::OperationTask> op;
 
     size_t hash() const
     {

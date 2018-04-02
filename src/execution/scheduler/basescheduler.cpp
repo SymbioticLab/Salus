@@ -34,6 +34,8 @@ bool useGPU()
 }
 } // namespace
 
+using namespace salus;
+
 SchedulerRegistary &SchedulerRegistary::instance()
 {
     static SchedulerRegistary registary;
@@ -166,7 +168,8 @@ POpItem BaseScheduler::submitTask(POpItem &&opItem)
         if (dt == DeviceType::GPU && !useGPU()) {
             continue;
         }
-        spec = {dt, 0};
+        spec.type = dt;
+        spec.id = 0;
         if (maybePreAllocateFor(*opItem, spec)) {
             VLOG(3) << "Task scheduled on " << spec.DebugString();
             scheduled = true;

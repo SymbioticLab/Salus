@@ -38,7 +38,9 @@
 #include <unordered_map>
 #include <unordered_set>
 
+namespace salus {
 class OperationTask;
+} // namespace salus
 class ResourceContext;
 struct SessionItem;
 struct OperationItem;
@@ -97,7 +99,7 @@ class ExecutionContext
          */
         void removeFromEngine();
         void insertIntoEngine();
-        void enqueueOperation(std::unique_ptr<OperationTask> &&task);
+        void enqueueOperation(std::unique_ptr<salus::OperationTask> &&task);
 
         PSessionItem item;
         uint64_t resOffer;
@@ -130,7 +132,7 @@ public:
 
     std::optional<ResourceMap> offeredSessionResource() const;
 
-    void enqueueOperation(std::unique_ptr<OperationTask> &&task);
+    void enqueueOperation(std::unique_ptr<salus::OperationTask> &&task);
 
     void registerPagingCallbacks(PagingCallbacks &&pcb);
 
@@ -181,7 +183,7 @@ private:
 
     // Task life cycle
     friend class BaseScheduler;
-    std::unique_ptr<ResourceContext> makeResourceContext(PSessionItem sess, const DeviceSpec &spec,
+    std::unique_ptr<ResourceContext> makeResourceContext(PSessionItem sess, const salus::DeviceSpec &spec,
                                                          const Resources &res, Resources *missing=nullptr);
 
     POpItem submitTask(POpItem &&opItem);
@@ -199,7 +201,7 @@ private:
      * @param target page out to device 'target'
      * @return
      */
-    bool doPaging(const DeviceSpec &spec, const DeviceSpec &target);
+    bool doPaging(const salus::DeviceSpec &spec, const salus::DeviceSpec &target);
 
     // Incoming kernels
     void pushToSessionQueue(POpItem &&opItem);
@@ -230,11 +232,11 @@ private:
 class ResourceContext
 {
     ResourceMonitor &resMon;
-    DeviceSpec m_spec;
+    salus::DeviceSpec m_spec;
     uint64_t m_ticket;
 
 public:
-    const DeviceSpec &spec() const
+    const salus::DeviceSpec &spec() const
     {
         return m_spec;
     }
@@ -253,7 +255,7 @@ public:
      * @param other
      * @param spec
      */
-    ResourceContext(const ResourceContext &other, const DeviceSpec &spec);
+    ResourceContext(const ResourceContext &other, const salus::DeviceSpec &spec);
 
     /**
      * @brief Construct a resource context
@@ -270,7 +272,7 @@ public:
      * @param missing
      * @return
      */
-    bool initializeStaging(const DeviceSpec &spec, const Resources &res, Resources *missing);
+    bool initializeStaging(const salus::DeviceSpec &spec, const Resources &res, Resources *missing);
     void releaseStaging();
 
     struct OperationScope

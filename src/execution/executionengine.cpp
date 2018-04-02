@@ -45,6 +45,7 @@ using std::chrono::system_clock;
 using FpSeconds = std::chrono::duration<double, seconds::period>;
 using namespace std::chrono_literals;
 using namespace date;
+using namespace salus;
 
 namespace {
 inline void logScheduleFailure(const Resources &usage, const ResourceMonitor &resMon)

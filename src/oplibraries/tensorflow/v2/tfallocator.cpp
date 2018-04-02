@@ -121,13 +121,13 @@ void *PerOpAllocator::AllocateRaw(size_t alignment, size_t num_bytes)
         if (!ptr) {
             scope.rollback();
         }
-        checkMemory(ptr, num_bytes);
     } else {
         // No enough memory
         AllocLog(DEBUG) << "TFAllocator failed to allocate.";
         return nullptr;
     }
 
+    checkMemory(ptr, num_bytes);
     recordSize(ptr, num_bytes);
 
     if (!ptr) {
@@ -162,7 +162,6 @@ void *PerOpAllocator::AllocateRaw(size_t alignment, size_t num_bytes,
         if (!ptr) {
             scope.rollback();
         }
-        checkMemory(ptr, num_bytes);
     } else {
         // No enough memory
         AllocLog(DEBUG) << "TFAllocator failed to allocate.";
@@ -173,6 +172,7 @@ void *PerOpAllocator::AllocateRaw(size_t alignment, size_t num_bytes,
         return ptr;
     }
 
+    checkMemory(ptr, num_bytes);
     recordSize(ptr, num_bytes);
 
     Ref();
