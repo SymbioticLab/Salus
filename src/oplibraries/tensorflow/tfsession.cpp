@@ -125,14 +125,11 @@ TFSession::TFSessionPrivate::TFSessionPrivate(TFInstance &inst, ExecutionContext
     // Setup session manager that creates worker session later
     m_sessMgr = std::make_unique<LocalSessionMgr>([this, ctx](auto sessHandle) {
         // worker session takes ownership of a deviceMgr, so we create shadow devices for it.
-        std::vector<tf::Device *> shadowDevices;
-        for (auto d : m_inst.devices()) {
-            shadowDevices.emplace_back(tf::RenamedDevice::NewRenamedDevice(m_inst.namePrefix(), d, false, true));
-        }
-
         return std::make_unique<tf::WorkerSession>(sessHandle, m_inst.namePrefix(),
                                                    std::make_unique<EmptyWorkerCache>(),
-                                                   std::make_unique<tf::DeviceMgr>(shadowDevices),
+                                                   // use an empty device mgr for session, because we should use
+                                                   // the device mgr from worker_env to make sure we use ISalusDevice
+                                                   std::make_unique<tf::DeviceMgr>(std::vector<tf::Device*>{}),
                                                    std::make_unique<MDGraphMgr>(&m_workerEnv,
                                                                                 &m_inst.deviceMgr(), ctx));
 

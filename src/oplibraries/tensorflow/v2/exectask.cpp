@@ -25,6 +25,7 @@
 #include "exectask.h"
 #include "execution/devices.h"
 #include "oplibraries/tensorflow/device/salusdevices.h"
+#include "oplibraries/tensorflow/tfexception.h"
 #include "oplibraries/tensorflow/tfutils.h"
 #include "oplibraries/tensorflow/v2/tfallocator.h"
 #include "oplibraries/tensorflow/worker/devicecontextwithdevice.h"
@@ -50,8 +51,8 @@ namespace salus::oplib::tensorflow {
 ExecTask::ExecTask(ExecutorState *state, sstl::semaphore &num_finished_ops,
                    const ExecutorState::TaggedNode &node, const tf::OpKernelContext::Params &initial_params,
                    tf::Rendezvous *rendez, int maxFailures)
-    : deleteKernel(state->impl_->params_.delete_kernel)
-    , maxFailures(maxFailures)
+    : maxFailures(maxFailures)
+    , op_kernel(nullptr, skip_delete_opkernel)
     , kernel_is_async(false)
     , has_ref_input(false)
     , tagged_node(node)
@@ -118,59 +119,30 @@ bool ExecTask::prepare(std::unique_ptr<ResourceContext> &&rctx)
         return false;
     }
 
-    // First check if we already created the kernel on some device
-    op_kernel = nullptr;
-    owns_kernel = true;
-    std::string devName;
-    auto ok = m_state->impl_->params_.find_kernel(tagged_node.node->def(), &devName, &op_kernel);
-
-    bool done = true;
-    if (ok.ok() && op_kernel) {
-        // we saw this kernel before, check if the device match
-        if (devName.empty()) {
-            LOG(WARNING) << "We've created the kernel, but don't remember its device: "
-                         << tagged_node.node->name();
-            auto s = tf::errors::Internal("We've created the kernel, but don't remember its device");
-            op_kernel = nullptr;
-            done = false;
-        } else if (devName != ditem.device->name()) {
-            VLOG(3) << "Stateful kernel can not be moved: previously created on " << devName
-                    << ", now requested on " << ditem.device->name();
-            op_kernel = nullptr;
-            done = false;
-        }
-        // We are on the same device, good.
-        // this is a cached kernel.
-        owns_kernel = false;
-    } else if (!ok.ok()) {
-        LOG(ERROR) << "Failed to find kernel with status " << ok << " for Node: " << tagged_node.node->name();
-        statusInPrepare.Update(ok);
-        // it is okay, just continue to create the kernel
-    }
-
-    // Instantiate kernel if not already done
-    if (!op_kernel) {
-        auto s = m_state->SetupKernel(tagged_node, ditem, &op_kernel);
-        if (!s.ok()) {
-            LOG(ERROR) << "Error when creating kernel for node " << tagged_node.node->name() << ": " << s;
-            statusInPrepare.Update(s);
-            done = false;
-        }
-        // HACK:
-        if (op_kernel) {
-            owns_kernel = !ditem.function_library->IsStateful(op_kernel->type_string());
-        }
-    }
-
-    if (!done) {
+    // In case anything go wrong, don't leak resource
+    sstl::ScopeGuards onReturn([this](){
         // Release the resource context and the device we've given
         ditem.device.reset();
-        return done;
-    }
+    });
 
-    AllocLog(INFO) << "Pre allocated " << ditem.device->resourceContext() << " for " << DebugString();
+    // Instantiate kernel if not already done
+    try {
+        op_kernel = m_state->impl_->SetupKernel(tagged_node.node, ditem);
+    } catch (const TFException &ex) {
+        if (tf::errors::IsAlreadyExists(ex.code())) {
+            // found a kernel on another device
+            // ignore it as we probably have another chance to prepare on another device.
+            return false;
+        }
+        // rethrow otherwise
+        throw;
+    }
     kernel_is_async = (op_kernel->AsAsync() != nullptr);
 
+    AllocLog(INFO) << "Pre allocated " << ditem.device->resourceContext() << " for " << DebugString();
+
+    // Now we are sure things succeeded, cancel the cleanup
+    onReturn.dismiss();
     return true;
 }
 
@@ -334,7 +306,7 @@ void ExecTask::run(Callbacks cbs)
     DCHECK(ditem.device);
 
     // Start run
-    auto s = gview.SetAllocAttrForNode(node, ditem.device.get(), op_kernel);
+    auto s = gview.SetAllocAttrForNode(node, ditem.device.get(), op_kernel.get());
     if (!s.ok()) {
         m_state->MaybeMarkCompleted(input_frame, input_iter, id);
         afterRun(s, cbs);
@@ -371,7 +343,7 @@ void ExecTask::run(Callbacks cbs)
 
     // Prepares inputs.
     bool is_input_dead = false;
-    s = m_state->PrepareInputs(item, op_kernel, ditem.device, params.op_device_context, first_input, &inputs,
+    s = m_state->PrepareInputs(item, op_kernel.get(), ditem.device, params.op_device_context, first_input, &inputs,
                                &buflocks, &input_device_contexts, &input_alloc_attrs, &is_input_dead);
     if (!s.ok()) {
         // Inspect return state for retrying on memory failure
@@ -402,7 +374,7 @@ void ExecTask::run(Callbacks cbs)
     }
 
     // Set up compute params.
-    params.op_kernel = op_kernel;
+    params.op_kernel = op_kernel.get();
     params.frame_iter = tf::FrameAndIter(input_frame->frame_id, input_iter);
     params.is_input_dead = is_input_dead;
     params.output_attr_array = item.output_attrs();
@@ -431,7 +403,7 @@ void ExecTask::run(Callbacks cbs)
         pctx = std::make_unique<tf::OpKernelContext>(&params, item.num_outputs);
 
         DCHECK_NOTNULL(op_kernel);
-        ditem.device->Compute(op_kernel, pctx.get());
+        ditem.device->Compute(op_kernel.get(), pctx.get());
 
         VLOG(2) << "Kernel done: " << SummarizeNodeDef(tagged_node.node->def());
         afterCompute(false, cbs, item);
@@ -586,13 +558,6 @@ ResourceContext &ExecTask::resourceContext() const
     return ditem.device->resourceContext();
 }
 
-ExecTask::~ExecTask()
-{
-    // At this time m_state may already be deleted.
-    if (owns_kernel && op_kernel) {
-        DCHECK(ditem.function_library);
-        deleteKernel(op_kernel, ditem.function_library.get());
-    }
-}
+ExecTask::~ExecTask() = default;
 
 } // namespace salus::oplib::tensorflow

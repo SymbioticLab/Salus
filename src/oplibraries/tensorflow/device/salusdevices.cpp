@@ -22,6 +22,7 @@
 #include "execution/executionengine.h"
 #include "oplibraries/tensorflow/device/cpu.h"
 #include "oplibraries/tensorflow/device/gpu.h"
+#include "oplibraries/tensorflow/tfexception.h"
 #include "utils/threadutils.h"
 
 #include <mutex>
@@ -51,13 +52,22 @@ ISalusDevice *ISalusDevice::safe_cast(tf::Device *device)
     }
 
     if (device->device_type() == tf::DEVICE_CPU) {
-        return static_cast<SalusCPUDevice*>(device);
+        return static_cast<SalusCPUDevice *>(device);
     } else if (device->device_type() == tf::DEVICE_GPU) {
-        return static_cast<SalusGPUDevice*>(device);
+        return static_cast<SalusGPUDevice *>(device);
     } else {
         LOG(WARNING) << "ISalusDevice::safe_cast got unknown device type: " << device->device_type();
         return nullptr;
     }
+}
+
+ISalusDevice &ISalusDevice::safe_cast(tf::Device &device)
+{
+    auto sdev = safe_cast(&device);
+    if (!sdev) {
+        throw TFException(tf::errors::InvalidArgument("device is not an ISalusDevice: ", device.name()));
+    }
+    return *sdev;
 }
 
 PerTaskDevice::PerTaskDevice(sstl::not_null<tf::Device *> other, std::unique_ptr<ResourceContext> &&rctx)
@@ -78,7 +88,8 @@ void PerTaskDevice::reset(sstl::not_null<tf::Device *> other, std::unique_ptr<Re
 
 void PerTaskDevice::reinitialize()
 {
-    set_tensorflow_cpu_worker_threads(const_cast<CpuWorkerThreads *>(m_base->tensorflow_cpu_worker_threads()));
+    set_tensorflow_cpu_worker_threads(
+        const_cast<CpuWorkerThreads *>(m_base->tensorflow_cpu_worker_threads()));
     set_tensorflow_gpu_device_info(const_cast<GpuDeviceInfo *>(m_base->tensorflow_gpu_device_info()));
     set_eigen_cpu_device(const_cast<Eigen::ThreadPoolDevice *>(m_base->eigen_cpu_device()));
 #ifdef TENSORFLOW_USE_SYCL

@@ -55,7 +55,7 @@ Status SalusCPUDevice::MakeTensorFromProto(const tf::TensorProto &tensor_proto,
                                        tf::ProtoDebugString(tensor_proto));
 }
 
-std::shared_ptr<PerTaskDevice> SalusCPUDevice::createPerTaskDevice(const tf::Graph *graph,
+std::shared_ptr<PerTaskDevice> SalusCPUDevice::createPerTaskDevice(sstl::not_null<const tf::Graph *> graph,
                                                                    std::unique_ptr<ResourceContext> &&rctx)
 {
     UNUSED(graph);

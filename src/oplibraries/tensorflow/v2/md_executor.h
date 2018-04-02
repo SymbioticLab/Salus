@@ -26,16 +26,26 @@ limitations under the License.
 #include "oplibraries/tensorflow/tfutils.h"
 #include "utils/pointerutils.h"
 #include <functional>
+#include <memory>
 
 namespace tensorflow {
 class OpSegment;
 class NodeDef;
 class OpKernel;
-class Device;
 class DeviceMgr;
 } // namespace tensorflow
 
 namespace salus::oplib::tensorflow {
+class PerTaskDevice;
+
+using POpKernel = std::unique_ptr<tf::OpKernel, void (*)(tf::OpKernel *)>;
+
+constexpr void skip_delete_opkernel(tf::OpKernel *) {}
+constexpr void default_delete_opkernel(tf::OpKernel *k)
+{
+    delete k;
+}
+
 struct MultiDeviceExecutorParams
 {
     MultiDeviceExecutorParams(tf::DeviceMgr &deviceMgr, tf::ResourceMgr &resourceMgr)
@@ -55,17 +65,12 @@ struct MultiDeviceExecutorParams
     tf::ResourceMgr &resourceMgr;
 
     // create_fruntime creates function library runtime given device,
-    std::function<std::shared_ptr<tf::FunctionLibraryRuntime>(tf::Device *)> create_fruntime;
+    std::function<std::shared_ptr<tf::FunctionLibraryRuntime>(PerTaskDevice *)> create_fruntime;
 
-    // find_kernel returns an instance of op kernel, which was created on device.
-    // create_kernel returns an instance of op kernel based on NodeDef for device d.
-    // delete_kernel is called for every kernel used by the executor
-    // when the executor is deleted.
-    std::function<Status(const tf::NodeDef &, std::string *, tf::OpKernel **)> find_kernel;
-
-    std::function<Status(const tf::NodeDef &, tf::FunctionLibraryRuntime *, tf::OpKernel **)> create_kernel;
-
-    std::function<void(tf::OpKernel *, tf::FunctionLibraryRuntime *)> delete_kernel;
+    /**
+     * @brief Get a kernel for nodedef, throws TFException on error
+     */
+    std::function<POpKernel(const tf::NodeDef &, tf::FunctionLibraryRuntime *)> get_kernel;
 
     tf::Executor::Args::NodeOutputsCallback node_outputs_cb;
 };
@@ -73,10 +78,10 @@ struct MultiDeviceExecutorParams
 // Creates an Executor that computes the given "graph".
 //
 // If successful, returns the constructed executor in "*executor".
-// The caller keeps the ownership of "device".
 // The returned executor takes the ownership of "graph".
 // Otherwise, returns an error status.
-Status NewMultiDeviceExecutor(MultiDeviceExecutorParams params, const tf::Graph *graph, tf::Executor **executor);
+Status NewMultiDeviceExecutor(MultiDeviceExecutorParams params, std::unique_ptr<const tf::Graph> &&graph,
+                              tf::Executor **executor);
 
 } // namespace salus::oplib::tensorflow
 

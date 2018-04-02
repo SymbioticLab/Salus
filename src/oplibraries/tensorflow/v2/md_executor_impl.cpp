@@ -25,6 +25,7 @@
 
 #include "md_executor_impl.h"
 
+#include "oplibraries/tensorflow/tfexception.h"
 #include "oplibraries/tensorflow/v2/tfallocator.h"
 #include "oplibraries/tensorflow/worker/rendezvousmgr.h"
 #include "oplibraries/tensorflow/device/salusdevices.h"
@@ -434,13 +435,41 @@ tf::Status ExecutorImpl::LookupDevice(const DeviceSpec &spec, std::unique_ptr<Re
         return ok;
     }
 
-    item->device = sdev->createPerTaskDevice(graph_, std::move(rctx));
+    item->device = sdev->createPerTaskDevice(graph_.get(), std::move(rctx));
 
     item->function_library = params_.create_fruntime(item->device.get());
 
     item->device_record_tensor_access = item->device->RequiresRecordingAccessedTensors();
     return tf::Status::OK();
 }
+
+POpKernel ExecutorImpl::SetupKernel(sstl::not_null<const tf::Node *> node, const DeviceItem &ditem)
+{
+    TIMED_FUNC_IF(timerObj, VLOG_IS_ON(1));
+
+    // first check if we have a cache for this kernel and if so, if the kernel is on the same device
+    {
+        sstl::Guard g(kernel_dev_mu_);
+        auto it = kernel_dev_.find(node->name());
+        if (it != kernel_dev_.end())
+            if (it->second != &ditem.device->underlayingDevice()) {
+                throw TFException(tf::errors::AlreadyExists("Kernel previously created on another device:", node->name(),
+                                                 " previous device: ", it->second->name(),
+                                                 " requested device: ", ditem.device->underlayingDevice().name()));
+        }
+    }
+
+    VLOG(2) << "Creating a kernel for device: " << ditem.device->name();
+    auto popkernel = params_.get_kernel(node->def(), ditem.function_library.get());
+
+    // only record device placement after create kernel, because get_kernel may throw
+    {
+        sstl::Guard g(kernel_dev_mu_);
+        kernel_dev_.emplace(node->name(), &ditem.device->underlayingDevice());
+    }
+    return popkernel;
+}
+
 
 /**
  * If entry->alloc_tree is not nullptr, add entry to entry->alloc_tree

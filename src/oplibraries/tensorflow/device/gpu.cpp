@@ -90,18 +90,18 @@ Status SalusGPUDevice::FillContextMap(const tf::Graph *, std::vector<tf::DeviceC
     return Status::OK();
 }
 
-void SalusGPUDevice::flushCacheFor(const tf::Graph *)
+void SalusGPUDevice::flushCacheFor(sstl::not_null<const tf::Graph *>)
 {
 //    VLOG(3) << "SalusGPUDevice::flushCacheFor(" << as_hex(graph) << ") on " << name();
 //    sstl::Guard g(m_muCache);
 //    m_streamAssignCache.erase(graph);
 }
 
-std::shared_ptr<PerTaskDevice> SalusGPUDevice::createPerTaskDevice(const tf::Graph *graph,
+std::shared_ptr<PerTaskDevice> SalusGPUDevice::createPerTaskDevice(sstl::not_null<const tf::Graph *> graph,
                                                                    std::unique_ptr<ResourceContext> &&rctx)
 {
     thread_local sstl::ObjectPool<PerTaskGPUDevice> pool;
-    VLOG(3) << "SalusGPUDevice::createPerTaskDevice on " << name() << " for " << as_hex(graph);
+    VLOG(3) << "SalusGPUDevice::createPerTaskDevice on " << name() << " for " << as_hex(graph.get());
     return pool.acquire(this, std::move(rctx));
 }
 

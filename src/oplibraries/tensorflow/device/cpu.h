@@ -34,13 +34,22 @@ public:
     Status MakeTensorFromProto(const tf::TensorProto &tensor_proto, const tf::AllocatorAttributes alloc_attrs,
                                tf::Tensor *tensor) override;
 
-    void flushCacheFor(const tf::Graph *graph) override
+    void flushCacheFor(sstl::not_null<const tf::Graph *>) override
     {
-        UNUSED(graph);
     }
 
-    std::shared_ptr<PerTaskDevice> createPerTaskDevice(const tf::Graph *graph,
+    std::shared_ptr<PerTaskDevice> createPerTaskDevice(sstl::not_null<const tf::Graph *> graph,
                                                        std::unique_ptr<ResourceContext> &&rctx) override;
+
+    tf::Device &as_tfdevice() override
+    {
+        return *this;
+    }
+
+    const tf::Device &as_tfdevice() const override
+    {
+        return *this;
+    }
 
 private:
     sstl::not_null<tf::Allocator *> m_allocator; // not owned

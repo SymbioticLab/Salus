@@ -30,11 +30,13 @@
 #include "oplibraries/tensorflow/v2/tensorutils.h"
 #include "utils/containerutils.h"
 #include "utils/threadutils.h"
+#include "utils/pointerutils.h"
 #include <boost/intrusive/list.hpp>
 #include <optional>
 #include <mutex>
 #include <unordered_map>
 #include <unordered_set>
+#include <memory>
 
 namespace gtl = ::tensorflow::gtl;
 
@@ -81,7 +83,7 @@ class ExecutorState;
 class ExecutorImpl : public tf::Executor
 {
 public:
-    ExecutorImpl(MultiDeviceExecutorParams &&p, const tf::Graph *g);
+    ExecutorImpl(MultiDeviceExecutorParams &&p, std::unique_ptr<const tf::Graph> &&g);
 
     ~ExecutorImpl() override;
 
@@ -151,10 +153,10 @@ private:
         tf::PendingCounts::Layout pending_counts_layout;
 
         // Each frame has its own PendingCounts only for the nodes in the frame.
-        tf::PendingCounts *pending_counts = nullptr; // Owned
+        sstl::owner<tf::PendingCounts *> pending_counts = nullptr; // Owned
 
         // The nodes in a frame. Used only for debugging.
-        std::vector<const tf::Node *> *nodes = nullptr; // Owned
+        sstl::owner<std::vector<const tf::Node *> *> nodes = nullptr; // Owned
 
         ~FrameInfo()
         {
@@ -163,8 +165,8 @@ private:
         }
     };
 
-    static tf::Status BuildControlFlowInfo(const tf::Graph *graph, ControlFlowInfo *cf_info);
-    void InitializePending(const tf::Graph *graph, const ControlFlowInfo &cf_info);
+    static tf::Status BuildControlFlowInfo(sstl::not_null<const tf::Graph *> graph, ControlFlowInfo *cf_info);
+    void InitializePending(sstl::not_null<const tf::Graph *> graph, const ControlFlowInfo &cf_info);
 
     FrameInfo *EnsureFrameInfo(const std::string &fname)
     {
@@ -175,9 +177,14 @@ private:
         return *slot;
     }
 
-    // Owned.
+    // Instantiate the op kernel for node.
+    POpKernel SetupKernel(sstl::not_null<const tf::Node *> node, const DeviceItem &ditem);
+
+    std::mutex kernel_dev_mu_;
+    std::unordered_map<std::string, const tf::Device*> kernel_dev_ GUARDED_BY(kernel_dev_mu_);
+
     MultiDeviceExecutorParams params_;
-    const tf::Graph *graph_;
+    std::unique_ptr<const tf::Graph> graph_;
     tf::remote::GraphView gview_;
     ExecutionContext inserter_;
 
@@ -380,7 +387,7 @@ private:
         int num_outstanding_iterations GUARDED_BY(mu) = 1;
 
         // The active iteration states of this frame.
-        gtl::InlinedVector<IterationState *, 12> iterations;
+        gtl::InlinedVector<sstl::owner<IterationState *>, 12> iterations;
 
         // The NextIteration nodes to enter a new iteration. If the number of
         // outstanding iterations reaches the limit, we will defer the start of
@@ -490,9 +497,9 @@ private:
 
         ~FrameState()
         {
-            for (size_t i = 0; i < iterations.size(); ++i) {
-                delete iterations[i];
-                iterations[i] = nullptr;
+            for (auto &iteration : iterations) {
+                delete iteration;
+                iteration = nullptr;
             }
         }
     };
@@ -565,10 +572,6 @@ private:
     std::mutex mu_;
     tf::Status status_ GUARDED_BY(mu_);
 
-    // Contains a value for [node->id()] for the device context assigned by the
-    // device at the beginning of a step, for each device
-    std::unordered_map<tf::Device *, tf::DeviceContextMap> m_deviceContextMaps GUARDED_BY(mu_);
-
     // Mapping from frame name to outstanding frames. A new frame is created
     // at some iteration of an active frame. So the unique key for the new
     // child frame is composed of the name of the parent frame, the iteration
@@ -596,17 +599,11 @@ private:
     // Process a ready node and submit to execution engine in current thread.
     void Process(TaggedNode node);
 
-    // Instantiate the op kernel for node.
-    tf::Status SetupKernel(TaggedNode node, const ExecutorImpl::DeviceItem &ditem, tf::OpKernel **op_kernel);
-
-    // Find a device context, or return nullptr
-    tf::DeviceContext *FindDeviceContext(size_t id, tf::Device *dev);
-
     // Before invoking item->kernel, fills in its "inputs".
-    tf::Status PrepareInputs(const tf::remote::NodeItem &item, tf::OpKernel *kernel,
+    tf::Status PrepareInputs(const tf::remote::NodeItem &item, sstl::not_null<tf::OpKernel *> kernel,
                              const std::shared_ptr<PerTaskDevice> &device,
                              tf::DeviceContext *device_context, Entry *first_input, TensorValueVec *inputs,
-                             BufferLockVec *buflocks, DeviceContextVec *input_device_contexts,
+                             sstl::not_null<BufferLockVec *> buflocks, DeviceContextVec *input_device_contexts,
                              AllocatorAttributeVec *input_alloc_attrs, bool *is_input_dead);
 
     // After item->kernel computation is done, processes its outputs.

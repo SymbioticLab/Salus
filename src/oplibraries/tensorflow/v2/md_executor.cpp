@@ -60,25 +60,22 @@ void ExecutionEngineRunner(tf::Executor::Args::Closure c)
 
 } // namespace
 
-tf::Status NewMultiDeviceExecutor(MultiDeviceExecutorParams params, const tf::Graph *graph,
+tf::Status NewMultiDeviceExecutor(MultiDeviceExecutorParams params, std::unique_ptr<const tf::Graph> &&graph,
                                   tf::Executor **executor)
 {
-    auto impl = new ExecutorImpl(std::move(params), graph);
+    auto impl = std::make_unique<ExecutorImpl>(std::move(params), std::move(graph));
     auto s = impl->Initialize();
     if (s.ok()) {
-        *executor = impl;
-    } else {
-        delete impl;
+        *executor = impl.release();
     }
     return s;
 }
 
-ExecutorImpl::ExecutorImpl(MultiDeviceExecutorParams &&p, const tf::Graph *g)
+ExecutorImpl::ExecutorImpl(MultiDeviceExecutorParams &&p, std::unique_ptr<const tf::Graph> &&g)
     : params_(std::move(p))
-    , graph_(g)
+    , graph_(std::move(g))
 {
-    DCHECK(params_.find_kernel != nullptr);
-    DCHECK(params_.create_kernel != nullptr);
+    DCHECK(params_.get_kernel != nullptr);
 
     using namespace std::placeholders;
     params_.ins.registerPagingCallbacks({
@@ -92,8 +89,6 @@ ExecutorImpl::~ExecutorImpl()
     for (auto fiter : frame_info_) {
         delete fiter.second;
     }
-    delete graph_;
-
     buffer_trees_.clear_and_dispose([](auto tree) { delete tree; });
 }
 
@@ -122,11 +117,11 @@ void GetMaxPendingCounts(const tf::Node *n, int *max_pending, int *max_dead_coun
 
 tf::Status ExecutorImpl::Initialize()
 {
-    gview_.Initialize(graph_);
+    gview_.Initialize(graph_.get());
 
     // Build the information about frames in this subgraph.
     ControlFlowInfo cf_info;
-    TF_RETURN_IF_ERROR(BuildControlFlowInfo(graph_, &cf_info));
+    TF_RETURN_IF_ERROR(BuildControlFlowInfo(graph_.get(), &cf_info));
 
     // Cache this value so we make this virtual function call once, rather
     // that O(# steps * # nodes per step) times.
@@ -172,6 +167,13 @@ tf::Status ExecutorImpl::Initialize()
         item->input_start = frame_info->total_inputs;
         frame_info->total_inputs += n->num_inputs();
 
+        // Create a kernel for the node on each possible device
+        /*
+        for (auto *tfdev : params_.deviceMgr.ListDevices()) {
+            SetupKernel(n)
+        }
+         */
+
         // Mark all kernel as expensive to put them in our threadpool.
         item->kernel_is_expensive = true;
         item->is_merge = IsMerge(n);
@@ -200,12 +202,12 @@ tf::Status ExecutorImpl::Initialize()
 
     // Initialize PendingCounts only after item->pending_id is initialized for
     // all nodes.
-    InitializePending(graph_, cf_info);
+    InitializePending(graph_.get(), cf_info);
 
     return tf::Status::OK();
 }
 
-tf::Status ExecutorImpl::BuildControlFlowInfo(const tf::Graph *g, ControlFlowInfo *cf_info)
+tf::Status ExecutorImpl::BuildControlFlowInfo(sstl::not_null<const tf::Graph *> g, ControlFlowInfo *cf_info)
 {
     const int num_nodes = g->num_node_ids();
     cf_info->frame_names.resize(num_nodes);
@@ -268,7 +270,7 @@ tf::Status ExecutorImpl::BuildControlFlowInfo(const tf::Graph *g, ControlFlowInf
     return tf::Status::OK();
 }
 
-void ExecutorImpl::InitializePending(const tf::Graph *graph, const ControlFlowInfo &cf_info)
+void ExecutorImpl::InitializePending(sstl::not_null<const tf::Graph *> graph, const ControlFlowInfo &cf_info)
 {
     for (auto &it : cf_info.unique_frame_names) {
         auto finfo = EnsureFrameInfo(it);
@@ -338,11 +340,6 @@ ExecutorState::~ExecutorState()
     for (auto name_frame : outstanding_frames_) {
         delete name_frame.second;
     }
-    for (auto it : m_deviceContextMaps) {
-        for (auto c : it.second) {
-            c->Unref();
-        }
-    }
 }
 
 void ExecutorState::RunAsync(const tf::Executor::DoneCallback &done)
@@ -356,7 +353,7 @@ void ExecutorState::RunAsync(const tf::Executor::DoneCallback &done)
             continue;
         }
         std::vector<tf::DeviceContext*> cmap;
-        tfdev->FillContextMap(impl_->graph_, &cmap);
+        tfdev->FillContextMap(impl_->graph_.get(), &cmap);
 
         // we don't actually use this map, free it
         for (auto ctx : cmap) {
@@ -420,51 +417,6 @@ void ExecutorState::Process(TaggedNode tagged_node)
     impl_->params_.ins.enqueueOperation(std::move(nodeTask));
 }
 
-tf::Status ExecutorState::SetupKernel(TaggedNode node, const ExecutorImpl::DeviceItem &ditem,
-                                      tf::OpKernel **op_kernel)
-{
-    TIMED_FUNC_IF(timerObj, VLOG_IS_ON(1));
-
-    auto &ndef = node.node->def();
-
-    tf::OpKernel *kernel = nullptr;
-    VLOG(2) << "Creating a kernel for device: " << ditem.device->name();
-    auto ok = impl_->params_.create_kernel(ndef, ditem.function_library.get(), &kernel);
-    if (!ok.ok()) {
-        *op_kernel = nullptr;
-        ok = AttachDef(ok, ndef);
-        LOG(WARNING) << "Executor failed to create kernel: " << ok;
-        return ok;
-    }
-    DCHECK(kernel);
-    *op_kernel = kernel;
-    return tf::Status::OK();
-}
-
-tf::DeviceContext *ExecutorState::FindDeviceContext(size_t id, tf::Device *device)
-{
-    TIMED_FUNC_IF(timerObj, VLOG_IS_ON(1));
-
-    auto it = m_deviceContextMaps.end();
-    {
-        sstl::Guard l(mu_);
-
-        it = m_deviceContextMaps.find(device);
-        if (it == m_deviceContextMaps.end()) {
-            tf::DeviceContextMap contexts;
-            auto ok = device->FillContextMap(impl_->graph_, &contexts);
-            if (!ok.ok()) {
-                LOG(ERROR) << "Filling contextmap failed: " << ok;
-            }
-            std::tie(it, std::ignore) = m_deviceContextMaps.emplace(device, std::move(contexts));
-        }
-    }
-    if (it != m_deviceContextMaps.end() && id < it->second.size()) {
-        return it->second[id];
-    }
-    return nullptr;
-}
-
 namespace {
 bool onSameDevice(tf::Device *devA, const tf::AllocatorAttributes &attrA, tf::Device *devB,
                   const tf::AllocatorAttributes &attrB)
@@ -484,15 +436,14 @@ bool onSameDevice(tf::Device *devA, const tf::AllocatorAttributes &attrA, tf::De
 }
 } // namespace
 
-tf::Status ExecutorState::PrepareInputs(const NodeItem &item, tf::OpKernel *kernel,
+tf::Status ExecutorState::PrepareInputs(const NodeItem &item, sstl::not_null<tf::OpKernel *> kernel,
                                         const std::shared_ptr<PerTaskDevice> &device,
                                         tf::DeviceContext *device_context, Entry *first_input,
-                                        TensorValueVec *inputs, BufferLockVec *buflocks,
+                                        TensorValueVec *inputs, sstl::not_null<BufferLockVec *> buflocks,
                                         DeviceContextVec *input_device_contexts,
                                         AllocatorAttributeVec *input_alloc_attrs, bool *is_input_dead)
 {
     TIMED_FUNC_IF(timerObj, VLOG_IS_ON(1));
-    DCHECK(buflocks);
 
     auto node = item.node;
     VLOG(2) << "Preparing " << item.num_inputs << " inputs for node " << node->name();
@@ -1190,7 +1141,7 @@ void ExecutorState::Finish()
         if (!sdev) {
             continue;
         }
-        sdev->flushCacheFor(impl_->graph_);
+        sdev->flushCacheFor(impl_->graph_.get());
     }
 
     // Get out handlers

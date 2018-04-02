@@ -91,8 +91,7 @@ private:
     Resources failedAlloc;
     std::string m_cachedDebugString;
 
-    tf::OpKernel *op_kernel = nullptr;
-    bool owns_kernel = true;
+    POpKernel op_kernel;
     bool kernel_is_async;
     bool has_ref_input;
     tf::Status statusInPrepare;

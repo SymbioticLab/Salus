@@ -40,10 +40,33 @@ public:
     explicit MDGraphMgr(const tf::WorkerEnv *env, tf::DeviceMgr *device_mgr, ExecutionContext execCtx);
     ~MDGraphMgr() override;
 
+    Status Register(const std::string &session, const tf::GraphDef &gdef,
+                    const tf::GraphOptions &graph_options, const tf::DebugOptions &debug_options,
+                    tf::DistributedFunctionLibraryRuntime *cluster_flr, std::string *handle) override;
+
 protected:
-    tf::Status InitItem(const std::string &session, const ::tensorflow::GraphDef &gdef,
-                        const tf::GraphOptions &graph_options, const tf::DebugOptions &debug_options,
-                        tf::DistributedFunctionLibraryRuntime *cluster_flr, Item *item) override;
+    struct MDItem : public Item
+    {
+        // Used to remove holds on devices
+        tf::DeviceMgr &deviceMgr;
+
+        explicit MDItem(tf::DeviceMgr &devMgr)
+            : Item()
+            , deviceMgr(devMgr)
+        {
+        }
+
+        ~MDItem() override
+        {
+            for (auto tfdev : deviceMgr.ListDevices()) {
+                tfdev->op_segment()->RemoveHold(session);
+            }
+        }
+    };
+
+    tf::Status InitMDItem(const std::string &session, const tf::GraphDef &gdef,
+                          const tf::GraphOptions &graph_options, const tf::DebugOptions &debug_options,
+                          tf::DistributedFunctionLibraryRuntime *cluster_flr, MDItem *item);
 
 private:
     ExecutionContext m_execCtx;

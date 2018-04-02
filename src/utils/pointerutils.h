@@ -88,6 +88,13 @@ struct ScopedUnref
         obj = nullptr;
     }
 
+    auto release()
+    {
+        auto tmp = obj;
+        obj = nullptr;
+        return tmp;
+    }
+
     auto get() const
     {
         return obj;
