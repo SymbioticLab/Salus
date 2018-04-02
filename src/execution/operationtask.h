@@ -50,14 +50,14 @@ public:
 
     virtual int failedTimes() const = 0;
 
-    virtual bool prepare(std::unique_ptr<ResourceContext> &&rctx) = 0;
+    virtual bool prepare(std::unique_ptr<ResourceContext> &&rctx) noexcept = 0;
 
     virtual ResourceContext &resourceContext() const = 0;
 
     // If allow paging happen when this task is running.
     virtual bool isAsync() const = 0;
 
-    virtual void run(Callbacks cbs) = 0;
+    virtual void run(Callbacks cbs) noexcept = 0;
 
     virtual void cancel() = 0;
 };

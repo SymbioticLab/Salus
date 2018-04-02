@@ -30,8 +30,8 @@
 #include "oplibraries/tensorflow/v2/tfallocator.h"
 #include "oplibraries/tensorflow/worker/devicecontextwithdevice.h"
 #include "oplibraries/tensorflow/worker/rendezvouswithhook.h"
-#include "utils/macros.h"
 #include "utils/date.h"
+#include "utils/macros.h"
 #include "utils/threadutils.h"
 #include <sstream>
 
@@ -44,7 +44,6 @@ using std::chrono::system_clock;
 using FpSeconds = std::chrono::duration<double, seconds::period>;
 using namespace std::chrono_literals;
 using namespace date;
-
 
 namespace salus::oplib::tensorflow {
 
@@ -102,48 +101,54 @@ const std::vector<DeviceType> &ExecTask::supportedDeviceTypes() const
     return supportedTypes;
 }
 
-bool ExecTask::prepare(std::unique_ptr<ResourceContext> &&rctx)
+bool ExecTask::prepare(std::unique_ptr<ResourceContext> &&rctx) noexcept
 {
-    statusInPrepare = tf::Status::OK();
-
-    auto &spec = rctx->spec();
-
-    auto match = [&spec](auto type) { return type == spec.type; };
-    if (std::none_of(supportedTypes.begin(), supportedTypes.end(), match)) {
-        return false;
-    }
-
-    auto s = m_state->impl_->LookupDevice(spec, std::move(rctx), &ditem);
-    if (!s.ok()) {
-        statusInPrepare.Update(s);
-        return false;
-    }
-
-    // In case anything go wrong, don't leak resource
-    sstl::ScopeGuards onReturn([this](){
-        // Release the resource context and the device we've given
-        ditem.device.reset();
-    });
-
-    // Instantiate kernel if not already done
     try {
-        op_kernel = m_state->impl_->SetupKernel(tagged_node.node, ditem);
-    } catch (const TFException &ex) {
-        if (tf::errors::IsAlreadyExists(ex.code())) {
-            // found a kernel on another device
-            // ignore it as we probably have another chance to prepare on another device.
+        statusInPrepare = tf::Status::OK();
+
+        auto &spec = rctx->spec();
+
+        auto match = [&spec](auto type) { return type == spec.type; };
+        if (std::none_of(supportedTypes.begin(), supportedTypes.end(), match)) {
             return false;
         }
-        // rethrow otherwise
-        throw;
+
+        auto s = m_state->impl_->LookupDevice(spec, std::move(rctx), &ditem);
+        if (!s.ok()) {
+            statusInPrepare.Update(s);
+            return false;
+        }
+
+        // In case anything go wrong, don't leak resource
+        sstl::ScopeGuards onReturn([this]() {
+            // Release the resource context and the device we've given
+            ditem.device.reset();
+        });
+
+        // Instantiate kernel if not already done
+        try {
+            op_kernel = m_state->impl_->SetupKernel(tagged_node.node, ditem);
+        } catch (const TFException &ex) {
+            if (tf::errors::IsAlreadyExists(ex.code())) {
+                // found a kernel on another device
+                // ignore it as we probably have another chance to prepare on another device.
+                return false;
+            }
+            // rethrow otherwise
+            throw;
+        }
+        kernel_is_async = (op_kernel->AsAsync() != nullptr);
+
+        AllocLog(INFO) << "Pre allocated " << ditem.device->resourceContext() << " for " << DebugString();
+
+        // Now we are sure things succeeded, cancel the cleanup
+        onReturn.dismiss();
+        return true;
+    } catch (const TFException &ex) {
+        LOG(ERROR) << "Exception caught when preparing opItem " << DebugString() << ": " << ex.what();
+        statusInPrepare = ex.code();
+        return false;
     }
-    kernel_is_async = (op_kernel->AsAsync() != nullptr);
-
-    AllocLog(INFO) << "Pre allocated " << ditem.device->resourceContext() << " for " << DebugString();
-
-    // Now we are sure things succeeded, cancel the cleanup
-    onReturn.dismiss();
-    return true;
 }
 
 bool ExecTask::isAsync() const
@@ -284,7 +289,7 @@ void ExecTask::cancel()
     }
 }
 
-void ExecTask::run(Callbacks cbs)
+void ExecTask::run(Callbacks cbs) noexcept
 {
     const auto &gview = m_state->impl_->gview_;
     auto *node = tagged_node.node;
@@ -296,124 +301,127 @@ void ExecTask::run(Callbacks cbs)
     // clear early
     params.rendezvous = nullptr;
 
-    if (!statusInPrepare.ok()) {
-        m_state->MaybeMarkCompleted(input_frame, input_iter, id);
-        afterRun(statusInPrepare, cbs);
-        return;
-    }
-
-    DCHECK(op_kernel);
-    DCHECK(ditem.device);
-
-    // Start run
-    auto s = gview.SetAllocAttrForNode(node, ditem.device.get(), op_kernel.get());
-    if (!s.ok()) {
-        m_state->MaybeMarkCompleted(input_frame, input_iter, id);
-        afterRun(s, cbs);
-        return;
-    }
-
-    params.device = ditem.device.get();
-
-    auto localRendez = new RendezvousWithHook(ditem.device, sstl::add_ref(rendez));
-    params.rendezvous = localRendez;
-    params.record_tensor_accesses = ditem.device_record_tensor_access;
-    params.function_library = ditem.function_library.get();
-    // Set the device_context for this node id, if it exists.
-    params.op_device_context = ditem.device->deviceContextForNode(id);
-
-    // Don't track allocations. Not implemented.
-    params.track_allocations = false;
-
-
-    VLOG(2) << "Process node: " << SummarizeNodeDef(node->def()) << " " << ditem.device->resourceContext();
-
-    auto input_tensors = m_state->GetInputTensors(input_frame, input_iter);
-    first_input = input_tensors + item.input_start;
-
-    CVLOG(1, logging::kOpTracing) << "OpItem Event " << DebugString()
-                                  << " event: afterDevCtx";
-    // Only execute this node if it is not dead or it is a send/recv
-    // transfer node. For transfer nodes, we need to propagate the "dead"
-    // bit even when the node is dead.
-    if (tagged_node.is_dead && !IsTransferNode(node)) {
-        afterCompute(true, cbs, item);
-        return;
-    }
-
-    // Prepares inputs.
-    bool is_input_dead = false;
-    s = m_state->PrepareInputs(item, op_kernel.get(), ditem.device, params.op_device_context, first_input, &inputs,
-                               &buflocks, &input_device_contexts, &input_alloc_attrs, &is_input_dead);
-    if (!s.ok()) {
-        // Inspect return state for retrying on memory failure
-        if (maybeMemoryFailure(s, cbs.memFailure)) {
+    try {
+        if (!statusInPrepare.ok()) {
+            m_state->MaybeMarkCompleted(input_frame, input_iter, id);
+            afterRun(statusInPrepare, cbs);
             return;
         }
-        // Clear inputs.
-        m_state->ClearInputs(first_input, item.num_inputs, buflocks);
-        afterRun(s, cbs);
-        return;
-    }
 
-    // record input sizes
-    input_size = 0;
-    for (auto &inp : inputs) {
-        if (inp.tensor) {
-            input_size += inp->shape().num_elements();
+        DCHECK(op_kernel);
+        DCHECK(ditem.device);
+
+        // Start run
+        auto s = gview.SetAllocAttrForNode(node, ditem.device.get(), op_kernel.get());
+        if (!s.ok()) {
+            m_state->MaybeMarkCompleted(input_frame, input_iter, id);
+            afterRun(s, cbs);
+            return;
         }
-    }
 
-    // Remember tickets for reffed inputs, they may be modified by the op
-    reffedEntries.clear();
-    for (auto entry = first_input; entry != first_input + item.num_inputs; ++entry) {
-        if (entry->ref) {
-            has_ref_input = true;
-            reffedEntries.push_back(entry);
+        params.device = ditem.device.get();
+
+        auto localRendez = new RendezvousWithHook(ditem.device, sstl::add_ref(rendez));
+        params.rendezvous = localRendez;
+        params.record_tensor_accesses = ditem.device_record_tensor_access;
+        params.function_library = ditem.function_library.get();
+        // Set the device_context for this node id, if it exists.
+        params.op_device_context = ditem.device->deviceContextForNode(id);
+
+        // Don't track allocations. Not implemented.
+        params.track_allocations = false;
+
+        VLOG(2) << "Process node: " << SummarizeNodeDef(node->def()) << " "
+                << ditem.device->resourceContext();
+
+        auto input_tensors = m_state->GetInputTensors(input_frame, input_iter);
+        first_input = input_tensors + item.input_start;
+
+        CVLOG(1, logging::kOpTracing) << "OpItem Event " << DebugString() << " event: afterDevCtx";
+        // Only execute this node if it is not dead or it is a send/recv
+        // transfer node. For transfer nodes, we need to propagate the "dead"
+        // bit even when the node is dead.
+        if (tagged_node.is_dead && !IsTransferNode(node)) {
+            afterCompute(true, cbs, item);
+            return;
         }
-    }
 
-    // Set up compute params.
-    params.op_kernel = op_kernel.get();
-    params.frame_iter = tf::FrameAndIter(input_frame->frame_id, input_iter);
-    params.is_input_dead = is_input_dead;
-    params.output_attr_array = item.output_attrs();
+        // Prepares inputs.
+        bool is_input_dead = false;
+        s = m_state->PrepareInputs(item, op_kernel.get(), ditem.device, params.op_device_context, first_input,
+                                   &inputs, &buflocks, &input_device_contexts, &input_alloc_attrs,
+                                   &is_input_dead);
+        if (!s.ok()) {
+            // Inspect return state for retrying on memory failure
+            if (maybeMemoryFailure(s, cbs.memFailure)) {
+                return;
+            }
+            // Clear inputs.
+            m_state->ClearInputs(first_input, item.num_inputs, buflocks);
+            afterRun(s, cbs);
+            return;
+        }
 
-    CVLOG(1, logging::kOpTracing) << "OpItem Event " << DebugString()
-                                  << " event: afterPrepInput";
+        // record input sizes
+        input_size = 0;
+        for (auto &inp : inputs) {
+            if (inp.tensor) {
+                input_size += inp->shape().num_elements();
+            }
+        }
 
-    if (kernel_is_async) {
-        // Asynchronous computes.
-        VLOG(2) << "Launch Async kernel";
-        auto async = op_kernel->AsAsync();
-        DCHECK_NOTNULL(async);
+        // Remember tickets for reffed inputs, they may be modified by the op
+        reffedEntries.clear();
+        for (auto entry = first_input; entry != first_input + item.num_inputs; ++entry) {
+            if (entry->ref) {
+                has_ref_input = true;
+                reffedEntries.push_back(entry);
+            }
+        }
 
-        // Ensure OpKernelContext constructor will make a new eigen GPU device if
-        // necessary.
-        params.eigen_gpu_device = nullptr; // Force allocation
-        pctx = std::make_unique<tf::OpKernelContext>(&params, item.num_outputs);
+        // Set up compute params.
+        params.op_kernel = op_kernel.get();
+        params.frame_iter = tf::FrameAndIter(input_frame->frame_id, input_iter);
+        params.is_input_dead = is_input_dead;
+        params.output_attr_array = item.output_attrs();
 
-        ditem.device->ComputeAsync(async, pctx.get(), [this, cbs = std::move(cbs), &item]() {
-            VLOG(2) << "Async Kernel done: " << SummarizeNodeDef(tagged_node.node->def());
+        CVLOG(1, logging::kOpTracing) << "OpItem Event " << DebugString() << " event: afterPrepInput";
+
+        if (kernel_is_async) {
+            // Asynchronous computes.
+            VLOG(2) << "Launch Async kernel";
+            auto async = op_kernel->AsAsync();
+            DCHECK_NOTNULL(async);
+
+            // Ensure OpKernelContext constructor will make a new eigen GPU device if
+            // necessary.
+            params.eigen_gpu_device = nullptr; // Force allocation
+            pctx = std::make_unique<tf::OpKernelContext>(&params, item.num_outputs);
+
+            ditem.device->ComputeAsync(async, pctx.get(), [this, cbs = std::move(cbs), &item]() {
+                VLOG(2) << "Async Kernel done: " << SummarizeNodeDef(tagged_node.node->def());
+                afterCompute(false, cbs, item);
+            });
+        } else {
+            // Synchronous computes.
+            VLOG(2) << "Launch sync kernel";
+            pctx = std::make_unique<tf::OpKernelContext>(&params, item.num_outputs);
+
+            DCHECK_NOTNULL(op_kernel);
+            ditem.device->Compute(op_kernel.get(), pctx.get());
+
+            VLOG(2) << "Kernel done: " << SummarizeNodeDef(tagged_node.node->def());
             afterCompute(false, cbs, item);
-        });
-    } else {
-        // Synchronous computes.
-        VLOG(2) << "Launch sync kernel";
-        pctx = std::make_unique<tf::OpKernelContext>(&params, item.num_outputs);
-
-        DCHECK_NOTNULL(op_kernel);
-        ditem.device->Compute(op_kernel.get(), pctx.get());
-
-        VLOG(2) << "Kernel done: " << SummarizeNodeDef(tagged_node.node->def());
-        afterCompute(false, cbs, item);
-    } // if (kernel_is_async)
+        } // if (kernel_is_async)
+    } catch (const TFException &ex) {
+        LOG(ERROR) << "Exception caught when preparing opItem " << DebugString() << ": " << ex.what();
+        afterRun(ex.code(), cbs);
+    }
 }
 
 void ExecTask::afterCompute(bool is_dead, const Callbacks &cbs, const tf::remote::NodeItem &item)
 {
-    CVLOG(1, logging::kOpTracing) << "OpItem Event " << DebugString()
-                                  << " event: afterCompute";
+    CVLOG(1, logging::kOpTracing) << "OpItem Event " << DebugString() << " event: afterCompute";
     // `cbs.done` should be called last as `this` would be deleted in it.
     auto &device = ditem.device;
     ExecutorState::EntryVector outputs;
@@ -439,8 +447,7 @@ void ExecTask::afterCompute(bool is_dead, const Callbacks &cbs, const tf::remote
     // Clears inputs.
     m_state->ClearInputs(first_input, item.num_inputs, buflocks);
 
-    CVLOG(1, logging::kOpTracing) << "OpItem Event " << DebugString()
-                                  << " event: afterClearInput";
+    CVLOG(1, logging::kOpTracing) << "OpItem Event " << DebugString() << " event: afterClearInput";
 
     // Mark completed
     auto input_frame = tagged_node.input_frame;
@@ -463,8 +470,7 @@ void ExecTask::afterCompute(bool is_dead, const Callbacks &cbs, const tf::remote
         device->ConsumeListOfAccessedTensors(pctx->op_device_context(), accessed);
     }
 
-    CVLOG(1, logging::kOpTracing) << "OpItem Event " << DebugString()
-                                  << " event: afterPropOut";
+    CVLOG(1, logging::kOpTracing) << "OpItem Event " << DebugString() << " event: afterPropOut";
     // Post process
     // call node done and cbs.done
     afterRun(s, cbs);

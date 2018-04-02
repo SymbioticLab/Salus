@@ -46,9 +46,9 @@ public:
     ExecTask(ExecutorState *state, sstl::semaphore &num_finished_ops, const ExecutorState::TaggedNode &node,
              const tf::OpKernelContext::Params &initial_params, tf::Rendezvous *rendez, int maxFailures = 2);
 
-    bool prepare(std::unique_ptr<ResourceContext> &&rctx) override;
+    bool prepare(std::unique_ptr<ResourceContext> &&rctx) noexcept override;
 
-    void run(Callbacks cbs) override;
+    void run(Callbacks cbs) noexcept override;
 
     void cancel() override;
 
