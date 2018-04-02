@@ -5,4 +5,7 @@
 #cmakedefine HAS_CXX_ALIGNED_ALLOC
 #cmakedefine WITH_GPERFTOOLS
 
+#cmakedefine SALUS_ENABLE_REFINER
+#cmakedefine SALUS_ENABLE_PARALLEL_SCHED
+
 #endif // EXECUTOR_CONFIG_H

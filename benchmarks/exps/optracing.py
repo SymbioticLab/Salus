@@ -30,7 +30,6 @@ def main(argv):
     wl = create_wl(Executor.TF)
     wl.env['TF_CPP_MIN_VLOG_LEVEL'] = '2'
     wl.env['TF_CPP_MIN_LOG_LEVEL'] = ''
-    print(wl.env)
     run_tf(FLAGS.save_dir / 'tf', wl)
 
     # Run alexnet_25 on Salus

@@ -101,6 +101,7 @@ public:
     }
 
     Resources failedResourceRequest() const;
+    Resources peakResourceUsage() const;
 
     virtual tf::DeviceContext *deviceContextForNode(int id) const = 0;
 

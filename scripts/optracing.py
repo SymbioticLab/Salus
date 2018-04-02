@@ -18,7 +18,7 @@ def load_tf():
     df = df[df.type != 'unknown'].drop(['level','loc', 'entry_type'], axis=1)
     
     # discard 20 warmup steps and first few steps, use the 5th iteration
-    step25 = df[df.step == 20 + 6]
+    step25 = df[df.step == 20 + 7]
     
     # discard some internal or async op: _SOURCE, _Recv, _Send
     ignored = ['_Recv', '_Send']
@@ -142,6 +142,35 @@ fig.tight_layout()
 fig.savefig('/home/peifeng/desktop/tfsalus.pdf', dpi=300)
 plt.close(fig)
 #%%
+#
+# Running one with matching iter
+#
+fig, axs = plt.subplots(nrows=2, ncols=1, sharex=True, figsize=(40, 70))
+draw_lines(axs[0], steptf, ['task_ready', 'task_start', 'task_done'],
+           colors=['g', 'r'])
+
+# load a few iters
+has_legend = False
+offset=None
+#iters = [132, 133, 134, 135, 136, 137, 138, 139, 140]
+iters = [133]
+for i in iters:
+    stepsalus = load_salus('logs/optracing/salus/1/perf.output', i)
+    ax, offset = draw_lines(axs[1], stepsalus, salus_events,
+                            colors=plt.rcParams['axes.prop_cycle'].by_key()['color'],
+                            labels=['Queuing', 'Prealloc', 'TPWait', 'DevCtx',
+                                    'PrepInput', 'Compute', 'ClrInput',
+                                    'PropOut', 'Misc'],
+                            offset=offset)
+    if not has_legend:
+        axs[1].legend()
+        has_legend = True
+axs[0].set_title('alexnet_25 on TF')
+axs[1].set_title('alexnet_25 on Salus')
+axs[1].set_xlabel('Normalized time (us)')
+fig.tight_layout()
+fig.savefig('/home/peifeng/desktop/tfsalus-later.pdf', dpi=300)
+plt.close(fig)
 
 #%%
 #

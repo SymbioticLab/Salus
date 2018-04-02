@@ -27,6 +27,10 @@ option(WITH_TESTS "Build test suite in default target" OFF)
 
 option(WITH_TCMALLOC "Build with tcmalloc" OFF)
 
+option(WITH_TF_REFINER "Enable ShapeRefiner in TF oplibrary" OFF)
+
+option(WITH_PARALLEL_SCHED "Enable parallel processing in scheduler" OFF)
+
 #---------------------------------------------------------------------------------------
 # Find packages
 #---------------------------------------------------------------------------------------
@@ -80,6 +84,8 @@ include(thirdparty/UseDocopt.cmake)
 #---------------------------------------------------------------------------------------
 add_feature_info(WITH_TENSORFLOW USE_TENSORFLOW "build TensorFlow operation library")
 add_feature_info(WITH_TESTS WITH_TESTS "build test suite with default target")
+add_feature_info(WITH_TF_REFINER WITH_TF_REFINER "enable ShapeRefiner in TF oplibrary")
+add_feature_info(WITH_PARALLEL_SCHED WITH_WITH_PARALLEL_SCHED "enable parallel processing in scheduler")
 feature_summary(INCLUDE_QUIET_PACKAGES FATAL_ON_MISSING_REQUIRED_PACKAGES WHAT ALL)
 
 #---------------------------------------------------------------------------------------
@@ -94,6 +100,15 @@ include(cmake/CheckCXXFeature.cmake)
 check_cxx_feature(cxx_enum_hash HAS_CXX_ENUM_HASH)
 check_cxx_feature(cxx_aligned_alloc HAS_CXX_ALIGNED_ALLOC)
 check_cxx_feature(cxx_builtin_expect HAS_CXX_BUILTIN_EXPECT)
+
+# Set feature macros
+if(WITH_TF_REFINER)
+    set(SALUS_ENABLE_REFINER 1)
+endif(WITH_TF_REFINER)
+
+if(WITH_PARALLEL_SCHED)
+    set(SALUS_ENABLE_PARALLEL_SCHED 1)
+endif(WITH_PARALLEL_SCHED)
 
 configure_file(src/config.h.in ${CMAKE_CURRENT_BINARY_DIR}/config.h)
 include_directories(${CMAKE_CURRENT_BINARY_DIR})

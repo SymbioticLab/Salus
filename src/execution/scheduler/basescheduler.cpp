@@ -212,33 +212,32 @@ size_t BaseScheduler::submitAllTaskFromQueue(const PSessionItem &item)
         SessionItem::UnsafeQueue stage;
         stage.swap(queue);
 
-        const bool parallelScheduling = false;
-        if (parallelScheduling) {
-            // Do all schedule in queue in parallel
-            std::vector<std::future<std::shared_ptr<OperationItem>>> futures;
-            futures.reserve(stage.size());
-            for (auto &opItem : stage) {
-                auto fu = m_engine.pool().post([opItem = std::move(opItem), this]() mutable {
-                    DCHECK(opItem);
-                    return submitTask(std::move(opItem));
-                });
-                futures.emplace_back(std::move(fu));
-            }
+#if defined(SALUS_ENABLE_PARALLEL_SCHED)
+        // Do all schedule in queue in parallel
+        std::vector<std::future<std::shared_ptr<OperationItem>>> futures;
+        futures.reserve(stage.size());
+        for (auto &opItem : stage) {
+            auto fu = m_engine.pool().post([opItem = std::move(opItem), this]() mutable {
+                DCHECK(opItem);
+                return submitTask(std::move(opItem));
+            });
+            futures.emplace_back(std::move(fu));
+        }
 
-            for (auto &fu : futures) {
-                auto poi = fu.get();
-                if (poi) {
-                    queue.emplace_back(std::move(poi));
-                }
-            }
-        } else {
-            for (auto &opItem : stage) {
-                auto poi = submitTask(std::move(opItem));
-                if (poi) {
-                    queue.emplace_back(std::move(poi));
-                }
+        for (auto &fu : futures) {
+            auto poi = fu.get();
+            if (poi) {
+                queue.emplace_back(std::move(poi));
             }
         }
+#else
+        for (auto &opItem : stage) {
+            auto poi = submitTask(std::move(opItem));
+            if (poi) {
+                queue.emplace_back(std::move(poi));
+            }
+        }
+#endif
         VLOG(2) << "All opItem in session " << item->sessHandle << " examined";
 
         scheduled = size - queue.size();

@@ -207,15 +207,25 @@ void PerOpAllocator::DeallocateRaw(void *ptr)
     m_actualAlloc->DeallocateRaw(ptr);
     m_rctx->dealloc(ResourceType::MEMORY, num_bytes);
 
+    std::unordered_map<void*, size_t>::node_type nh;
     {
         sstl::Guard g(m_mu);
-        m_allocated.erase(ptr);
+        nh = m_allocated.extract(ptr);
         if (m_allocated.empty()) {
+            // FIXME: have a add ticket to session?
             m_rctx->removeTicketFromSession();
         }
+        if (nh) {
+            m_currentAlloc -= nh.mapped();
+        }
     }
-
-    Unref();
+    if (nh) {
+        Unref();
+    } else {
+        LOG(ERROR) << "Un recognized deallocation at " << as_hex(ptr)
+                   << " using allocator " << nameOrNull(m_actualAlloc) << "@" << as_hex(m_actualAlloc)
+                   << " with " << *m_rctx;
+    }
 }
 
 bool PerOpAllocator::ShouldAllocateEmptyTensors()
@@ -229,6 +239,8 @@ void PerOpAllocator::recordSize(void *ptr, size_t size)
     m_lastFailedAllocSize = size;
     if (ptr) {
         m_allocated[ptr] = size;
+        m_currentAlloc += size;
+        m_peakAllocSize = std::max(m_currentAlloc, m_peakAllocSize);
     }
 }
 

@@ -70,7 +70,7 @@ public:
     ResourceContext &resourceContext() const override;
 
 private:
-    void inferUsage(const DeviceSpec &dev);
+    Resources calcUsageFromShape(const DeviceSpec &dev);
 
     bool maybeMemoryFailure(const tf::Status &s, const MemFailCallback &memFailure);
 

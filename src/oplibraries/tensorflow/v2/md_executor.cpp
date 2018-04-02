@@ -361,10 +361,12 @@ void ExecutorState::RunAsync(const tf::Executor::DoneCallback &done)
         }
     }
 
+#if defined(SALUS_ENABLE_REFINER)
     // Process all client_terminated recv first for shape inference
     for (const auto *n : impl_->client_recv_nodes_) {
         fetchRecvShape(n);
     }
+#endif // SALUS_ENABLE_REFINER
 
     // Initialize the ready queue.
     TaggedNodeSeq ready;
@@ -1004,9 +1006,11 @@ void ExecutorState::ScheduleReady(const TaggedNodeSeq &ready)
     VLOG(2) << "ScheduleReady";
 
     // Infer shape
+#if defined(SALUS_ENABLE_REFINER)
     for (auto &tn : ready) {
         addNodeToRefiner(tn);
     }
+#endif // SALUS_ENABLE_REFINER
 
     // Schedule to run all the ready ops in thread pool.
     VLOG(2) << "Schedule to run all the ready ops in thread pool.";

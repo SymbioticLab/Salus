@@ -226,7 +226,7 @@ ptn_progcnt = re.compile(r"""Progress counter for session (?P<sess>\w+): (?P<cnt
 ptn_optracing = re.compile(r"""OpItem\sStat.*name=(?P<op>[^,]+),.*
                                type=(?P<kernel>[^,]+),.*
                                session=(?P<sess>[^,]+).*
-                               step_id=(?P<step>[^,]+).*
+                               step_id=(?P<step>[^,()]+).*
                                queued:\s(?P<task_ready>.+)\s
                                scheduled:\s(?P<task_sched>.+)\s
                                running:\s(?P<task_start>.+)\s
@@ -237,7 +237,7 @@ ptn_optracing = re.compile(r"""OpItem\sStat.*name=(?P<op>[^,]+),.*
 ptn_optracing_evt = re.compile(r"""OpItem\sEvent.*name=(?P<op>[^,]+),.*
                                    type=(?P<kernel>[^,]+),.*
                                    session=(?P<sess>[^,]+).*
-                                   step_id=(?P<step>[^,]+).*
+                                   step_id=(?P<step>[^,()]+).*
                                    event:\s(?P<evt>[^,]+)$""",
                                re.VERBOSE)
 

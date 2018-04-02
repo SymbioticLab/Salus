@@ -202,4 +202,15 @@ Resources PerTaskDevice::failedResourceRequest() const
     }
     return res;
 }
+
+Resources PerTaskDevice::peakResourceUsage() const
+{
+    Resources res;
+    sstl::Guard g(m_mu);
+    for (const auto &[aa, alloc] : m_wrappedAllocators) {
+        UNUSED(aa);
+        res[{ResourceType::MEMORY, alloc->resourceContext().spec()}] += alloc->peakAllocSize();
+    }
+    return res;
+}
 } // namespace salus::oplib::tensorflow
