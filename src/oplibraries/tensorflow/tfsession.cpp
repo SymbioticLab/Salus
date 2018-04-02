@@ -130,8 +130,7 @@ TFSession::TFSessionPrivate::TFSessionPrivate(TFInstance &inst, ExecutionContext
                                                    // use an empty device mgr for session, because we should use
                                                    // the device mgr from worker_env to make sure we use ISalusDevice
                                                    std::make_unique<tf::DeviceMgr>(std::vector<tf::Device*>{}),
-                                                   std::make_unique<MDGraphMgr>(&m_workerEnv,
-                                                                                &m_inst.deviceMgr(), ctx));
+                                                   std::make_unique<MDGraphMgr>(&m_workerEnv, ctx));
 
     });
 

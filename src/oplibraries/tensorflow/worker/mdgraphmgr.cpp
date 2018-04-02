@@ -24,8 +24,8 @@
 
 namespace salus::oplib::tensorflow {
 
-MDGraphMgr::MDGraphMgr(const tf::WorkerEnv *env, tf::DeviceMgr *device_mgr, ExecutionContext execCtx)
-    : GraphMgr(env, device_mgr)
+MDGraphMgr::MDGraphMgr(const tf::WorkerEnv *env, ExecutionContext execCtx)
+    : GraphMgr(env, env->device_mgr)
     , m_execCtx(std::move(execCtx))
 {
 }
@@ -36,7 +36,14 @@ Status MDGraphMgr::Register(const std::string& session, const tf::GraphDef& gdef
                             const tf::GraphOptions& graph_options, const tf::DebugOptions& debug_options,
                             tf::DistributedFunctionLibraryRuntime* cluster_flr, std::string* handle)
 {
-    auto item = sstl::make_scoped_unref<MDItem>(*worker_env_->device_mgr);
+    auto item = sstl::make_scoped_unref<MDItem>();
+    std::string tempHandle;
+    {
+        tf::mutex_lock l(mu_);
+        tempHandle = tf::strings::Printf("%016llx", ++next_id_);
+        item->handle = tempHandle;
+    }
+
     auto s = InitMDItem(session, gdef, graph_options, debug_options, cluster_flr, item);
     if (!s.ok()) {
         return s;
@@ -57,6 +64,8 @@ Status MDGraphMgr::InitMDItem(const std::string &session, const tf::GraphDef &gd
                               tf::DistributedFunctionLibraryRuntime *cluster_flr, MDItem *item)
 {
     item->session = session;
+    item->devices = device_mgr_->ListDevices();
+
     item->lib_def = std::make_unique<tf::FunctionLibraryDefinition>(tf::OpRegistry::Global(), gdef.library());
 
     if (gdef.versions().producer() >= 5) {
@@ -153,7 +162,7 @@ Status MDGraphMgr::InitMDItem(const std::string &session, const tf::GraphDef &gd
         // These holds are removed in ~MDItem.
         // NOTE: unit->device->op_segment()->RemoveHold is called in Item destructor, but we don't
         // add that hold, although it's not harmful as it doesn't delete things if not found.
-        for (auto tfdev : params.deviceMgr.ListDevices()) {
+        for (auto tfdev : item->devices) {
             tfdev->op_segment()->AddHold(session);
         }
 
@@ -170,7 +179,7 @@ Status MDGraphMgr::InitMDItem(const std::string &session, const tf::GraphDef &gd
             });
         };
 
-        params.get_kernel = [session](const auto &ndef, auto *lib) -> POpKernel {
+        params.get_kernel = [item](const auto &ndef, auto *lib) -> POpKernel {
             tf::OpKernel *kernel = nullptr;
             // We do not share the kernel via the OpSegment if the node is
             // stateless, or a function.
@@ -184,15 +193,22 @@ Status MDGraphMgr::InitMDItem(const std::string &session, const tf::GraphDef &gd
                 return {kernel, default_delete_opkernel};
             }
 
-            auto create_fn = [lib, &ndef](auto **kernel) {
-                return lib->CreateKernel(ndef, kernel);
+            // the kernel should hold a reference for item, but the function library runtime
+            // already holds one, so to simplify things, we omit the item->Ref() and Unref
+            // for kernel
+            auto create_fn = [item, lib, &ndef](auto **pkernel) {
+                auto ok = lib->CreateKernel(ndef, pkernel);
+                VLOG(2) << "Creating cached kernel " << ndef << "@" << as_hex(*pkernel)
+                        << " on device " << lib->device()->name() << " for graphHandle=" << item->handle;
+                return ok;
             };
             // Cache the kernel in base SalusDevice's op segment, rather than in per task device
             auto &tfdev = static_cast<PerTaskDevice*>(lib->device())->underlayingDevice();
-            // Kernels created for subgraph nodes need to be cached.  On
-            // cache miss, create_fn() is invoked to create a kernel based
+            // On cache miss, create_fn() is invoked to create a kernel based
             // on the function library here + global op registry.
-            SALUS_THROW_IF_ERROR(tfdev.op_segment()->FindOrCreate(session, ndef.name(), &kernel, create_fn));
+            SALUS_THROW_IF_ERROR(tfdev.op_segment()->FindOrCreate(item->session, ndef.name(), &kernel, create_fn));
+            VLOG(2) << "Using cached kernel " << ndef << "@" << as_hex(kernel)
+                    << " on device " << tfdev.name() << " for graphHandle=" << item->handle;
             return {kernel, skip_delete_opkernel};
         };
 

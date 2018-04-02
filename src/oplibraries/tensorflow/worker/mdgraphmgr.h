@@ -25,6 +25,7 @@
 #include <memory>
 #include <mutex>
 #include <unordered_map>
+#include <utility>
 
 namespace salus::oplib::tensorflow {
 
@@ -37,7 +38,7 @@ namespace salus::oplib::tensorflow {
 class MDGraphMgr : public tf::GraphMgr
 {
 public:
-    explicit MDGraphMgr(const tf::WorkerEnv *env, tf::DeviceMgr *device_mgr, ExecutionContext execCtx);
+    explicit MDGraphMgr(const tf::WorkerEnv *env, ExecutionContext execCtx);
     ~MDGraphMgr() override;
 
     Status Register(const std::string &session, const tf::GraphDef &gdef,
@@ -47,19 +48,13 @@ public:
 protected:
     struct MDItem : public Item
     {
-        // Used to remove holds on devices
-        tf::DeviceMgr &deviceMgr;
-
-        explicit MDItem(tf::DeviceMgr &devMgr)
-            : Item()
-            , deviceMgr(devMgr)
-        {
-        }
+        // Used to remove holds on devices' opsegment
+        std::vector<tf::Device *> devices;
 
         ~MDItem() override
         {
-            for (auto tfdev : deviceMgr.ListDevices()) {
-                tfdev->op_segment()->RemoveHold(session);
+            for (auto dev : devices) {
+                dev->op_segment()->RemoveHold(session);
             }
         }
     };
