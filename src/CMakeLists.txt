@@ -57,6 +57,7 @@ if(USE_TENSORFLOW)
         "oplibraries/tensorflow/v2/exectask.cpp"
         "oplibraries/tensorflow/v2/tensorutils.cpp"
         "oplibraries/tensorflow/v2/md_executor_impl.cpp"
+        "oplibraries/tensorflow/v2/graphview.cpp"
 
         "oplibraries/tensorflow/device/salusdevices.cpp"
         "oplibraries/tensorflow/device/cpu.cpp"

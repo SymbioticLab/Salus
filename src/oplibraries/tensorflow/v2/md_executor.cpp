@@ -803,8 +803,8 @@ void ExecutorState::ClearInputs(Entry *first, size_t num, BufferLockVec &buflock
     }
 }
 
-void ExecutorState::PropagateOutputs(const TaggedNode &tagged_node, const NodeItem *item,
-                                     EntryVector *outputs, TaggedNodeSeq *ready)
+void ExecutorState::PropagateOutputs(const TaggedNode &tagged_node, const NodeItem &item,
+                                     sstl::not_null<EntryVector *> outputs, TaggedNodeSeq *ready)
 {
     TIMED_FUNC_IF(timerObj, VLOG_IS_ON(1));
 
@@ -821,21 +821,20 @@ void ExecutorState::PropagateOutputs(const TaggedNode &tagged_node, const NodeIt
     FrameState *output_frame = input_frame;
     int64_t output_iter = input_iter;
 
-    if (!item->is_enter_exit_or_next_iter) {
+    if (!item.is_enter_exit_or_next_iter) {
         // Fast path for nodes types that don't need special handling
         DCHECK_EQ(input_frame, output_frame);
         // Normal path for most nodes
         sstl::Guard l(input_frame->mu);
         output_frame->ActivateNodes(item, is_dead, output_iter, outputs, ready);
-        is_frame_done = input_frame->DecrementOutstandingOpsLocked(&impl_->gview_, input_iter, ready);
-    } else if (item->is_enter) {
+        is_frame_done = input_frame->DecrementOutstandingOpsLocked(impl_->gview_, input_iter, ready);
+    } else if (item.is_enter) {
         bool is_constant;
         auto s = GetNodeAttr(node->def(), "is_constant", &is_constant);
         DCHECK(s.ok()) << s;
         FindOrCreateChildFrame(input_frame, input_iter, node, &output_frame);
         output_iter = 0;
         {
-            const NodeItem *item = impl_->gview_.node(node->id());
             sstl::Guard l(output_frame->mu);
             if (is_constant) {
                 // Propagate to all active iterations if this is a loop invariant.
@@ -845,15 +844,15 @@ void ExecutorState::PropagateOutputs(const TaggedNode &tagged_node, const NodeIt
             }
             output_frame->num_pending_inputs--;
         }
-        is_frame_done = input_frame->DecrementOutstandingOps(&impl_->gview_, input_iter, ready);
-    } else if (item->is_exit) {
+        is_frame_done = input_frame->DecrementOutstandingOps(impl_->gview_, input_iter, ready);
+    } else if (item.is_exit) {
         if (is_dead) {
             sstl::Guard l(input_frame->mu);
             // Stop and remember this node if it is a dead exit.
             if (input_iter == input_frame->iteration_count) {
                 input_frame->dead_exits.push_back(node);
             }
-            is_frame_done = input_frame->DecrementOutstandingOpsLocked(&impl_->gview_, input_iter, ready);
+            is_frame_done = input_frame->DecrementOutstandingOpsLocked(impl_->gview_, input_iter, ready);
         } else {
             output_frame = input_frame->parent_frame;
             output_iter = input_frame->parent_iter;
@@ -861,7 +860,7 @@ void ExecutorState::PropagateOutputs(const TaggedNode &tagged_node, const NodeIt
                 sstl::Guard l(output_frame->mu);
                 output_frame->ActivateNodes(item, is_dead, output_iter, outputs, ready);
             }
-            is_frame_done = input_frame->DecrementOutstandingOps(&impl_->gview_, input_iter, ready);
+            is_frame_done = input_frame->DecrementOutstandingOps(impl_->gview_, input_iter, ready);
         }
     } else {
         DCHECK(IsNextIteration(node));
@@ -878,7 +877,7 @@ void ExecutorState::PropagateOutputs(const TaggedNode &tagged_node, const NodeIt
             } else {
                 // If this is a new iteration, start it.
                 if (input_iter == input_frame->iteration_count) {
-                    input_frame->IncrementIteration(&impl_->gview_, ready);
+                    input_frame->IncrementIteration(impl_->gview_, ready);
                 }
                 output_iter = input_iter + 1;
             }
@@ -888,7 +887,7 @@ void ExecutorState::PropagateOutputs(const TaggedNode &tagged_node, const NodeIt
             DCHECK(input_frame == output_frame);
             output_frame->ActivateNodes(item, is_dead, output_iter, outputs, ready);
         }
-        is_frame_done = input_frame->DecrementOutstandingOpsLocked(&impl_->gview_, input_iter, ready);
+        is_frame_done = input_frame->DecrementOutstandingOpsLocked(impl_->gview_, input_iter, ready);
     }
 
     VLOG(3) << "After propagate the ready queue has size: " << ready->size();
@@ -1293,7 +1292,7 @@ void ExecutorState::CleanupFramesIterations(FrameState *frame, int64_t iter, Tag
     {
         sstl::Guard frame_lock(frame->mu);
         frame->GetIteration(iter)->outstanding_frame_count--;
-        is_frame_done = frame->CleanupIterations(&impl_->gview_, iter, ready);
+        is_frame_done = frame->CleanupIterations(impl_->gview_, iter, ready);
     }
     if (is_frame_done) {
         auto parent_frame = frame->parent_frame;
@@ -1307,15 +1306,16 @@ void ExecutorState::CleanupFramesIterations(FrameState *frame, int64_t iter, Tag
     }
 }
 
-void ExecutorState::FrameState::ActivateNodes(const NodeItem *item, const bool is_dead, int64_t iter,
-                                              EntryVector *outputs, TaggedNodeSeq *ready)
+void ExecutorState::FrameState::ActivateNodes(const NodeItem &item, const bool is_dead, int64_t iter,
+                                              sstl::not_null<EntryVector *> poutputs, TaggedNodeSeq *ready)
 {
     TIMED_FUNC_IF(timerObj, VLOG_IS_ON(1));
 
     auto &gview = executor->gview_;
+    auto &outputs = *poutputs.get();
     auto iter_state = GetIteration(iter);
-    auto num_output_edges = item->num_output_edges;
-    auto edges = item->output_edge_list();
+    auto num_output_edges = item.num_output_edges;
+    auto edges = item.output_edge_list();
     auto input_tensors = iter_state->input_tensors;
     for (int out_index = 0; out_index < num_output_edges; out_index++) {
         auto &e = edges[out_index];
@@ -1349,7 +1349,7 @@ void ExecutorState::FrameState::ActivateNodes(const NodeItem *item, const bool i
                 dst_dead = (dead_cnt == dst_item->num_inputs);
                 dst_ready = (count == 0) || ((count == 1) && dst_dead);
             } else {
-                if ((*outputs)[src_slot].has_value) {
+                if (outputs[src_slot].has_value) {
                     // This is a live data input.
                     int count = iter_state->pending(dst_pending_id);
                     iter_state->mark_live(dst_pending_id);
@@ -1369,13 +1369,13 @@ void ExecutorState::FrameState::ActivateNodes(const NodeItem *item, const bool i
                     // now.
                     iter_state->increment_dead_count(dst_pending_id);
                     const int dead_cnt = iter_state->dead_count(dst_pending_id);
-                    dst_dead = (dead_cnt == dst_item->num_inputs) || item->is_enter;
+                    dst_dead = (dead_cnt == dst_item->num_inputs) || item.is_enter;
                     dst_ready = (iter_state->pending(dst_pending_id) == 1) && dst_dead;
                     dst_need_input = false;
                 }
             }
         } else {
-            bool increment_dead = (is_dead || (!is_control_edge && !(*outputs)[src_slot].has_value));
+            bool increment_dead = (is_dead || (!is_control_edge && !outputs[src_slot].has_value));
             int pending, dead;
             iter_state->adjust_for_activation(dst_pending_id, increment_dead, &pending, &dead);
             dst_dead = (dead > 0);
@@ -1387,9 +1387,9 @@ void ExecutorState::FrameState::ActivateNodes(const NodeItem *item, const bool i
             const int dst_loc = dst_item->input_start + dst_slot;
             auto &entry = input_tensors[dst_loc];
             if (e.is_last) {
-                entry = std::move((*outputs)[src_slot]);
+                entry = std::move(outputs[src_slot]);
             } else {
-                entry = (*outputs)[src_slot];
+                entry = outputs[src_slot];
             }
 
             if (entry.has_value) {
@@ -1411,37 +1411,37 @@ void ExecutorState::FrameState::ActivateNodes(const NodeItem *item, const bool i
     }
 }
 
-void ExecutorState::FrameState::ActivateNexts(const GraphView *gview, int64_t iter, TaggedNodeSeq *ready)
+void ExecutorState::FrameState::ActivateNexts(const GraphView &gview, int64_t iter, TaggedNodeSeq *ready)
 {
     // Propagate the deferred NextIteration nodes to the new iteration.
     for (auto &node_entry : next_iter_roots) {
         auto *node = node_entry.first;
         auto &entry = node_entry.second;
         auto is_dead = !entry.has_value;
-        auto *item = gview->node(node->id());
+        auto &item = *gview.node(node->id());
         EntryVector outputs{entry};
         ActivateNodes(item, is_dead, iter, &outputs, ready);
     }
     next_iter_roots.clear();
 }
 
-void ExecutorState::FrameState::ActivateLoopInvs(const GraphView *gview, int64_t iter, TaggedNodeSeq *ready)
+void ExecutorState::FrameState::ActivateLoopInvs(const GraphView &gview, int64_t iter, TaggedNodeSeq *ready)
 {
     // Propagate loop invariants to the new iteration.
     for (auto &node_entry : inv_values) {
         auto *node = node_entry.first;
         auto &entry = node_entry.second;
         auto is_dead = !entry.has_value;
-        auto *item = gview->node(node->id());
+        auto &item = *gview.node(node->id());
         EntryVector outputs{entry};
         ActivateNodes(item, is_dead, iter, &outputs, ready);
     }
 }
 
-void ExecutorState::FrameState::AddLoopInv(const NodeItem *item, const Entry &entry, TaggedNodeSeq *ready)
+void ExecutorState::FrameState::AddLoopInv(const NodeItem &item, const Entry &entry, TaggedNodeSeq *ready)
 {
     // Store this value.
-    inv_values.emplace_back(item->node, entry);
+    inv_values.emplace_back(item.node, entry);
 
     // Make this value available to all iterations.
     bool is_dead = !entry.has_value;
@@ -1466,7 +1466,7 @@ bool ExecutorState::FrameState::IsIterationDone(int64_t iter)
     return false;
 }
 
-void ExecutorState::FrameState::IncrementIteration(const GraphView *gview, TaggedNodeSeq *ready)
+void ExecutorState::FrameState::IncrementIteration(const GraphView &gview, TaggedNodeSeq *ready)
 {
     iteration_count++;
     int64_t next_iter = iteration_count;
@@ -1484,7 +1484,7 @@ void ExecutorState::FrameState::IncrementIteration(const GraphView *gview, Tagge
     ActivateLoopInvs(gview, next_iter, ready);
 }
 
-bool ExecutorState::FrameState::CleanupIterations(const GraphView *gview, int64_t iter, TaggedNodeSeq *ready)
+bool ExecutorState::FrameState::CleanupIterations(const GraphView &gview, int64_t iter, TaggedNodeSeq *ready)
 {
     auto curr_iter = iter;
     while (curr_iter <= iteration_count && IsIterationDone(curr_iter)) {

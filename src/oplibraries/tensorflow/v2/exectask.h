@@ -74,7 +74,7 @@ private:
 
     bool maybeMemoryFailure(const tf::Status &s, const MemFailCallback &memFailure);
 
-    void afterCompute(bool is_dead, const Callbacks &cbs, const tf::remote::NodeItem &item);
+    void afterCompute(bool is_dead, const Callbacks &cbs, const NodeItem &item);
 
     void afterRun(const tf::Status &s, const Callbacks &cbs);
 

@@ -425,7 +425,7 @@ void ExecTask::run(Callbacks cbs) noexcept
     }
 }
 
-void ExecTask::afterCompute(bool is_dead, const Callbacks &cbs, const tf::remote::NodeItem &item)
+void ExecTask::afterCompute(bool is_dead, const Callbacks &cbs, const NodeItem &item)
 {
     CVLOG(1, logging::kOpTracing) << "OpItem Event " << DebugString() << " event: afterCompute";
     // `cbs.done` should be called last as `this` would be deleted in it.
@@ -463,7 +463,7 @@ void ExecTask::afterCompute(bool is_dead, const Callbacks &cbs, const tf::remote
 
     // propagate outputs
     if (s.ok()) {
-        m_state->PropagateOutputs(tagged_node, &item, &outputs, &ready);
+        m_state->PropagateOutputs(tagged_node, item, &outputs, &ready);
     }
     outputs.clear();
 

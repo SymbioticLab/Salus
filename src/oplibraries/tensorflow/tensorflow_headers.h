@@ -48,9 +48,8 @@
 #include <tensorflow/core/distributed_runtime/session_mgr_interface.h>
 #include <tensorflow/core/distributed_runtime/worker.h>
 #include <tensorflow/core/distributed_runtime/worker_cache.h>
-#include <tensorflow/core/distributed_runtime/zrpc/exechelper/graphview.h>
-#include <tensorflow/core/distributed_runtime/zrpc/exechelper/memorytypes.h>
 #include <tensorflow/core/distributed_runtime/zrpc/exechelper/paginghelper.h>
+#include <tensorflow/core/distributed_runtime/zrpc/exechelper/memorytypes.h>
 #include <tensorflow/core/framework/allocator.h>
 #include <tensorflow/core/framework/function.h>
 #include <tensorflow/core/framework/function.pb.h>

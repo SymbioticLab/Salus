@@ -28,6 +28,7 @@
 #include "execution/executionengine.h"
 #include "oplibraries/tensorflow/v2/md_executor.h"
 #include "oplibraries/tensorflow/v2/tensorutils.h"
+#include "oplibraries/tensorflow/v2/graphview.h"
 #include "utils/containerutils.h"
 #include "utils/threadutils.h"
 #include "utils/pointerutils.h"
@@ -185,7 +186,7 @@ private:
 
     MultiDeviceExecutorParams params_;
     std::unique_ptr<const tf::Graph> graph_;
-    tf::remote::GraphView gview_;
+    GraphView gview_;
     ExecutionContext inserter_;
 
     // Active entries. Used for handle paging request
@@ -440,7 +441,7 @@ private:
 
         // Decrement the outstanding op count and clean up the iterations in the
         // frame. Return true iff the execution of the frame is done.
-        inline bool DecrementOutstandingOps(const tf::remote::GraphView *gview, int64_t iter,
+        inline bool DecrementOutstandingOps(const GraphView &gview, int64_t iter,
                                             TaggedNodeSeq *ready)
         {
             sstl::Guard l(mu);
@@ -449,7 +450,7 @@ private:
 
         // Decrement the outstanding op count and clean up the iterations in the
         // frame. Return true iff the execution of the frame is done.
-        inline bool DecrementOutstandingOpsLocked(const tf::remote::GraphView *gview, int64_t iter,
+        inline bool DecrementOutstandingOpsLocked(const GraphView &gview, int64_t iter,
                                                   TaggedNodeSeq *ready) EXCLUSIVE_LOCKS_REQUIRED(mu)
         {
             IterationState *istate = GetIteration(iter);
@@ -471,28 +472,28 @@ private:
         bool IsIterationDone(int64_t iter) EXCLUSIVE_LOCKS_REQUIRED(mu);
 
         // Increments the iteration id. If this is a new iteration, initialize it.
-        void IncrementIteration(const tf::remote::GraphView *gview, TaggedNodeSeq *ready)
+        void IncrementIteration(const GraphView &gview, TaggedNodeSeq *ready)
             EXCLUSIVE_LOCKS_REQUIRED(mu);
 
         // Activate all the deferred NextIteration nodes in a new iteration.
-        void ActivateNexts(const tf::remote::GraphView *gview, int64_t iter, TaggedNodeSeq *ready)
+        void ActivateNexts(const GraphView &gview, int64_t iter, TaggedNodeSeq *ready)
             EXCLUSIVE_LOCKS_REQUIRED(mu);
 
         // Activate all the current loop invariants in a new iteration.
-        void ActivateLoopInvs(const tf::remote::GraphView *gview, int64_t iter, TaggedNodeSeq *ready)
+        void ActivateLoopInvs(const GraphView &gview, int64_t iter, TaggedNodeSeq *ready)
             EXCLUSIVE_LOCKS_REQUIRED(mu);
 
         // Add a new loop invariant and make it available to all active iterations.
-        void AddLoopInv(const tf::remote::NodeItem *item, const Entry &value, TaggedNodeSeq *ready)
+        void AddLoopInv(const NodeItem &item, const Entry &value, TaggedNodeSeq *ready)
             EXCLUSIVE_LOCKS_REQUIRED(mu);
 
         // Activate the successors of a node. Contents of *outputs are left in an
         // indeterminate state after returning from this method.
-        void ActivateNodes(const tf::remote::NodeItem *item, const bool is_dead, int64_t iter,
-                           EntryVector *outputs, TaggedNodeSeq *ready) EXCLUSIVE_LOCKS_REQUIRED(mu);
+        void ActivateNodes(const NodeItem &item, bool is_dead, int64_t iter,
+                           sstl::not_null<EntryVector *> outputs, TaggedNodeSeq *ready) EXCLUSIVE_LOCKS_REQUIRED(mu);
 
         // Cleanup iterations of this frame starting from iteration iter.
-        bool CleanupIterations(const tf::remote::GraphView *gview, int64_t iter, TaggedNodeSeq *ready)
+        bool CleanupIterations(const GraphView &gview, int64_t iter, TaggedNodeSeq *ready)
             EXCLUSIVE_LOCKS_REQUIRED(mu);
 
         ~FrameState()
@@ -600,14 +601,14 @@ private:
     void Process(TaggedNode node);
 
     // Before invoking item->kernel, fills in its "inputs".
-    tf::Status PrepareInputs(const tf::remote::NodeItem &item, sstl::not_null<tf::OpKernel *> kernel,
+    tf::Status PrepareInputs(const NodeItem &item, sstl::not_null<tf::OpKernel *> kernel,
                              const std::shared_ptr<PerTaskDevice> &device,
                              tf::DeviceContext *device_context, Entry *first_input, TensorValueVec *inputs,
                              sstl::not_null<BufferLockVec *> buflocks, DeviceContextVec *input_device_contexts,
                              AllocatorAttributeVec *input_alloc_attrs, bool *is_input_dead);
 
     // After item->kernel computation is done, processes its outputs.
-    tf::Status ProcessOutputs(const tf::remote::NodeItem &item, tf::OpKernelContext *ctx,
+    tf::Status ProcessOutputs(const NodeItem &item, tf::OpKernelContext *ctx,
                               const std::shared_ptr<PerTaskDevice> &device, EntryVector *outputs);
 
     // After item->kernel computation is done, clear its inputs.
@@ -616,8 +617,8 @@ private:
     // After processing the outputs, propagates the outputs to their dsts.
     // Contents of *outputs are left in an indeterminate state after
     // returning from this method.
-    void PropagateOutputs(const TaggedNode &tagged_node, const tf::remote::NodeItem *item,
-                          EntryVector *outputs, TaggedNodeSeq *ready);
+    void PropagateOutputs(const TaggedNode &tagged_node, const NodeItem &item,
+                          sstl::not_null<EntryVector *> outputs, TaggedNodeSeq *ready);
 
     // "node" just finishes. Takes ownership of "stats". Returns true if
     // execution has completed.
