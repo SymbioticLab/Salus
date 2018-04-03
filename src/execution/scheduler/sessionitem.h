@@ -63,7 +63,6 @@ private:
     std::atomic_bool protectOOM{true};
 
     friend class ExecutionEngine;
-    friend class ResourceContext;
     friend class BaseScheduler;
 
 public:
@@ -106,6 +105,18 @@ public:
      * ```
      */
     void prepareDelete(std::function<void()> cb);
+
+    /**
+     * @brief Allocator should call when there is memory allocation happens
+     * @param ticket
+     */
+    void notifyMemoryAllocation(uint64_t ticket);
+
+    /**
+     * @brief Allocator should call when there is no more memory allocation
+     * @param ticket
+     */
+    void removeMemoryAllocationTicket(uint64_t ticket);
 
 private:
     using AtomicResUsages = std::unordered_map<ResourceTag, sstl::MutableAtom>;

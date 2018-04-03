@@ -97,16 +97,12 @@ bool BaseScheduler::maybePreAllocateFor(OperationItem &opItem, const DeviceSpec 
         usage[{ResourceType::GPU_STREAM, spec}] = 1;
     }
 
-    Resources *missing;
-    {
-        sstl::Guard g(m_muRes);
-        missing = &m_missingRes[&opItem];
-    }
-    DCHECK_NOTNULL(missing);
-
-    auto rctx = m_engine.makeResourceContext(item, spec, usage, missing);
+    Resources missing;
+    auto rctx = m_engine.makeResourceContext(item, spec, usage, &missing);
     if (!rctx->isGood()) {
         // Failed to pre allocate resources
+        sstl::Guard g(m_muRes);
+        m_missingRes.emplace(&opItem, std::move(missing));
         return false;
     }
 
@@ -124,7 +120,12 @@ bool BaseScheduler::insufficientMemory(const DeviceSpec &spec)
 {
     sstl::Guard g(m_muRes);
 
+    if (m_missingRes.empty()) {
+        return false;
+    }
+
     // we need paging if all not scheduled opItems in this iteration
+    // are missing memory resource on the device
     for (const auto &[pOpItem, missing] : m_missingRes) {
         UNUSED(pOpItem);
         for (const auto &[tag, amount] : missing) {

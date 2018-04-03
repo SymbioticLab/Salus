@@ -54,3 +54,16 @@ void SessionItem::prepareDelete(std::function<void()> cb)
     // but haven't been removed from session list yet.
     pagingCb = {};
 }
+
+void SessionItem::notifyMemoryAllocation(uint64_t ticket)
+{
+    sstl::Guard g(tickets_mu);
+    tickets.emplace(ticket);
+}
+
+void SessionItem::removeMemoryAllocationTicket(uint64_t ticket)
+{
+    VLOG(2) << "Removing ticket " << ticket << " from session " << sessHandle;
+    sstl::Guard g(tickets_mu);
+    tickets.erase(ticket);
+}

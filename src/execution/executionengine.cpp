@@ -152,8 +152,7 @@ void ExecutionContext::Data::enqueueOperation(std::unique_ptr<OperationTask> &&t
     auto opItem = std::make_shared<OperationItem>();
     opItem->sess = item;
     opItem->op = std::move(task);
-    CVLOG(1, logging::kOpTracing) << "OpItem Event " << opItem->op->DebugString()
-                                  << " event: queued";
+    CVLOG(1, logging::kOpTracing) << "OpItem Event " << opItem->op->DebugString() << " event: queued";
 
     engine.pushToSessionQueue(std::move(opItem));
 }
@@ -328,7 +327,6 @@ void ExecutionEngine::scheduleLoop()
 
             item->protectOOM = enableOOMProtect;
             item->lastScheduled = 0;
-
         }
 
         PERFORMANCE_CHECKPOINT_WITH_ID(schedIterObj, "after-accept");
@@ -348,7 +346,7 @@ void ExecutionEngine::scheduleLoop()
                     << item->bgQueue.size();
 
             // Try schedule from this session
-            auto[count, shouldContinue] = scheduler->maybeScheduleFrom(item);
+            auto [count, shouldContinue] = scheduler->maybeScheduleFrom(item);
             item->lastScheduled = count;
 
             remainingCount += item->bgQueue.size();
@@ -380,8 +378,9 @@ void ExecutionEngine::scheduleLoop()
             if (noProgress && scheduler->insufficientMemory(dev)) {
                 if (m_sessions.size() > 1) {
                     didPaging = doPaging(dev, devices::CPU0);
-                } else {
-                    LOG(ERROR) << "OOM for single session happened: " << m_sessions.front()->sessHandle;
+                } else if (m_sessions.size() == 1) {
+                    LOG(ERROR) << "OOM on device " << dev
+                               << " for single session happened: " << m_sessions.front()->sessHandle;
                     {
                         sstl::Guard g(m_sessions.front()->tickets_mu);
                         auto usage = m_resMonitor.queryUsages(m_sessions.front()->tickets);
@@ -392,8 +391,9 @@ void ExecutionEngine::scheduleLoop()
             }
         }
         // succeed, retry another sched iter immediately
-        if (didPaging)
+        if (didPaging) {
             continue;
+        }
 
         PERFORMANCE_CHECKPOINT_WITH_ID(schedIterObj, "without-wait");
 
@@ -485,8 +485,7 @@ POpItem ExecutionEngine::submitTask(POpItem &&opItem)
 
 void ExecutionEngine::taskRunning(OperationItem &opItem)
 {
-    CVLOG(1, logging::kOpTracing) << "OpItem Event " << opItem.op->DebugString()
-                                  << " event: running";
+    CVLOG(1, logging::kOpTracing) << "OpItem Event " << opItem.op->DebugString() << " event: running";
     m_runningTasks += 1;
     if (!opItem.op->isAsync()) {
         m_noPagingRunningTasks += 1;
@@ -498,8 +497,7 @@ void ExecutionEngine::taskStopped(OperationItem &opItem, bool failed)
     auto &rctx = opItem.op->resourceContext();
     rctx.releaseStaging();
 
-    CVLOG(1, logging::kOpTracing) << "OpItem Event " << opItem.op->DebugString()
-                                  << " event: done";
+    CVLOG(1, logging::kOpTracing) << "OpItem Event " << opItem.op->DebugString() << " event: done";
     if (!failed) {
         if (VLOG_IS_ON(2)) {
             if (auto item = opItem.sess.lock(); item) {
@@ -554,7 +552,7 @@ bool ExecutionEngine::doPaging(const DeviceSpec &spec, const DeviceSpec &target)
     }
 
     if (VLOG_IS_ON(2)) {
-        for (auto[usage, pSess] : candidates) {
+        for (auto [usage, pSess] : candidates) {
             VLOG(2) << "Session " << pSess.get()->sessHandle << " usage: " << usage;
         }
     }
@@ -583,7 +581,7 @@ bool ExecutionEngine::doPaging(const DeviceSpec &spec, const DeviceSpec &target)
 
         VLOG(2) << "Visiting session: " << pSess->sessHandle;
 
-        for (auto[usage, victim] : victims) {
+        for (auto [usage, victim] : victims) {
             // preallocate some CPU memory for use.
             Resources res{{dstTag, usage}};
 
@@ -608,13 +606,13 @@ bool ExecutionEngine::doPaging(const DeviceSpec &spec, const DeviceSpec &target)
     }
 
     LOG(ERROR) << "All paging request failed. Dump all session usage";
-    for (auto[usage, pSess] : candidates) {
+    for (auto [usage, pSess] : candidates) {
         LOG(ERROR) << "Session " << pSess.get()->sessHandle << " usage: " << usage;
     }
     LOG(ERROR) << "Dump resource monitor status: " << m_resMonitor.DebugString();
 
     // Forcely kill one session
-    for (auto[usage, pSess] : candidates) {
+    for (auto [usage, pSess] : candidates) {
         sstl::Guard g(pSess.get()->mu);
         if (!pSess.get()->pagingCb) {
             continue;
@@ -679,9 +677,7 @@ void ResourceContext::releaseStaging()
 void ResourceContext::removeTicketFromSession() const
 {
     // last resource freed
-    sstl::Guard g(session->tickets_mu);
-    VLOG(2) << "Removing ticket " << m_ticket << " from session " << session->sessHandle;
-    session->tickets.erase(m_ticket);
+    session->removeMemoryAllocationTicket(m_ticket);
 }
 
 ResourceContext::~ResourceContext()
@@ -728,8 +724,6 @@ void ResourceContext::OperationScope::rollback()
 {
     DCHECK(valid);
     proxy.free(context.ticket(), res);
-    // no need to call removeTicketFromSession
-    // because this most likely will not be the last deallocation
 }
 
 void ResourceContext::OperationScope::commit()
@@ -741,6 +735,7 @@ void ResourceContext::OperationScope::commit()
     // the allocation is used by the session (i.e. the session left the scope without rollback)
     for (auto p : res) {
         context.session->resourceUsage(p.first) += p.second;
+        context.session->notifyMemoryAllocation(context.ticket());
     }
 }
 
