@@ -9,8 +9,8 @@ message("-- ${library_name} version: bundled")
 
 if(NOT EXISTS ${third_party_dir}/${library_name}/CMakeLists.txt)
     message(STATUS "--   Initialize submodule")
-    execute_process(COMMAND "git" "submodule" "update" "--init" "${library_name}"
-        WORKING_DIRECTORY "${third_party_dir}"
+    execute_process(COMMAND "git" "submodule" "update" "--init" "${third_party_dir}/${library_name}"
+        WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}"
         RESULT_VARIABLE retcode
     )
     if(NOT "${retcode}" STREQUAL "0")

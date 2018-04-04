@@ -34,9 +34,6 @@ option(WITH_PARALLEL_SCHED "Enable parallel processing in scheduler" OFF)
 #---------------------------------------------------------------------------------------
 # Find packages
 #---------------------------------------------------------------------------------------
-list(APPEND CMAKE_PREFIX_PATH ${PROJECT_SOURCE_DIR}/spack-packages)
-list(REMOVE_DUPLICATES CMAKE_PREFIX_PATH)
-
 # Protobuf
 #set(protobuf_MODULE_COMPATIBLE ON CACHE BOOL "CMake build-in FindProtobuf.cmake module compatible" FORCE)
 find_package(Protobuf 3.4.0 EXACT REQUIRED)
