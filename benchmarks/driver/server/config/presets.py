@@ -85,6 +85,7 @@ def Gperf(**kwargs):
         logconf='disable',
         hide_output=False,
         use_gperf=True,
+        kill_timeout=10,
     ).update(**kwargs)
 
 

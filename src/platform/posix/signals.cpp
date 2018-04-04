@@ -103,6 +103,9 @@ extern "C" void handler(int signo)
 
 void initialize()
 {
+    gTheSignal = 0;
+    gSignalAction = SignalAction::Ignore;
+
     installSignalHandler(SIGINT, handler);
     installSignalHandler(SIGTERM, handler);
 }
@@ -111,14 +114,14 @@ std::pair<int, SignalAction> waitForTerminate()
 {
     sigset_t set;
     sigemptyset(&set);
-    sigsuspend(&set);
+    sigaddset(&set, SIGTERM);
+    sigaddset(&set, SIGINT);
+    int sig;
+    sigwait(&set, &sig);
 
-    int theSignal = gTheSignal;
-    auto action = gSignalAction.load();
+    LOG(INFO) << "Received signal " << signalName(sig) << "(" << sig << ")";
 
-    LOG(INFO) << "Received signal " << signalName(theSignal);
-
-    return {theSignal, action};
+    return {sig, SignalAction::Exit};
 }
 
 } // namespace signals

@@ -10,13 +10,13 @@ project(executor VERSION 1.0.0 LANGUAGES C CXX)
 # Include utilities
 include(cmake/Utilities.cmake)
 list(APPEND CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR}/cmake)
+# For feature_summary
+include(FeatureSummary)
+
 # Setup defaults
 include(cmake/Defaults.cmake)
 # Extra build types
 include(cmake/BuildTypes.cmake)
-
-# For feature_summary
-include(FeatureSummary)
 
 #---------------------------------------------------------------------------------------
 # Available options

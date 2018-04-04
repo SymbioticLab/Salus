@@ -4,6 +4,8 @@
 #include "platform/signals.h"
 #include "rpcserver/zmqserver.h"
 #include "utils/macros.h"
+#include "utils/envutils.h"
+#include "profiler.h"
 
 #include <docopt.h>
 
@@ -195,11 +197,8 @@ void configureExecution(std::map<std::string, docopt::value> &args)
 
 void printConfiguration(std::map<std::string, docopt::value> &)
 {
-#if defined(NDEBUG)
-    LOG(INFO) << "Running in Release mode";
-#else
-    LOG(INFO) << "Running in Debug mode";
-#endif
+    LOG(INFO) << "Running build type: " << SALUS_BUILD_TYPE;
+
     {
         const auto &conf = el::Loggers::getLogger(logging::kDefTag)->typedConfigurations();
         LOG(INFO) << "Verbose logging level: " << el::Loggers::verboseLevel()
@@ -235,6 +234,11 @@ int main(int argc, char **argv)
 
     printConfiguration(args);
 
+#if defined(WITH_GPERFTOOLS)
+    const auto &profiler_output = sstl::fromEnvVarStr("SALUS_PROFILE", "/tmp/gperf.out");
+    LOG(INFO) << "Running under gperftools, output: " << profiler_output;
+    ProfilerStart(profiler_output);
+#endif
     // Start scheduling engine
     ExecutionEngine::instance().startScheduler();
 
@@ -246,5 +250,8 @@ int main(int argc, char **argv)
 
     server.join();
 
+#if defined(WITH_GPERFTOOLS)
+    ProfilerStop();
+#endif
     return 0;
 }

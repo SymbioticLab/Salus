@@ -99,9 +99,9 @@ class SalusServer(object):
             ]
 
         if self.config.use_gperf:
-            self.env['CPUPROFILE'] = '/tmp/gperf.out'
+            self.env['SALUS_PROFILE'] = '/tmp/gperf.out'
         else:
-            self.env['CPUPROFILE'] = ''
+            self.env['SALUS_PROFILE'] = ''
 
         self.args += [
             self._find_executable(),
@@ -219,8 +219,9 @@ class SalusServer(object):
             return
 
         logger.info(f'Killing server with pid: {self.proc.pid}')
-        _, alive = kill_tree(self.proc)
+        _, alive = kill_tree(self.proc, timeout=self.config.kill_timeout)
         if alive:
+            prompt.confirm('Server did not respond in time, do you want to kill hard?')
             logger.info(f'Force killing server with pid: {self.proc.pid}')
             kill_hard(alive)
 

@@ -67,7 +67,8 @@ set(CMAKE_BUILD_TYPE "${CMAKE_BUILD_TYPE}"
     FORCE)
 
 message(STATUS "Using build type: ${CMAKE_BUILD_TYPE}")
-if(CMAKE_BUILD_TYPE EQUAL "Profiling")
+if(CMAKE_BUILD_TYPE STREQUAL "Profiling")
     find_package(Gperftools REQUIRED)
+    set_package_properties(Gperftools PROPERTIES TYPE REQUIRED PURPOSE "For gperftools cpu profiler")
     set(WITH_GPERFTOOLS ON)
-endif(CMAKE_BUILD_TYPE EQUAL "Profiling")
+endif(CMAKE_BUILD_TYPE STREQUAL "Profiling")

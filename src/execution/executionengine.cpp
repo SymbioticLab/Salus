@@ -473,7 +473,7 @@ POpItem ExecutionEngine::submitTask(POpItem &&opItem)
 
             VLOG(2) << "Running opItem in session " << item->sessHandle << ": " << opItem->op->DebugString();
             taskRunning(*opItem);
-            opItem->op->run(cbs);
+            opItem->op->run(std::move(cbs));
         }
     });
     if (!c) {
