@@ -71,16 +71,9 @@ DeviceType deviceTypeFromString(const std::string &rt)
     return spec;
 }
 
-std::string DeviceSpec::DebugString() const
+std::string DeviceSpec::debugString() const
 {
-    std::ostringstream oss;
-    oss << enumToString(type) << ":" << id;
-    return oss.str();
-}
-
-std::ostream &operator<<(std::ostream &os, const DeviceSpec &c)
-{
-    return os << enumToString(c.type) << ":" << c.id;
+    return enumToString(type) + ":" + std::to_string(id);
 }
 
 } // namespace salus

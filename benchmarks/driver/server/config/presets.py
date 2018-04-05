@@ -28,10 +28,9 @@ def Debugging(**kwargs):
 def OpTracing(**kwargs):
     # type: (...) -> SalusConfig
     return SalusConfig(
-        build_type='Release',
+        build_type='OpTracing',
         logconf='optracing',
         hide_output=False,
-        extra_args=['-v', '1']
     ).update(**kwargs)
 
 
@@ -81,7 +80,7 @@ def Nvprof(**kwargs):
 def Gperf(**kwargs):
     # type: (...) -> SalusConfig
     return SalusConfig(
-        build_type='Profiling',
+        build_type='Gperf',
         logconf='disable',
         hide_output=False,
         use_gperf=True,

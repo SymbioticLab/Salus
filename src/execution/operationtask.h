@@ -44,7 +44,7 @@ public:
 
     virtual ~OperationTask();
 
-    virtual std::string DebugString() = 0;
+    virtual std::string DebugString() const = 0;
 
     // Estimate usage and cache the result
     virtual Resources estimatedUsage(const DeviceSpec &dev) = 0;
@@ -67,6 +67,16 @@ public:
 
     virtual void cancel() = 0;
 };
+
+inline std::ostream& operator<<(std::ostream& out, const OperationTask& op)
+{
+    return out << op.DebugString();
+}
+
+inline std::ostream& operator<<(std::ostream& out, const std::unique_ptr<OperationTask>& op)
+{
+    return out << op->DebugString();
+}
 
 } // namespace salus
 

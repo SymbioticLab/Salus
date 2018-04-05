@@ -77,9 +77,9 @@ public:
         // print time usage
         if (was_own) {
             using namespace std::chrono;
-            PerfLog(INFO) << "Mutex " << name << "@" << as_hex(g.mutex()) << " usage: acquiring "
-                          << duration_cast<microseconds>(locked - prelock).count() << "us, locking "
-                          << duration_cast<microseconds>(released - locked).count() << "us";
+            LogPerf() << "Mutex " << name << "@" << as_hex(g.mutex()) << " usage: acquiring "
+                      << duration_cast<microseconds>(locked - prelock).count() << "us, locking "
+                      << duration_cast<microseconds>(released - locked).count() << "us";
         }
     }
 

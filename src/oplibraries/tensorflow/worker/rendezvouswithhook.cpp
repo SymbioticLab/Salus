@@ -42,7 +42,7 @@ RendezvousWithHook::~RendezvousWithHook() = default;
 tensorflow::Status RendezvousWithHook::Send(const ParsedKey &parsed, const Args &send_args,
                                             const tensorflow::Tensor &val, const bool is_dead)
 {
-    VLOG(2) << "MultiDeviceRendezvous::Send " << parsed.FullKey().ToString();
+    VLOG(2) << "MultiDeviceRendezvous::Send " << parsed;
 
     auto args = send_args;
     args.device_context = new DeviceContextWithDevice(m_device, sstl::add_ref(send_args.device_context));
@@ -52,7 +52,7 @@ tensorflow::Status RendezvousWithHook::Send(const ParsedKey &parsed, const Args 
 
 void RendezvousWithHook::RecvAsync(const ParsedKey &parsed, const Args &recv_args, DoneCallback done)
 {
-    VLOG(2) << "MultiDeviceRendezvous::RecvAsync " << parsed.FullKey().ToString();
+    VLOG(2) << "MultiDeviceRendezvous::RecvAsync " << parsed;
 
     auto args = recv_args;
     args.device_context = new DeviceContextWithDevice(m_device, sstl::add_ref(recv_args.device_context));

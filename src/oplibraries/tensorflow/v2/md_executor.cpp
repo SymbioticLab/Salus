@@ -162,7 +162,7 @@ tf::Status ExecutorImpl::Initialize()
         auto frame_info = EnsureFrameInfo(frame_name);
 
         if (VLOG_IS_ON(3)) {
-            VLOG(3) << "Node " << id << " in graph@" << as_hex(graph_) << ": " << SummarizeNodeDef(n->def());
+            VLOG(3) << "Node " << id << " in graph@" << as_hex(graph_) << ": " << n->def();
         }
 
         const int num_in_edges = n->in_edges().size();
@@ -404,8 +404,6 @@ void ExecutorState::RunAsync(const tf::Executor::DoneCallback &done)
 
 void ExecutorState::Process(TaggedNode tagged_node)
 {
-    TIMED_FUNC_IF(timerObj, VLOG_IS_ON(1));
-
     // Initial parameters passed to OpKernel::Compute.
     tf::OpKernelContext::Params params;
     params.step_id = step_id_;
@@ -462,8 +460,6 @@ tf::Status ExecutorState::PrepareInputs(const NodeItem &item, sstl::not_null<tf:
                                         DeviceContextVec *input_device_contexts,
                                         AllocatorAttributeVec *input_alloc_attrs, bool *is_input_dead)
 {
-    TIMED_FUNC_IF(timerObj, VLOG_IS_ON(1));
-
     auto node = item.node;
     VLOG(2) << "Preparing " << item.num_inputs << " inputs for node " << node->name();
 
@@ -479,7 +475,6 @@ tf::Status ExecutorState::PrepareInputs(const NodeItem &item, sstl::not_null<tf:
     // Check and bring back paged out entries. Also gather all buf lock for later use
     std::unordered_set<boost::upgrade_mutex *> locks;
     {
-        TIMED_SCOPE_IF(pagingCheckObj, "check paging", VLOG_IS_ON(1));
         for (int i = 0; i < item.num_inputs; ++i) {
             auto entry = first_input + i;
             if (!entry->has_value) {
@@ -514,7 +509,6 @@ tf::Status ExecutorState::PrepareInputs(const NodeItem &item, sstl::not_null<tf:
     // lock all buflocks as read for whole period,
     // all read/write should happen after this
     {
-        TIMED_SCOPE_IF(readLockObj, "lock all read", VLOG_IS_ON(1));
         sstl::lock_shared(locks.begin(), locks.end());
     }
 
@@ -662,8 +656,6 @@ tf::Status ExecutorState::ProcessOutputs(const NodeItem &item, tf::OpKernelConte
                                          const std::shared_ptr<PerTaskDevice> &device,
                                          EntryVector *outputs)
 {
-    TIMED_FUNC_IF(timerObj, VLOG_IS_ON(1));
-
     auto node = item.node;
     DCHECK(outputs->empty());
     outputs->resize(item.num_outputs);
@@ -782,8 +774,6 @@ tf::Status ExecutorState::ProcessOutputs(const NodeItem &item, tf::OpKernelConte
 
 void ExecutorState::ClearInputs(Entry *first, size_t num, BufferLockVec &buflocks)
 {
-    TIMED_FUNC_IF(timerObj, VLOG_IS_ON(1));
-
     // Release locks first, because it may be deleted below
     buflocks.clear();
 
@@ -801,7 +791,7 @@ void ExecutorState::ClearInputs(Entry *first, size_t num, BufferLockVec &buflock
             DCHECK(entry->alloc_tree);
             VLOG(2) << "Removing entry " << as_hex(entry) << " of ticket " << entry->alloc_tree->ticket
                     << " due to clearinputs";
-            sstl::TGuard g(impl_->entry_mu_, "ClearInputs");
+            sstl::Guard g(impl_->entry_mu_);
             auto range = impl_->active_buffers_.equal_range(entry->alloc_tree->ticket);
             for (auto it = range.first; it != range.second; ++it) {
                 if (it->second == entry->alloc_tree) {
@@ -823,8 +813,6 @@ void ExecutorState::ClearInputs(Entry *first, size_t num, BufferLockVec &buflock
 void ExecutorState::PropagateOutputs(const TaggedNode &tagged_node, const NodeItem &item,
                                      sstl::not_null<EntryVector *> outputs, TaggedNodeSeq *ready)
 {
-    TIMED_FUNC_IF(timerObj, VLOG_IS_ON(1));
-
     auto node = tagged_node.node;
     FrameState *input_frame = tagged_node.input_frame;
     int64_t input_iter = tagged_node.input_iter;
@@ -908,7 +896,7 @@ void ExecutorState::PropagateOutputs(const TaggedNode &tagged_node, const NodeIt
     }
 
     VLOG(3) << "After propagate the ready queue has size: " << ready->size();
-    if (VLOG_IS_ON(3)) {
+    if (vlog_ && VLOG_IS_ON(3)) {
         for (auto &n : *ready) {
             VLOG(3) << "    in ready queue: " << n.node->name();
         }
@@ -958,16 +946,13 @@ void ExecutorState::ForceInterrupt(const tf::Status &s)
 bool ExecutorState::NodeDone(const tf::Status &s, const tf::Node *node, const tf::Device *device,
                              tf::Rendezvous *rendezvous, const TaggedNodeSeq &ready)
 {
-    TIMED_FUNC_IF(timerObj, VLOG_IS_ON(1));
     UNUSED(node);
     UNUSED(device);
 
     bool abort_run = false;
     if (!s.ok()) {
         // Some error happened. This thread of computation is done.
-        VLOG(3) << "Try get lock for error handle";
         sstl::Guard l(mu_);
-        VLOG(2) << "Error handle";
         if (status_.ok()) {
             abort_run = true;
             status_ = s;
@@ -989,8 +974,7 @@ bool ExecutorState::NodeDone(const tf::Status &s, const tf::Node *node, const tf
         rendezvous->Unref();
     }
 
-    VLOG(2) << "NodeDone ready size: " << ready.size();
-    VLOG(3) << "NodeDone s: " << s;
+    VLOG(2) << "NodeDone ready size: " << ready.size() << " status: " << s;
 
     bool completed = false;
     auto ready_size = ready.size();
@@ -1013,8 +997,6 @@ bool ExecutorState::NodeDone(const tf::Status &s, const tf::Node *node, const tf
 
 void ExecutorState::ScheduleReady(const TaggedNodeSeq &ready)
 {
-    TIMED_FUNC_IF(timerObj, VLOG_IS_ON(1));
-
     if (ready.empty()) {
         VLOG(3) << "ScheduleReady on an empty ready queue";
         return;
@@ -1068,13 +1050,13 @@ void ExecutorState::DumpPendingNodeState(const int node_id, const Entry *input_v
             return;
         }
     }
-    VLOG(2) << "    Pending Node: " << node.DebugString();
+    VLOG(2) << "    Pending Node: " << node;
     for (int i = 0; i < node.num_inputs(); ++i) {
         auto &input = input_vector[input_base + i];
         auto *tensor = GetTensorValueForDump(input);
         if (tensor->IsInitialized()) {
-            VLOG(2) << "      Input " << i << ": Tensor<type: " << DataTypeString(tensor->dtype())
-                    << " shape: " << tensor->shape().DebugString() << ">";
+            VLOG(2) << "      Input " << i << ": Tensor<type: " << tensor->dtype()
+                    << " shape: " << tensor->shape() << ">";
         } else {
             VLOG(2) << "      Input " << i << ": not present";
         }
@@ -1085,14 +1067,14 @@ void ExecutorState::DumpActiveNodeState(const int node_id, const Entry *input_ve
 {
     auto &node_item = *impl_->gview_.node(node_id);
     auto &node = *node_item.node;
-    VLOG(2) << "    Active Node: " << node.DebugString();
+    VLOG(2) << "    Active Node: " << node;
     const int input_base = node_item.input_start;
     for (int i = 0; i < node.num_inputs(); ++i) {
         auto &input = input_vector[input_base + i];
         auto *tensor = GetTensorValueForDump(input);
         if (tensor->IsInitialized()) {
-            VLOG(2) << "      Input " << i << ": Tensor<type: " << DataTypeString(tensor->dtype())
-                    << " shape: " << tensor->shape().DebugString() << ">";
+            VLOG(2) << "      Input " << i << ": Tensor<type: " << tensor->dtype()
+                    << " shape: " << tensor->shape() << ">";
         } else {
             VLOG(2) << "      Input " << i << ": not present";
         }
@@ -1126,8 +1108,8 @@ void ExecutorState::DumpIterationState(const FrameState *frame, IterationState *
         auto &input = iteration->input_tensors[i];
         auto *tensor = GetTensorValueForDump(input);
         if (tensor->IsInitialized()) {
-            VLOG(2) << "      Input " << i << ": Tensor<type: " << DataTypeString(tensor->dtype())
-                    << " shape: " << tensor->shape().DebugString() << " bytes: " << tensor->TotalBytes()
+            VLOG(2) << "      Input " << i << ": Tensor<type: " << tensor->dtype()
+                    << " shape: " << tensor->shape() << " bytes: " << tensor->TotalBytes()
                     << ">";
             total_bytes += tensor->TotalBytes();
         }
@@ -1326,8 +1308,6 @@ void ExecutorState::CleanupFramesIterations(FrameState *frame, int64_t iter, Tag
 void ExecutorState::FrameState::ActivateNodes(const NodeItem &item, const bool is_dead, int64_t iter,
                                               sstl::not_null<EntryVector *> poutputs, TaggedNodeSeq *ready)
 {
-    TIMED_FUNC_IF(timerObj, VLOG_IS_ON(1));
-
     auto &gview = executor->gview_;
     auto &outputs = *poutputs.get();
     auto iter_state = GetIteration(iter);

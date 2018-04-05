@@ -92,7 +92,7 @@ bool ExecTask::prepare(std::unique_ptr<ResourceContext> &&rctx) noexcept
         auto &spec = rctx->spec();
 
         if (boost::range::count(supportedDeviceTypes(), spec.type) == 0) {
-            LOG(ERROR) << "Try to prepare ExecTask on unsupported device type " << spec << " :" << DebugString();
+            LOG(ERROR) << "Try to prepare ExecTask on unsupported device type " << spec << " :" << *this;
             LOG(ERROR) << "Supported device types are: ";
             for (const auto &dt : supportedDeviceTypes()) {
                 LOG(ERROR) << "  " << enumToString(dt);
@@ -126,13 +126,13 @@ bool ExecTask::prepare(std::unique_ptr<ResourceContext> &&rctx) noexcept
         }
         kernel_is_async = (op_kernel->AsAsync() != nullptr);
 
-        AllocLog(INFO) << "Pre allocated " << ditem.device->resourceContext() << " for " << DebugString();
+        LogAlloc() << "Pre allocated " << ditem.device->resourceContext() << " for " << *this;
 
         // Now we are sure things succeeded, cancel the cleanup
         onReturn.dismiss();
         return true;
     } catch (const TFException &ex) {
-        LOG(ERROR) << "Exception caught when preparing opItem " << DebugString() << ": " << ex.what();
+        LOG(ERROR) << "Exception caught when preparing opItem " << *this << ": " << ex.what();
         statusInPrepare = ex.code();
         return false;
     }
@@ -247,7 +247,7 @@ Resources ExecTask::calcUsageFromShape(const DeviceSpec &dev)
             count *= val;
         }
         auto dtype = node->output_type(i);
-        VLOG(3) << "    dtype " << tf::DataType_Name(dtype) << ", " << tf::DataTypeSize(dtype) << " bytes";
+        VLOG(3) << "    dtype " << dtype;
         double subtotal = count * tf::DataTypeSize(dtype);
 
         if (mtypeStatus.ok() && output_mtypes[i] == tf::HOST_MEMORY) {
@@ -260,7 +260,7 @@ Resources ExecTask::calcUsageFromShape(const DeviceSpec &dev)
     return res;
 }
 
-std::string ExecTask::DebugString()
+std::string ExecTask::DebugString() const
 {
     return m_cachedDebugString;
 }
@@ -323,13 +323,12 @@ void ExecTask::run(Callbacks cbs) noexcept
         // Don't track allocations. Not implemented.
         params.track_allocations = false;
 
-        VLOG(2) << "Process node: " << SummarizeNodeDef(node->def()) << " "
-                << ditem.device->resourceContext();
+        VLOG(2) << "Process node: " << node->def() << " " << ditem.device->resourceContext();
 
         auto input_tensors = m_state->GetInputTensors(input_frame, input_iter);
         first_input = input_tensors + item.input_start;
 
-        CVLOG(1, logging::kOpTracing) << "OpItem Event " << DebugString() << " event: afterDevCtx";
+        LogOpTracing() << "OpItem Event " << *this << " event: afterDevCtx";
         // Only execute this node if it is not dead or it is a send/recv
         // transfer node. For transfer nodes, we need to propagate the "dead"
         // bit even when the node is dead.
@@ -377,7 +376,7 @@ void ExecTask::run(Callbacks cbs) noexcept
         params.is_input_dead = is_input_dead;
         params.output_attr_array = item.output_attrs();
 
-        CVLOG(1, logging::kOpTracing) << "OpItem Event " << DebugString() << " event: afterPrepInput";
+        LogOpTracing() << "OpItem Event " << *this << " event: afterPrepInput";
 
         if (kernel_is_async) {
             // Asynchronous computes.
@@ -391,7 +390,7 @@ void ExecTask::run(Callbacks cbs) noexcept
             pctx = std::make_unique<tf::OpKernelContext>(&params, item.num_outputs);
 
             ditem.device->ComputeAsync(async, pctx.get(), [this, cbs = std::move(cbs)]() {
-                VLOG(2) << "Async Kernel done: " << SummarizeNodeDef(tagged_node.node->def());
+                VLOG(2) << "Async Kernel done: " << tagged_node.node->def();
                 afterCompute(false, cbs);
             });
         } else {
@@ -402,18 +401,18 @@ void ExecTask::run(Callbacks cbs) noexcept
             DCHECK_NOTNULL(op_kernel);
             ditem.device->Compute(op_kernel.get(), pctx.get());
 
-            VLOG(2) << "Kernel done: " << SummarizeNodeDef(tagged_node.node->def());
+            VLOG(2) << "Kernel done: " << tagged_node.node->def();
             afterCompute(false, cbs);
         } // if (kernel_is_async)
     } catch (const TFException &ex) {
-        LOG(ERROR) << "Exception caught when preparing opItem " << DebugString() << ": " << ex.what();
+        LOG(ERROR) << "Exception caught when preparing opItem " << *this << ": " << ex.what();
         afterRun(ex.code(), cbs);
     }
 }
 
 void ExecTask::afterCompute(bool is_dead, const Callbacks &cbs)
 {
-    CVLOG(1, logging::kOpTracing) << "OpItem Event " << DebugString() << " event: afterCompute";
+    LogOpTracing() << "OpItem Event " << *this << " event: afterCompute";
     // `cbs.done` should be called last as `this` would be deleted in it.
     auto &device = ditem.device;
     ExecutorState::EntryVector outputs;
@@ -439,7 +438,7 @@ void ExecTask::afterCompute(bool is_dead, const Callbacks &cbs)
     // Clears inputs.
     m_state->ClearInputs(first_input, item.num_inputs, buflocks);
 
-    CVLOG(1, logging::kOpTracing) << "OpItem Event " << DebugString() << " event: afterClearInput";
+    LogOpTracing() << "OpItem Event " << *this << " event: afterClearInput";
 
     // Mark completed
     auto input_frame = tagged_node.input_frame;
@@ -462,7 +461,7 @@ void ExecTask::afterCompute(bool is_dead, const Callbacks &cbs)
         device->ConsumeListOfAccessedTensors(pctx->op_device_context(), accessed);
     }
 
-    CVLOG(1, logging::kOpTracing) << "OpItem Event " << DebugString() << " event: afterPropOut";
+    LogOpTracing() << "OpItem Event " << *this << " event: afterPropOut";
     // Post process
     // call node done and cbs.done
     afterRun(s, cbs);
@@ -540,10 +539,10 @@ bool ExecTask::maybeMemoryFailure(const tf::Status &s, const MemFailCallback &me
         resources::merge(failedAlloc, ditem.device->failedResourceRequest());
 
         if (memFailure && memFailure()) {
-            VLOG(1) << "OOM happened and catched by scheduler: " << DebugString();
+            VLOG(1) << "OOM happened and catched by scheduler: " << *this;
             return true;
         }
-        VLOG(1) << "OOM happened and propagated: " << DebugString();
+        VLOG(1) << "OOM happened and propagated: " << *this;
     }
     // This is either not a OOM error, or the scheduler is not willing to handle it,
     // just go through normal handling

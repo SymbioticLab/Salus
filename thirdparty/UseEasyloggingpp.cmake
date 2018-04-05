@@ -30,6 +30,13 @@ if(NOT EXISTS ${third_party_dir}/${library_name}/CMakeLists.txt)
     if(NOT "${retcode}" STREQUAL "0")
         message(FATAL_ERROR "Failed to patch ${library_name} after submodule initialization")
     endif(NOT "${retcode}" STREQUAL "0")
+    execute_process(COMMAND "git" "apply" "../optimize-vlog-is-on.patch"
+        WORKING_DIRECTORY "${third_party_dir}/${library_name}"
+        RESULT_VARIABLE retcode
+        )
+    if(NOT "${retcode}" STREQUAL "0")
+        message(FATAL_ERROR "Failed to patch ${library_name} after submodule initialization")
+    endif(NOT "${retcode}" STREQUAL "0")
 endif(NOT EXISTS ${third_party_dir}/${library_name}/CMakeLists.txt)
 
 # Set any options

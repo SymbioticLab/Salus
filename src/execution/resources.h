@@ -149,6 +149,11 @@ constexpr ResourceTag GPU0Memory {ResourceType::MEMORY, salus::devices::GPU0};
 constexpr ResourceTag GPU1Memory {ResourceType::MEMORY, salus::devices::GPU1};
 } // namespace resources
 
+inline std::ostream& operator<<(std::ostream& out, const Resources& res)
+{
+    return out << resources::DebugString(res);
+}
+
 struct ResourceMap
 {
     Resources temporary;

@@ -31,6 +31,8 @@ option(WITH_TF_REFINER "Enable ShapeRefiner in TF oplibrary" OFF)
 
 option(WITH_PARALLEL_SCHED "Enable parallel processing in scheduler" OFF)
 
+option(DISABLE_LOGGING "Disable all logging except INFO level" OFF)
+
 #---------------------------------------------------------------------------------------
 # Find packages
 #---------------------------------------------------------------------------------------
@@ -83,6 +85,7 @@ add_feature_info(WITH_TENSORFLOW USE_TENSORFLOW "build TensorFlow operation libr
 add_feature_info(WITH_TESTS WITH_TESTS "build test suite with default target")
 add_feature_info(WITH_TF_REFINER WITH_TF_REFINER "enable ShapeRefiner in TF oplibrary")
 add_feature_info(WITH_PARALLEL_SCHED WITH_WITH_PARALLEL_SCHED "enable parallel processing in scheduler")
+add_feature_info(DISABLE_LOGGING DISABLE_LOGGING "disable all logging except INFO level")
 feature_summary(INCLUDE_QUIET_PACKAGES FATAL_ON_MISSING_REQUIRED_PACKAGES WHAT ALL)
 
 #---------------------------------------------------------------------------------------
@@ -109,6 +112,35 @@ endif(WITH_PARALLEL_SCHED)
 
 configure_file(src/config.h.in ${CMAKE_CURRENT_BINARY_DIR}/config.h)
 include_directories(${CMAKE_CURRENT_BINARY_DIR})
+
+# Disable verbose logging in non debug builds
+if(CMAKE_BUILD_TYPE STREQUAL "Debug")
+    #add_definitions(-DELPP_DISABLE_DEBUG_LOGS)
+    add_definitions(-DELPP_DISABLE_TRACE_LOGS)
+    #add_definitions(-DELPP_DISABLE_VERBOSE_LOGS)
+elseif(CMAKE_BUILD_TYPE STREQUAL "OpTracing")
+    add_definitions(-DELPP_DISABLE_DEBUG_LOGS)
+    #add_definitions(-DELPP_DISABLE_TRACE_LOGS)
+    add_definitions(-DELPP_DISABLE_VERBOSE_LOGS)
+elseif(CMAKE_BUILD_TYPE MATCHES "San$")
+    #add_definitions(-DELPP_DISABLE_DEBUG_LOGS)
+    add_definitions(-DELPP_DISABLE_TRACE_LOGS)
+    #add_definitions(-DELPP_DISABLE_VERBOSE_LOGS)
+else()
+    add_definitions(-DELPP_DISABLE_DEBUG_LOGS)
+    add_definitions(-DELPP_DISABLE_TRACE_LOGS)
+    add_definitions(-DELPP_DISABLE_VERBOSE_LOGS)
+endif()
+
+if(DISABLE_LOGGING)
+    add_definitions(-DELPP_DISABLE_DEBUG_LOGS)
+    #add_definitions(-DELPP_DISABLE_INFO_LOGS)
+    add_definitions(-DELPP_DISABLE_WARNING_LOGS)
+    add_definitions(-DELPP_DISABLE_ERROR_LOGS)
+    add_definitions(-DELPP_DISABLE_FATAL_LOGS)
+    add_definitions(-DELPP_DISABLE_TRACE_LOGS)
+    add_definitions(-DELPP_DISABLE_VERBOSE_LOGS)
+endif()
 
 #---------------------------------------------------------------------------------------
 # Put code together

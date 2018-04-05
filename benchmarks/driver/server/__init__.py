@@ -98,11 +98,6 @@ class SalusServer(object):
                 '--export-profile', str(self.config.output_dir / 'profile.prof'),
             ]
 
-        if self.config.use_gperf:
-            self.env['SALUS_PROFILE'] = '/tmp/gperf.out'
-        else:
-            self.env['SALUS_PROFILE'] = ''
-
         self.args += [
             self._find_executable(),
             '--listen', remove_prefix(self.endpoint, 'zrpc://'),
@@ -110,6 +105,12 @@ class SalusServer(object):
             '--sched', self.config.scheduler,
         ]
         self.args += self.config.extra_args
+
+        if self.config.use_gperf:
+            self.env['SALUS_PROFILE'] = '/tmp/gperf.out'
+            self.args += ['--gperf']
+        else:
+            self.env['SALUS_PROFILE'] = ''
 
         if self.config.disable_adc:
             self.args.append('--disable-adc')

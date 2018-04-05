@@ -1,6 +1,6 @@
 #! /bin/bash
 set -e
-BUILD_TYPES=(Debug Release)
+BUILD_TYPES=(Debug Release TSan ASan OpTracing Gperf)
 
 # Configure
 for build_type in ${BUILD_TYPES[@]}; do
@@ -14,5 +14,5 @@ done
 # Build
 for build_type in ${BUILD_TYPES[@]}; do
     echo "Building $build_type"
-    cmake --build build/$build_type -- -j80
+    cmake --build build/$build_type -- -j
 done

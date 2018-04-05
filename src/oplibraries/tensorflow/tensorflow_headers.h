@@ -123,4 +123,29 @@ inline std::ostream &operator<<(std::ostream &os, const tensorflow::TensorValue 
     return os;
 }
 
+inline std::ostream &operator<<(std::ostream &os, const tensorflow::Node &c)
+{
+    return os << c.DebugString();
+}
+
+inline std::ostream &operator<<(std::ostream &os, const tensorflow::TensorShape &c)
+{
+    return os << c.DebugString();
+}
+
+inline std::ostream &operator<<(std::ostream &os, const tensorflow::Rendezvous::ParsedKey &c)
+{
+    return os << c.FullKey().ToString();
+}
+
+inline std::ostream &operator<<(std::ostream &os, const tensorflow::NodeDef &c)
+{
+    return os << SummarizeNodeDef(c);
+}
+
+inline std::ostream &operator<<(std::ostream &os, const tensorflow::DataType &c)
+{
+    return os << tensorflow::DataTypeString(c) << "(" << tensorflow::DataTypeSize(c) << ")";
+}
+
 #endif // TENSORFLOW_HEADERS_H

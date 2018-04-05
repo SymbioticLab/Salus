@@ -109,9 +109,7 @@ std::string PerOpAllocator::Name()
 
 void *PerOpAllocator::AllocateRaw(size_t alignment, size_t num_bytes)
 {
-    TIMED_FUNC(timeObj);
-
-    AllocLog(DEBUG) << "TFAllocator allocating " << num_bytes << " bytes of memory with alignment "
+    LogAlloc() << "TFAllocator allocating " << num_bytes << " bytes of memory with alignment "
                     << alignment << " using allocator " << nameOrNull(m_actualAlloc) << "@"
                     << as_hex(m_actualAlloc);
 
@@ -123,7 +121,7 @@ void *PerOpAllocator::AllocateRaw(size_t alignment, size_t num_bytes)
         }
     } else {
         // No enough memory
-        AllocLog(DEBUG) << "TFAllocator failed to allocate.";
+        LogAlloc() << "TFAllocator failed to allocate.";
         return nullptr;
     }
 
@@ -136,7 +134,7 @@ void *PerOpAllocator::AllocateRaw(size_t alignment, size_t num_bytes)
 
     Ref();
 
-    AllocLog(INFO) << "TFAllocator allocated " << num_bytes << " bytes of memory at " << as_hex(ptr)
+    LogAlloc() << "TFAllocator allocated " << num_bytes << " bytes of memory at " << as_hex(ptr)
                    << " with alignment " << alignment << " using allocator " << nameOrNull(m_actualAlloc)
                    << "@" << as_hex(m_actualAlloc) << " with " << *m_rctx;
 
@@ -146,13 +144,11 @@ void *PerOpAllocator::AllocateRaw(size_t alignment, size_t num_bytes)
 void *PerOpAllocator::AllocateRaw(size_t alignment, size_t num_bytes,
                                   const tf::AllocationAttributes &allocation_attr)
 {
-    TIMED_FUNC(timeObj);
-
     auto attr(allocation_attr);
     // We should not retry on failure due to the restarting feature
     attr.no_retry_on_failure = true;
 
-    AllocLog(DEBUG) << "TFAllocator allocating attributes " << attr << " of " << num_bytes
+    LogAlloc() << "TFAllocator allocating attributes " << attr << " of " << num_bytes
                     << " bytes of memory with alignment " << alignment << " using allocator "
                     << nameOrNull(m_actualAlloc) << "@" << as_hex(m_actualAlloc);
 
@@ -164,7 +160,7 @@ void *PerOpAllocator::AllocateRaw(size_t alignment, size_t num_bytes,
         }
     } else {
         // No enough memory
-        AllocLog(DEBUG) << "TFAllocator failed to allocate.";
+        LogAlloc() << "TFAllocator failed to allocate.";
         return nullptr;
     }
 
@@ -177,7 +173,7 @@ void *PerOpAllocator::AllocateRaw(size_t alignment, size_t num_bytes,
 
     Ref();
 
-    AllocLog(INFO) << "TFAllocator called for attributes " << attr << " of " << num_bytes
+    LogAlloc() << "TFAllocator called for attributes " << attr << " of " << num_bytes
                    << " bytes of memory at " << as_hex(ptr) << " with alignment " << alignment
                    << " using allocator " << nameOrNull(m_actualAlloc) << "@" << as_hex(m_actualAlloc)
                    << " with " << *m_rctx;
@@ -196,13 +192,11 @@ tf::int64 PerOpAllocator::AllocationId(void *ptr)
 
 void PerOpAllocator::DeallocateRaw(void *ptr)
 {
-    TIMED_FUNC(timeObj);
-
     auto num_bytes = RequestedSize(ptr);
 
-    AllocLog(INFO) << "TFAllocator deallocating memory at " << as_hex(ptr) << " size " << num_bytes
-                   << " using allocator " << nameOrNull(m_actualAlloc) << "@" << as_hex(m_actualAlloc)
-                   << " with " << *m_rctx;
+    LogAlloc() << "TFAllocator deallocating memory at " << as_hex(ptr) << " size " << num_bytes
+               << " using allocator " << nameOrNull(m_actualAlloc) << "@" << as_hex(m_actualAlloc)
+               << " with " << *m_rctx;
 
     m_actualAlloc->DeallocateRaw(ptr);
     m_rctx->dealloc(ResourceType::MEMORY, num_bytes);

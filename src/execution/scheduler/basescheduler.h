@@ -137,6 +137,16 @@ protected:
     ExecutionEngine &m_engine;
 };
 
+inline std::ostream& operator<<(std::ostream& out, const BaseScheduler& sch)
+{
+    return out << sch.debugString();
+}
+
+inline std::ostream& operator<<(std::ostream& out, const std::unique_ptr<BaseScheduler>& sch)
+{
+    return out << sch->debugString();
+}
+
 class SchedulerRegistary final
 {
 public:

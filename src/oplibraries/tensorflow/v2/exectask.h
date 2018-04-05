@@ -63,7 +63,7 @@ public:
 
     ~ExecTask() override;
 
-    std::string DebugString() override;
+    std::string DebugString() const override;
 
     bool isAsync() const override;
 

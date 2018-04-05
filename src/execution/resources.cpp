@@ -82,7 +82,7 @@ ResourceType resourceTypeFromString(const std::string &rt)
 std::string ResourceTag::DebugString() const
 {
     std::ostringstream oss;
-    oss << enumToString(type) << "@" << device.DebugString();
+    oss << enumToString(type) << "@" << device;
     return oss.str();
 }
 
@@ -346,7 +346,7 @@ void SessionResourceTracker::freeUnsafe(uint64_t ticket)
 
 void SessionResourceTracker::free(uint64_t ticket)
 {
-    AllocLog(INFO) << "Free session resource: ticket=" << ticket;
+    LogAlloc() << "Free session resource: ticket=" << ticket;
     Guard g(m_mu);
     if (m_disabled) {
         return;

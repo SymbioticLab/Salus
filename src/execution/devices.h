@@ -22,6 +22,7 @@
 
 #include <string>
 #include <tuple>
+#include <ostream>
 
 #include "utils/macros.h"
 
@@ -47,7 +48,7 @@ struct DeviceSpec
 
     static DeviceSpec fromString(const std::string &str);
 
-    std::string DebugString() const;
+    std::string debugString() const;
 
 private:
     friend bool operator==(const DeviceSpec &lhs, const DeviceSpec &rhs);
@@ -66,7 +67,10 @@ inline bool operator!=(const DeviceSpec &lhs, const DeviceSpec &rhs)
     return lhs.tie() != rhs.tie();
 }
 
-std::ostream &operator<<(std::ostream &os, const DeviceSpec &c);
+inline std::ostream &operator<<(std::ostream &os, const DeviceSpec &c)
+{
+    return os << enumToString(c.type) << ":" << c.id;
+}
 
 namespace devices {
 constexpr DeviceSpec CPU0 {DeviceType::CPU, 0};

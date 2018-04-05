@@ -158,11 +158,9 @@ POpItem BaseScheduler::submitTask(POpItem &&opItem)
         return nullptr;
     }
 
-    VLOG(3) << "Scheduling opItem in session " << item->sessHandle << ": " << opItem->op->DebugString();
-    TIMED_SCOPE_IF(timerInnerObj, "BaseScheduler::submitTask", VLOG_IS_ON(1));
+    VLOG(3) << "Scheduling opItem in session " << item->sessHandle << ": " << opItem->op;
 
-    CVLOG(1, logging::kOpTracing) << "OpItem Event " << opItem->op->DebugString()
-                                  << " event: inspected";
+    LogOpTracing() << "OpItem Event " << opItem->op << " event: inspected";
     bool scheduled = false;
     DeviceSpec spec{};
     for (auto dt : opItem->op->supportedDeviceTypes()) {
@@ -172,14 +170,13 @@ POpItem BaseScheduler::submitTask(POpItem &&opItem)
         spec.type = dt;
         spec.id = 0;
         if (maybePreAllocateFor(*opItem, spec)) {
-            VLOG(3) << "Task scheduled on " << spec.DebugString();
+            VLOG(3) << "Task scheduled on " << spec;
             scheduled = true;
             break;
         }
     }
 
-    CVLOG(1, logging::kOpTracing) << "OpItem Event " << opItem->op->DebugString()
-                                  << " event: prealloced";
+    LogOpTracing() << "OpItem Event " << opItem->op << " event: prealloced";
 
     // Send to thread pool
     if (scheduled) {

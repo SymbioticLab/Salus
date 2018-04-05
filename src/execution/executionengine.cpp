@@ -54,7 +54,7 @@ inline void logScheduleFailure(const Resources &usage, const ResourceMonitor &re
     UNUSED(resMon);
 
 #ifndef NDEBUG
-    VLOG(2) << "Try to allocate resource failed. Requested: " << resources::DebugString(usage);
+    VLOG(2) << "Try to allocate resource failed. Requested: " << usage;
     // Don't call resMon.DebugString directly in log line, as logging acquires lock, and
     // may causing deadlock.
     const auto &str = resMon.DebugString();
@@ -152,7 +152,7 @@ void ExecutionContext::Data::enqueueOperation(std::unique_ptr<OperationTask> &&t
     auto opItem = std::make_shared<OperationItem>();
     opItem->sess = item;
     opItem->op = std::move(task);
-    CVLOG(1, logging::kOpTracing) << "OpItem Event " << opItem->op->DebugString() << " event: queued";
+    LogOpTracing() << "OpItem Event " << opItem->op << " event: queued";
 
     engine.pushToSessionQueue(std::move(opItem));
 }
@@ -251,7 +251,7 @@ void ExecutionEngine::scheduleLoop()
     m_resMonitor.initializeLimits();
     auto scheduler = SchedulerRegistary::instance().create(m_schedParam.scheduler, *this);
     DCHECK(scheduler);
-    VLOG(2) << "Using scheduler: " << scheduler->debugString();
+    VLOG(2) << "Using scheduler: " << scheduler;
 
     m_runningTasks = 0;
     m_noPagingRunningTasks = 0;
@@ -263,8 +263,6 @@ void ExecutionEngine::scheduleLoop()
 
     while (!m_shouldExit) {
         snprintf(schedIterNameBuf, kNameBufLen, "sched-iter-%zu", schedIterCount++);
-        TIMED_SCOPE(schedIterObj, schedIterNameBuf);
-
         SessionChangeSet changeset;
         // Fisrt check if there's any pending deletions
         {
@@ -329,8 +327,6 @@ void ExecutionEngine::scheduleLoop()
             item->lastScheduled = 0;
         }
 
-        PERFORMANCE_CHECKPOINT_WITH_ID(schedIterObj, "after-accept");
-
         // Select and sort candidates.
         scheduler->notifyPreSchedulingIteration(m_sessions, changeset, &candidates);
 
@@ -368,8 +364,6 @@ void ExecutionEngine::scheduleLoop()
                 << scheduler->debugString(item);
         }
 
-        PERFORMANCE_CHECKPOINT_WITH_ID(schedIterObj, "after-sched");
-
         // Update conditions and check if we need paging
         bool noProgress = remainingCount > 0 && scheduled == 0 && m_noPagingRunningTasks == 0;
         bool didPaging = false;
@@ -394,8 +388,6 @@ void ExecutionEngine::scheduleLoop()
         if (didPaging) {
             continue;
         }
-
-        PERFORMANCE_CHECKPOINT_WITH_ID(schedIterObj, "without-wait");
 
         maybeWaitForAWhile(scheduled);
 
@@ -441,7 +433,6 @@ POpItem ExecutionEngine::submitTask(POpItem &&opItem)
 
     // opItem has to be captured by value, we need it in case the thread pool is full
     auto c = m_pool.tryRun([opItem, this]() mutable {
-        TIMED_SCOPE_IF(timerInnerObj, "ExecutionEngine::maybeScheduleFrom::doSchedule::run", VLOG_IS_ON(1));
         DCHECK(opItem);
 
         if (auto item = opItem->sess.lock()) {
@@ -456,22 +447,22 @@ POpItem ExecutionEngine::submitTask(POpItem &&opItem)
                 auto item = opItem->sess.lock();
                 if (!item) {
                     VLOG(2) << "Found expired session during handling of memory failure of opItem: "
-                            << opItem->op->DebugString();
+                            << opItem->op;
                     return false;
                 }
                 if (!item->protectOOM) {
-                    VLOG(2) << "Pass through OOM failed task back to client: " << opItem->op->DebugString();
+                    VLOG(2) << "Pass through OOM failed task back to client: " << opItem->op;
                     return false;
                 }
 
                 taskStopped(*opItem, true);
                 // failed due to OOM. Push back to queue and retry later
-                VLOG(2) << "Putting back OOM failed task: " << opItem->op->DebugString();
+                VLOG(2) << "Putting back OOM failed task: " << opItem->op;
                 pushToSessionQueue(std::move(opItem));
                 return true;
             };
 
-            VLOG(2) << "Running opItem in session " << item->sessHandle << ": " << opItem->op->DebugString();
+            VLOG(2) << "Running opItem in session " << item->sessHandle << ": " << opItem->op;
             taskRunning(*opItem);
             opItem->op->run(std::move(cbs));
         }
@@ -485,7 +476,7 @@ POpItem ExecutionEngine::submitTask(POpItem &&opItem)
 
 void ExecutionEngine::taskRunning(OperationItem &opItem)
 {
-    CVLOG(1, logging::kOpTracing) << "OpItem Event " << opItem.op->DebugString() << " event: running";
+    LogOpTracing() << "OpItem Event " << opItem.op << " event: running";
     m_runningTasks += 1;
     if (!opItem.op->isAsync()) {
         m_noPagingRunningTasks += 1;
@@ -497,7 +488,7 @@ void ExecutionEngine::taskStopped(OperationItem &opItem, bool failed)
     auto &rctx = opItem.op->resourceContext();
     rctx.releaseStaging();
 
-    CVLOG(1, logging::kOpTracing) << "OpItem Event " << opItem.op->DebugString() << " event: done";
+    LogOpTracing() << "OpItem Event " << opItem.op << " event: done";
     if (!failed) {
         if (VLOG_IS_ON(2)) {
             if (auto item = opItem.sess.lock(); item) {
@@ -590,7 +581,7 @@ bool ExecutionEngine::doPaging(const DeviceSpec &spec, const DeviceSpec &target)
                 LOG(ERROR) << "No enough CPU memory for paging. Required: " << res[dstTag] << " bytes";
                 return false;
             }
-            AllocLog(INFO) << "Pre allocated " << *rctx << " for session=" << pSess->sessHandle;
+            LogAlloc() << "Pre allocated " << *rctx << " for session=" << pSess->sessHandle;
 
             VLOG(2) << "    request to page out ticket " << victim << " of usage " << usage;
             // request the session to do paging

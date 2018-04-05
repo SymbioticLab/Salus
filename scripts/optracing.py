@@ -115,16 +115,16 @@ sns.set_style("dark")
 #
 # Set paths
 #
-logdir = 'logs/optracing-original/'
-outputdir = '/home/peifeng/desktop/original'
+logdir = 'logs/optracing/'
+outputdir = '/home/peifeng/desktop/'
 figsize = (40, 70)
 set_y = True
 
 #%%
-logdir = 'logs/optracing/'
-outputdir = '/home/peifeng/sync/M.S.Study/Research/salus/groupmeeting/20180403/weekend'
-figsize = None
-set_y = False
+#logdir = 'logs/optracing/'
+#outputdir = '/home/peifeng/sync/M.S.Study/Research/salus/groupmeeting/20180403/weekend'
+#figsize = None
+#set_y = False
 
 #%%
 #

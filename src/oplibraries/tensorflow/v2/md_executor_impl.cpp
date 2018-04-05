@@ -303,7 +303,7 @@ size_t ExecutorImpl::handlePagingRequest(uint64_t oldTicket, std::unique_ptr<Res
     sg += [&totalReleased]() { VLOG(2) << "Paging released " << totalReleased << " bytes of memory"; };
 
     {
-        sstl::TGuard g(entry_mu_, "PagingStart");
+        sstl::Guard g(entry_mu_);
         auto range = active_buffers_.equal_range(oldTicket);
         if (range.first == range.second) {
             LOG(ERROR) << "Requested ticket for paging not found: " << oldTicket;
@@ -329,7 +329,7 @@ size_t ExecutorImpl::handlePagingRequest(uint64_t oldTicket, std::unique_ptr<Res
 
     // Remember to add them back to active entries with updated value when exit
     sg += [this, &parts, oldTicket]() {
-        sstl::TGuard g(entry_mu_, "PagingEnd");
+        sstl::Guard g(entry_mu_);
         for (auto part : parts) {
             VLOG(2) << "Adding buffer tree of ticket " << part->ticket << " (was " << oldTicket
                     << ") due to paging";
@@ -421,8 +421,6 @@ tf::Status ExecutorImpl::LookupTFDevice(const DeviceSpec &spec, tf::Device **tfd
 
 tf::Status ExecutorImpl::LookupDevice(const DeviceSpec &spec, std::unique_ptr<ResourceContext> &&rctx, DeviceItem *item)
 {
-    TIMED_FUNC_IF(timerObj, VLOG_IS_ON(1));
-
     tf::Device *tfdev = nullptr;
     auto ok = LookupTFDevice(spec, &tfdev);
     if (!ok.ok()) {
@@ -431,7 +429,7 @@ tf::Status ExecutorImpl::LookupDevice(const DeviceSpec &spec, std::unique_ptr<Re
 
     auto sdev = ISalusDevice::safe_cast(tfdev);
     if (!sdev) {
-        ok == tf::errors::Internal(tf::strings::StrCat("Device is not an ISalusDevice: ", spec.DebugString()));
+        ok == tf::errors::Internal(tf::strings::StrCat("Device is not an ISalusDevice: ", spec.debugString()));
         return ok;
     }
 
@@ -445,8 +443,6 @@ tf::Status ExecutorImpl::LookupDevice(const DeviceSpec &spec, std::unique_ptr<Re
 
 POpKernel ExecutorImpl::SetupKernel(sstl::not_null<const tf::Node *> node, const DeviceItem &ditem)
 {
-    TIMED_FUNC_IF(timerObj, VLOG_IS_ON(1));
-
     // first check if we have a cache for this kernel and if so, if the kernel is on the same device
     {
         sstl::Guard g(kernel_dev_mu_);
@@ -481,15 +477,13 @@ POpKernel ExecutorImpl::SetupKernel(sstl::not_null<const tf::Node *> node, const
  */
 void ExecutorImpl::updateBufferTree(Entry *entry, uint64_t ticket)
 {
-    TIMED_FUNC_IF(timerObj, VLOG_IS_ON(1));
-
     DCHECK(entry);
     DCHECK(entry->has_value);
 
     const auto buf = tf::remote::PagingHelper::bufferOf(*entry->RefOrVal());
     const auto root_buf = buf ? buf->root_buffer() : nullptr;
 
-    sstl::TGuard g(entry_mu_, "UpdateBufferTree");
+    sstl::Guard g(entry_mu_);
     auto &tree = entry->alloc_tree;
     if (!tree) {
         auto range = active_buffers_.equal_range(ticket);
@@ -540,7 +534,6 @@ void ExecutorImpl::updateBufferTree(Entry *entry, uint64_t ticket)
 
 void ExecutorImpl::removeFromBufferTree(const Entry *entry, EntryVec *needUpdate)
 {
-    TIMED_FUNC_IF(timerObj, VLOG_IS_ON(1));
     DCHECK(entry);
 
     auto tree = entry->alloc_tree;
@@ -564,7 +557,7 @@ void ExecutorImpl::removeFromBufferTree(const Entry *entry, EntryVec *needUpdate
         return false;
     };
 
-    sstl::TGuard g(entry_mu_, "RemoveFromBufferTree");
+    sstl::Guard g(entry_mu_);
 
     if (sstl::erase_if(tree->roots, matchRefs)) {
         return;
