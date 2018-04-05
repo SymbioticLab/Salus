@@ -25,7 +25,7 @@ option(WITH_TENSORFLOW "Build TensorFlow operation library" ON)
 
 option(WITH_TESTS "Build test suite in default target" OFF)
 
-option(WITH_TCMALLOC "Build with tcmalloc" OFF)
+option(WITH_TCMALLOC "Build with tcmalloc" ON)
 
 option(WITH_TF_REFINER "Enable ShapeRefiner in TF oplibrary" OFF)
 
@@ -70,6 +70,7 @@ add_definitions(-DBOOST_THREAD_VERSION=4)
 
 if(WITH_TCMALLOC)
     find_package(Gperftools REQUIRED)
+    set_package_properties(Gperftools PROPERTIES TYPE REQUIRED PURPOSE "For gperftools cpu profiler and/or tcmalloc")
 endif(WITH_TCMALLOC)
 
 # Easylogging++
@@ -83,6 +84,7 @@ include(thirdparty/UseDocopt.cmake)
 #---------------------------------------------------------------------------------------
 add_feature_info(WITH_TENSORFLOW USE_TENSORFLOW "build TensorFlow operation library")
 add_feature_info(WITH_TESTS WITH_TESTS "build test suite with default target")
+add_feature_info(WITH_TCMALLOC WITH_TCMALLOC "build with tcmalloc")
 add_feature_info(WITH_TF_REFINER WITH_TF_REFINER "enable ShapeRefiner in TF oplibrary")
 add_feature_info(WITH_PARALLEL_SCHED WITH_WITH_PARALLEL_SCHED "enable parallel processing in scheduler")
 add_feature_info(DISABLE_LOGGING DISABLE_LOGGING "disable all logging except INFO level")
