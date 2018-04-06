@@ -16,23 +16,19 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
+#include <utils/debugging.h>
 #include "basescheduler.h"
 
 #include "execution/operationtask.h"
 #include "execution/scheduler/operationitem.h"
 #include "platform/logging.h"
-#include "utils/date.h"
+#include "utils/debugging.h"
 #include "utils/envutils.h"
 #include "utils/macros.h"
 #include "utils/threadutils.h"
 
 using std::chrono::duration_cast;
-using std::chrono::microseconds;
-using std::chrono::milliseconds;
-using std::chrono::nanoseconds;
-using std::chrono::seconds;
-using std::chrono::system_clock;
-using FpSeconds = std::chrono::duration<double, seconds::period>;
+using FpMS = std::chrono::duration<double, std::chrono::milliseconds::period>;
 using namespace std::chrono_literals;
 using namespace date;
 using namespace salus;
@@ -100,15 +96,6 @@ void BaseScheduler::notifyPreSchedulingIteration(const SessionList &sessions,
 
 bool BaseScheduler::maybePreAllocateFor(OperationItem &opItem, const DeviceSpec &spec)
 {
-    sstl::ScopeGuards sg([&, start = system_clock::now()]() {
-        auto dur = system_clock::now() - start;
-        constexpr auto limit = 10ms;
-        if (dur > limit) {
-            LOG(WARNING) << "maybePreAllocateFor took more than " << limit << " to finish: " << dur
-                         << " for " << opItem.op << " on " << spec;
-        }
-    });
-
     auto item = opItem.sess.lock();
     if (!item) {
         return false;

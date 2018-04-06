@@ -33,6 +33,7 @@
 #include "utils/date.h"
 #include "utils/macros.h"
 #include "utils/threadutils.h"
+#include "utils/debugging.h"
 #include <boost/range/algorithm.hpp>
 #include <sstream>
 
@@ -42,7 +43,7 @@ using std::chrono::milliseconds;
 using std::chrono::nanoseconds;
 using std::chrono::seconds;
 using std::chrono::system_clock;
-using FpSeconds = std::chrono::duration<double, seconds::period>;
+using FpMS = std::chrono::duration<double, std::chrono::milliseconds::period>;
 using namespace std::chrono_literals;
 using namespace date;
 
@@ -86,6 +87,12 @@ ExecTask::DeviceTypes ExecTask::supportedDeviceTypes() const
 
 bool ExecTask::prepare(std::unique_ptr<ResourceContext> &&rctx) noexcept
 {
+    sstl::TimeoutWarning tw(2ms, [&](auto limit, auto dur){
+        LOG(WARNING) << "ExecTask::prepare took more than " << duration_cast<FpMS>(limit)
+                     << " to finish: " << duration_cast<FpMS>(dur)
+                     << " for " << *this;
+    });
+
     try {
         statusInPrepare = tf::Status::OK();
 
@@ -145,6 +152,11 @@ bool ExecTask::isAsync() const
 
 Resources ExecTask::estimatedUsage(const DeviceSpec &dev)
 {
+    sstl::TimeoutWarning tw(1ms, [&](auto limit, auto dur){
+        LOG(WARNING) << "ExecTask::estimatedUsage took more than " << duration_cast<FpMS>(limit)
+                     << " to finish: " << duration_cast<FpMS>(dur)
+                     << " for " << *this;
+    });
     // First see if we have usage for this node in session
     // but only if we haven't failed before, otherwise,
     // the session cached usage maybe be just a lucky case

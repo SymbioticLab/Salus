@@ -32,11 +32,17 @@
 #include "utils/containerutils.h"
 #include "utils/cpp17.h"
 #include "utils/stringutils.h"
+#include "utils/debugging.h"
 #include <boost/iterator/indirect_iterator.hpp>
 #include <boost/thread/lock_algorithms.hpp>
 #include <unordered_set>
 #include <vector>
 #include <oplibraries/tensorflow/tfinstance.h>
+
+using std::chrono::duration_cast;
+using FpMS = std::chrono::duration<double, std::chrono::milliseconds::period>;
+using namespace std::chrono_literals;
+using namespace date;
 
 namespace salus::oplib::tensorflow {
 
@@ -409,6 +415,12 @@ tf::Status ExecutorImpl::LookupTFDevice(const DeviceSpec &spec, tf::Device **tfd
 tf::Status ExecutorImpl::LookupDevice(const DeviceSpec &spec, std::unique_ptr<ResourceContext> &&rctx,
                                       DeviceItem *item)
 {
+    sstl::TimeoutWarning tw(2ms, [&](auto limit, auto dur){
+        LOG(WARNING) << "LookupDevice took more than " << duration_cast<FpMS>(limit)
+                     << " to finish: " << duration_cast<FpMS>(dur)
+                     << " for " << spec;
+    });
+
     tf::Device *tfdev = nullptr;
     auto ok = LookupTFDevice(spec, &tfdev);
     if (!ok.ok()) {
@@ -432,6 +444,11 @@ tf::Status ExecutorImpl::LookupDevice(const DeviceSpec &spec, std::unique_ptr<Re
 
 POpKernel ExecutorImpl::SetupKernel(sstl::not_null<const tf::Node *> node, const DeviceItem &ditem)
 {
+    sstl::TimeoutWarning tw(2ms, [&](auto limit, auto dur){
+        LOG(WARNING) << "SetupKernel took more than " << duration_cast<FpMS>(limit)
+                     << " to finish: " << duration_cast<FpMS>(dur)
+                     << " for " << node->name() << " on " << ditem.device->name();
+    });
     // first check if we have a cache for this kernel and if so, if the kernel is on the same device
     {
         sstl::Guard g(kernel_dev_mu_);

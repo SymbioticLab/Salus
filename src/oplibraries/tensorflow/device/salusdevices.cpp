@@ -84,6 +84,10 @@ void PerTaskDevice::reset(sstl::not_null<tf::Device *> other, std::unique_ptr<Re
     m_rctx = std::move(rctx);
     m_wrappedAllocators.clear();
     reinitialize();
+
+    if (!m_rctx->isGood()) {
+        LOG(ERROR) << "Resetting to an uninitialized resource context";
+    }
 }
 
 void PerTaskDevice::reinitialize()

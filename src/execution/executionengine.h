@@ -233,7 +233,10 @@ class ResourceContext
 {
     ResourceMonitor &resMon;
     salus::DeviceSpec m_spec;
+
     uint64_t m_ticket;
+    PSessionItem session;
+    bool hasStaging;
 
 public:
     const salus::DeviceSpec &spec() const
@@ -338,11 +341,6 @@ public:
      *
      */
     void removeTicketFromSession() const;
-
-private:
-
-    PSessionItem session;
-    std::atomic<bool> hasStaging;
 };
 std::ostream &operator<<(std::ostream &os, const ResourceContext &c);
 

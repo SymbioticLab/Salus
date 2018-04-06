@@ -21,6 +21,7 @@
 #include "platform/logging.h"
 #include "utils/containerutils.h"
 #include "utils/threadutils.h"
+#include "utils/debugging.h"
 
 #include <algorithm>
 #include <functional>
@@ -30,6 +31,10 @@
 
 using std::optional;
 using sstl::Guard;
+using std::chrono::duration_cast;
+using FpMS = std::chrono::duration<double, std::chrono::milliseconds::period>;
+using namespace std::chrono_literals;
+using namespace date;
 using namespace salus;
 
 std::string enumToString(const ResourceType &rt)
@@ -404,6 +409,11 @@ void ResourceMonitor::initializeLimits(const Resources &cap)
 
 std::optional<uint64_t> ResourceMonitor::preAllocate(const Resources &req, Resources *missing)
 {
+    sstl::TimeoutWarning tw(10ms, [&](auto limit, auto dur){
+        LOG(WARNING) << "preAllocate took more than " << duration_cast<FpMS>(limit)
+                     << " to finish: " << duration_cast<FpMS>(dur)
+                     << " for " << req;
+    });
     Guard g(m_mu);
     if (!contains(m_limits, req)) {
         if (missing) {
