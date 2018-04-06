@@ -34,6 +34,11 @@ namespace salus::oplib::tensorflow {
 
 TFInstance::TFInstance()
     : m_env(tf::Env::Default())
+    , m_devCon()
+{
+}
+
+TFInstance::DeviceContainer::DeviceContainer()
 {
     tf::SessionOptions sess_opts;
     // Disable old style RPCDevice creation if any.
@@ -41,11 +46,38 @@ TFInstance::TFInstance()
 
     // Load devices
     maybeRegisterSalusDeviceFactories();
-    SALUS_THROW_IF_ERROR(tf::DeviceFactory::AddDevices(sess_opts, namePrefix(), &m_devices));
-    m_deviceMgr = std::make_unique<tf::DeviceMgr>(m_devices);
+    SALUS_THROW_IF_ERROR(tf::DeviceFactory::AddDevices(sess_opts, namePrefix(), &devices));
+    deviceMgr = std::make_unique<tf::DeviceMgr>(devices);
+
+    for (int dt = 0; dt != MaxDeviceType; ++dt) {
+        for (int id = 0; id != MaxDeviceId; ++id) {
+            deviceMgr->LookupDevice(svToStringPiece(SpecToTFDevName(DeviceSpec{static_cast<DeviceType>(dt), id})),
+                                    &specToTF[dt][id]);
+        }
+    }
 }
 
 TFInstance::~TFInstance() = default;
+
+tf::Device *TFInstance::tfdevice(const DeviceSpec &spec) const
+{
+    auto dt = sstl::to_underlying(spec.type);
+    tf::Device *tfdev = nullptr;
+    if (dt < DeviceContainer::MaxDeviceType && spec.id < DeviceContainer::MaxDeviceId) {
+        tfdev = m_devCon.specToTF[dt][spec.id];
+        if (tfdev) {
+            return tfdev;
+        }
+    }
+    auto ok = m_devCon.deviceMgr->LookupDevice(svToStringPiece(DeviceContainer::SpecToTFDevName(spec)), &tfdev);
+    if (ok.ok()) {
+        return tfdev;
+    }
+
+    LOG(ERROR) << "Cannot find device for " << spec << ": " << ok;
+    return nullptr;
+}
+
 
 void TFInstance::handleCreateSession(const tf::CreateSessionRequest &req, tf::CreateSessionResponse &resp,
                                      HandlerCallback &&cb)
@@ -103,7 +135,7 @@ std::shared_ptr<TFSession> TFInstance::findSession(const std::string &sessHandle
     auto it = m_sessions.find(sessHandle);
     if (it == m_sessions.end()) {
         LOG(ERROR) << "Dumping all known sessions: ";
-        for (auto & [h, ptr] : m_sessions) {
+        for (auto &[h, ptr] : m_sessions) {
             LOG(ERROR) << " Session " << h << "@" << as_hex(ptr);
         }
         throw TFException(tf::errors::InvalidArgument("Session ", sessHandle,
@@ -151,7 +183,7 @@ void TFInstance::handleReset(const tf::ResetRequest &req, tf::ResetResponse &res
     {
         sstl::Guard g(m_mu);
         sessToClose.reserve(m_sessions.size());
-        for (auto & [sessHandle, sess] : m_sessions) {
+        for (auto &[sessHandle, sess] : m_sessions) {
             UNUSED(sessHandle);
             sessToClose.emplace_back(std::move(sess));
         }

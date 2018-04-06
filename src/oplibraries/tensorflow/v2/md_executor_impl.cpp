@@ -25,18 +25,18 @@
 
 #include "md_executor_impl.h"
 
+#include "oplibraries/tensorflow/device/salusdevices.h"
 #include "oplibraries/tensorflow/tfexception.h"
 #include "oplibraries/tensorflow/v2/tfallocator.h"
 #include "oplibraries/tensorflow/worker/rendezvousmgr.h"
-#include "oplibraries/tensorflow/device/salusdevices.h"
 #include "utils/containerutils.h"
+#include "utils/cpp17.h"
 #include "utils/stringutils.h"
-
 #include <boost/iterator/indirect_iterator.hpp>
 #include <boost/thread/lock_algorithms.hpp>
-
 #include <unordered_set>
 #include <vector>
+#include <oplibraries/tensorflow/tfinstance.h>
 
 namespace salus::oplib::tensorflow {
 
@@ -399,27 +399,15 @@ void ExecutorImpl::forceEvicted()
 
 tf::Status ExecutorImpl::LookupTFDevice(const DeviceSpec &spec, tf::Device **tfdev)
 {
-    std::string name;
-    switch (spec.type) {
-        case DeviceType::CPU:
-            name = "CPU:";
-            break;
-        case DeviceType::GPU:
-            name = "GPU:";
-            break;
+    *tfdev = TFInstance::instance().tfdevice(spec);
+    if (*tfdev) {
+        return tf::Status::OK();
     }
-    name += std::to_string(spec.id);
-
-    auto ok = params_.deviceMgr.LookupDevice(name, tfdev);
-    if (!ok.ok()) {
-        LOG(ERROR) << "Cannot find device for " << spec << ": " << ok;
-        return ok;
-    }
-
-    return tf::Status::OK();
+    return tf::errors::InvalidArgument("Cannot find device for ", spec.debugString());
 }
 
-tf::Status ExecutorImpl::LookupDevice(const DeviceSpec &spec, std::unique_ptr<ResourceContext> &&rctx, DeviceItem *item)
+tf::Status ExecutorImpl::LookupDevice(const DeviceSpec &spec, std::unique_ptr<ResourceContext> &&rctx,
+                                      DeviceItem *item)
 {
     tf::Device *tfdev = nullptr;
     auto ok = LookupTFDevice(spec, &tfdev);
@@ -429,7 +417,8 @@ tf::Status ExecutorImpl::LookupDevice(const DeviceSpec &spec, std::unique_ptr<Re
 
     auto sdev = ISalusDevice::safe_cast(tfdev);
     if (!sdev) {
-        ok == tf::errors::Internal(tf::strings::StrCat("Device is not an ISalusDevice: ", spec.debugString()));
+        ok = tf::errors::Internal(
+                   tf::strings::StrCat("Device is not an ISalusDevice: ", spec.debugString()));
         return ok;
     }
 
@@ -449,10 +438,11 @@ POpKernel ExecutorImpl::SetupKernel(sstl::not_null<const tf::Node *> node, const
         auto it = kernel_dev_.find(node->name());
         if (it != kernel_dev_.end())
             if (it->second != &ditem.device->underlayingDevice()) {
-                throw TFException(tf::errors::AlreadyExists("Kernel previously created on another device:", node->name(),
-                                                 " previous device: ", it->second->name(),
-                                                 " requested device: ", ditem.device->underlayingDevice().name()));
-        }
+                throw TFException(
+                    tf::errors::AlreadyExists("Kernel previously created on another device:", node->name(),
+                                              " previous device: ", it->second->name(), " requested device: ",
+                                              ditem.device->underlayingDevice().name()));
+            }
     }
 
     VLOG(2) << "Creating a kernel for device: " << ditem.device->name();
@@ -465,7 +455,6 @@ POpKernel ExecutorImpl::SetupKernel(sstl::not_null<const tf::Node *> node, const
     }
     return popkernel;
 }
-
 
 /**
  * If entry->alloc_tree is not nullptr, add entry to entry->alloc_tree

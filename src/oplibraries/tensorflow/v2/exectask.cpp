@@ -128,7 +128,7 @@ bool ExecTask::prepare(std::unique_ptr<ResourceContext> &&rctx) noexcept
 
         LogAlloc() << "Pre allocated " << ditem.device->resourceContext() << " for " << *this;
 
-        // Now we are sure things succeeded, cancel the cleanup
+        // Now we are sure things succeeded, cancel the rollback
         onReturn.dismiss();
         return true;
     } catch (const TFException &ex) {

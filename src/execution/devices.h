@@ -28,6 +28,8 @@
 
 namespace salus {
 
+// NOTE: this order is used in salus::oplib::tensorflow::TFInstance::DeviceContainer
+// If modify this, also update there.
 enum class DeviceType
 {
     CPU,
