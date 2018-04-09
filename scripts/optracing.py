@@ -1,4 +1,5 @@
-#%%
+from __future__ import absolute_import, print_function, division
+from builtins import input
 import parse_log as pl
 import pandas as pd
 import numpy as np
@@ -10,23 +11,132 @@ from importlib import reload
 reload(pl)
 #%%
 
+def choose(prompt, choices=None, default=0):
+    """Prompt the user to make a choice.
+
+    Args:
+        prompt: The prompt to show
+
+        choices: Iterable of tuples of choices. Each tuple represents a choice, and is
+        in the form (one letter, help, value) or (one letter, help). If value is missing,
+        it defaults to the letter.
+        The default choices are [('y', 'yes', True), ('n', 'no', False)]
+
+        default: the index of the default choice. Defaults to 0
+
+    Returns:
+        the associated value of the choice the user has made.
+    """
+    # Handle default arguments
+    if choices is None:
+        choices = [('y', 'yes', True), ('n', 'no', False)]
+
+    # validate arguments
+    if not choices:
+        raise ValueError('Empty choices')
+    if default < 0 or default >= len(choices):
+        raise IndexError(f'Default index should be within [0, {len(choices)}), got: {default}')
+
+    def parse_choice(ch):
+        if len(ch) == 2:
+            return ch[0].lower(), ch[1], ch[0]
+        elif len(ch) == 3:
+            return ch[0].lower(), ch[1], ch[2]
+        else:
+            raise ValueError(f'Invalid choice in choices: {tuple}')
+
+    choices = [parse_choice(c) for c in choices]
+
+    # form choices string
+    choices_str = '/'.join(ch[0] if idx != default else ch[0].upper()
+                           for idx, ch in enumerate(choices))
+
+    prompt = f'{prompt} [{choices_str}]: '
+    def_resp = choices[default][0]
+    while True:
+        resp = input(prompt)
+        if not resp:
+            resp = def_resp
+        resp = resp.lower()
+
+        for ch, _, value in choices:
+            if resp == ch:
+                return value
+
+        # Invalid input, print help
+        print(f'Invalid response: {resp}')
+        print('Accepted responses are:')
+        for ch, h, _ in choices:
+            print(f'{ch} - {h}')
+
+
+def confirm(prompt, default=False, yes_choice='y', no_choice='n'):
+    """Prompt for user's confirmation on some operation.
+
+    Returns:
+        True if the user confirmed, False otherwise.
+    """
+    return choose(prompt, choices=[(yes_choice, 'yes', True), (no_choice, 'no', False)], default=0 if default else 1)
+
+
+def select_steps(df):
+    # count unique numbers
+    counts = df.groupby('step').agg({c: 'nunique' for c in ['kernel', 'op']}).reset_index()
+    ss = counts.query('step > 10 & kernel > 10 & op > 200')
+    
+    # so the step list is
+    if len(ss) > 1:
+        # drop first iteration
+        return ss.step.astype(int).tolist()[1:]
+    else:
+        slist = []
+        # nothing we can find programmatically, let the user decide
+        for _, s, ker, op in counts:
+            if confirm(f'Step {s} has {op} tasks, with {ker} kernels, select?'):
+                slist.append(s)
+        return slist
+
+
+def only_step(steps, idx):
+    ss = steps.step.sort_values().unique().tolist()
+    if idx >= len(ss):
+        idx = len(ss) - 1
+    return steps[steps.step == ss[idx]]
+
+
+def unify_names(*dfs):
+    # make sure names map to same idx
+    names = pd.concat([df.name for df in dfs]).unique()
+    ndf = pd.DataFrame({'name': names})
+    ndf.index.rename('nameid', inplace=True)
+    ndf = ndf.reset_index()
+    
+    res = [df.drop('nameid', axis=1, errors='ignore').merge(ndf) for df in dfs]
+    if len(res) == 1:
+        return res[0]
+    else:
+        return res
+
 #
 # First load log from tensorflow
 #
+tf_events = ['task_ready', 'task_start', 'task_done']
 def load_tf(path):
     logs = pl.load_file(path)
     df = pd.DataFrame(l.__dict__ for l in logs)
     df = df[df.type != 'unknown'].drop(['level','loc', 'entry_type'], axis=1)
+    # make sure step is int
+    df['step'] = df.step.astype(int)
     
-    # discard 20 warmup steps and first few steps, use the 5th iteration
-    step25 = df[df.step == 20 + 7]
+    ss = select_steps(df)
+    step25 = df[df.step.isin(ss)]
     
     # discard some internal or async op: _SOURCE, _Recv, _Send
     ignored = ['_Recv', '_Send']
     step25 = step25[~step25.kernel.isin(ignored)]
     step25 = step25[step25.op != '_SOURCE']
     
-    steptf = step25.pivot_table(values='timestamp', index=['op','kernel'],
+    steptf = step25.pivot_table(values='timestamp', index=['step', 'op', 'kernel'],
                                 columns='type', aggfunc='first').reset_index()
     
     # add a name column
@@ -34,7 +144,10 @@ def load_tf(path):
         return '{}[{}]'.format(row['op'], row['kernel'])
     steptf['name'] = steptf.apply(name, axis=1).values
     
-    return steptf.sort_values(by=['task_ready', 'task_start', 'task_done']).reset_index(drop=True)
+    # reorder
+    steptf = steptf[['step', 'name', 'op', 'kernel'] + tf_events]
+    
+    return steptf.sort_values(by=tf_events).reset_index(drop=True)
 
 #
 # Second load log from salus
@@ -56,9 +169,11 @@ def load_salus(path, stepid=132):
     df = pd.DataFrame(l.__dict__ for l in logs)
     df = df[df.type == 'optracing_evt']
     df = df.drop(['entry_type','level','loc', 'thread', 'type'], axis=1)
+    # make sure step is int
+    df['step'] = df.step.astype(int)
     
-    # discard 20 warmup steps and first few steps, use the 5th iteration
-    step25 = df[df.step == stepid].drop(['step'], axis=1)
+    ss = select_steps(df)
+    step25 = df[df.step.isin(ss)]
     
     # discard some internal or async op: _SOURCE, _Recv, _Send
     ignored = ['_Recv', '_Send']
@@ -70,7 +185,7 @@ def load_salus(path, stepid=132):
     
     # convert evt values to columns
     step = step25.pivot_table(values='timestamp',
-                              index=['op', 'kernel', 'sess'],
+                              index=['step', 'op', 'kernel', 'sess'],
                               columns='evt', aggfunc='first').reset_index()
     # add a name column
     def name(row):
@@ -78,7 +193,7 @@ def load_salus(path, stepid=132):
     step['name'] = step.apply(name, axis=1).values
     
     # reorder
-    step = step[['sess', 'name', 'op', 'kernel'] + salus_events]
+    step = step[['sess', 'step', 'name', 'op', 'kernel'] + salus_events]
     
     # sort
     return step.sort_values(by=salus_events).reset_index(drop=True)
@@ -87,11 +202,14 @@ def load_salus(path, stepid=132):
 # Draw hlines
 #
 def draw_lines(ax, step, checkpoints, colors=['g', 'y', 'r'], offset=None,
-               labels=None, set_y=True):
+               labels=None, set_y=True, sort=False):
     """
     step is a pd.DataFrame contains a:
         timestamp, op, kernel, task_ready, task_start, task_done
     """
+    # sort first
+    if sort:
+        step = unify_names(step.sort_values(by=checkpoints))
     # columns as unix timestamp in us
     columns = [step[c].astype(np.int64) // 10**3 for c in checkpoints]
     # with offset subtracted
@@ -102,21 +220,27 @@ def draw_lines(ax, step, checkpoints, colors=['g', 'y', 'r'], offset=None,
     if labels is None:
         labels = [''] * len(colors)
     for st, ed, c, l in zip(columns, columns[1:], colors, labels):
-        ax.hlines(y=step.index, xmin=st, xmax=ed, color=c, label=l)
+        ax.hlines(y=step.nameid, xmin=st, xmax=ed, color=c, label=l)
     
     # put name on yaxis
     if set_y:
-        ax.set_yticks(step.index)
+        ax.set_yticks(step.nameid)
         ax.set_yticklabels(step.name)
     return ax, offset
 
+
+def draw_compute_tf(ax, steps):
+    pass
+
+
 sns.set_style("dark")
+plt.ioff()
 #%%
 #
 # Set paths
 #
 logdir = 'logs/optracing/'
-outputdir = '/home/peifeng/desktop/'
+outputdir = '/home/aetf/desktop/'
 figsize = (40, 70)
 set_y = True
 
@@ -126,32 +250,31 @@ set_y = True
 #figsize = None
 #set_y = False
 
+#%% Load data
+steptf = load_tf(os.path.join(logdir, 'tf/vgg11_25.tf.10iter.0.output'))
+stepsalus = load_salus(os.path.join(logdir, 'salus/1/perf.output'))
+twosess = load_salus(os.path.join(logdir, 'salus/2/perf.output'))
+
+steptf = unify_names(steptf)
+stepsalus = unify_names(stepsalus)
+twosess = unify_names(twosess)
+
 #%%
 #
 # Running one
 #
-steptf = load_tf(os.path.join(logdir, 'tf/alexnet_25.tf.10iter.0.output'))
 fig, axs = plt.subplots(nrows=2, ncols=1, sharex=True, figsize=figsize)
-draw_lines(axs[0], steptf, ['task_ready', 'task_start', 'task_done'],
-           colors=['g', 'r'], set_y=set_y)
-
-# load a few iters
-has_legend = False
-offset=None
-iters = [132, 133, 134, 135, 136, 137, 138, 139, 140]
-#iters = [133]
-for i in iters:
-    stepsalus = load_salus(os.path.join(logdir, 'salus/1/perf.output'), i)
-    ax, offset = draw_lines(axs[1], stepsalus, salus_events,
-                            colors=plt.rcParams['axes.prop_cycle'].by_key()['color'],
-                            labels=['Queuing', 'Prealloc', 'TPWait', 'DevCtx',
-                                    'PrepInput', 'Compute', 'ClrInput',
-                                    'PropOut', 'Misc'],
-                            offset=offset, set_y=set_y)
-    if not has_legend:
-        axs[1].legend()
-        has_legend = True
+draw_lines(axs[0], steptf, tf_events, colors=['g', 'r'], set_y=set_y)
 axs[0].set_title('alexnet_25 on TF')
+# load a few iters
+draw_lines(axs[1], stepsalus, salus_events,
+           colors=plt.rcParams['axes.prop_cycle'].by_key()['color'],
+           labels=['Queuing', 'Prealloc', 'TPWait', 'DevCtx',
+                   'PrepInput', 'Compute', 'ClrInput',
+                   'PropOut', 'Misc'],
+           set_y=set_y)
+
+axs[1].legend()
 axs[1].set_title('alexnet_25 on Salus')
 axs[1].set_xlabel('Normalized time (us)')
 fig.tight_layout()
@@ -162,26 +285,17 @@ plt.close(fig)
 # Running one with matching iter
 #
 fig, axs = plt.subplots(nrows=2, ncols=1, sharex=True, figsize=figsize)
-draw_lines(axs[0], steptf, ['task_ready', 'task_start', 'task_done'],
-           colors=['g', 'r'], set_y=set_y)
-
-# load a few iters
-has_legend = False
-offset=None
-#iters = [132, 133, 134, 135, 136, 137, 138, 139, 140]
-iters = [133]
-for i in iters:
-    stepsalus = load_salus(os.path.join(logdir, 'salus/1/perf.output'), i)
-    ax, offset = draw_lines(axs[1], stepsalus, salus_events,
-                            colors=plt.rcParams['axes.prop_cycle'].by_key()['color'],
-                            labels=['Queuing', 'Prealloc', 'TPWait', 'DevCtx',
-                                    'PrepInput', 'Compute', 'ClrInput',
-                                    'PropOut', 'Misc'],
-                            offset=offset, set_y=set_y)
-    if not has_legend:
-        axs[1].legend()
-        has_legend = True
+draw_lines(axs[0], only_step(steptf, 6), tf_events, colors=['g', 'r'], set_y=set_y)
 axs[0].set_title('alexnet_25 on TF')
+# use second normal iter
+draw_lines(axs[1], only_step(stepsalus, 10), salus_events,
+           colors=plt.rcParams['axes.prop_cycle'].by_key()['color'],
+           labels=['Queuing', 'Prealloc', 'TPWait', 'DevCtx',
+                   'PrepInput', 'Compute', 'ClrInput',
+                   'PropOut', 'Misc'],
+           set_y=set_y, sort=True)
+
+axs[1].legend()
 axs[1].set_title('alexnet_25 on Salus')
 axs[1].set_xlabel('Normalized time (us)')
 axs[1].set_xlim(0, 60000)
@@ -195,32 +309,25 @@ plt.close(fig)
 #
 def split_sess(twosess):
     sessA, sessB = twosess.sess.unique()
-    alexA = twosess[twosess.sess == sessA].reset_index(drop=True)
-    alexB = twosess[twosess.sess == sessB].reset_index(drop=True)
+    alexA = twosess[twosess.sess == sessA]
+    alexB = twosess[twosess.sess == sessB]
     
-    # make sure names map to same idx
-    names = pd.concat([alexA.name, alexB.name]).unique()
-    ndf = pd.DataFrame({'name': names}).reset_index()
-    alexA = alexA.merge(ndf).sort_values('index').set_index('index')
-    alexB = alexB.merge(ndf).sort_values('index').set_index('index')
     return alexA, alexB, sessA, sessB
 
 fig, axs = plt.subplots(nrows=2, ncols=1, sharex=True, figsize=figsize)
-# load another iter
+
+alexA, alexB, sessA, sessB = split_sess(twosess)
 offset=None
-for i in [133, 134, 135, 136, 137, 138, 139, 140]:
-    twosess = load_salus(os.path.join(logdir, 'salus/2/perf.output'), i)
-    alexA, alexB, sessA, sessB = split_sess(twosess)
-    _, offset = draw_lines(axs[0], alexA, salus_events,
-               colors=plt.rcParams['axes.prop_cycle'].by_key()['color'],
-               labels=['Queuing', 'Prealloc', 'TPWait', 'DevCtx', 'PrepInput',
-                       'Compute', 'ClrInput', 'PropOut', 'Misc'],
-                       offset=offset, set_y=set_y)
-    _, offset = draw_lines(axs[1], alexB, salus_events,
-               colors=plt.rcParams['axes.prop_cycle'].by_key()['color'],
-               labels=['Queuing', 'Prealloc', 'TPWait', 'DevCtx', 'PrepInput',
-                       'Compute', 'ClrInput', 'PropOut', 'Misc'],
-                       offset=offset, set_y=set_y)
+_, offset = draw_lines(axs[0], alexA, salus_events,
+           colors=plt.rcParams['axes.prop_cycle'].by_key()['color'],
+           labels=['Queuing', 'Prealloc', 'TPWait', 'DevCtx', 'PrepInput',
+                   'Compute', 'ClrInput', 'PropOut', 'Misc'],
+                   offset=offset, set_y=set_y)
+_, offset = draw_lines(axs[1], alexB, salus_events,
+           colors=plt.rcParams['axes.prop_cycle'].by_key()['color'],
+           labels=['Queuing', 'Prealloc', 'TPWait', 'DevCtx', 'PrepInput',
+                   'Compute', 'ClrInput', 'PropOut', 'Misc'],
+                   offset=offset, set_y=set_y)
 
 axs[0].set_title('alexnet_25 on Salus (Instance A: {})'.format(sessA))
 axs[1].set_title('alexnet_25 on Salus (Instance B: {})'.format(sessB))

@@ -21,11 +21,14 @@ FLAGS = flags.FLAGS
 
 
 def main(argv):
-    scfg = maybe_forced_preset(presets.Gperf)
-    scfg.scheduler = 'pack'
+    scfg = maybe_forced_preset(presets.MostEfficient)
 
     def create_wl(ex):
-        return WTL.create('vgg11', 25, 100, executor=ex)
+        return WTL.create('vgg11', 25, 405, executor=ex)
+
+    # Run alexnet_25 on TF
+    wl = create_wl(Executor.TF)
+    run_tf(FLAGS.save_dir / 'tf', wl)
 
     # Run alexnet_25 on Salus
     wl = create_wl(Executor.Salus)
