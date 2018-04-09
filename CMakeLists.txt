@@ -73,12 +73,8 @@ if(WITH_TCMALLOC)
     set_package_properties(Gperftools PROPERTIES TYPE REQUIRED PURPOSE "For gperftools cpu profiler and/or tcmalloc")
 endif(WITH_TCMALLOC)
 
-# Easylogging++
-include(thirdparty/UseEasyloggingpp.cmake)
-
-# docopt.cpp
-include(thirdparty/UseDocopt.cmake)
-
+# Bundled third party library
+add_subdirectory(thirdparty)
 #---------------------------------------------------------------------------------------
 # Print summary
 #---------------------------------------------------------------------------------------
