@@ -61,7 +61,7 @@ void OpLibraryRegistary::registerOpLibrary(executor::OpLibraryType libraryType,
 
 void OpLibraryRegistary::initializeLibraries()
 {
-    sstl::Guard g(m_mu);
+    auto g = sstl::with_guard(m_mu);
     ++initialized;
     if (initialized > 1) {
         return;
@@ -81,7 +81,7 @@ void OpLibraryRegistary::initializeLibraries()
 
 void OpLibraryRegistary::uninitializeLibraries()
 {
-    sstl::Guard g(m_mu);
+    auto g = sstl::with_guard(m_mu);
 
     --initialized;
     if (initialized <= 0) {

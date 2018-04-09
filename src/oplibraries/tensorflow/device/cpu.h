@@ -8,9 +8,11 @@
 #include "oplibraries/tensorflow/tensorflow_headers.h"
 #include "oplibraries/tensorflow/device/salusdevices.h"
 #include "utils/pointerutils.h"
+#include "utils/objectpool.h"
 
 namespace salus::oplib::tensorflow {
 
+class PerTaskCPUDevice;
 class SalusCPUDevice : public ISalusDevice, public tf::LocalDevice
 {
 public:
@@ -53,6 +55,8 @@ public:
 
 private:
     sstl::not_null<tf::Allocator *> m_allocator; // not owned
+
+    std::shared_ptr<sstl::ObjectPool<PerTaskCPUDevice>> m_pool;
 };
 
 class SalusCPUDeviceFactory : public tf::DeviceFactory

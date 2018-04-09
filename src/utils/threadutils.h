@@ -21,6 +21,7 @@
 #define SALUS_SSTL_THREADUTILS_H
 
 #include "platform/logging.h"
+#include "utils/macros.h"
 
 #include <boost/iterator/indirect_iterator.hpp>
 #include <boost/thread/lock_algorithms.hpp>
@@ -33,12 +34,13 @@
 #include <memory>
 #include <mutex>
 #include <type_traits>
+#include <utility>
 
 namespace sstl {
 
+namespace detail {
 using Guard = std::lock_guard<std::mutex>;
 using UGuard = std::unique_lock<std::mutex>;
-
 class TGuard
 {
     std::chrono::steady_clock::time_point prelock;
@@ -47,15 +49,14 @@ class TGuard
     std::chrono::steady_clock::time_point released;
     std::string name;
 
-    TGuard(const TGuard &other) = delete;
-    TGuard &operator=(const TGuard &other) = delete;
-
 public:
-    explicit TGuard(std::mutex &mu, const std::string &name)
+    SALUS_DISALLOW_COPY_AND_ASSIGN(TGuard);
+
+    explicit TGuard(std::mutex &mu, std::string name)
         : prelock(std::chrono::steady_clock::now())
-        , g(mu)
-        , locked(std::chrono::steady_clock::now())
-        , name(name)
+          , g(mu)
+          , locked(std::chrono::steady_clock::now())
+          , name(std::move(name))
     {
     }
 
@@ -88,12 +89,27 @@ public:
         unlock();
     }
 };
+} // namespace detail
 
-// Catch bug where variable name is omitted, e.g. Guard (mu);
-#define Guard(x) static_assert(0, "Guard declaration missing variable name");
-#define UGuard(x) static_assert(0, "UGuard declaration missing variable name");
+template<typename ... Args>
+[[nodiscard]] auto with_guard(Args && ... args)
+{
+    return detail::Guard(std::forward<Args>(args)...);
+}
 
-template<typename Iterator, typename SFINAE = std::enable_if_t<
+template<typename ... Args>
+[[nodiscard]] auto with_uguard(Args && ... args)
+{
+    return detail::UGuard(std::forward<Args>(args)...);
+}
+
+template<typename ... Args>
+[[nodiscard]] auto with_tguard(Args && ... args)
+{
+    return detail::TGuard(std::forward<Args>(args)...);
+}
+
+template<typename Iterator, typename = std::enable_if_t<
                                 std::is_pointer_v<typename std::iterator_traits<Iterator>::value_type>>>
 void lock(Iterator begin, Iterator end)
 {
@@ -104,7 +120,7 @@ template<typename Iterator>
 std::enable_if_t<std::is_pointer_v<typename std::iterator_traits<Iterator>::value_type>> lock_shared(
     Iterator begin, Iterator end);
 
-template<typename Iterator, typename SFINAE = std::enable_if_t<std::is_same_v<
+template<typename Iterator, typename = std::enable_if_t<std::is_same_v<
                                 typename std::iterator_traits<Iterator>::value_type, boost::shared_mutex>>>
 void lock_shared(Iterator begin, Iterator end);
 
@@ -200,7 +216,7 @@ std::enable_if_t<std::is_pointer_v<typename std::iterator_traits<Iterator>::valu
     lock_shared(b, e);
 }
 
-template<typename Iterator, typename SFINAE = std::enable_if_t<std::is_same_v<
+template<typename Iterator, typename = std::enable_if_t<std::is_same_v<
                                 typename std::iterator_traits<Iterator>::value_type, boost::shared_mutex>>>
 void lock_shared(Iterator begin, Iterator end)
 {

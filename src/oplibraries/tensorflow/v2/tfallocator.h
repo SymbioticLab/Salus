@@ -71,13 +71,13 @@ public:
 
     size_t lastFailedAllocSize() const
     {
-        sstl::Guard g(m_mu);
+        auto g = sstl::with_guard(m_mu);
         return m_lastFailedAllocSize;
     }
 
     size_t peakAllocSize() const
     {
-        sstl::Guard g(m_mu);
+        auto g = sstl::with_guard(m_mu);
         return m_peakAllocSize;
     }
 

@@ -7,6 +7,7 @@
 
 #include "oplibraries/tensorflow/tensorflow_headers.h"
 #include "oplibraries/tensorflow/device/salusdevices.h"
+#include "utils/objectpool.h"
 
 #include <mutex>
 #include <unordered_map>
@@ -73,6 +74,7 @@ private:
     }
 
     friend class PerTaskGPUDevice;
+    std::shared_ptr<sstl::ObjectPool<PerTaskGPUDevice>> m_pool;
 
     std::mutex m_muStream;
     std::vector<bool> m_streamUsed;

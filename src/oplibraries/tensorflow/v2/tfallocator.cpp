@@ -203,7 +203,7 @@ void PerOpAllocator::DeallocateRaw(void *ptr)
 
     std::unordered_map<void*, size_t>::node_type nh;
     {
-        sstl::Guard g(m_mu);
+        auto g = sstl::with_guard(m_mu);
         nh = m_allocated.extract(ptr);
         if (m_allocated.empty()) {
             // FIXME: have a add ticket to session?
@@ -229,7 +229,7 @@ bool PerOpAllocator::ShouldAllocateEmptyTensors()
 
 void PerOpAllocator::recordSize(void *ptr, size_t size)
 {
-    sstl::Guard g(m_mu);
+    auto g = sstl::with_guard(m_mu);
     m_lastFailedAllocSize = size;
     if (ptr) {
         m_allocated[ptr] = size;
@@ -240,7 +240,7 @@ void PerOpAllocator::recordSize(void *ptr, size_t size)
 
 size_t PerOpAllocator::findSize(void *ptr)
 {
-    sstl::Guard g(m_mu);
+    auto g = sstl::with_guard(m_mu);
     auto it = m_allocated.find(ptr);
     if (it == m_allocated.end()) {
         return 0;

@@ -86,7 +86,7 @@ private:
 
     void saveSucceedUsageForNode(const std::string &name, const Resources &res)
     {
-        sstl::Guard g(usage_mu_);
+        auto g = sstl::with_guard(usage_mu_);
         if (!resources::contains(cachedUsages_[name], res)) {
             cachedUsages_[name] = res;
         }
@@ -94,7 +94,7 @@ private:
 
     std::optional<Resources> cachedUsageForNode(const std::string &name)
     {
-        sstl::Guard g(usage_mu_);
+        auto g = sstl::with_guard(usage_mu_);
         return sstl::optionalGet(cachedUsages_, name);
     }
 
@@ -420,7 +420,7 @@ private:
         inline bool DecrementOutstandingOps(const GraphView &gview, int64_t iter,
                                             TaggedNodeSeq *ready)
         {
-            sstl::Guard l(mu);
+            auto l = sstl::with_guard(mu);
             return DecrementOutstandingOpsLocked(gview, iter, ready);
         }
 
@@ -511,7 +511,7 @@ private:
 
     inline auto shapeForNode(const tf::Node *n)
     {
-        sstl::Guard l(refinerMu_);
+        auto l = sstl::with_guard(refinerMu_);
         return refiner_.GetContext(n);
     }
 
@@ -611,7 +611,7 @@ private:
         // add better optional debugging support.
         if (vlog_ && VLOG_IS_ON(1)) {
             const auto *item = impl_->gview_.node(node_id);
-            sstl::Guard l(frame->mu);
+            auto l = sstl::with_guard(frame->mu);
             frame->GetIteration(iter)->mark_completed(item->pending_id);
         }
     }

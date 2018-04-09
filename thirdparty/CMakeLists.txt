@@ -14,7 +14,6 @@ function(add_submodule library_name)
     else()
         set(third_party_dir ${CMAKE_CURRENT_LIST_DIR})
     endif()
-        message("Using third party dir: ${third_party_dir}")
 
     if(NOT EXISTS ${third_party_dir}/${library_name}/CMakeLists.txt)
         message(STATUS "   Initializing submodule")

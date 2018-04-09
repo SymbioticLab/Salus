@@ -30,7 +30,6 @@
 #include <optional>
 
 using std::optional;
-using sstl::Guard;
 using std::chrono::duration_cast;
 using FpMS = std::chrono::duration<double, std::chrono::milliseconds::period>;
 using namespace std::chrono_literals;
@@ -107,7 +106,7 @@ std::string ResourceMonitor::DebugString() const
     std::ostringstream oss;
     oss << "ResourceMonitor: dumping available resources" << std::endl;
 
-    Guard g(m_mu);
+    auto g = sstl::with_guard(m_mu);
 
     oss << "    Available:" << std::endl;
     oss << resources::DebugString(m_limits, "        ");
@@ -254,13 +253,13 @@ SessionResourceTracker::SessionResourceTracker(const Resources &cap)
 
 void SessionResourceTracker::setDisabled(bool val)
 {
-    Guard g(m_mu);
+    auto g = sstl::with_guard(m_mu);
     m_disabled = val;
 }
 
 bool SessionResourceTracker::disabled() const
 {
-    Guard g(m_mu);
+    auto g = sstl::with_guard(m_mu);
     return m_disabled;
 }
 
@@ -284,7 +283,7 @@ bool SessionResourceTracker::canAdmitUnsafe(const ResourceMap &cap) const
 // Take the session
 bool SessionResourceTracker::admit(const ResourceMap &cap, uint64_t &ticket)
 {
-    Guard g(m_mu);
+    auto g = sstl::with_guard(m_mu);
 
     if (m_disabled) {
         return true;
@@ -312,7 +311,7 @@ bool SessionResourceTracker::admit(const ResourceMap &cap, uint64_t &ticket)
 
 void SessionResourceTracker::acceptAdmission(uint64_t ticket, const std::string &sessHandle)
 {
-    Guard g(m_mu);
+    auto g = sstl::with_guard(m_mu);
     if (m_disabled) {
         return;
     }
@@ -322,7 +321,7 @@ void SessionResourceTracker::acceptAdmission(uint64_t ticket, const std::string 
 
 optional<ResourceMap> SessionResourceTracker::usage(uint64_t ticket) const
 {
-    Guard g(m_mu);
+    auto g = sstl::with_guard(m_mu);
 
     auto it = m_sessions.find(ticket);
     if (it == m_sessions.end()) {
@@ -352,7 +351,7 @@ void SessionResourceTracker::freeUnsafe(uint64_t ticket)
 void SessionResourceTracker::free(uint64_t ticket)
 {
     LogAlloc() << "Free session resource: ticket=" << ticket;
-    Guard g(m_mu);
+    auto g = sstl::with_guard(m_mu);
     if (m_disabled) {
         return;
     }
@@ -362,7 +361,7 @@ void SessionResourceTracker::free(uint64_t ticket)
 
 std::string SessionResourceTracker::DebugString() const
 {
-    Guard g(m_mu);
+    auto g = sstl::with_guard(m_mu);
 
     std::ostringstream oss;
 
@@ -376,7 +375,7 @@ std::string SessionResourceTracker::DebugString() const
 
 void ResourceMonitor::initializeLimits()
 {
-    Guard g(m_mu);
+    auto g = sstl::with_guard(m_mu);
 
     // 100 G for CPU
     m_limits[{ResourceType::MEMORY, devices::CPU0}] = 100_sz * 1024 * 1024 * 1024;
@@ -392,7 +391,7 @@ void ResourceMonitor::initializeLimits(const Resources &cap)
 {
     initializeLimits();
 
-    Guard g(m_mu);
+    auto g = sstl::with_guard(m_mu);
 
     auto lend = m_limits.end();
 
@@ -409,12 +408,7 @@ void ResourceMonitor::initializeLimits(const Resources &cap)
 
 std::optional<uint64_t> ResourceMonitor::preAllocate(const Resources &req, Resources *missing)
 {
-    sstl::TimeoutWarning tw(10ms, [&](auto limit, auto dur){
-        LOG(WARNING) << "preAllocate took more than " << duration_cast<FpMS>(limit)
-                     << " to finish: " << duration_cast<FpMS>(dur)
-                     << " for " << req;
-    });
-    Guard g(m_mu);
+    auto g = sstl::with_guard(m_mu);
     if (!contains(m_limits, req)) {
         if (missing) {
             *missing = req;
@@ -435,7 +429,7 @@ std::optional<uint64_t> ResourceMonitor::preAllocate(const Resources &req, Resou
 
 bool ResourceMonitor::allocate(uint64_t ticket, const Resources &res)
 {
-    Guard g(m_mu);
+    auto g = sstl::with_guard(m_mu);
     return allocateUnsafe(ticket, res);
 }
 
@@ -504,7 +498,7 @@ void ResourceMonitor::freeStaging(uint64_t ticket)
         return;
     }
 
-    Guard g(m_mu);
+    auto g = sstl::with_guard(m_mu);
 
     auto it = m_staging.find(ticket);
     if (it == m_staging.end()) {
@@ -518,7 +512,7 @@ void ResourceMonitor::freeStaging(uint64_t ticket)
 
 bool ResourceMonitor::free(uint64_t ticket, const Resources &res)
 {
-    Guard g(m_mu);
+    auto g = sstl::with_guard(m_mu);
     return freeUnsafe(ticket, res);
 }
 
@@ -573,7 +567,7 @@ std::vector<std::pair<size_t, uint64_t>> ResourceMonitor::sortVictim(
     // TODO: currently only select based on GPU memory usage, generalize to all resources
     ResourceTag tag{ResourceType::MEMORY, devices::GPU0};
     {
-        Guard g(m_mu);
+        auto g = sstl::with_guard(m_mu);
         for (auto &ticket : candidates) {
             auto usagemap = sstl::optionalGet(m_using, ticket);
             if (!usagemap) {
@@ -595,7 +589,7 @@ std::vector<std::pair<size_t, uint64_t>> ResourceMonitor::sortVictim(
 
 Resources ResourceMonitor::queryUsages(const std::unordered_set<uint64_t> &tickets) const
 {
-    Guard g(m_mu);
+    auto g = sstl::with_guard(m_mu);
     Resources res;
     for (auto t : tickets) {
         merge(res, sstl::getOrDefault(m_using, t, {}));
@@ -605,12 +599,12 @@ Resources ResourceMonitor::queryUsages(const std::unordered_set<uint64_t> &ticke
 
 optional<Resources> ResourceMonitor::queryUsage(uint64_t ticket) const
 {
-    Guard g(m_mu);
+    auto g = sstl::with_guard(m_mu);
     return sstl::optionalGet(m_using, ticket);
 }
 
 bool ResourceMonitor::hasUsage(uint64_t ticket) const
 {
-    Guard g(m_mu);
+    auto g = sstl::with_guard(m_mu);
     return m_using.count(ticket) > 0;
 }

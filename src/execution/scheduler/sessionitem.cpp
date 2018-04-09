@@ -26,7 +26,7 @@ SessionItem::~SessionItem()
 
     std::function<void()> cb;
     {
-        sstl::Guard g(mu);
+        auto g = sstl::with_guard(mu);
         cb = std::move(cleanupCb);
     }
     if (cb) {
@@ -42,13 +42,13 @@ SessionItem::~SessionItem()
 
 void SessionItem::setPagingCallbacks(PagingCallbacks pcb)
 {
-    sstl::Guard g(mu);
+    auto g = sstl::with_guard(mu);
     pagingCb = std::move(pcb);
 }
 
 void SessionItem::prepareDelete(std::function<void()> cb)
 {
-    sstl::Guard g(mu);
+    auto g = sstl::with_guard(mu);
     cleanupCb = std::move(cb);
     // clear paging callbacks so the executorImpl won't get called after it is deleted
     // but haven't been removed from session list yet.
@@ -57,13 +57,13 @@ void SessionItem::prepareDelete(std::function<void()> cb)
 
 void SessionItem::notifyMemoryAllocation(uint64_t ticket)
 {
-    sstl::Guard g(tickets_mu);
+    auto g = sstl::with_guard(tickets_mu);
     tickets.emplace(ticket);
 }
 
 void SessionItem::removeMemoryAllocationTicket(uint64_t ticket)
 {
     VLOG(2) << "Removing ticket " << ticket << " from session " << sessHandle;
-    sstl::Guard g(tickets_mu);
+    auto g = sstl::with_guard(tickets_mu);
     tickets.erase(ticket);
 }

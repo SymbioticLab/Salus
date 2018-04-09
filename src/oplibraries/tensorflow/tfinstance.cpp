@@ -119,7 +119,7 @@ void TFInstance::handleCreateSession(const tf::CreateSessionRequest &req, tf::Cr
     resp.set_session_handle(handle);
     // Insert into the session map, which takes ownership of the session.
     {
-        sstl::Guard l(m_mu);
+        auto l = sstl::with_guard(m_mu);
         if (!m_sessions.try_emplace(handle, std::move(session)).second) {
             throw TFException(tf::errors::Internal("Error when inserting session ", handle));
         }
@@ -131,7 +131,7 @@ void TFInstance::handleCreateSession(const tf::CreateSessionRequest &req, tf::Cr
 
 std::shared_ptr<TFSession> TFInstance::findSession(const std::string &sessHandle)
 {
-    sstl::Guard g(m_mu);
+    auto g = sstl::with_guard(m_mu);
     auto it = m_sessions.find(sessHandle);
     if (it == m_sessions.end()) {
         LOG(ERROR) << "Dumping all known sessions: ";
@@ -146,7 +146,7 @@ std::shared_ptr<TFSession> TFInstance::findSession(const std::string &sessHandle
 
 std::shared_ptr<TFSession> TFInstance::popSession(const std::string &sessHandle)
 {
-    sstl::Guard g(m_mu);
+    auto g = sstl::with_guard(m_mu);
     auto nh = m_sessions.extract(sessHandle);
     if (!nh) {
         throw TFException(tf::errors::InvalidArgument("Session ", sessHandle,
@@ -181,7 +181,7 @@ void TFInstance::handleReset(const tf::ResetRequest &req, tf::ResetResponse &res
     UNUSED(resp);
     std::vector<std::shared_ptr<TFSession>> sessToClose;
     {
-        sstl::Guard g(m_mu);
+        auto g = sstl::with_guard(m_mu);
         sessToClose.reserve(m_sessions.size());
         for (auto &[sessHandle, sess] : m_sessions) {
             UNUSED(sessHandle);

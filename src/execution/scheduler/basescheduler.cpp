@@ -55,7 +55,7 @@ SchedulerRegistary::~SchedulerRegistary() = default;
 SchedulerRegistary::Register::Register(std::string_view name, SchedulerFactory factory)
 {
     auto &registary = SchedulerRegistary::instance();
-    sstl::Guard guard(registary.m_mu);
+    auto guard = sstl::with_guard(registary.m_mu);
     auto [iter, inserted] = registary.m_schedulers.try_emplace(std::string(name), std::move(factory));
     UNUSED(iter);
     if (!inserted) {
@@ -66,7 +66,7 @@ SchedulerRegistary::Register::Register(std::string_view name, SchedulerFactory f
 std::unique_ptr<BaseScheduler> SchedulerRegistary::create(std::string_view name,
                                                           ExecutionEngine &engine) const
 {
-    sstl::Guard guard(m_mu);
+    auto guard = sstl::with_guard(m_mu);
     auto iter = m_schedulers.find(name);
     if (iter == m_schedulers.end()) {
         LOG(ERROR) << "No scheduler registered under name: " << name;
@@ -90,7 +90,7 @@ void BaseScheduler::notifyPreSchedulingIteration(const SessionList &sessions,
     UNUSED(changeset);
     UNUSED(candidates);
 
-    sstl::Guard g(m_muRes);
+    auto g = sstl::with_guard(m_muRes);
     m_missingRes.clear();
 }
 
@@ -112,7 +112,7 @@ bool BaseScheduler::maybePreAllocateFor(OperationItem &opItem, const DeviceSpec 
     auto rctx = m_engine.makeResourceContext(item, spec, usage, &missing);
     if (!rctx->isGood()) {
         // Failed to pre allocate resources
-        sstl::Guard g(m_muRes);
+        auto g = sstl::with_guard(m_muRes);
         m_missingRes.emplace(&opItem, std::move(missing));
         return false;
     }
@@ -122,14 +122,14 @@ bool BaseScheduler::maybePreAllocateFor(OperationItem &opItem, const DeviceSpec 
         return false;
     }
 
-    sstl::Guard g(item->tickets_mu);
+    auto g = sstl::with_guard(item->tickets_mu);
     item->tickets.insert(ticket);
     return true;
 }
 
 bool BaseScheduler::insufficientMemory(const DeviceSpec &spec)
 {
-    sstl::Guard g(m_muRes);
+    auto g = sstl::with_guard(m_muRes);
 
     if (m_missingRes.empty()) {
         return false;

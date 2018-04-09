@@ -7,11 +7,13 @@
 
 #include "platform/logging.h"
 
+#include <concurrentqueue.h>
+
 #include <memory>
 
 namespace sstl {
 /**
- * An pool of objects
+ * An pool of objects. This is thread safe.
  */
 template<typename T>
 class ObjectPool : public std::enable_shared_from_this<ObjectPool<T>>
@@ -31,8 +33,10 @@ private:
                     pool_ptr->add(std::unique_ptr<T>{ptr});
                     return;
                 } catch (...) {
+                    LOG(ERROR) << "Error when adding back objecto to pool";
                 }
             }
+            LOG(WARNING) << "Object pool goes out of scope before objects";
             std::default_delete<T>{}(ptr);
         }
 
@@ -43,39 +47,43 @@ private:
 public:
     using ptr_type = std::unique_ptr<T, ExternalDeleter>;
 
+    ObjectPool() noexcept
+        : m_frees(std::thread::hardware_concurrency(), 0, std::thread::hardware_concurrency())
+        , m_token(m_frees)
+    {
+    }
+
     void add(std::unique_ptr<T> &&t) noexcept
     {
-        m_frees.push(std::move(t));
+        m_frees.enqueue(std::move(t));
     }
 
     template<typename... Args>
-    ptr_type acquire(Args... args) noexcept
+    ptr_type acquire(Args && ... args) noexcept
     {
-        T *tmp;
-        if (m_frees.empty()) {
-            tmp = std::make_unique<T>(std::forward<Args>(args)...).release();
+        std::unique_ptr<T> tmp;
+        if (m_frees.try_dequeue(m_token, tmp)) {
+            tmp->reset(std::forward<Args>(args)...);
         } else {
-            m_frees.top()->reset(std::forward<Args>(args)...);
-            tmp = m_frees.top().release();
-            m_frees.pop();
+            tmp = std::make_unique<T>(std::forward<Args>(args)...);
         }
+
         // NOTE: 'this->' is needed before weak_from_this because of template 2 pheases name lookup
         // see https://stackoverflow.com/a/15531940/2441376
-        return ptr_type{tmp, ExternalDeleter{this->weak_from_this()}};
-    }
-
-    bool empty() const noexcept
-    {
-        return m_frees.empty();
+        return ptr_type{tmp.release(), ExternalDeleter{this->weak_from_this()}};
     }
 
     size_t size() const noexcept
     {
-        return m_frees.size();
+        return m_frees.size_approx();
     }
 
 private:
-    std::stack<std::unique_ptr<T>> m_frees;
+    using value_type = std::unique_ptr<T>;
+    using FreeList = moodycamel::ConcurrentQueue<value_type>;
+    using Token = moodycamel::ConsumerToken;
+    FreeList m_frees;
+    Token m_token;
 };
 
 } // namespace sstl

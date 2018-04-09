@@ -233,7 +233,7 @@ void ExecutorState::fetchRecvShape(const tf::Node *n)
 
     tf::Tensor t;
     if (zr->FindTensor(key, t)) {
-        sstl::Guard l(refinerMu_);
+        auto l = sstl::with_guard(refinerMu_);
         sendShapes_[key] = tf::PartialTensorShape(t.shape().dim_sizes());
     } else {
         VLOG(2) << "Recv key not found for a client terminated recv op : " << key;
@@ -242,7 +242,7 @@ void ExecutorState::fetchRecvShape(const tf::Node *n)
 
 void ExecutorState::addNodeToRefiner(const TaggedNode &tn)
 {
-    sstl::Guard l(refinerMu_);
+    auto l = sstl::with_guard(refinerMu_);
     auto node = tn.node;
 
     if (node->type_string() == "Slice") {
@@ -309,7 +309,7 @@ size_t ExecutorImpl::handlePagingRequest(uint64_t oldTicket, std::unique_ptr<Res
     sg += [&totalReleased]() { VLOG(2) << "Paging released " << totalReleased << " bytes of memory"; };
 
     {
-        sstl::Guard g(entry_mu_);
+        auto g = sstl::with_guard(entry_mu_);
         auto range = active_buffers_.equal_range(oldTicket);
         if (range.first == range.second) {
             LOG(ERROR) << "Requested ticket for paging not found: " << oldTicket;
@@ -335,7 +335,7 @@ size_t ExecutorImpl::handlePagingRequest(uint64_t oldTicket, std::unique_ptr<Res
 
     // Remember to add them back to active entries with updated value when exit
     sg += [this, &parts, oldTicket]() {
-        sstl::Guard g(entry_mu_);
+        auto g = sstl::with_guard(entry_mu_);
         for (auto part : parts) {
             VLOG(2) << "Adding buffer tree of ticket " << part->ticket << " (was " << oldTicket
                     << ") due to paging";
@@ -396,7 +396,7 @@ size_t ExecutorImpl::handlePagingRequest(uint64_t oldTicket, std::unique_ptr<Res
 
 void ExecutorImpl::forceEvicted()
 {
-    sstl::Guard g(entry_mu_);
+    auto g = sstl::with_guard(entry_mu_);
     for (auto state : active_states_) {
         state->ForceInterrupt(tf::errors::ResourceExhausted("Forcely killed due to paging"));
     }
@@ -451,7 +451,7 @@ POpKernel ExecutorImpl::SetupKernel(sstl::not_null<const tf::Node *> node, const
     });
     // first check if we have a cache for this kernel and if so, if the kernel is on the same device
     {
-        sstl::Guard g(kernel_dev_mu_);
+        auto g = sstl::with_guard(kernel_dev_mu_);
         auto it = kernel_dev_.find(node->name());
         if (it != kernel_dev_.end())
             if (it->second != &ditem.device->underlayingDevice()) {
@@ -467,7 +467,7 @@ POpKernel ExecutorImpl::SetupKernel(sstl::not_null<const tf::Node *> node, const
 
     // only record device placement after create kernel, because get_kernel may throw
     {
-        sstl::Guard g(kernel_dev_mu_);
+        auto g = sstl::with_guard(kernel_dev_mu_);
         kernel_dev_.emplace(node->name(), &ditem.device->underlayingDevice());
     }
     return popkernel;
@@ -489,7 +489,7 @@ void ExecutorImpl::updateBufferTree(Entry *entry, uint64_t ticket)
     const auto buf = tf::remote::PagingHelper::bufferOf(*entry->RefOrVal());
     const auto root_buf = buf ? buf->root_buffer() : nullptr;
 
-    sstl::Guard g(entry_mu_);
+    auto g = sstl::with_guard(entry_mu_);
     auto &tree = entry->alloc_tree;
     if (!tree) {
         auto range = active_buffers_.equal_range(ticket);
@@ -563,7 +563,7 @@ void ExecutorImpl::removeFromBufferTree(const Entry *entry, EntryVec *needUpdate
         return false;
     };
 
-    sstl::Guard g(entry_mu_);
+    auto g = sstl::with_guard(entry_mu_);
 
     if (sstl::erase_if(tree->roots, matchRefs)) {
         return;

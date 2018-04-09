@@ -184,7 +184,7 @@ void ExecutionEngine::pushToSessionQueue(POpItem &&opItem)
     }
 
     {
-        sstl::Guard g(sess->mu);
+        auto g = sstl::with_guard(sess->mu);
         sess->queue.emplace_back(std::move(opItem));
     }
     m_note_has_work.notify();
@@ -266,7 +266,7 @@ void ExecutionEngine::scheduleLoop()
         SessionChangeSet changeset;
         // Fisrt check if there's any pending deletions
         {
-            sstl::Guard g(m_delMu);
+            auto g = sstl::with_guard(m_delMu);
 
             using std::swap;
             swap(changeset.deletedSessions, m_deletedSessions);
@@ -288,7 +288,7 @@ void ExecutionEngine::scheduleLoop()
 
         // Append any new sessions
         {
-            sstl::Guard g(m_newMu);
+            auto g = sstl::with_guard(m_newMu);
 
             changeset.numAddedSessions = m_newSessions.size();
 
@@ -308,7 +308,7 @@ void ExecutionEngine::scheduleLoop()
         bool enableOOMProtect = m_sessions.size() > 1;
         for (auto &item : m_sessions) {
             {
-                sstl::Guard g(item->mu);
+                auto g = sstl::with_guard(item->mu);
                 item->bgQueue.splice(item->bgQueue.end(), item->queue);
             }
 
@@ -376,7 +376,7 @@ void ExecutionEngine::scheduleLoop()
                     LOG(ERROR) << "OOM on device " << dev
                                << " for single session happened: " << m_sessions.front()->sessHandle;
                     {
-                        sstl::Guard g(m_sessions.front()->tickets_mu);
+                        auto g = sstl::with_guard(m_sessions.front()->tickets_mu);
                         auto usage = m_resMonitor.queryUsages(m_sessions.front()->tickets);
                         LOG(ERROR) << "This session usage:" << resources::DebugString(usage);
                     }
@@ -492,7 +492,7 @@ void ExecutionEngine::taskStopped(OperationItem &opItem, bool failed)
     if (!failed) {
         if (VLOG_IS_ON(2)) {
             if (auto item = opItem.sess.lock(); item) {
-                sstl::Guard g(item->mu);
+                auto g = sstl::with_guard(item->mu);
                 ++item->totalExecutedOp;
             }
         }
@@ -553,7 +553,7 @@ bool ExecutionEngine::doPaging(const DeviceSpec &spec, const DeviceSpec &target)
         auto &pSess = candidates[i].second.get();
         std::vector<std::pair<size_t, uint64_t>> victims;
         {
-            sstl::Guard g(pSess->tickets_mu);
+            auto g = sstl::with_guard(pSess->tickets_mu);
             if (pSess->tickets.empty()) {
                 // no need to go beyond
                 break;
@@ -565,7 +565,7 @@ bool ExecutionEngine::doPaging(const DeviceSpec &spec, const DeviceSpec &target)
         // also prevents the executor from clearing the paging callbacks.
         // This should not create deadlock as nothing could finish at this time,
         // thus no new tasks could be submitted.
-        sstl::Guard g(pSess->mu);
+        auto g = sstl::with_guard(pSess->mu);
         if (!pSess->pagingCb) {
             continue;
         }
@@ -604,7 +604,7 @@ bool ExecutionEngine::doPaging(const DeviceSpec &spec, const DeviceSpec &target)
 
     // Forcely kill one session
     for (auto [usage, pSess] : candidates) {
-        sstl::Guard g(pSess.get()->mu);
+        auto g = sstl::with_guard(pSess.get()->mu);
         if (!pSess.get()->pagingCb) {
             continue;
         }

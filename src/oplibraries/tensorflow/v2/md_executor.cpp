@@ -325,7 +325,7 @@ ExecutorState::ExecutorState(const tf::Executor::Args &args, ExecutorImpl *impl)
 {
     // Insert ourself into active list
     {
-        sstl::Guard g(impl->entry_mu_);
+        auto g = sstl::with_guard(impl->entry_mu_);
         impl->active_states_.insert(this);
     }
 
@@ -350,7 +350,7 @@ ExecutorState::~ExecutorState()
     // force interupption. In that case the ExecutorImpl takes care
     // of clearing active_states_
     if (!forceInterrupted) {
-        sstl::Guard g(impl_->entry_mu_);
+        auto g = sstl::with_guard(impl_->entry_mu_);
         impl_->active_states_.erase(this);
     }
 
@@ -423,7 +423,7 @@ void ExecutorState::Process(TaggedNode tagged_node)
         int64_t input_iter = tagged_node.input_iter;
         const NodeItem &item = *impl_->gview_.node(tagged_node.node->id());
 
-        sstl::Guard l(input_frame->mu);
+        auto l = sstl::with_guard(input_frame->mu);
         input_frame->GetIteration(input_iter)->mark_started(item.pending_id);
     }
 
@@ -791,7 +791,7 @@ void ExecutorState::ClearInputs(Entry *first, size_t num, BufferLockVec &buflock
             DCHECK(entry->alloc_tree);
             VLOG(2) << "Removing entry " << as_hex(entry) << " of ticket " << entry->alloc_tree->ticket
                     << " due to clearinputs";
-            sstl::Guard g(impl_->entry_mu_);
+            auto g = sstl::with_guard(impl_->entry_mu_);
             auto range = impl_->active_buffers_.equal_range(entry->alloc_tree->ticket);
             for (auto it = range.first; it != range.second; ++it) {
                 if (it->second == entry->alloc_tree) {
@@ -830,7 +830,7 @@ void ExecutorState::PropagateOutputs(const TaggedNode &tagged_node, const NodeIt
         // Fast path for nodes types that don't need special handling
         DCHECK_EQ(input_frame, output_frame);
         // Normal path for most nodes
-        sstl::Guard l(input_frame->mu);
+        auto l = sstl::with_guard(input_frame->mu);
         output_frame->ActivateNodes(item, is_dead, output_iter, outputs, ready);
         is_frame_done = input_frame->DecrementOutstandingOpsLocked(impl_->gview_, input_iter, ready);
     } else if (item.is_enter) {
@@ -840,7 +840,7 @@ void ExecutorState::PropagateOutputs(const TaggedNode &tagged_node, const NodeIt
         FindOrCreateChildFrame(input_frame, input_iter, node, &output_frame);
         output_iter = 0;
         {
-            sstl::Guard l(output_frame->mu);
+            auto l = sstl::with_guard(output_frame->mu);
             if (is_constant) {
                 // Propagate to all active iterations if this is a loop invariant.
                 output_frame->AddLoopInv(item, (*outputs)[0], ready);
@@ -852,7 +852,7 @@ void ExecutorState::PropagateOutputs(const TaggedNode &tagged_node, const NodeIt
         is_frame_done = input_frame->DecrementOutstandingOps(impl_->gview_, input_iter, ready);
     } else if (item.is_exit) {
         if (is_dead) {
-            sstl::Guard l(input_frame->mu);
+            auto l = sstl::with_guard(input_frame->mu);
             // Stop and remember this node if it is a dead exit.
             if (input_iter == input_frame->iteration_count) {
                 input_frame->dead_exits.push_back(node);
@@ -862,14 +862,14 @@ void ExecutorState::PropagateOutputs(const TaggedNode &tagged_node, const NodeIt
             output_frame = input_frame->parent_frame;
             output_iter = input_frame->parent_iter;
             {
-                sstl::Guard l(output_frame->mu);
+                auto l = sstl::with_guard(output_frame->mu);
                 output_frame->ActivateNodes(item, is_dead, output_iter, outputs, ready);
             }
             is_frame_done = input_frame->DecrementOutstandingOps(impl_->gview_, input_iter, ready);
         }
     } else {
         DCHECK(IsNextIteration(node));
-        sstl::Guard l(input_frame->mu);
+        auto l = sstl::with_guard(input_frame->mu);
         if (is_dead) {
             // Stop the deadness propagation.
             output_frame = nullptr;
@@ -926,7 +926,7 @@ void ExecutorState::ForceInterrupt(const tf::Status &s)
     // Some error happened. This thread of computation is done.
     {
         VLOG(3) << "Try get lock for error handle";
-        sstl::Guard l(mu_);
+        auto l = sstl::with_guard(mu_);
         VLOG(2) << "Error handle";
         if (status_.ok()) {
             status_ = s;
@@ -952,7 +952,7 @@ bool ExecutorState::NodeDone(const tf::Status &s, const tf::Node *node, const tf
     bool abort_run = false;
     if (!s.ok()) {
         // Some error happened. This thread of computation is done.
-        sstl::Guard l(mu_);
+        auto l = sstl::with_guard(mu_);
         if (status_.ok()) {
             abort_run = true;
             status_ = s;
@@ -1119,13 +1119,13 @@ void ExecutorState::DumpIterationState(const FrameState *frame, IterationState *
 
 void ExecutorState::DumpState()
 {
-    sstl::Guard l(mu_);
+    auto l = sstl::with_guard(mu_);
     if (!dumped_on_error_) {
         VLOG(2) << "Dumping state";
         for (auto &frame : outstanding_frames_) {
             VLOG(2) << frame.first;
             FrameState *frame_state = frame.second;
-            sstl::Guard frame_lock(frame_state->mu);
+            auto frame_lock = sstl::with_guard(frame_state->mu);
             for (IterationState *iteration : frame_state->iterations) {
                 VLOG(2) << "  Iteration:";
                 DumpIterationState(frame_state, iteration);
@@ -1180,7 +1180,7 @@ void ExecutorState::FindOrCreateChildFrame(FrameState *frame, int64_t iter, cons
     const std::string child_name = MakeFrameName(frame, iter, enter_name);
 
     {
-        sstl::Guard executor_lock(mu_);
+        auto executor_lock = sstl::with_guard(mu_);
         auto it = outstanding_frames_.find(child_name);
         if (it != outstanding_frames_.end()) {
             *child = it->second;
@@ -1208,12 +1208,12 @@ void ExecutorState::FindOrCreateChildFrame(FrameState *frame, int64_t iter, cons
     temp->iterations[0] = new IterationState(temp->pending_counts, temp->total_input_tensors);
 
     {
-        sstl::Guard executor_lock(mu_);
+        auto executor_lock = sstl::with_guard(mu_);
         auto it = outstanding_frames_.find(child_name);
         if (it != outstanding_frames_.end()) {
             *child = it->second;
         } else {
-            sstl::Guard frame_lock(frame->mu);
+            auto frame_lock = sstl::with_guard(frame->mu);
             frame->GetIteration(iter)->outstanding_frame_count++;
             outstanding_frames_[child_name] = temp;
             *child = temp;
@@ -1229,7 +1229,7 @@ void ExecutorState::DeleteFrame(FrameState *frame, TaggedNodeSeq *ready)
     FrameState *parent_frame = frame->parent_frame;
     int64_t parent_iter = frame->parent_iter;
     if (parent_frame != nullptr) {
-        sstl::Guard paranet_frame_lock(parent_frame->mu);
+        auto paranet_frame_lock = sstl::with_guard(parent_frame->mu);
         // Propagate all the dead exits to the parent frame.
         for (auto *node : frame->dead_exits) {
             auto parent_iter_state = parent_frame->GetIteration(parent_iter);
@@ -1279,7 +1279,7 @@ void ExecutorState::DeleteFrame(FrameState *frame, TaggedNodeSeq *ready)
     auto &frame_name = frame->frame_name;
     VLOG(3) << "Delete frame " << frame_name;
     {
-        sstl::Guard executor_lock(mu_);
+        auto executor_lock = sstl::with_guard(mu_);
         outstanding_frames_.erase(frame_name);
     }
     delete frame;
@@ -1289,7 +1289,7 @@ void ExecutorState::CleanupFramesIterations(FrameState *frame, int64_t iter, Tag
 {
     bool is_frame_done = false;
     {
-        sstl::Guard frame_lock(frame->mu);
+        auto frame_lock = sstl::with_guard(frame->mu);
         frame->GetIteration(iter)->outstanding_frame_count--;
         is_frame_done = frame->CleanupIterations(impl_->gview_, iter, ready);
     }

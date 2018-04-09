@@ -176,7 +176,7 @@ tf::Allocator *PerTaskDevice::wrapAllocator(tf::Allocator *alloc, const tf::Allo
 
     AA key{alloc, attr};
 
-    sstl::Guard g(m_mu);
+    auto g = sstl::with_guard(m_mu);
     auto it = m_wrappedAllocators.find(key);
     if (it != m_wrappedAllocators.end()) {
         return it->second.get();
@@ -199,7 +199,7 @@ tf::Allocator *PerTaskDevice::wrapAllocator(tf::Allocator *alloc, const tf::Allo
 Resources PerTaskDevice::failedResourceRequest() const
 {
     Resources res;
-    sstl::Guard g(m_mu);
+    auto g = sstl::with_guard(m_mu);
     for (auto &p : m_wrappedAllocators) {
         auto alloc = p.second.get();
         res[{ResourceType::MEMORY, alloc->resourceContext().spec()}] += alloc->lastFailedAllocSize();
@@ -210,7 +210,7 @@ Resources PerTaskDevice::failedResourceRequest() const
 Resources PerTaskDevice::peakResourceUsage() const
 {
     Resources res;
-    sstl::Guard g(m_mu);
+    auto g = sstl::with_guard(m_mu);
     for (const auto &[aa, alloc] : m_wrappedAllocators) {
         UNUSED(aa);
         res[{ResourceType::MEMORY, alloc->resourceContext().spec()}] += alloc->peakAllocSize();

@@ -6,7 +6,6 @@
 #include "oplibraries/tensorflow/device/gpu.h"
 #include "execution/executionengine.h"
 #include "utils/threadutils.h"
-#include "utils/objectpool.h"
 
 #include <utility>
 
@@ -44,6 +43,7 @@ SalusGPUDevice::SalusGPUDevice(const tf::SessionOptions &options, const std::str
                                tf::Allocator *cpu_allocator, int max_streams)
     : BaseGPUDevice(options, name, memory_limit, locality, gpu_id, physical_device_desc, gpu_allocator,
                     cpu_allocator, false /* sync every op */, max_streams)
+    , m_pool(std::make_shared<sstl::ObjectPool<PerTaskGPUDevice>>())
     , m_streamUsed(static_cast<size_t>(max_streams), false)
     , m_streamAssignCache()
 {
@@ -69,7 +69,7 @@ Status SalusGPUDevice::FillContextMap(const tf::Graph *, std::vector<tf::DeviceC
 
     NodeStreamMap *node_to_stream_id;
     {
-        sstl::Guard g(m_muCache);
+        auto g = sstl::with_guard(m_muCache);
         if (m_streamAssignCache.count(graph) > 0) {
             LOG(WARNING) << "Detected graph address reuse: " << as_hex(graph);
         }
@@ -93,16 +93,15 @@ Status SalusGPUDevice::FillContextMap(const tf::Graph *, std::vector<tf::DeviceC
 void SalusGPUDevice::flushCacheFor(sstl::not_null<const tf::Graph *>)
 {
 //    VLOG(3) << "SalusGPUDevice::flushCacheFor(" << as_hex(graph) << ") on " << name();
-//    sstl::Guard g(m_muCache);
+//    auto g = sstl::with_guard(m_muCache);
 //    m_streamAssignCache.erase(graph);
 }
 
 std::shared_ptr<PerTaskDevice> SalusGPUDevice::createPerTaskDevice(sstl::not_null<const tf::Graph *> graph,
                                                                    std::unique_ptr<ResourceContext> &&rctx)
 {
-    thread_local sstl::ObjectPool<PerTaskGPUDevice> pool;
     VLOG(3) << "SalusGPUDevice::createPerTaskDevice on " << name() << " for " << as_hex(graph.get());
-    return pool.acquire(this, std::move(rctx));
+    return m_pool->acquire(this, std::move(rctx));
 }
 
 std::vector<int> SalusGPUDevice::allocateStreams(size_t num)
@@ -111,7 +110,7 @@ std::vector<int> SalusGPUDevice::allocateStreams(size_t num)
         return {};
     }
 
-    sstl::Guard g(m_muStream);
+    auto g = sstl::with_guard(m_muStream);
     std::vector<int> res;
     for (int i = 0; i != max_streams_; ++i) {
         if (!m_streamUsed[i]) {
@@ -132,7 +131,7 @@ void SalusGPUDevice::freeStreams(std::vector<int> &&streams)
         return;
     }
 
-    sstl::Guard g(m_muStream);
+    auto g = sstl::with_guard(m_muStream);
     for (auto i : streams) {
         m_streamUsed[i] = false;
     }

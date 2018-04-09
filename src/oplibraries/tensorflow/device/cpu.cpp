@@ -29,6 +29,7 @@ SalusCPUDevice::SalusCPUDevice(const tf::SessionOptions &options, const std::str
                                tf::Allocator *allocator)
     : LocalDevice(options, tf::Device::BuildDeviceAttributes(name, tf::DEVICE_CPU, memory_limit, locality))
     , m_allocator(allocator)
+    , m_pool(std::make_shared<sstl::ObjectPool<PerTaskCPUDevice>>())
 {
 }
 
@@ -59,8 +60,7 @@ std::shared_ptr<PerTaskDevice> SalusCPUDevice::createPerTaskDevice(sstl::not_nul
                                                                    std::unique_ptr<ResourceContext> &&rctx)
 {
     UNUSED(graph);
-    thread_local sstl::ObjectPool<PerTaskCPUDevice> pool;
-    return pool.acquire(this, std::move(rctx));
+    return m_pool->acquire(this, std::move(rctx));
 }
 
 Status SalusCPUDeviceFactory::CreateDevices(const tf::SessionOptions &options, const std::string &name_prefix,

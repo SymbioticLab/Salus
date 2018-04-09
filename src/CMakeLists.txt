@@ -79,6 +79,7 @@ target_link_libraries(executor
     Boost::boost
     Boost::thread
     docopt_s
+    moodycamel::concurrentqueue
 )
 
 if(USE_TENSORFLOW)
