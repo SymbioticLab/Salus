@@ -225,7 +225,7 @@ tf::BaseGPUDevice *SalusGPUDeviceFactory::CreateGPUDevice(const tf::SessionOptio
 
     auto dev = new SalusGPUDevice(options, name, memory_limit, locality, gpu_id, physical_device_desc,
                                   gpu_allocator, cpu_allocator, max_streams);
-    VLOG(1) << "Creating SalusGPUDevice " << as_hex(dev) << " which is a tf::Device "
+    VLOG(3) << "Creating SalusGPUDevice " << as_hex(dev) << " which is a tf::Device "
             << as_hex(static_cast<tf::Device *>(dev)) << " and also a ISalusDevice "
             << as_hex(static_cast<ISalusDevice *>(dev));
     return dev;

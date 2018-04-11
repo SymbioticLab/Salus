@@ -113,6 +113,7 @@ void ExecutionContext::acceptOffer(const std::string &sessHandle)
 {
     DCHECK(m_data);
     SessionResourceTracker::instance().acceptAdmission(m_data->resOffer, sessHandle);
+    m_data->item->sessHandle = sessHandle;
     m_data->insertIntoEngine();
 }
 
