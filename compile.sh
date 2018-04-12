@@ -12,7 +12,12 @@ for build_type in ${BUILD_TYPES[@]}; do
 done
 
 # Build
-for build_type in ${BUILD_TYPES[@]}; do
-    echo "Building $build_type"
-    cmake --build build/$build_type -- -j
-done
+#for build_type in ${BUILD_TYPES[@]}; do
+#    echo "Building $build_type"
+#    cmake --build build/$build_type -- -j &
+#done
+#wait
+
+export CLICOLOR_FORCE=1
+parallel --tag --lb "cmake --build build/{} -- -j" ::: "${BUILD_TYPES[@]}"
+

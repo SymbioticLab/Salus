@@ -2,10 +2,10 @@
 #include "execution/resources.h"
 #include "platform/logging.h"
 #include "platform/signals.h"
+#include "platform/profiler.h"
 #include "rpcserver/zmqserver.h"
 #include "utils/macros.h"
 #include "utils/envutils.h"
-#include "profiler.h"
 
 #include <docopt.h>
 
@@ -239,13 +239,8 @@ int main(int argc, char **argv)
 
     printConfiguration(args);
 
-#if defined(WITH_GPERFTOOLS)
-    if (value_or<bool>(args[flags::gperf], false)) {
-        const auto &profiler_output = sstl::fromEnvVarStr("SALUS_PROFILE", "/tmp/gperf.out");
-        LOG(INFO) << "Running under gperftools, output: " << profiler_output;
-        ProfilerStart(profiler_output);
-    }
-#endif
+    ScopedProfiling sp(value_or<bool>(args[flags::gperf], false));
+
     // Start scheduling engine
     ExecutionEngine::instance().startScheduler();
 
@@ -257,10 +252,7 @@ int main(int argc, char **argv)
 
     server.join();
 
-#if defined(WITH_GPERFTOOLS)
-    if (value_or<bool>(args[flags::gperf], false)) {
-        ProfilerStop();
-    }
-#endif
+    ExecutionEngine::instance().stopScheduler();
+
     return 0;
 }

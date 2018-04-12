@@ -16,8 +16,8 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef PLATFORM_SIGNALS_H
-#define PLATFORM_SIGNALS_H
+#ifndef SALUS_PLATFORM_SIGNALS_H
+#define SALUS_PLATFORM_SIGNALS_H
 
 #include <utility>
 
@@ -41,4 +41,4 @@ const char *signalName(int sig);
 
 }
 
-#endif // PLATFORM_SIGNALS_H
+#endif // SALUS_PLATFORM_SIGNALS_H

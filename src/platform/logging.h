@@ -17,8 +17,8 @@
  *
  */
 
-#ifndef LOGGING_H
-#define LOGGING_H
+#ifndef SALUS_PLATFORM_LOGGING_H
+#define SALUS_PLATFORM_LOGGING_H
 
 #include "easylogging++.h"
 
@@ -190,4 +190,4 @@ constexpr PtrPrintHelper as_hex(const std::shared_ptr<T> &p)
 
 MAKE_LOGGABLE(PtrPrintHelper, helper, os);
 
-#endif // LOGGING_H
+#endif // SALUS_PLATFORM_LOGGING_H
