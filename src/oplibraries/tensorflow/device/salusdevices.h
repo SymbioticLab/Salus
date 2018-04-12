@@ -35,6 +35,42 @@ class ResourceContext;
 
 namespace salus::oplib::tensorflow {
 
+class PerTaskDevice;
+/**
+ * @brief We use an extension to tensorflow devices.
+ *
+ * All TF devices should implement this interface.
+ */
+class ISalusDevice
+{
+public:
+    virtual ~ISalusDevice() = default;
+
+    virtual void flushCacheFor(sstl::not_null<const tf::Graph *> graph) = 0;
+
+    virtual std::shared_ptr<PerTaskDevice> createPerTaskDevice(sstl::not_null<const tf::Graph *> g,
+                                                               std::unique_ptr<ResourceContext> &&rctx) = 0;
+
+    /**
+     * @brief Get the tf::Device instance
+     * @return
+     */
+    virtual tf::Device &as_tfdevice() = 0;
+    virtual const tf::Device &as_tfdevice() const = 0;
+
+    /**
+     * @brief Safely cast a tf::Device to ISalusDeivce, w/o dynamic_cast and RTTI.
+     *
+     * It does this by first downcasting to concrete device type and then upcast,
+     * based on the device name and type.
+     *
+     * @param device
+     * @return
+     */
+    static ISalusDevice *safe_cast(tf::Device *device);
+    static ISalusDevice &safe_cast(tf::Device &device);
+};
+
 /**
  * @brief Per task device knows the resource allocation for the particular task, it actually wrapps another
  * device
@@ -46,15 +82,17 @@ public:
     explicit PerTaskDevice(sstl::not_null<tf::Device *> base, std::unique_ptr<ResourceContext> &&rctx);
     ~PerTaskDevice() override;
 
+    virtual void reset(sstl::not_null<tf::Device *> base, std::unique_ptr<ResourceContext> &&rctx);
+
     ResourceContext &resourceContext() const
     {
         return *m_rctx;
     }
 
-    template<typename T>
+    template<typename T, typename = std::enable_if_t<std::is_convertible_v<T&, ISalusDevice&>>>
     T &underlayingDevice() const
     {
-        return *static_cast<T *>(m_base.get());
+        return static_cast<T &>(ISalusDevice::safe_cast(underlayingDevice()));
     }
 
     tf::Device &underlayingDevice() const
@@ -63,6 +101,7 @@ public:
     }
 
     Resources failedResourceRequest() const;
+    Resources peakResourceUsage() const;
 
     virtual tf::DeviceContext *deviceContextForNode(int id) const = 0;
 
@@ -89,10 +128,9 @@ public:
     tf::Status MaybeRewriteGraph(std::unique_ptr<tf::Graph> *graph) override;
     tf::Status FillContextMap(const tf::Graph *graph, tf::DeviceContextMap *device_context_map) override;
 
-protected:
-    void setResourceContext(std::unique_ptr<ResourceContext> &&rctx);
-
 private:
+    void reinitialize();
+
     tf::Allocator *wrapAllocator(tf::Allocator *alloc, const tf::AllocatorAttributes &alloc_attrs);
 
     sstl::not_null<tf::Device *> m_base;
@@ -121,33 +159,6 @@ private:
         }
     };
     std::unordered_map<AA, sstl::ScopedUnref<PerOpAllocator>, AAHasher> m_wrappedAllocators;
-};
-
-/**
- * @brief We use an extension to tensorflow devices.
- *
- * All TF devices should implement this interface.
- */
-class ISalusDevice
-{
-public:
-    virtual ~ISalusDevice() = default;
-
-    virtual void flushCacheFor(const tf::Graph *graph) = 0;
-
-    virtual std::unique_ptr<PerTaskDevice> createPerTaskDevice(const tf::Graph *g,
-                                                               std::unique_ptr<ResourceContext> &&rctx) = 0;
-
-    /**
-     * @brief Safely cast a tf::Device to ISalusDeivce, w/o dynamic_cast and RTTI.
-     *
-     * It does this by first downcasting to concrete device type and then upcast,
-     * based on the device name and type.
-     *
-     * @param device
-     * @return
-     */
-    static ISalusDevice *safe_cast(tf::Device *device);
 };
 
 void maybeRegisterSalusDeviceFactories();

@@ -22,6 +22,7 @@
 #include "execution/devices.h"
 #include <functional>
 #include <memory>
+#include <string_view>
 
 #define CallWithMasterMethodName(m)                                                                          \
     m(CreateSession) m(ExtendSession) m(PartialRunSetup) m(CloseSession) m(ListDevices) m(Reset) m(RunStep)
@@ -57,6 +58,11 @@ CallWithMasterMethodName(DECLARE_USING)
 DeviceSpec tfDeviceNameToSpec(const std::string &name);
 DeviceType tfDeviceTypeToType(const tf::DeviceType &type);
 DeviceType tfDeviceTypeToType(const std::string &type);
+
+inline tf::StringPiece svToStringPiece(std::string_view sv)
+{
+    return {sv.data(), sv.size()};
+}
 
 } // namespace salus::oplib::tensorflow
 

@@ -4,6 +4,8 @@
 #include "platform/signals.h"
 #include "rpcserver/zmqserver.h"
 #include "utils/macros.h"
+#include "utils/envutils.h"
+#include "profiler.h"
 
 #include <docopt.h>
 
@@ -32,6 +34,7 @@ const static auto verbose = "--verbose";
 const static auto vModule = "--vmodule";
 const static auto vLogFile = "--vlogfile";
 const static auto pLogFile = "--perflog";
+const static auto gperf = "--gperf";
 } // namespace flags
 
 // <program-name> [-v | -vv | -vvv | --verbose=<verbosity>] [--vmodule=<vmodules>] [-l <endpoint>]
@@ -49,14 +52,15 @@ Options:
     -l <endpoint>, --listen=<endpoint>
                                 Listen on ZeroMQ endpoint <endpoint>.
                                 [default: tcp://*:5501]
-    --sched=<policy>            Use <policy> for scheduling . Choices: fair, preempt, pack.
+    -s <policy>, --sched=<policy>
+                                Use <policy> for scheduling . Choices: fair, preempt, pack.
                                 [default: fair]
     --disable-adc               Disable admission control.
     --disable-wc                Disable work conservation. Only have effect when
                                 fairness is on.
     --max-hol-waiting=<num>     Maximum number of task allowed go before queue head
                                 in scheduling. [default: 50]
-    --logconf=<file>            Path to log configuration file. Note that
+    -c <file>, --logconf=<file> Path to log configuration file. Note that
                                 settings in this file takes precedence over
                                 other command line arguments.
     -v <level>, --verbose=<level>
@@ -70,6 +74,9 @@ Options:
     --vlogfile=<file>           Verbose logging goes to <file>.
                                 [default: verbose.log]
     --perflog=<file>            Enable performance logging and log to <file>.
+    --gperf                     Enable gperftools CPU profiling. Output is controlled by
+                                environment variable SALUS_PROFILE. Has no effect if
+                                not use the Profiling build.
 
 Deprecated options:
     --disable-fairness          Disable fair sharing in scheduling, having the same effect
@@ -195,11 +202,8 @@ void configureExecution(std::map<std::string, docopt::value> &args)
 
 void printConfiguration(std::map<std::string, docopt::value> &)
 {
-#if defined(NDEBUG)
-    LOG(INFO) << "Running in Release mode";
-#else
-    LOG(INFO) << "Running in Debug mode";
-#endif
+    LOG(INFO) << "Running build type: " << SALUS_BUILD_TYPE;
+
     {
         const auto &conf = el::Loggers::getLogger(logging::kDefTag)->typedConfigurations();
         LOG(INFO) << "Verbose logging level: " << el::Loggers::verboseLevel()
@@ -235,6 +239,17 @@ int main(int argc, char **argv)
 
     printConfiguration(args);
 
+#if defined(WITH_GPERFTOOLS)
+    if (value_or<bool>(args[flags::gperf], false)) {
+        const auto &profiler_output = sstl::fromEnvVarStr("SALUS_PROFILE", "/tmp/gperf.out");
+        LOG(INFO) << "Running under gperftools, output: " << profiler_output;
+        ProfilerStart(profiler_output);
+    }
+#endif
+    // Start scheduling engine
+    ExecutionEngine::instance().startScheduler();
+
+    // Then start server to accept request
     ZmqServer server;
     const auto &listen = (args)[flags::listen].asString();
     LOG(INFO) << "Starting server listening at " << listen;
@@ -242,5 +257,10 @@ int main(int argc, char **argv)
 
     server.join();
 
+#if defined(WITH_GPERFTOOLS)
+    if (value_or<bool>(args[flags::gperf], false)) {
+        ProfilerStop();
+    }
+#endif
     return 0;
 }

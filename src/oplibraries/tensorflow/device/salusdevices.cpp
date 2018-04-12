@@ -22,6 +22,7 @@
 #include "execution/executionengine.h"
 #include "oplibraries/tensorflow/device/cpu.h"
 #include "oplibraries/tensorflow/device/gpu.h"
+#include "oplibraries/tensorflow/tfexception.h"
 #include "utils/threadutils.h"
 
 #include <mutex>
@@ -51,13 +52,22 @@ ISalusDevice *ISalusDevice::safe_cast(tf::Device *device)
     }
 
     if (device->device_type() == tf::DEVICE_CPU) {
-        return static_cast<SalusCPUDevice*>(device);
+        return static_cast<SalusCPUDevice *>(device);
     } else if (device->device_type() == tf::DEVICE_GPU) {
-        return static_cast<SalusGPUDevice*>(device);
+        return static_cast<SalusGPUDevice *>(device);
     } else {
         LOG(WARNING) << "ISalusDevice::safe_cast got unknown device type: " << device->device_type();
         return nullptr;
     }
+}
+
+ISalusDevice &ISalusDevice::safe_cast(tf::Device &device)
+{
+    auto sdev = safe_cast(&device);
+    if (!sdev) {
+        throw TFException(tf::errors::InvalidArgument("device is not an ISalusDevice: ", device.name()));
+    }
+    return *sdev;
 }
 
 PerTaskDevice::PerTaskDevice(sstl::not_null<tf::Device *> other, std::unique_ptr<ResourceContext> &&rctx)
@@ -65,20 +75,33 @@ PerTaskDevice::PerTaskDevice(sstl::not_null<tf::Device *> other, std::unique_ptr
     , m_base(other)
     , m_rctx(std::move(rctx))
 {
-    set_tensorflow_cpu_worker_threads(const_cast<CpuWorkerThreads *>(other->tensorflow_cpu_worker_threads()));
-    set_tensorflow_gpu_device_info(const_cast<GpuDeviceInfo *>(other->tensorflow_gpu_device_info()));
-    set_eigen_cpu_device(const_cast<Eigen::ThreadPoolDevice *>(other->eigen_cpu_device()));
+    reinitialize();
+}
+
+void PerTaskDevice::reset(sstl::not_null<tf::Device *> other, std::unique_ptr<ResourceContext> &&rctx)
+{
+    m_base = other;
+    m_rctx = std::move(rctx);
+    m_wrappedAllocators.clear();
+    reinitialize();
+
+    if (!m_rctx->isGood()) {
+        LOG(ERROR) << "Resetting to an uninitialized resource context";
+    }
+}
+
+void PerTaskDevice::reinitialize()
+{
+    set_tensorflow_cpu_worker_threads(
+        const_cast<CpuWorkerThreads *>(m_base->tensorflow_cpu_worker_threads()));
+    set_tensorflow_gpu_device_info(const_cast<GpuDeviceInfo *>(m_base->tensorflow_gpu_device_info()));
+    set_eigen_cpu_device(const_cast<Eigen::ThreadPoolDevice *>(m_base->eigen_cpu_device()));
 #ifdef TENSORFLOW_USE_SYCL
-    set_eigen_sycl_device(const_cast<Eigen::SyclDevice *>(other->eigen_sycl_device()));
+    set_eigen_sycl_device(const_cast<Eigen::SyclDevice *>(m_base->eigen_sycl_device()));
 #endif
 }
 
 PerTaskDevice::~PerTaskDevice() = default;
-
-void PerTaskDevice::setResourceContext(std::unique_ptr<ResourceContext> &&rctx)
-{
-    m_rctx = std::move(rctx);
-}
 
 bool PerTaskDevice::RequiresRecordingAccessedTensors() const
 {
@@ -153,7 +176,7 @@ tf::Allocator *PerTaskDevice::wrapAllocator(tf::Allocator *alloc, const tf::Allo
 
     AA key{alloc, attr};
 
-    sstl::Guard g(m_mu);
+    auto g = sstl::with_guard(m_mu);
     auto it = m_wrappedAllocators.find(key);
     if (it != m_wrappedAllocators.end()) {
         return it->second.get();
@@ -176,10 +199,21 @@ tf::Allocator *PerTaskDevice::wrapAllocator(tf::Allocator *alloc, const tf::Allo
 Resources PerTaskDevice::failedResourceRequest() const
 {
     Resources res;
-    sstl::Guard g(m_mu);
+    auto g = sstl::with_guard(m_mu);
     for (auto &p : m_wrappedAllocators) {
         auto alloc = p.second.get();
         res[{ResourceType::MEMORY, alloc->resourceContext().spec()}] += alloc->lastFailedAllocSize();
+    }
+    return res;
+}
+
+Resources PerTaskDevice::peakResourceUsage() const
+{
+    Resources res;
+    auto g = sstl::with_guard(m_mu);
+    for (const auto &[aa, alloc] : m_wrappedAllocators) {
+        UNUSED(aa);
+        res[{ResourceType::MEMORY, alloc->resourceContext().spec()}] += alloc->peakAllocSize();
     }
     return res;
 }

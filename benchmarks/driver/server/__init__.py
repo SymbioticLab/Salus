@@ -106,6 +106,12 @@ class SalusServer(object):
         ]
         self.args += self.config.extra_args
 
+        if self.config.use_gperf:
+            self.env['SALUS_PROFILE'] = '/tmp/gperf.out'
+            self.args += ['--gperf']
+        else:
+            self.env['SALUS_PROFILE'] = ''
+
         if self.config.disable_adc:
             self.args.append('--disable-adc')
         if self.config.disable_wc:
@@ -117,7 +123,11 @@ class SalusServer(object):
     def run(self):
         # type: () -> None
         """Run server"""
-        outputfiles = [Path(p) for p in ['/tmp/server.output', '/tmp/perf.output', '/tmp/alloc.output', 'verbose.log']]
+        outputfiles = [Path(p) for p in ['/tmp/server.output',
+                                         '/tmp/perf.output',
+                                         '/tmp/alloc.output',
+                                         '/tmp/gperf.out',
+                                         'verbose.log']]
         stdout = sp.PIPE if self.config.hide_output else None
         stderr = sp.PIPE if self.config.hide_output else None
         # remove any existing output
@@ -210,8 +220,9 @@ class SalusServer(object):
             return
 
         logger.info(f'Killing server with pid: {self.proc.pid}')
-        _, alive = kill_tree(self.proc)
+        _, alive = kill_tree(self.proc, timeout=self.config.kill_timeout)
         if alive:
+            prompt.confirm('Server did not respond in time, do you want to kill hard?')
             logger.info(f'Force killing server with pid: {self.proc.pid}')
             kill_hard(alive)
 

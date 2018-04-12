@@ -332,7 +332,9 @@ void ZmqServer::join()
 {
     // Handle SIGINT and SIGTERM
     // so the user can stop the server from terminal
-    signals::waitForTerminate();
+    for (auto [signo, action] = signals::waitForTerminate(); action != signals::SignalAction::Exit;) {
+        UNUSED(signo);
+    }
 
     LOG(INFO) << "Stopping ZmqServer";
     requestStop();

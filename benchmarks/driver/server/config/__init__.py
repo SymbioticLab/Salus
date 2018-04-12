@@ -32,12 +32,14 @@ class SalusConfig(object):
         self.logconf = 'disable'
         self.logconf_dir = None if FLAGS.logconf_dir is None else Path(FLAGS.logconf_dir)  # type: Path
         self.use_nvprof = False
+        self.use_gperf = True
         self.hide_output = True
         self.scheduler = 'fair'
         self.disable_adc = False
         self.disable_wc = False
         self.extra_args = []
         self.output_dir = Path('templogs')
+        self.kill_timeout = 3
         self.update(kwargs)
 
     def __repr__(self):

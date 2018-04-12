@@ -7,6 +7,7 @@
 
 #include "oplibraries/tensorflow/tensorflow_headers.h"
 #include "oplibraries/tensorflow/device/salusdevices.h"
+#include "utils/objectpool.h"
 
 #include <mutex>
 #include <unordered_map>
@@ -31,10 +32,20 @@ public:
     Status FillContextMap(const tf::Graph *graph,
                           std::vector<tf::DeviceContext *> *device_context_map) override;
 
-    void flushCacheFor(const tf::Graph *graph) override;
+    void flushCacheFor(sstl::not_null<const tf::Graph *> graph) override;
 
-    std::unique_ptr<PerTaskDevice> createPerTaskDevice(const tf::Graph *graph,
+    std::shared_ptr<PerTaskDevice> createPerTaskDevice(sstl::not_null<const tf::Graph *> graph,
                                                        std::unique_ptr<ResourceContext> &&rctx) override;
+
+    tf::Device &as_tfdevice() override
+    {
+        return *this;
+    }
+
+    const tf::Device &as_tfdevice() const override
+    {
+        return *this;
+    }
 
 private:
     /**
@@ -51,10 +62,19 @@ private:
      */
     void freeStreams(std::vector<int> &&streams);
 
-    friend class PerTaskGPUDevice;
+    /**
+     * @brief Get the device context correspond to stream `num'
+     * @param num
+     * @return
+     */
+    sstl::not_null<tf::DeviceContext *> deviceContext(int num) const
+    {
+        DCHECK_LT(num, static_cast<int>(device_contexts_.size()));
+        return device_contexts_[num];
+    }
 
-    // bring up device_contexts_
-    using BaseGPUDevice::device_contexts_;
+    friend class PerTaskGPUDevice;
+    std::shared_ptr<sstl::ObjectPool<PerTaskGPUDevice>> m_pool;
 
     std::mutex m_muStream;
     std::vector<bool> m_streamUsed;

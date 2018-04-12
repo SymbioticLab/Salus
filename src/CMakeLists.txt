@@ -31,6 +31,7 @@ set(SRC_LIST
     "utils/containerutils.cpp"
     "utils/cpp17.cpp"
     "utils/debugging.cpp"
+    "utils/objectpool.cpp"
 
     "main.cpp"
 )
@@ -56,6 +57,7 @@ if(USE_TENSORFLOW)
         "oplibraries/tensorflow/v2/exectask.cpp"
         "oplibraries/tensorflow/v2/tensorutils.cpp"
         "oplibraries/tensorflow/v2/md_executor_impl.cpp"
+        "oplibraries/tensorflow/v2/graphview.cpp"
 
         "oplibraries/tensorflow/device/salusdevices.cpp"
         "oplibraries/tensorflow/device/cpu.cpp"
@@ -77,6 +79,7 @@ target_link_libraries(executor
     Boost::boost
     Boost::thread
     docopt_s
+    moodycamel::concurrentqueue
 )
 
 if(USE_TENSORFLOW)
@@ -88,3 +91,14 @@ if(USE_TENSORFLOW)
             GOOGLE_CUDA=1
     )
 endif(USE_TENSORFLOW)
+
+#---------------------------------------------------------------------------------------
+# Instrucment
+#---------------------------------------------------------------------------------------
+if(WITH_GPERFTOOLS AND WITH_TCMALLOC)
+    target_link_libraries(executor gperftools::tcmalloc_and_profiler)
+elseif(WITH_GPERFTOOLS)
+    target_link_libraries(executor gperftools::profiler)
+elseif(WITH_TCMALLOC)
+    target_link_libraries(executor gperftools::tcmalloc)
+endif()

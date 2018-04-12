@@ -46,9 +46,9 @@ public:
     ExecTask(ExecutorState *state, sstl::semaphore &num_finished_ops, const ExecutorState::TaggedNode &node,
              const tf::OpKernelContext::Params &initial_params, tf::Rendezvous *rendez, int maxFailures = 2);
 
-    bool prepare(std::unique_ptr<ResourceContext> &&rctx) override;
+    bool prepare(std::unique_ptr<ResourceContext> &&rctx) noexcept override;
 
-    void run(Callbacks cbs) override;
+    void run(Callbacks cbs) noexcept override;
 
     void cancel() override;
 
@@ -59,51 +59,57 @@ public:
 
     Resources estimatedUsage(const DeviceSpec &dev) override;
 
-    const std::vector<DeviceType> &supportedDeviceTypes() const override;
+    DeviceTypes supportedDeviceTypes() const override;
 
     ~ExecTask() override;
 
-    std::string DebugString() override;
+    std::string DebugString() const override;
 
     bool isAsync() const override;
 
     ResourceContext &resourceContext() const override;
 
 private:
-    void inferUsage(const DeviceSpec &dev);
+    Resources calcUsageFromShape(const DeviceSpec &dev);
 
     bool maybeMemoryFailure(const tf::Status &s, const MemFailCallback &memFailure);
 
-    void afterCompute(bool is_dead, const Callbacks &cbs, const tf::remote::NodeItem &item);
+    void afterCompute(bool is_dead, const Callbacks &cbs);
 
     void afterRun(const tf::Status &s, const Callbacks &cbs);
 
     void updateRefEntryTickets(const std::vector<Entry *> &entries);
 
 private:
-    ExecutorImpl::DeviceItem ditem;
-    std::unordered_map<DeviceSpec, Resources> cachedUsage;
-    std::vector<DeviceType> supportedTypes;
-    std::function<void(tf::OpKernel *, tf::FunctionLibraryRuntime *)> deleteKernel;
+    // Borrowed from ExecutorState
+    ExecutorState *m_state;
 
-    int failureTimes = 0;
-    int maxFailures;
+    const NodeItem &item;
+    tf::Rendezvous *rendez;
+    sstl::semaphore &num_finished_ops;
+
+    // Misc
+    int failureTimes;
+    const int maxFailures;
     Resources failedAlloc;
 
-    tf::OpKernel *op_kernel = nullptr;
-    bool owns_kernel = true;
+    // Owned
+    ExecutorImpl::DeviceItem ditem;
+    tf::Status statusInPrepare;
+    ExecutorState::TaggedNode tagged_node;
+
+    POpKernel op_kernel;
     bool kernel_is_async;
     bool has_ref_input;
-    tf::Status statusInPrepare;
 
     std::vector<Entry *> reffedEntries;
     Entry *first_input = nullptr;
     BufferLockVec buflocks;
     uint64_t input_size = 0;
 
-    ExecutorState::TaggedNode tagged_node;
     ExecutorState::TaggedNodeSeq ready;
 
+    // Back storage for params
     TensorValueVec inputs;
     DeviceContextVec input_device_contexts;
     AllocatorAttributeVec input_alloc_attrs;
@@ -112,11 +118,9 @@ private:
     tf::OpKernelContext::Params params;
     std::unique_ptr<tf::OpKernelContext> pctx;
 
-    // Borrowed from ExecutorState
-    tf::Rendezvous *rendez;
-    sstl::semaphore &num_finished_ops;
-
-    ExecutorState *m_state;
+    // Caches
+    std::unordered_map<DeviceSpec, Resources> cachedUsage;
+    std::string m_cachedDebugString;
 };
 
 } // namespace salus::oplib::tensorflow

@@ -32,18 +32,32 @@ namespace sstl {
  * @param def default value in case of error
  * @return the read value or default value
  */
-template<typename T>
-T fromEnvVar(const char *env, const T &def)
+template<typename T, typename R = T, typename = std::enable_if<std::is_same_v<char *, std::decay_t<T>>>>
+R fromEnvVar(const char *env, const T &def)
 {
     const char *env_var_val = std::getenv(env);
     if (!env_var_val) {
         return def;
     }
-    T res;
-    if (!boost::conversion::try_lexical_convert(env_var_val, res))
-        return def;
+    if constexpr (std::is_same_v<R, std::string_view> || std::is_same_v<R, std::string>) {
+        return env_var_val;
+    } else {
+        T res;
+        if (!boost::conversion::try_lexical_convert(env_var_val, res)) {
+            return def;
+        }
 
-    return res;
+        return res;
+    }
+}
+
+inline const char *fromEnvVarStr(const char *env, const char *def)
+{
+    auto env_var_val = std::getenv(env);
+    if (!env_var_val) {
+        return def;
+    }
+    return env_var_val;
 }
 
 /**

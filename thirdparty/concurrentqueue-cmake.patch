@@ -1,0 +1,34 @@
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+new file mode 100644
+index 0000000..54cdc49
+--- /dev/null
++++ b/CMakeLists.txt
+@@ -0,0 +1,28 @@
++cmake_minimum_required(VERSION 3.1)
++project(concurrentqueue VERSION 1.0.0)
++
++include(GNUInstallDirs)
++
++#============================================================================
++# Internal compiler options
++#============================================================================
++# C++ standard
++set(CMAKE_CXX_STANDARD_REQUIRED ON)
++set(CMAKE_CXX_EXTENSIONS OFF)
++if(NOT CMAKE_CXX_STANDARD OR CMAKE_CXX_STANDARD LESS 11)
++	set(CMAKE_CXX_STANDARD 11)
++endif()
++
++#============================================================================
++# Sources & headers
++#============================================================================
++add_library(concurrentqueue INTERFACE)
++target_include_directories(concurrentqueue INTERFACE $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}> $<INSTALL_INTERFACE:include/>)
++
++#============================================================================
++# Install
++#============================================================================
++set(export_name "concurrentqueue-targets")
++
++# Runtime package
++install(TARGETS concurrentqueue EXPORT ${export_name} DESTINATION ${CMAKE_INSTALL_LIBDIR})

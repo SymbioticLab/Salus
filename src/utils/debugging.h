@@ -19,6 +19,7 @@
 #ifndef SALUS_SSTL_DEBUGGING_H
 #define SALUS_SSTL_DEBUGGING_H
 
+#include "utils/date.h"
 #include <cstdint>
 
 namespace sstl {
@@ -30,6 +31,33 @@ class StackSentinel
 public:
     StackSentinel();
     ~StackSentinel();
+};
+
+template<typename LogFn, typename Clock = std::chrono::system_clock>
+class TimeoutWarning {
+public:
+    using time_point_t = std::chrono::time_point<Clock>;
+    using duration_t = typename Clock::duration;
+
+    explicit TimeoutWarning(duration_t limit, LogFn&& logfn)
+        : m_logfn(std::forward<LogFn>(logfn))
+        , m_limit(std::move(limit))
+        , m_start(Clock::now())
+    {
+    }
+
+    ~TimeoutWarning()
+    {
+        auto dur = Clock::now() - m_start;
+        if (dur > m_limit) {
+            m_logfn(m_limit, dur);
+        }
+    }
+
+private:
+    LogFn m_logfn;
+    duration_t m_limit;
+    std::chrono::time_point<Clock> m_start = Clock::now();
 };
 
 } // namespace sstl

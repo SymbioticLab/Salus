@@ -45,6 +45,7 @@ using std::chrono::system_clock;
 using FpSeconds = std::chrono::duration<double, seconds::period>;
 using namespace std::chrono_literals;
 using namespace date;
+using namespace salus;
 
 namespace {
 inline void logScheduleFailure(const Resources &usage, const ResourceMonitor &resMon)
@@ -53,7 +54,7 @@ inline void logScheduleFailure(const Resources &usage, const ResourceMonitor &re
     UNUSED(resMon);
 
 #ifndef NDEBUG
-    VLOG(2) << "Try to allocate resource failed. Requested: " << resources::DebugString(usage);
+    VLOG(2) << "Try to allocate resource failed. Requested: " << usage;
     // Don't call resMon.DebugString directly in log line, as logging acquires lock, and
     // may causing deadlock.
     const auto &str = resMon.DebugString();
@@ -69,13 +70,13 @@ ExecutionEngine &ExecutionEngine::instance()
     return eng;
 }
 
-ExecutionEngine::ExecutionEngine()
+void ExecutionEngine::startScheduler()
 {
     // Start scheduling thread
     m_schedThread = std::make_unique<std::thread>(std::bind(&ExecutionEngine::scheduleLoop, this));
 }
 
-ExecutionEngine::~ExecutionEngine()
+void ExecutionEngine::stopScheduler()
 {
     // stop scheduling thread
     m_shouldExit = true;
@@ -87,6 +88,11 @@ ExecutionEngine::~ExecutionEngine()
     // NOTE: has to be done *after* the scheduling thread exits.
     m_newSessions.clear();
     m_deletedSessions.clear();
+}
+
+ExecutionEngine::~ExecutionEngine()
+{
+    stopScheduler();
 }
 
 ExecutionContext ExecutionEngine::createSessionOffer(ResourceMap rm)
@@ -107,6 +113,7 @@ void ExecutionContext::acceptOffer(const std::string &sessHandle)
 {
     DCHECK(m_data);
     SessionResourceTracker::instance().acceptAdmission(m_data->resOffer, sessHandle);
+    m_data->item->sessHandle = sessHandle;
     m_data->insertIntoEngine();
 }
 
@@ -146,7 +153,7 @@ void ExecutionContext::Data::enqueueOperation(std::unique_ptr<OperationTask> &&t
     auto opItem = std::make_shared<OperationItem>();
     opItem->sess = item;
     opItem->op = std::move(task);
-    opItem->tQueued = std::chrono::system_clock::now();
+    LogOpTracing() << "OpItem Event " << opItem->op << " event: queued";
 
     engine.pushToSessionQueue(std::move(opItem));
 }
@@ -178,7 +185,7 @@ void ExecutionEngine::pushToSessionQueue(POpItem &&opItem)
     }
 
     {
-        sstl::Guard g(sess->mu);
+        auto g = sstl::with_guard(sess->mu);
         sess->queue.emplace_back(std::move(opItem));
     }
     m_note_has_work.notify();
@@ -245,7 +252,7 @@ void ExecutionEngine::scheduleLoop()
     m_resMonitor.initializeLimits();
     auto scheduler = SchedulerRegistary::instance().create(m_schedParam.scheduler, *this);
     DCHECK(scheduler);
-    VLOG(2) << "Using scheduler: " << scheduler->debugString();
+    VLOG(2) << "Using scheduler: " << scheduler;
 
     m_runningTasks = 0;
     m_noPagingRunningTasks = 0;
@@ -257,12 +264,10 @@ void ExecutionEngine::scheduleLoop()
 
     while (!m_shouldExit) {
         snprintf(schedIterNameBuf, kNameBufLen, "sched-iter-%zu", schedIterCount++);
-        TIMED_SCOPE(schedIterObj, schedIterNameBuf);
-
         SessionChangeSet changeset;
         // Fisrt check if there's any pending deletions
         {
-            sstl::Guard g(m_delMu);
+            auto g = sstl::with_guard(m_delMu);
 
             using std::swap;
             swap(changeset.deletedSessions, m_deletedSessions);
@@ -284,7 +289,7 @@ void ExecutionEngine::scheduleLoop()
 
         // Append any new sessions
         {
-            sstl::Guard g(m_newMu);
+            auto g = sstl::with_guard(m_newMu);
 
             changeset.numAddedSessions = m_newSessions.size();
 
@@ -304,7 +309,7 @@ void ExecutionEngine::scheduleLoop()
         bool enableOOMProtect = m_sessions.size() > 1;
         for (auto &item : m_sessions) {
             {
-                sstl::Guard g(item->mu);
+                auto g = sstl::with_guard(item->mu);
                 item->bgQueue.splice(item->bgQueue.end(), item->queue);
             }
 
@@ -321,10 +326,7 @@ void ExecutionEngine::scheduleLoop()
 
             item->protectOOM = enableOOMProtect;
             item->lastScheduled = 0;
-
         }
-
-        PERFORMANCE_CHECKPOINT_WITH_ID(schedIterObj, "after-accept");
 
         // Select and sort candidates.
         scheduler->notifyPreSchedulingIteration(m_sessions, changeset, &candidates);
@@ -341,7 +343,7 @@ void ExecutionEngine::scheduleLoop()
                     << item->bgQueue.size();
 
             // Try schedule from this session
-            auto[count, shouldContinue] = scheduler->maybeScheduleFrom(item);
+            auto [count, shouldContinue] = scheduler->maybeScheduleFrom(item);
             item->lastScheduled = count;
 
             remainingCount += item->bgQueue.size();
@@ -363,8 +365,6 @@ void ExecutionEngine::scheduleLoop()
                 << scheduler->debugString(item);
         }
 
-        PERFORMANCE_CHECKPOINT_WITH_ID(schedIterObj, "after-sched");
-
         // Update conditions and check if we need paging
         bool noProgress = remainingCount > 0 && scheduled == 0 && m_noPagingRunningTasks == 0;
         bool didPaging = false;
@@ -373,10 +373,11 @@ void ExecutionEngine::scheduleLoop()
             if (noProgress && scheduler->insufficientMemory(dev)) {
                 if (m_sessions.size() > 1) {
                     didPaging = doPaging(dev, devices::CPU0);
-                } else {
-                    LOG(ERROR) << "OOM for single session happened: " << m_sessions.front()->sessHandle;
+                } else if (m_sessions.size() == 1) {
+                    LOG(ERROR) << "OOM on device " << dev
+                               << " for single session happened: " << m_sessions.front()->sessHandle;
                     {
-                        sstl::Guard g(m_sessions.front()->tickets_mu);
+                        auto g = sstl::with_guard(m_sessions.front()->tickets_mu);
                         auto usage = m_resMonitor.queryUsages(m_sessions.front()->tickets);
                         LOG(ERROR) << "This session usage:" << resources::DebugString(usage);
                     }
@@ -385,10 +386,9 @@ void ExecutionEngine::scheduleLoop()
             }
         }
         // succeed, retry another sched iter immediately
-        if (didPaging)
+        if (didPaging) {
             continue;
-
-        PERFORMANCE_CHECKPOINT_WITH_ID(schedIterObj, "without-wait");
+        }
 
         maybeWaitForAWhile(scheduled);
 
@@ -428,18 +428,12 @@ POpItem ExecutionEngine::submitTask(POpItem &&opItem)
         return std::move(opItem);
     }
 
-    opItem->tScheduled = system_clock::now();
-
-    VLOG(3) << "Adding to thread pool: opItem in session " << item->sessHandle << ": "
-            << opItem->op->DebugString();
-
     // NOTE: this is waited by schedule thread, so we can't afford running
     // the operation inline. If the thread pool is full, simply consider the
     // opItem as not scheduled.
 
     // opItem has to be captured by value, we need it in case the thread pool is full
     auto c = m_pool.tryRun([opItem, this]() mutable {
-        TIMED_SCOPE_IF(timerInnerObj, "ExecutionEngine::maybeScheduleFrom::doSchedule::run", VLOG_IS_ON(1));
         DCHECK(opItem);
 
         if (auto item = opItem->sess.lock()) {
@@ -454,24 +448,24 @@ POpItem ExecutionEngine::submitTask(POpItem &&opItem)
                 auto item = opItem->sess.lock();
                 if (!item) {
                     VLOG(2) << "Found expired session during handling of memory failure of opItem: "
-                            << opItem->op->DebugString();
+                            << opItem->op;
                     return false;
                 }
                 if (!item->protectOOM) {
-                    VLOG(2) << "Pass through OOM failed task back to client: " << opItem->op->DebugString();
+                    VLOG(2) << "Pass through OOM failed task back to client: " << opItem->op;
                     return false;
                 }
 
                 taskStopped(*opItem, true);
                 // failed due to OOM. Push back to queue and retry later
-                VLOG(2) << "Putting back OOM failed task: " << opItem->op->DebugString();
+                VLOG(2) << "Putting back OOM failed task: " << opItem->op;
                 pushToSessionQueue(std::move(opItem));
                 return true;
             };
 
-            VLOG(2) << "Running opItem in session " << item->sessHandle << ": " << opItem->op->DebugString();
+            VLOG(2) << "Running opItem in session " << item->sessHandle << ": " << opItem->op;
             taskRunning(*opItem);
-            opItem->op->run(cbs);
+            opItem->op->run(std::move(cbs));
         }
     });
     if (!c) {
@@ -483,7 +477,7 @@ POpItem ExecutionEngine::submitTask(POpItem &&opItem)
 
 void ExecutionEngine::taskRunning(OperationItem &opItem)
 {
-    opItem.tRunning = system_clock::now();
+    LogOpTracing() << "OpItem Event " << opItem.op << " event: running";
     m_runningTasks += 1;
     if (!opItem.op->isAsync()) {
         m_noPagingRunningTasks += 1;
@@ -492,27 +486,14 @@ void ExecutionEngine::taskRunning(OperationItem &opItem)
 
 void ExecutionEngine::taskStopped(OperationItem &opItem, bool failed)
 {
-    auto now = system_clock::now();
-
     auto &rctx = opItem.op->resourceContext();
     rctx.releaseStaging();
 
+    LogOpTracing() << "OpItem Event " << opItem.op << " event: done";
     if (!failed) {
-        if (VLOG_IS_ON(1)) {
-            CVLOG(1, logging::kOpTracing)
-                << "OpItem Stat " << opItem.op->DebugString() << " queued: " << opItem.tQueued
-                << " scheduled: " << opItem.tScheduled << " running: " << opItem.tRunning
-                << " finished: " << now;
-
+        if (VLOG_IS_ON(2)) {
             if (auto item = opItem.sess.lock(); item) {
-                sstl::Guard g(item->mu);
-                auto opjct = duration_cast<microseconds>(opItem.tQueued - now).count();
-                auto oh = duration_cast<microseconds>(opItem.tQueued - opItem.tRunning).count()
-                          / static_cast<double>(opjct);
-                // update session stats
-                auto oldTotal = item->totalExecutedOp;
-                item->avgOpOverhead = (item->avgOpOverhead * oldTotal + oh) / (oldTotal + 1);
-                item->avgOpJct = (item->avgOpJct * oldTotal + opjct) / (oldTotal + 1);
+                auto g = sstl::with_guard(item->mu);
                 ++item->totalExecutedOp;
             }
         }
@@ -563,7 +544,7 @@ bool ExecutionEngine::doPaging(const DeviceSpec &spec, const DeviceSpec &target)
     }
 
     if (VLOG_IS_ON(2)) {
-        for (auto[usage, pSess] : candidates) {
+        for (auto [usage, pSess] : candidates) {
             VLOG(2) << "Session " << pSess.get()->sessHandle << " usage: " << usage;
         }
     }
@@ -573,7 +554,7 @@ bool ExecutionEngine::doPaging(const DeviceSpec &spec, const DeviceSpec &target)
         auto &pSess = candidates[i].second.get();
         std::vector<std::pair<size_t, uint64_t>> victims;
         {
-            sstl::Guard g(pSess->tickets_mu);
+            auto g = sstl::with_guard(pSess->tickets_mu);
             if (pSess->tickets.empty()) {
                 // no need to go beyond
                 break;
@@ -585,14 +566,14 @@ bool ExecutionEngine::doPaging(const DeviceSpec &spec, const DeviceSpec &target)
         // also prevents the executor from clearing the paging callbacks.
         // This should not create deadlock as nothing could finish at this time,
         // thus no new tasks could be submitted.
-        sstl::Guard g(pSess->mu);
+        auto g = sstl::with_guard(pSess->mu);
         if (!pSess->pagingCb) {
             continue;
         }
 
         VLOG(2) << "Visiting session: " << pSess->sessHandle;
 
-        for (auto[usage, victim] : victims) {
+        for (auto [usage, victim] : victims) {
             // preallocate some CPU memory for use.
             Resources res{{dstTag, usage}};
 
@@ -601,7 +582,7 @@ bool ExecutionEngine::doPaging(const DeviceSpec &spec, const DeviceSpec &target)
                 LOG(ERROR) << "No enough CPU memory for paging. Required: " << res[dstTag] << " bytes";
                 return false;
             }
-            AllocLog(INFO) << "Pre allocated " << *rctx << " for session=" << pSess->sessHandle;
+            LogAlloc() << "Pre allocated " << *rctx << " for session=" << pSess->sessHandle;
 
             VLOG(2) << "    request to page out ticket " << victim << " of usage " << usage;
             // request the session to do paging
@@ -617,14 +598,14 @@ bool ExecutionEngine::doPaging(const DeviceSpec &spec, const DeviceSpec &target)
     }
 
     LOG(ERROR) << "All paging request failed. Dump all session usage";
-    for (auto[usage, pSess] : candidates) {
+    for (auto [usage, pSess] : candidates) {
         LOG(ERROR) << "Session " << pSess.get()->sessHandle << " usage: " << usage;
     }
     LOG(ERROR) << "Dump resource monitor status: " << m_resMonitor.DebugString();
 
     // Forcely kill one session
-    for (auto[usage, pSess] : candidates) {
-        sstl::Guard g(pSess.get()->mu);
+    for (auto [usage, pSess] : candidates) {
+        auto g = sstl::with_guard(pSess.get()->mu);
         if (!pSess.get()->pagingCb) {
             continue;
         }
@@ -688,9 +669,7 @@ void ResourceContext::releaseStaging()
 void ResourceContext::removeTicketFromSession() const
 {
     // last resource freed
-    sstl::Guard g(session->tickets_mu);
-    VLOG(2) << "Removing ticket " << m_ticket << " from session " << session->sessHandle;
-    session->tickets.erase(m_ticket);
+    session->removeMemoryAllocationTicket(m_ticket);
 }
 
 ResourceContext::~ResourceContext()
@@ -737,8 +716,6 @@ void ResourceContext::OperationScope::rollback()
 {
     DCHECK(valid);
     proxy.free(context.ticket(), res);
-    // no need to call removeTicketFromSession
-    // because this most likely will not be the last deallocation
 }
 
 void ResourceContext::OperationScope::commit()
@@ -750,6 +727,7 @@ void ResourceContext::OperationScope::commit()
     // the allocation is used by the session (i.e. the session left the scope without rollback)
     for (auto p : res) {
         context.session->resourceUsage(p.first) += p.second;
+        context.session->notifyMemoryAllocation(context.ticket());
     }
 }
 

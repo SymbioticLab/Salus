@@ -17,14 +17,19 @@
  * 
  */
 
-#ifndef DEVICES_H
-#define DEVICES_H
+#ifndef SALUS_EXEC_DEVICES_H
+#define SALUS_EXEC_DEVICES_H
 
 #include <string>
 #include <tuple>
+#include <ostream>
 
 #include "utils/macros.h"
 
+namespace salus {
+
+// NOTE: this order is used in salus::oplib::tensorflow::TFInstance::DeviceContainer
+// If modify this, also update there.
 enum class DeviceType
 {
     CPU,
@@ -39,13 +44,13 @@ struct DeviceSpec
     DeviceType type;
     int id;
 
-    DeviceSpec() = default;
+    DeviceSpec() noexcept = default;
 
-    constexpr DeviceSpec(DeviceType t, int id = 0) : type(t), id(id) {}
+    explicit constexpr DeviceSpec(DeviceType t, int id = 0) noexcept : type(t), id(id) {}
 
     static DeviceSpec fromString(const std::string &str);
 
-    std::string DebugString() const;
+    std::string debugString() const;
 
 private:
     friend bool operator==(const DeviceSpec &lhs, const DeviceSpec &rhs);
@@ -64,7 +69,10 @@ inline bool operator!=(const DeviceSpec &lhs, const DeviceSpec &rhs)
     return lhs.tie() != rhs.tie();
 }
 
-std::ostream &operator<<(std::ostream &os, const DeviceSpec &c);
+inline std::ostream &operator<<(std::ostream &os, const DeviceSpec &c)
+{
+    return os << enumToString(c.type) << ":" << c.id;
+}
 
 namespace devices {
 constexpr DeviceSpec CPU0 {DeviceType::CPU, 0};
@@ -72,12 +80,14 @@ constexpr DeviceSpec GPU0 {DeviceType::GPU, 0};
 constexpr DeviceSpec GPU1 {DeviceType::GPU, 1};
 } // namespace devices
 
+} // namespace salus
+
 namespace std {
 template<>
-class hash<DeviceSpec>
+class hash<salus::DeviceSpec>
 {
 public:
-    inline size_t operator()(const DeviceSpec &spec) const
+    inline size_t operator()(const salus::DeviceSpec &spec) const
     {
         size_t res = 0;
         sstl::hash_combine(res, spec.type);
@@ -88,4 +98,4 @@ public:
 } // namespace std
 
 
-#endif // DEVICES_H
+#endif // SALUS_EXEC_DEVICES_H

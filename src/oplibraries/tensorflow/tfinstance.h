@@ -23,11 +23,13 @@
 #include "oplibraries/tensorflow/tfoplibraryv2.h"
 #include "platform/thread_annotations.h"
 #include "utils/macros.h"
+#include "utils/cpp17.h"
 #include "utils/pointerutils.h"
 #include <memory>
 #include <mutex>
 #include <unordered_map>
 #include <vector>
+#include <string_view>
 
 namespace tensorflow {
 class ConfigProto;
@@ -47,13 +49,43 @@ class TFInstance
 {
     sstl::not_null<tf::Env *> m_env;
 
-    std::unique_ptr<tf::DeviceMgr> m_deviceMgr;
-    // devices in m_devices owned by m_deviceMgr
-    std::vector<tf::Device *> m_devices;
-
     friend class TFSession;
     std::mutex m_mu;
     std::unordered_map<std::string, std::shared_ptr<TFSession>> m_sessions GUARDED_BY(m_mu);
+
+    struct DeviceContainer
+    {
+        static constexpr int MaxDeviceType = 2;
+        static constexpr int MaxDeviceId = 3;
+
+        tf::Device * specToTF[MaxDeviceType][MaxDeviceId] = {};
+        std::unique_ptr<tf::DeviceMgr> deviceMgr;
+        // devices in m_devices owned by m_deviceMgr
+        std::vector<tf::Device *> devices;
+
+        DeviceContainer();
+
+        static constexpr std::string_view SpecToTFDevName(const DeviceSpec &spec)
+        {
+            using namespace std::literals::string_view_literals;
+
+            static_assert(sstl::to_underlying(DeviceType::CPU) == 0,
+                          "The order of dtstrings depends on the order of DeviceType enum");
+            static_assert(sstl::to_underlying(DeviceType::GPU) == 1,
+                          "The order of dtstrings depends on the order of DeviceType enum");
+            // NOTE: this must match the order of DeviceType enum
+            // clang-format off
+            constexpr std::string_view tfdevnames[MaxDeviceType][MaxDeviceId] = {
+                { "CPU:0"sv, "CPU:1"sv, "CPU:2"sv, },
+                { "GPU:0"sv, "GPU:1"sv, "GPU:2"sv, },
+            };
+            // clang-format on
+            return tfdevnames[sstl::to_underlying(spec.type)][spec.id];
+        }
+
+        SALUS_DISALLOW_COPY_AND_ASSIGN(DeviceContainer);
+    };
+    const DeviceContainer m_devCon;
 
 public:
     SALUS_DISALLOW_COPY_AND_ASSIGN(TFInstance);
@@ -74,12 +106,14 @@ public:
     }
     auto &deviceMgr() const
     {
-        return *m_deviceMgr;
+        return *m_devCon.deviceMgr;
     }
     auto &devices() const
     {
-        return m_devices;
+        return m_devCon.devices;
     }
+
+    tf::Device *tfdevice(const DeviceSpec &spec) const;
 
     /**
      * @brief find session

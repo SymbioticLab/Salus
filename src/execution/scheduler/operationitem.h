@@ -22,22 +22,20 @@
 #include <memory>
 #include <chrono>
 
+namespace salus {
 class OperationTask;
+} // namespace salus
+
 struct SessionItem;
 struct OperationItem
 {
     std::weak_ptr<SessionItem> sess;
-    std::unique_ptr<OperationTask> op;
+    std::unique_ptr<salus::OperationTask> op;
 
     size_t hash() const
     {
         return reinterpret_cast<size_t>(this);
     }
-
-    std::chrono::time_point<std::chrono::system_clock> tQueued;
-    std::chrono::time_point<std::chrono::system_clock> tInspected;
-    std::chrono::time_point<std::chrono::system_clock> tScheduled;
-    std::chrono::time_point<std::chrono::system_clock> tRunning;
 
 private:
     friend class ExecutionEngine;

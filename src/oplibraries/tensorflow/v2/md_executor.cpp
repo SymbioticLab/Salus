@@ -60,25 +60,22 @@ void ExecutionEngineRunner(tf::Executor::Args::Closure c)
 
 } // namespace
 
-tf::Status NewMultiDeviceExecutor(MultiDeviceExecutorParams params, const tf::Graph *graph,
+tf::Status NewMultiDeviceExecutor(MultiDeviceExecutorParams params, std::unique_ptr<const tf::Graph> &&graph,
                                   tf::Executor **executor)
 {
-    auto impl = new ExecutorImpl(std::move(params), graph);
+    auto impl = std::make_unique<ExecutorImpl>(std::move(params), std::move(graph));
     auto s = impl->Initialize();
     if (s.ok()) {
-        *executor = impl;
-    } else {
-        delete impl;
+        *executor = impl.release();
     }
     return s;
 }
 
-ExecutorImpl::ExecutorImpl(MultiDeviceExecutorParams &&p, const tf::Graph *g)
+ExecutorImpl::ExecutorImpl(MultiDeviceExecutorParams &&p, std::unique_ptr<const tf::Graph> &&g)
     : params_(std::move(p))
-    , graph_(g)
+    , graph_(std::move(g))
 {
-    DCHECK(params_.find_kernel != nullptr);
-    DCHECK(params_.create_kernel != nullptr);
+    DCHECK(params_.get_kernel != nullptr);
 
     using namespace std::placeholders;
     params_.ins.registerPagingCallbacks({
@@ -92,8 +89,6 @@ ExecutorImpl::~ExecutorImpl()
     for (auto fiter : frame_info_) {
         delete fiter.second;
     }
-    delete graph_;
-
     buffer_trees_.clear_and_dispose([](auto tree) { delete tree; });
 }
 
@@ -120,13 +115,36 @@ void GetMaxPendingCounts(const tf::Node *n, int *max_pending, int *max_dead_coun
     *max_dead_count = num_in_edges;
 }
 
+void FillinSupportedDeviceSpecs(sstl::not_null<NodeItem*> item)
+{
+    const auto &node = *item->node;
+    // A little cheat here, default to use TF device assignment
+    auto device = node.def().device();
+    if (!device.empty()) {
+        item->supported_devices.clear();
+        item->supported_devices.push_back(tfDeviceNameToSpec(device).type);
+        return;
+    }
+
+    tf::DeviceTypeVector tftypes;
+    auto ok = tf::SupportedDeviceTypesForNode({tf::DEVICE_GPU, tf::DEVICE_CPU}, node.def(), &tftypes);
+    if (!ok.ok()) {
+        LOG(ERROR) << "Error while querying supported device for node " << node.name() << ": " << ok;
+    }
+
+    item->supported_devices.reserve(tftypes.size());
+    for (const auto &tft : tftypes) {
+        item->supported_devices.emplace_back(tfDeviceTypeToType(tft));
+    }
+}
+
 tf::Status ExecutorImpl::Initialize()
 {
-    gview_.Initialize(graph_);
+    gview_.Initialize(graph_.get());
 
     // Build the information about frames in this subgraph.
     ControlFlowInfo cf_info;
-    TF_RETURN_IF_ERROR(BuildControlFlowInfo(graph_, &cf_info));
+    TF_RETURN_IF_ERROR(BuildControlFlowInfo(graph_.get(), &cf_info));
 
     // Cache this value so we make this virtual function call once, rather
     // that O(# steps * # nodes per step) times.
@@ -144,7 +162,7 @@ tf::Status ExecutorImpl::Initialize()
         auto frame_info = EnsureFrameInfo(frame_name);
 
         if (VLOG_IS_ON(3)) {
-            VLOG(3) << "Node " << id << " in graph@" << as_hex(graph_) << ": " << SummarizeNodeDef(n->def());
+            VLOG(3) << "Node " << id << " in graph@" << as_hex(graph_) << ": " << n->def();
         }
 
         const int num_in_edges = n->in_edges().size();
@@ -172,6 +190,7 @@ tf::Status ExecutorImpl::Initialize()
         item->input_start = frame_info->total_inputs;
         frame_info->total_inputs += n->num_inputs();
 
+        FillinSupportedDeviceSpecs(item);
         // Mark all kernel as expensive to put them in our threadpool.
         item->kernel_is_expensive = true;
         item->is_merge = IsMerge(n);
@@ -200,12 +219,12 @@ tf::Status ExecutorImpl::Initialize()
 
     // Initialize PendingCounts only after item->pending_id is initialized for
     // all nodes.
-    InitializePending(graph_, cf_info);
+    InitializePending(graph_.get(), cf_info);
 
     return tf::Status::OK();
 }
 
-tf::Status ExecutorImpl::BuildControlFlowInfo(const tf::Graph *g, ControlFlowInfo *cf_info)
+tf::Status ExecutorImpl::BuildControlFlowInfo(sstl::not_null<const tf::Graph *> g, ControlFlowInfo *cf_info)
 {
     const int num_nodes = g->num_node_ids();
     cf_info->frame_names.resize(num_nodes);
@@ -268,7 +287,7 @@ tf::Status ExecutorImpl::BuildControlFlowInfo(const tf::Graph *g, ControlFlowInf
     return tf::Status::OK();
 }
 
-void ExecutorImpl::InitializePending(const tf::Graph *graph, const ControlFlowInfo &cf_info)
+void ExecutorImpl::InitializePending(sstl::not_null<const tf::Graph *> graph, const ControlFlowInfo &cf_info)
 {
     for (auto &it : cf_info.unique_frame_names) {
         auto finfo = EnsureFrameInfo(it);
@@ -306,7 +325,7 @@ ExecutorState::ExecutorState(const tf::Executor::Args &args, ExecutorImpl *impl)
 {
     // Insert ourself into active list
     {
-        sstl::Guard g(impl->entry_mu_);
+        auto g = sstl::with_guard(impl->entry_mu_);
         impl->active_states_.insert(this);
     }
 
@@ -331,17 +350,12 @@ ExecutorState::~ExecutorState()
     // force interupption. In that case the ExecutorImpl takes care
     // of clearing active_states_
     if (!forceInterrupted) {
-        sstl::Guard g(impl_->entry_mu_);
+        auto g = sstl::with_guard(impl_->entry_mu_);
         impl_->active_states_.erase(this);
     }
 
     for (auto name_frame : outstanding_frames_) {
         delete name_frame.second;
-    }
-    for (auto it : m_deviceContextMaps) {
-        for (auto c : it.second) {
-            c->Unref();
-        }
     }
 }
 
@@ -356,7 +370,7 @@ void ExecutorState::RunAsync(const tf::Executor::DoneCallback &done)
             continue;
         }
         std::vector<tf::DeviceContext*> cmap;
-        tfdev->FillContextMap(impl_->graph_, &cmap);
+        tfdev->FillContextMap(impl_->graph_.get(), &cmap);
 
         // we don't actually use this map, free it
         for (auto ctx : cmap) {
@@ -364,10 +378,12 @@ void ExecutorState::RunAsync(const tf::Executor::DoneCallback &done)
         }
     }
 
+#if defined(SALUS_ENABLE_REFINER)
     // Process all client_terminated recv first for shape inference
     for (const auto *n : impl_->client_recv_nodes_) {
         fetchRecvShape(n);
     }
+#endif // SALUS_ENABLE_REFINER
 
     // Initialize the ready queue.
     TaggedNodeSeq ready;
@@ -388,8 +404,6 @@ void ExecutorState::RunAsync(const tf::Executor::DoneCallback &done)
 
 void ExecutorState::Process(TaggedNode tagged_node)
 {
-    TIMED_FUNC_IF(timerObj, VLOG_IS_ON(1));
-
     // Initial parameters passed to OpKernel::Compute.
     tf::OpKernelContext::Params params;
     params.step_id = step_id_;
@@ -409,7 +423,7 @@ void ExecutorState::Process(TaggedNode tagged_node)
         int64_t input_iter = tagged_node.input_iter;
         const NodeItem &item = *impl_->gview_.node(tagged_node.node->id());
 
-        tf::mutex_lock l(input_frame->mu);
+        auto l = sstl::with_guard(input_frame->mu);
         input_frame->GetIteration(input_iter)->mark_started(item.pending_id);
     }
 
@@ -418,51 +432,6 @@ void ExecutorState::Process(TaggedNode tagged_node)
     num_emitted_ops_ += 1;
 
     impl_->params_.ins.enqueueOperation(std::move(nodeTask));
-}
-
-tf::Status ExecutorState::SetupKernel(TaggedNode node, const ExecutorImpl::DeviceItem &ditem,
-                                      tf::OpKernel **op_kernel)
-{
-    TIMED_FUNC_IF(timerObj, VLOG_IS_ON(1));
-
-    auto &ndef = node.node->def();
-
-    tf::OpKernel *kernel = nullptr;
-    VLOG(2) << "Creating a kernel for device: " << ditem.device->name();
-    auto ok = impl_->params_.create_kernel(ndef, ditem.function_library.get(), &kernel);
-    if (!ok.ok()) {
-        *op_kernel = nullptr;
-        ok = AttachDef(ok, ndef);
-        LOG(WARNING) << "Executor failed to create kernel: " << ok;
-        return ok;
-    }
-    DCHECK(kernel);
-    *op_kernel = kernel;
-    return tf::Status::OK();
-}
-
-tf::DeviceContext *ExecutorState::FindDeviceContext(size_t id, tf::Device *device)
-{
-    TIMED_FUNC_IF(timerObj, VLOG_IS_ON(1));
-
-    auto it = m_deviceContextMaps.end();
-    {
-        tf::mutex_lock l(mu_);
-
-        it = m_deviceContextMaps.find(device);
-        if (it == m_deviceContextMaps.end()) {
-            tf::DeviceContextMap contexts;
-            auto ok = device->FillContextMap(impl_->graph_, &contexts);
-            if (!ok.ok()) {
-                LOG(ERROR) << "Filling contextmap failed: " << ok;
-            }
-            std::tie(it, std::ignore) = m_deviceContextMaps.emplace(device, std::move(contexts));
-        }
-    }
-    if (it != m_deviceContextMaps.end() && id < it->second.size()) {
-        return it->second[id];
-    }
-    return nullptr;
 }
 
 namespace {
@@ -484,16 +453,13 @@ bool onSameDevice(tf::Device *devA, const tf::AllocatorAttributes &attrA, tf::De
 }
 } // namespace
 
-tf::Status ExecutorState::PrepareInputs(const NodeItem &item, tf::OpKernel *kernel,
+tf::Status ExecutorState::PrepareInputs(const NodeItem &item, sstl::not_null<tf::OpKernel *> kernel,
                                         const std::shared_ptr<PerTaskDevice> &device,
                                         tf::DeviceContext *device_context, Entry *first_input,
-                                        TensorValueVec *inputs, BufferLockVec *buflocks,
+                                        TensorValueVec *inputs, sstl::not_null<BufferLockVec *> buflocks,
                                         DeviceContextVec *input_device_contexts,
                                         AllocatorAttributeVec *input_alloc_attrs, bool *is_input_dead)
 {
-    TIMED_FUNC_IF(timerObj, VLOG_IS_ON(1));
-    DCHECK(buflocks);
-
     auto node = item.node;
     VLOG(2) << "Preparing " << item.num_inputs << " inputs for node " << node->name();
 
@@ -509,7 +475,6 @@ tf::Status ExecutorState::PrepareInputs(const NodeItem &item, tf::OpKernel *kern
     // Check and bring back paged out entries. Also gather all buf lock for later use
     std::unordered_set<boost::upgrade_mutex *> locks;
     {
-        TIMED_SCOPE_IF(pagingCheckObj, "check paging", VLOG_IS_ON(1));
         for (int i = 0; i < item.num_inputs; ++i) {
             auto entry = first_input + i;
             if (!entry->has_value) {
@@ -544,7 +509,6 @@ tf::Status ExecutorState::PrepareInputs(const NodeItem &item, tf::OpKernel *kern
     // lock all buflocks as read for whole period,
     // all read/write should happen after this
     {
-        TIMED_SCOPE_IF(readLockObj, "lock all read", VLOG_IS_ON(1));
         sstl::lock_shared(locks.begin(), locks.end());
     }
 
@@ -692,8 +656,6 @@ tf::Status ExecutorState::ProcessOutputs(const NodeItem &item, tf::OpKernelConte
                                          const std::shared_ptr<PerTaskDevice> &device,
                                          EntryVector *outputs)
 {
-    TIMED_FUNC_IF(timerObj, VLOG_IS_ON(1));
-
     auto node = item.node;
     DCHECK(outputs->empty());
     outputs->resize(item.num_outputs);
@@ -812,8 +774,6 @@ tf::Status ExecutorState::ProcessOutputs(const NodeItem &item, tf::OpKernelConte
 
 void ExecutorState::ClearInputs(Entry *first, size_t num, BufferLockVec &buflocks)
 {
-    TIMED_FUNC_IF(timerObj, VLOG_IS_ON(1));
-
     // Release locks first, because it may be deleted below
     buflocks.clear();
 
@@ -831,7 +791,7 @@ void ExecutorState::ClearInputs(Entry *first, size_t num, BufferLockVec &buflock
             DCHECK(entry->alloc_tree);
             VLOG(2) << "Removing entry " << as_hex(entry) << " of ticket " << entry->alloc_tree->ticket
                     << " due to clearinputs";
-            sstl::TGuard g(impl_->entry_mu_, "ClearInputs");
+            auto g = sstl::with_guard(impl_->entry_mu_);
             auto range = impl_->active_buffers_.equal_range(entry->alloc_tree->ticket);
             for (auto it = range.first; it != range.second; ++it) {
                 if (it->second == entry->alloc_tree) {
@@ -850,11 +810,9 @@ void ExecutorState::ClearInputs(Entry *first, size_t num, BufferLockVec &buflock
     }
 }
 
-void ExecutorState::PropagateOutputs(const TaggedNode &tagged_node, const NodeItem *item,
-                                     EntryVector *outputs, TaggedNodeSeq *ready)
+void ExecutorState::PropagateOutputs(const TaggedNode &tagged_node, const NodeItem &item,
+                                     sstl::not_null<EntryVector *> outputs, TaggedNodeSeq *ready)
 {
-    TIMED_FUNC_IF(timerObj, VLOG_IS_ON(1));
-
     auto node = tagged_node.node;
     FrameState *input_frame = tagged_node.input_frame;
     int64_t input_iter = tagged_node.input_iter;
@@ -868,22 +826,21 @@ void ExecutorState::PropagateOutputs(const TaggedNode &tagged_node, const NodeIt
     FrameState *output_frame = input_frame;
     int64_t output_iter = input_iter;
 
-    if (!item->is_enter_exit_or_next_iter) {
+    if (!item.is_enter_exit_or_next_iter) {
         // Fast path for nodes types that don't need special handling
         DCHECK_EQ(input_frame, output_frame);
         // Normal path for most nodes
-        tf::mutex_lock l(input_frame->mu);
+        auto l = sstl::with_guard(input_frame->mu);
         output_frame->ActivateNodes(item, is_dead, output_iter, outputs, ready);
-        is_frame_done = input_frame->DecrementOutstandingOpsLocked(&impl_->gview_, input_iter, ready);
-    } else if (item->is_enter) {
+        is_frame_done = input_frame->DecrementOutstandingOpsLocked(impl_->gview_, input_iter, ready);
+    } else if (item.is_enter) {
         bool is_constant;
         auto s = GetNodeAttr(node->def(), "is_constant", &is_constant);
         DCHECK(s.ok()) << s;
         FindOrCreateChildFrame(input_frame, input_iter, node, &output_frame);
         output_iter = 0;
         {
-            const NodeItem *item = impl_->gview_.node(node->id());
-            tf::mutex_lock l(output_frame->mu);
+            auto l = sstl::with_guard(output_frame->mu);
             if (is_constant) {
                 // Propagate to all active iterations if this is a loop invariant.
                 output_frame->AddLoopInv(item, (*outputs)[0], ready);
@@ -892,27 +849,27 @@ void ExecutorState::PropagateOutputs(const TaggedNode &tagged_node, const NodeIt
             }
             output_frame->num_pending_inputs--;
         }
-        is_frame_done = input_frame->DecrementOutstandingOps(&impl_->gview_, input_iter, ready);
-    } else if (item->is_exit) {
+        is_frame_done = input_frame->DecrementOutstandingOps(impl_->gview_, input_iter, ready);
+    } else if (item.is_exit) {
         if (is_dead) {
-            tf::mutex_lock l(input_frame->mu);
+            auto l = sstl::with_guard(input_frame->mu);
             // Stop and remember this node if it is a dead exit.
             if (input_iter == input_frame->iteration_count) {
                 input_frame->dead_exits.push_back(node);
             }
-            is_frame_done = input_frame->DecrementOutstandingOpsLocked(&impl_->gview_, input_iter, ready);
+            is_frame_done = input_frame->DecrementOutstandingOpsLocked(impl_->gview_, input_iter, ready);
         } else {
             output_frame = input_frame->parent_frame;
             output_iter = input_frame->parent_iter;
             {
-                tf::mutex_lock l(output_frame->mu);
+                auto l = sstl::with_guard(output_frame->mu);
                 output_frame->ActivateNodes(item, is_dead, output_iter, outputs, ready);
             }
-            is_frame_done = input_frame->DecrementOutstandingOps(&impl_->gview_, input_iter, ready);
+            is_frame_done = input_frame->DecrementOutstandingOps(impl_->gview_, input_iter, ready);
         }
     } else {
         DCHECK(IsNextIteration(node));
-        tf::mutex_lock l(input_frame->mu);
+        auto l = sstl::with_guard(input_frame->mu);
         if (is_dead) {
             // Stop the deadness propagation.
             output_frame = nullptr;
@@ -925,7 +882,7 @@ void ExecutorState::PropagateOutputs(const TaggedNode &tagged_node, const NodeIt
             } else {
                 // If this is a new iteration, start it.
                 if (input_iter == input_frame->iteration_count) {
-                    input_frame->IncrementIteration(&impl_->gview_, ready);
+                    input_frame->IncrementIteration(impl_->gview_, ready);
                 }
                 output_iter = input_iter + 1;
             }
@@ -935,11 +892,11 @@ void ExecutorState::PropagateOutputs(const TaggedNode &tagged_node, const NodeIt
             DCHECK(input_frame == output_frame);
             output_frame->ActivateNodes(item, is_dead, output_iter, outputs, ready);
         }
-        is_frame_done = input_frame->DecrementOutstandingOpsLocked(&impl_->gview_, input_iter, ready);
+        is_frame_done = input_frame->DecrementOutstandingOpsLocked(impl_->gview_, input_iter, ready);
     }
 
     VLOG(3) << "After propagate the ready queue has size: " << ready->size();
-    if (VLOG_IS_ON(3)) {
+    if (vlog_ && VLOG_IS_ON(3)) {
         for (auto &n : *ready) {
             VLOG(3) << "    in ready queue: " << n.node->name();
         }
@@ -969,7 +926,7 @@ void ExecutorState::ForceInterrupt(const tf::Status &s)
     // Some error happened. This thread of computation is done.
     {
         VLOG(3) << "Try get lock for error handle";
-        tf::mutex_lock l(mu_);
+        auto l = sstl::with_guard(mu_);
         VLOG(2) << "Error handle";
         if (status_.ok()) {
             status_ = s;
@@ -989,16 +946,13 @@ void ExecutorState::ForceInterrupt(const tf::Status &s)
 bool ExecutorState::NodeDone(const tf::Status &s, const tf::Node *node, const tf::Device *device,
                              tf::Rendezvous *rendezvous, const TaggedNodeSeq &ready)
 {
-    TIMED_FUNC_IF(timerObj, VLOG_IS_ON(1));
     UNUSED(node);
     UNUSED(device);
 
     bool abort_run = false;
     if (!s.ok()) {
         // Some error happened. This thread of computation is done.
-        VLOG(3) << "Try get lock for error handle";
-        tf::mutex_lock l(mu_);
-        VLOG(2) << "Error handle";
+        auto l = sstl::with_guard(mu_);
         if (status_.ok()) {
             abort_run = true;
             status_ = s;
@@ -1020,8 +974,7 @@ bool ExecutorState::NodeDone(const tf::Status &s, const tf::Node *node, const tf
         rendezvous->Unref();
     }
 
-    VLOG(2) << "NodeDone ready size: " << ready.size();
-    VLOG(3) << "NodeDone s: " << s;
+    VLOG(2) << "NodeDone ready size: " << ready.size() << " status: " << s;
 
     bool completed = false;
     auto ready_size = ready.size();
@@ -1044,8 +997,6 @@ bool ExecutorState::NodeDone(const tf::Status &s, const tf::Node *node, const tf
 
 void ExecutorState::ScheduleReady(const TaggedNodeSeq &ready)
 {
-    TIMED_FUNC_IF(timerObj, VLOG_IS_ON(1));
-
     if (ready.empty()) {
         VLOG(3) << "ScheduleReady on an empty ready queue";
         return;
@@ -1053,9 +1004,11 @@ void ExecutorState::ScheduleReady(const TaggedNodeSeq &ready)
     VLOG(2) << "ScheduleReady";
 
     // Infer shape
+#if defined(SALUS_ENABLE_REFINER)
     for (auto &tn : ready) {
         addNodeToRefiner(tn);
     }
+#endif // SALUS_ENABLE_REFINER
 
     // Schedule to run all the ready ops in thread pool.
     VLOG(2) << "Schedule to run all the ready ops in thread pool.";
@@ -1097,13 +1050,13 @@ void ExecutorState::DumpPendingNodeState(const int node_id, const Entry *input_v
             return;
         }
     }
-    VLOG(2) << "    Pending Node: " << node.DebugString();
+    VLOG(2) << "    Pending Node: " << node;
     for (int i = 0; i < node.num_inputs(); ++i) {
         auto &input = input_vector[input_base + i];
         auto *tensor = GetTensorValueForDump(input);
         if (tensor->IsInitialized()) {
-            VLOG(2) << "      Input " << i << ": Tensor<type: " << DataTypeString(tensor->dtype())
-                    << " shape: " << tensor->shape().DebugString() << ">";
+            VLOG(2) << "      Input " << i << ": Tensor<type: " << tensor->dtype()
+                    << " shape: " << tensor->shape() << ">";
         } else {
             VLOG(2) << "      Input " << i << ": not present";
         }
@@ -1114,14 +1067,14 @@ void ExecutorState::DumpActiveNodeState(const int node_id, const Entry *input_ve
 {
     auto &node_item = *impl_->gview_.node(node_id);
     auto &node = *node_item.node;
-    VLOG(2) << "    Active Node: " << node.DebugString();
+    VLOG(2) << "    Active Node: " << node;
     const int input_base = node_item.input_start;
     for (int i = 0; i < node.num_inputs(); ++i) {
         auto &input = input_vector[input_base + i];
         auto *tensor = GetTensorValueForDump(input);
         if (tensor->IsInitialized()) {
-            VLOG(2) << "      Input " << i << ": Tensor<type: " << DataTypeString(tensor->dtype())
-                    << " shape: " << tensor->shape().DebugString() << ">";
+            VLOG(2) << "      Input " << i << ": Tensor<type: " << tensor->dtype()
+                    << " shape: " << tensor->shape() << ">";
         } else {
             VLOG(2) << "      Input " << i << ": not present";
         }
@@ -1155,8 +1108,8 @@ void ExecutorState::DumpIterationState(const FrameState *frame, IterationState *
         auto &input = iteration->input_tensors[i];
         auto *tensor = GetTensorValueForDump(input);
         if (tensor->IsInitialized()) {
-            VLOG(2) << "      Input " << i << ": Tensor<type: " << DataTypeString(tensor->dtype())
-                    << " shape: " << tensor->shape().DebugString() << " bytes: " << tensor->TotalBytes()
+            VLOG(2) << "      Input " << i << ": Tensor<type: " << tensor->dtype()
+                    << " shape: " << tensor->shape() << " bytes: " << tensor->TotalBytes()
                     << ">";
             total_bytes += tensor->TotalBytes();
         }
@@ -1166,13 +1119,13 @@ void ExecutorState::DumpIterationState(const FrameState *frame, IterationState *
 
 void ExecutorState::DumpState()
 {
-    tf::mutex_lock l(mu_);
+    auto l = sstl::with_guard(mu_);
     if (!dumped_on_error_) {
         VLOG(2) << "Dumping state";
         for (auto &frame : outstanding_frames_) {
             VLOG(2) << frame.first;
             FrameState *frame_state = frame.second;
-            tf::mutex_lock frame_lock(frame_state->mu);
+            auto frame_lock = sstl::with_guard(frame_state->mu);
             for (IterationState *iteration : frame_state->iterations) {
                 VLOG(2) << "  Iteration:";
                 DumpIterationState(frame_state, iteration);
@@ -1190,7 +1143,7 @@ void ExecutorState::Finish()
         if (!sdev) {
             continue;
         }
-        sdev->flushCacheFor(impl_->graph_);
+        sdev->flushCacheFor(impl_->graph_.get());
     }
 
     // Get out handlers
@@ -1227,7 +1180,7 @@ void ExecutorState::FindOrCreateChildFrame(FrameState *frame, int64_t iter, cons
     const std::string child_name = MakeFrameName(frame, iter, enter_name);
 
     {
-        tf::mutex_lock executor_lock(mu_);
+        auto executor_lock = sstl::with_guard(mu_);
         auto it = outstanding_frames_.find(child_name);
         if (it != outstanding_frames_.end()) {
             *child = it->second;
@@ -1255,12 +1208,12 @@ void ExecutorState::FindOrCreateChildFrame(FrameState *frame, int64_t iter, cons
     temp->iterations[0] = new IterationState(temp->pending_counts, temp->total_input_tensors);
 
     {
-        tf::mutex_lock executor_lock(mu_);
+        auto executor_lock = sstl::with_guard(mu_);
         auto it = outstanding_frames_.find(child_name);
         if (it != outstanding_frames_.end()) {
             *child = it->second;
         } else {
-            tf::mutex_lock frame_lock(frame->mu);
+            auto frame_lock = sstl::with_guard(frame->mu);
             frame->GetIteration(iter)->outstanding_frame_count++;
             outstanding_frames_[child_name] = temp;
             *child = temp;
@@ -1276,7 +1229,7 @@ void ExecutorState::DeleteFrame(FrameState *frame, TaggedNodeSeq *ready)
     FrameState *parent_frame = frame->parent_frame;
     int64_t parent_iter = frame->parent_iter;
     if (parent_frame != nullptr) {
-        tf::mutex_lock paranet_frame_lock(parent_frame->mu);
+        auto paranet_frame_lock = sstl::with_guard(parent_frame->mu);
         // Propagate all the dead exits to the parent frame.
         for (auto *node : frame->dead_exits) {
             auto parent_iter_state = parent_frame->GetIteration(parent_iter);
@@ -1326,7 +1279,7 @@ void ExecutorState::DeleteFrame(FrameState *frame, TaggedNodeSeq *ready)
     auto &frame_name = frame->frame_name;
     VLOG(3) << "Delete frame " << frame_name;
     {
-        tf::mutex_lock executor_lock(mu_);
+        auto executor_lock = sstl::with_guard(mu_);
         outstanding_frames_.erase(frame_name);
     }
     delete frame;
@@ -1336,9 +1289,9 @@ void ExecutorState::CleanupFramesIterations(FrameState *frame, int64_t iter, Tag
 {
     bool is_frame_done = false;
     {
-        tf::mutex_lock frame_lock(frame->mu);
+        auto frame_lock = sstl::with_guard(frame->mu);
         frame->GetIteration(iter)->outstanding_frame_count--;
-        is_frame_done = frame->CleanupIterations(&impl_->gview_, iter, ready);
+        is_frame_done = frame->CleanupIterations(impl_->gview_, iter, ready);
     }
     if (is_frame_done) {
         auto parent_frame = frame->parent_frame;
@@ -1352,15 +1305,14 @@ void ExecutorState::CleanupFramesIterations(FrameState *frame, int64_t iter, Tag
     }
 }
 
-void ExecutorState::FrameState::ActivateNodes(const NodeItem *item, const bool is_dead, int64_t iter,
-                                              EntryVector *outputs, TaggedNodeSeq *ready)
+void ExecutorState::FrameState::ActivateNodes(const NodeItem &item, const bool is_dead, int64_t iter,
+                                              sstl::not_null<EntryVector *> poutputs, TaggedNodeSeq *ready)
 {
-    TIMED_FUNC_IF(timerObj, VLOG_IS_ON(1));
-
     auto &gview = executor->gview_;
+    auto &outputs = *poutputs.get();
     auto iter_state = GetIteration(iter);
-    auto num_output_edges = item->num_output_edges;
-    auto edges = item->output_edge_list();
+    auto num_output_edges = item.num_output_edges;
+    auto edges = item.output_edge_list();
     auto input_tensors = iter_state->input_tensors;
     for (int out_index = 0; out_index < num_output_edges; out_index++) {
         auto &e = edges[out_index];
@@ -1394,7 +1346,7 @@ void ExecutorState::FrameState::ActivateNodes(const NodeItem *item, const bool i
                 dst_dead = (dead_cnt == dst_item->num_inputs);
                 dst_ready = (count == 0) || ((count == 1) && dst_dead);
             } else {
-                if ((*outputs)[src_slot].has_value) {
+                if (outputs[src_slot].has_value) {
                     // This is a live data input.
                     int count = iter_state->pending(dst_pending_id);
                     iter_state->mark_live(dst_pending_id);
@@ -1414,13 +1366,13 @@ void ExecutorState::FrameState::ActivateNodes(const NodeItem *item, const bool i
                     // now.
                     iter_state->increment_dead_count(dst_pending_id);
                     const int dead_cnt = iter_state->dead_count(dst_pending_id);
-                    dst_dead = (dead_cnt == dst_item->num_inputs) || item->is_enter;
+                    dst_dead = (dead_cnt == dst_item->num_inputs) || item.is_enter;
                     dst_ready = (iter_state->pending(dst_pending_id) == 1) && dst_dead;
                     dst_need_input = false;
                 }
             }
         } else {
-            bool increment_dead = (is_dead || (!is_control_edge && !(*outputs)[src_slot].has_value));
+            bool increment_dead = (is_dead || (!is_control_edge && !outputs[src_slot].has_value));
             int pending, dead;
             iter_state->adjust_for_activation(dst_pending_id, increment_dead, &pending, &dead);
             dst_dead = (dead > 0);
@@ -1432,9 +1384,9 @@ void ExecutorState::FrameState::ActivateNodes(const NodeItem *item, const bool i
             const int dst_loc = dst_item->input_start + dst_slot;
             auto &entry = input_tensors[dst_loc];
             if (e.is_last) {
-                entry = std::move((*outputs)[src_slot]);
+                entry = std::move(outputs[src_slot]);
             } else {
-                entry = (*outputs)[src_slot];
+                entry = outputs[src_slot];
             }
 
             if (entry.has_value) {
@@ -1456,37 +1408,37 @@ void ExecutorState::FrameState::ActivateNodes(const NodeItem *item, const bool i
     }
 }
 
-void ExecutorState::FrameState::ActivateNexts(const GraphView *gview, int64_t iter, TaggedNodeSeq *ready)
+void ExecutorState::FrameState::ActivateNexts(const GraphView &gview, int64_t iter, TaggedNodeSeq *ready)
 {
     // Propagate the deferred NextIteration nodes to the new iteration.
     for (auto &node_entry : next_iter_roots) {
         auto *node = node_entry.first;
         auto &entry = node_entry.second;
         auto is_dead = !entry.has_value;
-        auto *item = gview->node(node->id());
+        auto &item = *gview.node(node->id());
         EntryVector outputs{entry};
         ActivateNodes(item, is_dead, iter, &outputs, ready);
     }
     next_iter_roots.clear();
 }
 
-void ExecutorState::FrameState::ActivateLoopInvs(const GraphView *gview, int64_t iter, TaggedNodeSeq *ready)
+void ExecutorState::FrameState::ActivateLoopInvs(const GraphView &gview, int64_t iter, TaggedNodeSeq *ready)
 {
     // Propagate loop invariants to the new iteration.
     for (auto &node_entry : inv_values) {
         auto *node = node_entry.first;
         auto &entry = node_entry.second;
         auto is_dead = !entry.has_value;
-        auto *item = gview->node(node->id());
+        auto &item = *gview.node(node->id());
         EntryVector outputs{entry};
         ActivateNodes(item, is_dead, iter, &outputs, ready);
     }
 }
 
-void ExecutorState::FrameState::AddLoopInv(const NodeItem *item, const Entry &entry, TaggedNodeSeq *ready)
+void ExecutorState::FrameState::AddLoopInv(const NodeItem &item, const Entry &entry, TaggedNodeSeq *ready)
 {
     // Store this value.
-    inv_values.emplace_back(item->node, entry);
+    inv_values.emplace_back(item.node, entry);
 
     // Make this value available to all iterations.
     bool is_dead = !entry.has_value;
@@ -1511,7 +1463,7 @@ bool ExecutorState::FrameState::IsIterationDone(int64_t iter)
     return false;
 }
 
-void ExecutorState::FrameState::IncrementIteration(const GraphView *gview, TaggedNodeSeq *ready)
+void ExecutorState::FrameState::IncrementIteration(const GraphView &gview, TaggedNodeSeq *ready)
 {
     iteration_count++;
     int64_t next_iter = iteration_count;
@@ -1529,7 +1481,7 @@ void ExecutorState::FrameState::IncrementIteration(const GraphView *gview, Tagge
     ActivateLoopInvs(gview, next_iter, ready);
 }
 
-bool ExecutorState::FrameState::CleanupIterations(const GraphView *gview, int64_t iter, TaggedNodeSeq *ready)
+bool ExecutorState::FrameState::CleanupIterations(const GraphView &gview, int64_t iter, TaggedNodeSeq *ready)
 {
     auto curr_iter = iter;
     while (curr_iter <= iteration_count && IsIterationDone(curr_iter)) {

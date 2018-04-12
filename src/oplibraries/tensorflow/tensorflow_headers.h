@@ -48,9 +48,8 @@
 #include <tensorflow/core/distributed_runtime/session_mgr_interface.h>
 #include <tensorflow/core/distributed_runtime/worker.h>
 #include <tensorflow/core/distributed_runtime/worker_cache.h>
-#include <tensorflow/core/distributed_runtime/zrpc/exechelper/graphview.h>
-#include <tensorflow/core/distributed_runtime/zrpc/exechelper/memorytypes.h>
 #include <tensorflow/core/distributed_runtime/zrpc/exechelper/paginghelper.h>
+#include <tensorflow/core/distributed_runtime/zrpc/exechelper/memorytypes.h>
 #include <tensorflow/core/framework/allocator.h>
 #include <tensorflow/core/framework/function.h>
 #include <tensorflow/core/framework/function.pb.h>
@@ -122,6 +121,31 @@ inline std::ostream &operator<<(std::ostream &os, const tensorflow::TensorValue 
     }
     os << ")";
     return os;
+}
+
+inline std::ostream &operator<<(std::ostream &os, const tensorflow::Node &c)
+{
+    return os << c.DebugString();
+}
+
+inline std::ostream &operator<<(std::ostream &os, const tensorflow::TensorShape &c)
+{
+    return os << c.DebugString();
+}
+
+inline std::ostream &operator<<(std::ostream &os, const tensorflow::Rendezvous::ParsedKey &c)
+{
+    return os << c.FullKey().ToString();
+}
+
+inline std::ostream &operator<<(std::ostream &os, const tensorflow::NodeDef &c)
+{
+    return os << SummarizeNodeDef(c);
+}
+
+inline std::ostream &operator<<(std::ostream &os, const tensorflow::DataType &c)
+{
+    return os << tensorflow::DataTypeString(c) << "(" << tensorflow::DataTypeSize(c) << ")";
 }
 
 #endif // TENSORFLOW_HEADERS_H

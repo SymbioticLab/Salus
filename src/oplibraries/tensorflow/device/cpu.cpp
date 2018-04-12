@@ -4,7 +4,9 @@
 
 #include "oplibraries/tensorflow/tensorflow_headers.h"
 #include "oplibraries/tensorflow/device/cpu.h"
+#include "execution/executionengine.h"
 #include "utils/threadutils.h"
+#include "utils/objectpool.h"
 
 namespace salus::oplib::tensorflow {
 
@@ -27,6 +29,7 @@ SalusCPUDevice::SalusCPUDevice(const tf::SessionOptions &options, const std::str
                                tf::Allocator *allocator)
     : LocalDevice(options, tf::Device::BuildDeviceAttributes(name, tf::DEVICE_CPU, memory_limit, locality))
     , m_allocator(allocator)
+    , m_pool(std::make_shared<sstl::ObjectPool<PerTaskCPUDevice>>())
 {
 }
 
@@ -53,11 +56,11 @@ Status SalusCPUDevice::MakeTensorFromProto(const tf::TensorProto &tensor_proto,
                                        tf::ProtoDebugString(tensor_proto));
 }
 
-std::unique_ptr<PerTaskDevice> SalusCPUDevice::createPerTaskDevice(const tf::Graph *graph,
+std::shared_ptr<PerTaskDevice> SalusCPUDevice::createPerTaskDevice(sstl::not_null<const tf::Graph *> graph,
                                                                    std::unique_ptr<ResourceContext> &&rctx)
 {
     UNUSED(graph);
-    return std::make_unique<PerTaskCPUDevice>(this, std::move(rctx));
+    return m_pool->acquire(this, std::move(rctx));
 }
 
 Status SalusCPUDeviceFactory::CreateDevices(const tf::SessionOptions &options, const std::string &name_prefix,
@@ -73,7 +76,7 @@ Status SalusCPUDeviceFactory::CreateDevices(const tf::SessionOptions &options, c
         auto name = tf::strings::StrCat(name_prefix, "/cpu:", i);
         // use tf::cpu_allocator to select from cpu allocatory registary
         auto dev = new SalusCPUDevice(options, name, tf::Bytes(256 << 20), {}, tf::cpu_allocator());
-        VLOG(1) << "Creating SalusCPUDevice " << as_hex(dev) << " which is a tf::Device "
+        VLOG(3) << "Creating SalusCPUDevice " << as_hex(dev) << " which is a tf::Device "
                 << as_hex(static_cast<tf::Device *>(dev)) << " and also a ISalusDevice "
                 << as_hex(static_cast<ISalusDevice *>(dev));
         devices->push_back(dev);

@@ -25,135 +25,124 @@
 #include "exectask.h"
 #include "execution/devices.h"
 #include "oplibraries/tensorflow/device/salusdevices.h"
+#include "oplibraries/tensorflow/tfexception.h"
 #include "oplibraries/tensorflow/tfutils.h"
 #include "oplibraries/tensorflow/v2/tfallocator.h"
 #include "oplibraries/tensorflow/worker/devicecontextwithdevice.h"
 #include "oplibraries/tensorflow/worker/rendezvouswithhook.h"
+#include "utils/date.h"
 #include "utils/macros.h"
 #include "utils/threadutils.h"
+#include "utils/debugging.h"
+#include <boost/range/algorithm.hpp>
 #include <sstream>
+
+using std::chrono::duration_cast;
+using std::chrono::microseconds;
+using std::chrono::milliseconds;
+using std::chrono::nanoseconds;
+using std::chrono::seconds;
+using std::chrono::system_clock;
+using FpMS = std::chrono::duration<double, std::chrono::milliseconds::period>;
+using namespace std::chrono_literals;
+using namespace date;
 
 namespace salus::oplib::tensorflow {
 
 ExecTask::ExecTask(ExecutorState *state, sstl::semaphore &num_finished_ops,
                    const ExecutorState::TaggedNode &node, const tf::OpKernelContext::Params &initial_params,
-                   tf::Rendezvous *rendez, int maxFailures)
-    : deleteKernel(state->impl_->params_.delete_kernel)
-    , maxFailures(maxFailures)
-    , kernel_is_async(false)
-    , has_ref_input(false)
-    , tagged_node(node)
-    , params(initial_params)
+                   tf::Rendezvous *rendez, const int maxFailures)
+    : m_state(state)
+    , item(*m_state->impl_->gview_.node(node.node->id()))
     , rendez(rendez)
     , num_finished_ops(num_finished_ops)
-    , m_state(state)
+    , failureTimes(0)
+    , maxFailures(maxFailures)
+    , tagged_node(node)
+    , op_kernel(nullptr, skip_delete_opkernel)
+    , kernel_is_async(false)
+    , has_ref_input(false)
+    , params(initial_params)
 {
     params.inputs = &inputs;
     params.input_device_contexts = &input_device_contexts;
     params.input_alloc_attrs = &input_alloc_attrs;
 
-    tf::DeviceTypeVector tftypes;
-    auto ok =
-        tf::SupportedDeviceTypesForNode({tf::DEVICE_GPU, tf::DEVICE_CPU}, tagged_node.node->def(), &tftypes);
-    if (!ok.ok()) {
-        LOG(ERROR) << "Error while querying supported device for node " << tagged_node.node->name() << ": "
-                   << ok;
-    }
-
-    VLOG(2) << "Op " << tagged_node.node->def() << " supports device:";
-    supportedTypes.reserve(tftypes.size());
-    for (const auto &tft : tftypes) {
-        supportedTypes.emplace_back(tfDeviceTypeToType(tft));
-        VLOG(2) << "    " << tft.type();
-    }
-
-    auto device = tagged_node.node->def().device();
-    if (!device.empty()) {
-        supportedTypes.clear();
-        supportedTypes.push_back(tfDeviceNameToSpec(device).type);
-    }
     // pre compute estimated usage
-    for (auto t : supportedTypes) {
-        inferUsage(t);
+    for (auto t : item.supported_devices) {
+        calcUsageFromShape(DeviceSpec{t});
     }
+
+    // pre compute debug string
+    std::ostringstream oss;
+    oss << "ExecTask(name=" << tagged_node.node->name() << ", type=" << tagged_node.node->op_def().name()
+        << ", session=" << m_state->impl_->params_.session << ", step_id=" << m_state->step_id_ << ")";
+    m_cachedDebugString = oss.str();
 }
 
-const std::vector<DeviceType> &ExecTask::supportedDeviceTypes() const
+ExecTask::DeviceTypes ExecTask::supportedDeviceTypes() const
 {
-    return supportedTypes;
+    return item.supported_devices;
 }
 
-bool ExecTask::prepare(std::unique_ptr<ResourceContext> &&rctx)
+bool ExecTask::prepare(std::unique_ptr<ResourceContext> &&rctx) noexcept
 {
-    statusInPrepare = tf::Status::OK();
+    sstl::TimeoutWarning tw(2ms, [&](auto limit, auto dur){
+        LOG(WARNING) << "ExecTask::prepare took more than " << duration_cast<FpMS>(limit)
+                     << " to finish: " << duration_cast<FpMS>(dur)
+                     << " for " << *this;
+    });
 
-    auto &spec = rctx->spec();
+    try {
+        statusInPrepare = tf::Status::OK();
 
-    auto match = [&spec](auto type) { return type == spec.type; };
-    if (std::none_of(supportedTypes.begin(), supportedTypes.end(), match)) {
-        return false;
-    }
+        auto &spec = rctx->spec();
 
-    auto s = m_state->impl_->LookupDevice(spec, std::move(rctx), &ditem);
-    if (!s.ok()) {
-        statusInPrepare.Update(s);
-        return false;
-    }
-
-    // First check if we already created the kernel on some device
-    op_kernel = nullptr;
-    owns_kernel = true;
-    std::string devName;
-    auto ok = m_state->impl_->params_.find_kernel(tagged_node.node->def(), &devName, &op_kernel);
-
-    bool done = true;
-    if (ok.ok() && op_kernel) {
-        // we saw this kernel before, check if the device match
-        if (devName.empty()) {
-            LOG(WARNING) << "We've created the kernel, but don't remember its device: "
-                         << tagged_node.node->name();
-            auto s = tf::errors::Internal("We've created the kernel, but don't remember its device");
-            op_kernel = nullptr;
-            done = false;
-        } else if (devName != ditem.device->name()) {
-            VLOG(3) << "Stateful kernel can not be moved: previously created on " << devName
-                    << ", now requested on " << ditem.device->name();
-            op_kernel = nullptr;
-            done = false;
+        if (boost::range::count(supportedDeviceTypes(), spec.type) == 0) {
+            LOG(ERROR) << "Try to prepare ExecTask on unsupported device type " << spec << " :" << *this;
+            LOG(ERROR) << "Supported device types are: ";
+            for (const auto &dt : supportedDeviceTypes()) {
+                LOG(ERROR) << "  " << enumToString(dt);
+            }
+            return false;
         }
-        // We are on the same device, good.
-        // this is a cached kernel.
-        owns_kernel = false;
-    } else if (!ok.ok()) {
-        LOG(ERROR) << "Failed to find kernel with status " << ok << " for Node: " << tagged_node.node->name();
-        statusInPrepare.Update(ok);
-        // it is okay, just continue to create the kernel
-    }
 
-    // Instantiate kernel if not already done
-    if (!op_kernel) {
-        auto s = m_state->SetupKernel(tagged_node, ditem, &op_kernel);
+        auto s = m_state->impl_->LookupDevice(spec, std::move(rctx), &ditem);
         if (!s.ok()) {
-            LOG(ERROR) << "Error when creating kernel for node " << tagged_node.node->name() << ": " << s;
             statusInPrepare.Update(s);
-            done = false;
+            return false;
         }
-        // HACK:
-        if (op_kernel) {
-            owns_kernel = !ditem.function_library->IsStateful(op_kernel->type_string());
+
+        // In case anything go wrong, don't leak resource
+        sstl::ScopeGuards onReturn([this]() {
+            // Release the resource context and the device we've given
+            ditem.device.reset();
+        });
+
+        // Instantiate kernel if not already done
+        try {
+            op_kernel = m_state->impl_->SetupKernel(tagged_node.node, ditem);
+        } catch (const TFException &ex) {
+            if (tf::errors::IsAlreadyExists(ex.code())) {
+                // found a kernel on another device
+                // ignore it as we probably have another chance to prepare on another device.
+                return false;
+            }
+            // rethrow otherwise
+            throw;
         }
+        kernel_is_async = (op_kernel->AsAsync() != nullptr);
+
+        LogAlloc() << "Pre allocated " << ditem.device->resourceContext() << " for " << *this;
+
+        // Now we are sure things succeeded, cancel the rollback
+        onReturn.dismiss();
+        return true;
+    } catch (const TFException &ex) {
+        LOG(ERROR) << "Exception caught when preparing opItem " << *this << ": " << ex.what();
+        statusInPrepare = ex.code();
+        return false;
     }
-
-    if (!done) {
-        // Release the resource context and the device we've given
-        ditem.device.reset();
-        return done;
-    }
-
-    AllocLog(INFO) << "Pre allocated " << ditem.device->resourceContext() << " for " << DebugString();
-    kernel_is_async = (op_kernel->AsAsync() != nullptr);
-
-    return true;
 }
 
 bool ExecTask::isAsync() const
@@ -163,12 +152,17 @@ bool ExecTask::isAsync() const
 
 Resources ExecTask::estimatedUsage(const DeviceSpec &dev)
 {
+    sstl::TimeoutWarning tw(1ms, [&](auto limit, auto dur){
+        LOG(WARNING) << "ExecTask::estimatedUsage took more than " << duration_cast<FpMS>(limit)
+                     << " to finish: " << duration_cast<FpMS>(dur)
+                     << " for " << *this;
+    });
     // First see if we have usage for this node in session
     // but only if we haven't failed before, otherwise,
     // the session cached usage maybe be just a lucky case
     auto usage = m_state->impl_->cachedUsageForNode(tagged_node.node->name());
     if (usage && failureTimes == 0) {
-        return *usage;
+        return std::move(*usage);
     }
 
     // Short-cut if this task has failed before
@@ -207,21 +201,25 @@ Resources ExecTask::estimatedUsage(const DeviceSpec &dev)
     // Fast path from cache
     auto it = cachedUsage.find(dev);
     if (it == cachedUsage.end()) {
-        inferUsage(dev);
+        return calcUsageFromShape(dev);
     }
-    return cachedUsage[dev];
+    return it->second;
 }
 
-void ExecTask::inferUsage(const DeviceSpec &dev)
+Resources ExecTask::calcUsageFromShape(const DeviceSpec &dev)
 {
     // Slow path to calculate the usage
     auto &res = cachedUsage[dev];
+
+#if !defined(SALUS_ENABLE_REFINER)
+    return res;
+#endif // SALUS_ENABLE_REFINER
 
     const auto *node = tagged_node.node;
     auto ctx = m_state->shapeForNode(node);
     if (!ctx) {
         LOG(WARNING) << "Shape information not available for node: " << node->name();
-        return;
+        return res;
     }
 
     ExecutorImpl::DeviceItem ditem;
@@ -261,7 +259,7 @@ void ExecTask::inferUsage(const DeviceSpec &dev)
             count *= val;
         }
         auto dtype = node->output_type(i);
-        VLOG(3) << "    dtype " << tf::DataType_Name(dtype) << ", " << tf::DataTypeSize(dtype) << " bytes";
+        VLOG(3) << "    dtype " << dtype;
         double subtotal = count * tf::DataTypeSize(dtype);
 
         if (mtypeStatus.ok() && output_mtypes[i] == tf::HOST_MEMORY) {
@@ -270,15 +268,13 @@ void ExecTask::inferUsage(const DeviceSpec &dev)
             res[devTag] += subtotal;
         }
     }
+
+    return res;
 }
 
-std::string ExecTask::DebugString()
+std::string ExecTask::DebugString() const
 {
-    std::ostringstream oss;
-    oss << "ExecTask(name=" << tagged_node.node->name() << ", type=" << tagged_node.node->op_def().name()
-        << ", session=" << m_state->impl_->params_.session << ", step_id=" << m_state->step_id_
-        << ", failures=" << failureTimes << ", inputsize=" << input_size << ")";
-    return oss.str();
+    return m_cachedDebugString;
 }
 
 void ExecTask::cancel()
@@ -298,128 +294,137 @@ void ExecTask::cancel()
     }
 }
 
-void ExecTask::run(Callbacks cbs)
+void ExecTask::run(Callbacks cbs) noexcept
 {
     const auto &gview = m_state->impl_->gview_;
     auto *node = tagged_node.node;
     const auto input_frame = tagged_node.input_frame;
     const auto input_iter = tagged_node.input_iter;
     const auto id = node->id();
-    const auto &item = *gview.node(id);
 
     // clear early
     params.rendezvous = nullptr;
 
-    if (!statusInPrepare.ok()) {
-        m_state->MaybeMarkCompleted(input_frame, input_iter, id);
-        afterRun(statusInPrepare, cbs);
-        return;
-    }
-
-    DCHECK(op_kernel);
-    DCHECK(ditem.device);
-
-    // Start run
-    auto s = gview.SetAllocAttrForNode(node, ditem.device.get(), op_kernel);
-    if (!s.ok()) {
-        m_state->MaybeMarkCompleted(input_frame, input_iter, id);
-        afterRun(s, cbs);
-        return;
-    }
-
-    params.device = ditem.device.get();
-
-    auto localRendez = new RendezvousWithHook(ditem.device, sstl::add_ref(rendez));
-    params.rendezvous = localRendez;
-    params.record_tensor_accesses = ditem.device_record_tensor_access;
-    params.function_library = ditem.function_library.get();
-    // Set the device_context for this node id, if it exists.
-    params.op_device_context = ditem.device->deviceContextForNode(id);
-
-    // Don't track allocations. Not implemented.
-    params.track_allocations = false;
-
-    VLOG(2) << "Process node: " << SummarizeNodeDef(node->def()) << " " << ditem.device->resourceContext();
-
-    auto input_tensors = m_state->GetInputTensors(input_frame, input_iter);
-    first_input = input_tensors + item.input_start;
-
-    // Only execute this node if it is not dead or it is a send/recv
-    // transfer node. For transfer nodes, we need to propagate the "dead"
-    // bit even when the node is dead.
-    if (tagged_node.is_dead && !IsTransferNode(node)) {
-        afterCompute(true, cbs, item);
-        return;
-    }
-
-    // Prepares inputs.
-    bool is_input_dead = false;
-    s = m_state->PrepareInputs(item, op_kernel, ditem.device, params.op_device_context, first_input, &inputs,
-                               &buflocks, &input_device_contexts, &input_alloc_attrs, &is_input_dead);
-    if (!s.ok()) {
-        // Inspect return state for retrying on memory failure
-        if (maybeMemoryFailure(s, cbs.memFailure)) {
+    try {
+        if (!statusInPrepare.ok()) {
+            m_state->MaybeMarkCompleted(input_frame, input_iter, id);
+            afterRun(statusInPrepare, cbs);
             return;
         }
-        // Clear inputs.
-        m_state->ClearInputs(first_input, item.num_inputs, buflocks);
-        afterRun(s, cbs);
-        return;
-    }
 
-    // record input sizes
-    input_size = 0;
-    for (auto &inp : inputs) {
-        if (inp.tensor) {
-            input_size += inp->shape().num_elements();
+        DCHECK(op_kernel);
+        DCHECK(ditem.device);
+
+        // Start run
+        auto s = gview.SetAllocAttrForNode(node, ditem.device.get(), op_kernel.get());
+        if (!s.ok()) {
+            m_state->MaybeMarkCompleted(input_frame, input_iter, id);
+            afterRun(s, cbs);
+            return;
         }
-    }
 
-    // Remember tickets for reffed inputs, they may be modified by the op
-    reffedEntries.clear();
-    for (auto entry = first_input; entry != first_input + item.num_inputs; ++entry) {
-        if (entry->ref) {
-            has_ref_input = true;
-            reffedEntries.push_back(entry);
+        params.device = ditem.device.get();
+
+        auto localRendez = new RendezvousWithHook(ditem.device, sstl::add_ref(rendez));
+        params.rendezvous = localRendez;
+        params.record_tensor_accesses = ditem.device_record_tensor_access;
+        params.function_library = ditem.function_library.get();
+        // Set the device_context for this node id, if it exists.
+        params.op_device_context = ditem.device->deviceContextForNode(id);
+
+        // Don't track allocations. Not implemented.
+        params.track_allocations = false;
+
+        VLOG(2) << "Process node: " << node->def() << " " << ditem.device->resourceContext();
+
+        auto input_tensors = m_state->GetInputTensors(input_frame, input_iter);
+        first_input = input_tensors + item.input_start;
+
+        LogOpTracing() << "OpItem Event " << *this << " event: afterDevCtx";
+        // Only execute this node if it is not dead or it is a send/recv
+        // transfer node. For transfer nodes, we need to propagate the "dead"
+        // bit even when the node is dead.
+        if (tagged_node.is_dead && !IsTransferNode(node)) {
+            afterCompute(true, cbs);
+            return;
         }
+
+        // Prepares inputs.
+        bool is_input_dead = false;
+        s = m_state->PrepareInputs(item, op_kernel.get(), ditem.device, params.op_device_context, first_input,
+                                   &inputs, &buflocks, &input_device_contexts, &input_alloc_attrs,
+                                   &is_input_dead);
+        if (!s.ok()) {
+            // Inspect return state for retrying on memory failure
+            if (maybeMemoryFailure(s, cbs.memFailure)) {
+                return;
+            }
+            // Clear inputs.
+            m_state->ClearInputs(first_input, item.num_inputs, buflocks);
+            afterRun(s, cbs);
+            return;
+        }
+
+        // record input sizes
+        input_size = 0;
+        for (auto &inp : inputs) {
+            if (inp.tensor) {
+                input_size += inp->shape().num_elements();
+            }
+        }
+
+        // Remember tickets for reffed inputs, they may be modified by the op
+        reffedEntries.clear();
+        for (auto entry = first_input; entry != first_input + item.num_inputs; ++entry) {
+            if (entry->ref) {
+                has_ref_input = true;
+                reffedEntries.push_back(entry);
+            }
+        }
+
+        // Set up compute params.
+        params.op_kernel = op_kernel.get();
+        params.frame_iter = tf::FrameAndIter(input_frame->frame_id, input_iter);
+        params.is_input_dead = is_input_dead;
+        params.output_attr_array = item.output_attrs();
+
+        LogOpTracing() << "OpItem Event " << *this << " event: afterPrepInput";
+
+        if (kernel_is_async) {
+            // Asynchronous computes.
+            VLOG(2) << "Launch Async kernel";
+            auto async = op_kernel->AsAsync();
+            DCHECK_NOTNULL(async);
+
+            // Ensure OpKernelContext constructor will make a new eigen GPU device if
+            // necessary.
+            params.eigen_gpu_device = nullptr; // Force allocation
+            pctx = std::make_unique<tf::OpKernelContext>(&params, item.num_outputs);
+
+            ditem.device->ComputeAsync(async, pctx.get(), [this, cbs = std::move(cbs)]() {
+                VLOG(2) << "Async Kernel done: " << tagged_node.node->def();
+                afterCompute(false, cbs);
+            });
+        } else {
+            // Synchronous computes.
+            VLOG(2) << "Launch sync kernel";
+            pctx = std::make_unique<tf::OpKernelContext>(&params, item.num_outputs);
+
+            DCHECK_NOTNULL(op_kernel);
+            ditem.device->Compute(op_kernel.get(), pctx.get());
+
+            VLOG(2) << "Kernel done: " << tagged_node.node->def();
+            afterCompute(false, cbs);
+        } // if (kernel_is_async)
+    } catch (const TFException &ex) {
+        LOG(ERROR) << "Exception caught when preparing opItem " << *this << ": " << ex.what();
+        afterRun(ex.code(), cbs);
     }
-
-    // Set up compute params.
-    params.op_kernel = op_kernel;
-    params.frame_iter = tf::FrameAndIter(input_frame->frame_id, input_iter);
-    params.is_input_dead = is_input_dead;
-    params.output_attr_array = item.output_attrs();
-
-    if (kernel_is_async) {
-        // Asynchronous computes.
-        VLOG(2) << "Launch Async kernel";
-        auto async = op_kernel->AsAsync();
-        DCHECK_NOTNULL(async);
-
-        // Ensure OpKernelContext constructor will make a new eigen GPU device if
-        // necessary.
-        params.eigen_gpu_device = nullptr; // Force allocation
-        pctx = std::make_unique<tf::OpKernelContext>(&params, item.num_outputs);
-
-        ditem.device->ComputeAsync(async, pctx.get(), [this, cbs = std::move(cbs), &item]() {
-            VLOG(2) << "Async Kernel done: " << SummarizeNodeDef(tagged_node.node->def());
-            afterCompute(false, cbs, item);
-        });
-    } else {
-        // Synchronous computes.
-        VLOG(2) << "Launch sync kernel";
-        pctx = std::make_unique<tf::OpKernelContext>(&params, item.num_outputs);
-
-        DCHECK_NOTNULL(op_kernel);
-        ditem.device->Compute(op_kernel, pctx.get());
-
-        VLOG(2) << "Kernel done: " << SummarizeNodeDef(tagged_node.node->def());
-        afterCompute(false, cbs, item);
-    } // if (kernel_is_async)
 }
 
-void ExecTask::afterCompute(bool is_dead, const Callbacks &cbs, const tf::remote::NodeItem &item)
+void ExecTask::afterCompute(bool is_dead, const Callbacks &cbs)
 {
+    LogOpTracing() << "OpItem Event " << *this << " event: afterCompute";
     // `cbs.done` should be called last as `this` would be deleted in it.
     auto &device = ditem.device;
     ExecutorState::EntryVector outputs;
@@ -445,6 +450,8 @@ void ExecTask::afterCompute(bool is_dead, const Callbacks &cbs, const tf::remote
     // Clears inputs.
     m_state->ClearInputs(first_input, item.num_inputs, buflocks);
 
+    LogOpTracing() << "OpItem Event " << *this << " event: afterClearInput";
+
     // Mark completed
     auto input_frame = tagged_node.input_frame;
     const int64_t input_iter = tagged_node.input_iter;
@@ -453,7 +460,7 @@ void ExecTask::afterCompute(bool is_dead, const Callbacks &cbs, const tf::remote
 
     // propagate outputs
     if (s.ok()) {
-        m_state->PropagateOutputs(tagged_node, &item, &outputs, &ready);
+        m_state->PropagateOutputs(tagged_node, item, &outputs, &ready);
     }
     outputs.clear();
 
@@ -466,6 +473,7 @@ void ExecTask::afterCompute(bool is_dead, const Callbacks &cbs, const tf::remote
         device->ConsumeListOfAccessedTensors(pctx->op_device_context(), accessed);
     }
 
+    LogOpTracing() << "OpItem Event " << *this << " event: afterPropOut";
     // Post process
     // call node done and cbs.done
     afterRun(s, cbs);
@@ -511,7 +519,7 @@ void ExecTask::afterRun(const tf::Status &s, const Callbacks &cbs)
     DCHECK(ditem.device);
     if (s.ok()) {
         // save succeed estimation
-        auto usage = estimatedUsage(ditem.device->resourceContext().spec());
+        auto usage = ditem.device->peakResourceUsage();
         m_state->impl_->saveSucceedUsageForNode(tagged_node.node->name(), usage);
     }
     auto completed = m_state->NodeDone(s, tagged_node.node, ditem.device.get(), params.rendezvous, ready);
@@ -543,10 +551,10 @@ bool ExecTask::maybeMemoryFailure(const tf::Status &s, const MemFailCallback &me
         resources::merge(failedAlloc, ditem.device->failedResourceRequest());
 
         if (memFailure && memFailure()) {
-            VLOG(1) << "OOM happened and catched by scheduler: " << DebugString();
+            VLOG(1) << "OOM happened and catched by scheduler: " << *this;
             return true;
         }
-        VLOG(1) << "OOM happened and propagated: " << DebugString();
+        VLOG(1) << "OOM happened and propagated: " << *this;
     }
     // This is either not a OOM error, or the scheduler is not willing to handle it,
     // just go through normal handling
@@ -559,13 +567,6 @@ ResourceContext &ExecTask::resourceContext() const
     return ditem.device->resourceContext();
 }
 
-ExecTask::~ExecTask()
-{
-    // At this time m_state may already be deleted.
-    if (owns_kernel && op_kernel) {
-        DCHECK(ditem.function_library);
-        deleteKernel(op_kernel, ditem.function_library.get());
-    }
-}
+ExecTask::~ExecTask() = default;
 
 } // namespace salus::oplib::tensorflow

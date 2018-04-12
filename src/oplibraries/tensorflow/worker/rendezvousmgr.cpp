@@ -31,7 +31,7 @@ tf::BaseRemoteRendezvous *SalusRendezvousMgr::Create(tf::int64 step_id, const tf
 
 bool WorkerRendezvous::FindTensor(const std::string &key, tf::Tensor &t)
 {
-    sstl::Guard l(m_mu);
+    auto l = sstl::with_guard(m_mu);
     auto it = m_tensors.find(key);
     if (it != m_tensors.end()) {
         t = it->second;
@@ -45,7 +45,7 @@ tf::Status WorkerRendezvous::Send(const ParsedKey &key, const Args &args, const 
 {
     // Must not hold lock when calling Send, which in turn may call cb, and requiring lock again
     {
-        sstl::Guard l(m_mu);
+        auto l = sstl::with_guard(m_mu);
         m_tensors.emplace(key.FullKey().ToString(), val);
     }
     return BaseRemoteRendezvous::Send(key, args, val, is_dead);
@@ -58,7 +58,7 @@ void WorkerRendezvous::RecvAsync(const ParsedKey &key, const Args &args, DoneCal
                                                                auto val, auto is_dead)
     {
         {
-            sstl::Guard l(m_mu);
+            auto l = sstl::with_guard(m_mu);
             m_tensors.erase(full_key);
         }
         done(s, send_args, recv_args, val, is_dead);

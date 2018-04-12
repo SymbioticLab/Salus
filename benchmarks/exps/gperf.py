@@ -21,30 +21,18 @@ FLAGS = flags.FLAGS
 
 
 def main(argv):
-    scfg = maybe_forced_preset(presets.OpTracing)
-
-    name, bs = 'vgg11', 25
-    if len(argv) > 0:
-        name = argv[0]
-    if len(argv) > 1:
-        bs = int(argv[1])
+    scfg = maybe_forced_preset(presets.Gperf)
+    scfg.scheduler = 'pack'
 
     def create_wl(ex):
-        return WTL.create(name, bs, 10, executor=ex)
+        return WTL.create('vgg11', 25, 100, executor=ex)
 
-    # Run on Salus
+    # Run alexnet_25 on Salus
     wl = create_wl(Executor.Salus)
     run_seq(scfg.copy(output_dir=FLAGS.save_dir / "salus" / '1'), wl)
 
-    # Run 2 on Salus
+    # Run 2 alexnet_25 on Salus
     run_seq(scfg.copy(output_dir=FLAGS.save_dir / "salus" / '2'),
             create_wl(Executor.Salus),
             create_wl(Executor.Salus),
             )
-
-    # Run on TF
-    wl = create_wl(Executor.TF)
-    wl.env['TF_CPP_MIN_VLOG_LEVEL'] = '2'
-    wl.env['TF_CPP_MIN_LOG_LEVEL'] = ''
-    run_tf(FLAGS.save_dir / 'tf', wl)
-

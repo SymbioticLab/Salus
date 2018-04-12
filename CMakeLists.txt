@@ -2,7 +2,7 @@
 # Version 3.10 required from Boost 1.66.0 for imported target
 cmake_minimum_required(VERSION 3.10.0)
 
-project(executor)
+project(executor VERSION 1.0.0 LANGUAGES C CXX)
 
 #---------------------------------------------------------------------------------------
 # Initial setups
@@ -10,10 +10,13 @@ project(executor)
 # Include utilities
 include(cmake/Utilities.cmake)
 list(APPEND CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR}/cmake)
-# Setup defaults
-include(cmake/Defaults.cmake)
 # For feature_summary
 include(FeatureSummary)
+
+# Setup defaults
+include(cmake/Defaults.cmake)
+# Extra build types
+include(cmake/BuildTypes.cmake)
 
 #---------------------------------------------------------------------------------------
 # Available options
@@ -22,22 +25,17 @@ option(WITH_TENSORFLOW "Build TensorFlow operation library" ON)
 
 option(WITH_TESTS "Build test suite in default target" OFF)
 
-option(WITH_ASAN "Build with Address Sanitizer and Undefined beheavior Sanitizer" OFF)
+option(WITH_TCMALLOC "Build with tcmalloc" ON)
 
-option(WITH_MSAN "Build with Memory Sanitizer" OFF)
+option(WITH_TF_REFINER "Enable ShapeRefiner in TF oplibrary" OFF)
 
-option(WITH_TSAN "Build with Thread Sanitizer" OFF)
+option(WITH_PARALLEL_SCHED "Enable parallel processing in scheduler" OFF)
 
-option(WITH_GPERFTOOLS "Build with gperftools cpu profiler" OFF)
-
-option(WITH_TCMALLOC "Build with tcmalloc" OFF)
+option(DISABLE_LOGGING "Disable all logging except INFO level" OFF)
 
 #---------------------------------------------------------------------------------------
 # Find packages
 #---------------------------------------------------------------------------------------
-list(APPEND CMAKE_PREFIX_PATH ${PROJECT_SOURCE_DIR}/spack-packages)
-list(REMOVE_DUPLICATES CMAKE_PREFIX_PATH)
-
 # Protobuf
 #set(protobuf_MODULE_COMPATIBLE ON CACHE BOOL "CMake build-in FindProtobuf.cmake module compatible" FORCE)
 find_package(Protobuf 3.4.0 EXACT REQUIRED)
@@ -70,21 +68,22 @@ find_package(Boost 1.66 EXACT REQUIRED COMPONENTS
 set_package_properties(Boost PROPERTIES TYPE REQUIRED PURPOSE "For lock free queue and some utilities")
 add_definitions(-DBOOST_THREAD_VERSION=4)
 
-if(WITH_GPERFTOOLS OR WITH_TCMALLOC)
+if(WITH_TCMALLOC)
     find_package(Gperftools REQUIRED)
-endif(WITH_GPERFTOOLS OR WITH_TCMALLOC)
+    set_package_properties(Gperftools PROPERTIES TYPE REQUIRED PURPOSE "For gperftools cpu profiler and/or tcmalloc")
+endif(WITH_TCMALLOC)
 
-# Easylogging++
-include(thirdparty/UseEasyloggingpp.cmake)
-
-# docopt.cpp
-include(thirdparty/UseDocopt.cmake)
-
+# Bundled third party library
+add_subdirectory(thirdparty)
 #---------------------------------------------------------------------------------------
 # Print summary
 #---------------------------------------------------------------------------------------
 add_feature_info(WITH_TENSORFLOW USE_TENSORFLOW "build TensorFlow operation library")
 add_feature_info(WITH_TESTS WITH_TESTS "build test suite with default target")
+add_feature_info(WITH_TCMALLOC WITH_TCMALLOC "build with tcmalloc")
+add_feature_info(WITH_TF_REFINER WITH_TF_REFINER "enable ShapeRefiner in TF oplibrary")
+add_feature_info(WITH_PARALLEL_SCHED WITH_WITH_PARALLEL_SCHED "enable parallel processing in scheduler")
+add_feature_info(DISABLE_LOGGING DISABLE_LOGGING "disable all logging except INFO level")
 feature_summary(INCLUDE_QUIET_PACKAGES FATAL_ON_MISSING_REQUIRED_PACKAGES WHAT ALL)
 
 #---------------------------------------------------------------------------------------
@@ -94,37 +93,52 @@ feature_summary(INCLUDE_QUIET_PACKAGES FATAL_ON_MISSING_REQUIRED_PACKAGES WHAT A
 # Only set compile options after any inclusion of third party code
 include(cmake/CompileOptions.cmake)
 
-# Address Sanitizer
-if(WITH_ASAN)
-    add_compile_options(-fno-omit-frame-pointer)
-    add_compile_options(-fsanitize=address)
-    add_compile_options(-fsanitize=undefined)
-    set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -fsanitize=address -fsanitize=undefined")
-endif(WITH_ASAN)
-
-if(WITH_MSAN)
-    add_compile_options(-fno-omit-frame-pointer)
-    add_compile_options(-fsanitize=memory)
-    set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -fsanitize=memory")
-endif(WITH_MSAN)
-
-if(WITH_TSAN)
-    if(WITH_ASAN)
-        message(FATAL_ERROR "Thread Sanitizer can not be enabled with Address Sanitizer at the same time!")
-    endif()
-    add_compile_options(-fno-omit-frame-pointer)
-    add_compile_options(-fsanitize=thread)
-    set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -fsanitize=thread")
-endif(WITH_TSAN)
-
 # Detect features
 include(cmake/CheckCXXFeature.cmake)
 check_cxx_feature(cxx_enum_hash HAS_CXX_ENUM_HASH)
 check_cxx_feature(cxx_aligned_alloc HAS_CXX_ALIGNED_ALLOC)
 check_cxx_feature(cxx_builtin_expect HAS_CXX_BUILTIN_EXPECT)
 
+# Set feature macros
+if(WITH_TF_REFINER)
+    set(SALUS_ENABLE_REFINER 1)
+endif(WITH_TF_REFINER)
+
+if(WITH_PARALLEL_SCHED)
+    set(SALUS_ENABLE_PARALLEL_SCHED 1)
+endif(WITH_PARALLEL_SCHED)
+
 configure_file(src/config.h.in ${CMAKE_CURRENT_BINARY_DIR}/config.h)
 include_directories(${CMAKE_CURRENT_BINARY_DIR})
+
+# Disable verbose logging in non debug builds
+if(CMAKE_BUILD_TYPE STREQUAL "Debug")
+    #add_definitions(-DELPP_DISABLE_DEBUG_LOGS)
+    add_definitions(-DELPP_DISABLE_TRACE_LOGS)
+    #add_definitions(-DELPP_DISABLE_VERBOSE_LOGS)
+elseif(CMAKE_BUILD_TYPE STREQUAL "OpTracing")
+    add_definitions(-DELPP_DISABLE_DEBUG_LOGS)
+    #add_definitions(-DELPP_DISABLE_TRACE_LOGS)
+    add_definitions(-DELPP_DISABLE_VERBOSE_LOGS)
+elseif(CMAKE_BUILD_TYPE MATCHES "San$")
+    #add_definitions(-DELPP_DISABLE_DEBUG_LOGS)
+    add_definitions(-DELPP_DISABLE_TRACE_LOGS)
+    #add_definitions(-DELPP_DISABLE_VERBOSE_LOGS)
+else()
+    add_definitions(-DELPP_DISABLE_DEBUG_LOGS)
+    add_definitions(-DELPP_DISABLE_TRACE_LOGS)
+    add_definitions(-DELPP_DISABLE_VERBOSE_LOGS)
+endif()
+
+if(DISABLE_LOGGING)
+    add_definitions(-DELPP_DISABLE_DEBUG_LOGS)
+    #add_definitions(-DELPP_DISABLE_INFO_LOGS)
+    add_definitions(-DELPP_DISABLE_WARNING_LOGS)
+    add_definitions(-DELPP_DISABLE_ERROR_LOGS)
+    add_definitions(-DELPP_DISABLE_FATAL_LOGS)
+    add_definitions(-DELPP_DISABLE_TRACE_LOGS)
+    add_definitions(-DELPP_DISABLE_VERBOSE_LOGS)
+endif()
 
 #---------------------------------------------------------------------------------------
 # Put code together
@@ -138,16 +152,4 @@ if(WITH_TESTS)
     add_subdirectory(tests)
 else()
     add_subdirectory(tests EXCLUDE_FROM_ALL)
-endif()
-
-
-#---------------------------------------------------------------------------------------
-# Instrucment
-#---------------------------------------------------------------------------------------
-if(WITH_GPERFTOOLS AND WITH_TCMALLOC)
-    target_link_libraries(executor gperftools::tcmalloc_and_profiler)
-elseif(WITH_GPERFTOOLS)
-    target_link_libraries(executor gperftools::profiler)
-elseif(WITH_TCMALLOC)
-    target_link_libraries(executor gperftools::tcmalloc)
 endif()

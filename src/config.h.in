@@ -1,7 +1,13 @@
-#ifndef EXECUTOR_CONFIG_H
-#define EXECUTOR_CONFIG_H
+#ifndef SALUS_CONFIG_H
+#define SALUS_CONFIG_H
 
 #cmakedefine HAS_CXX_ENUM_HASH
 #cmakedefine HAS_CXX_ALIGNED_ALLOC
+#cmakedefine WITH_GPERFTOOLS
 
-#endif // EXECUTOR_CONFIG_H
+#cmakedefine SALUS_ENABLE_REFINER
+#cmakedefine SALUS_ENABLE_PARALLEL_SCHED
+
+#define SALUS_BUILD_TYPE "@CMAKE_BUILD_TYPE@"
+
+#endif // SALUS_CONFIG_H

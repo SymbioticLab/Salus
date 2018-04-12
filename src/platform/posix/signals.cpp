@@ -20,10 +20,10 @@
 
 #include "platform/logging.h"
 
-#include <signal.h>
-
+#include <atomic>
+#include <csignal>
 #include <cstring>
-#include <unordered_map>
+#include <cstdio>
 
 namespace signals {
 
@@ -75,36 +75,53 @@ const char *signalName(int sig)
 }
 
 namespace {
-void handler(int signo)
+
+std::atomic_int gTheSignal;
+
+std::atomic<SignalAction> gSignalAction;
+
+extern "C" void handler(int signo)
 {
-    const char *action = "";
+    gTheSignal = signo;
     switch (signo) {
         case SIGINT:
         case SIGTERM:
-            action = ", exiting";
+            gSignalAction = SignalAction::Exit;
             break;
         default:
-            action = ", ignoring";
+            gSignalAction = SignalAction::Ignore;
     }
 
     // Flush and start a new line on stdout, so ^C won't mess up the output
-    std::cout << std::endl;
-    LOG(INFO) << "Received signal " << signalName(signo) << action;
+    auto esaved = errno;
+    printf("\n");
+    fflush(stdout);
+    errno = esaved;
 }
 
 } // namespace
 
 void initialize()
 {
+    gTheSignal = 0;
+    gSignalAction = SignalAction::Ignore;
+
     installSignalHandler(SIGINT, handler);
     installSignalHandler(SIGTERM, handler);
 }
 
-void waitForTerminate()
+std::pair<int, SignalAction> waitForTerminate()
 {
     sigset_t set;
     sigemptyset(&set);
-    sigsuspend(&set);
+    sigaddset(&set, SIGTERM);
+    sigaddset(&set, SIGINT);
+    int sig;
+    sigwait(&set, &sig);
+
+    LOG(INFO) << "Received signal " << signalName(sig) << "(" << sig << ")";
+
+    return {sig, SignalAction::Exit};
 }
 
 } // namespace signals

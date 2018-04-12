@@ -109,9 +109,7 @@ std::string PerOpAllocator::Name()
 
 void *PerOpAllocator::AllocateRaw(size_t alignment, size_t num_bytes)
 {
-    TIMED_FUNC(timeObj);
-
-    AllocLog(DEBUG) << "TFAllocator allocating " << num_bytes << " bytes of memory with alignment "
+    LogAlloc() << "TFAllocator allocating " << num_bytes << " bytes of memory with alignment "
                     << alignment << " using allocator " << nameOrNull(m_actualAlloc) << "@"
                     << as_hex(m_actualAlloc);
 
@@ -121,13 +119,13 @@ void *PerOpAllocator::AllocateRaw(size_t alignment, size_t num_bytes)
         if (!ptr) {
             scope.rollback();
         }
-        checkMemory(ptr, num_bytes);
     } else {
         // No enough memory
-        AllocLog(DEBUG) << "TFAllocator failed to allocate.";
+        LogAlloc() << "TFAllocator failed to allocate.";
         return nullptr;
     }
 
+    checkMemory(ptr, num_bytes);
     recordSize(ptr, num_bytes);
 
     if (!ptr) {
@@ -136,7 +134,7 @@ void *PerOpAllocator::AllocateRaw(size_t alignment, size_t num_bytes)
 
     Ref();
 
-    AllocLog(INFO) << "TFAllocator allocated " << num_bytes << " bytes of memory at " << as_hex(ptr)
+    LogAlloc() << "TFAllocator allocated " << num_bytes << " bytes of memory at " << as_hex(ptr)
                    << " with alignment " << alignment << " using allocator " << nameOrNull(m_actualAlloc)
                    << "@" << as_hex(m_actualAlloc) << " with " << *m_rctx;
 
@@ -146,13 +144,11 @@ void *PerOpAllocator::AllocateRaw(size_t alignment, size_t num_bytes)
 void *PerOpAllocator::AllocateRaw(size_t alignment, size_t num_bytes,
                                   const tf::AllocationAttributes &allocation_attr)
 {
-    TIMED_FUNC(timeObj);
-
     auto attr(allocation_attr);
     // We should not retry on failure due to the restarting feature
     attr.no_retry_on_failure = true;
 
-    AllocLog(DEBUG) << "TFAllocator allocating attributes " << attr << " of " << num_bytes
+    LogAlloc() << "TFAllocator allocating attributes " << attr << " of " << num_bytes
                     << " bytes of memory with alignment " << alignment << " using allocator "
                     << nameOrNull(m_actualAlloc) << "@" << as_hex(m_actualAlloc);
 
@@ -162,10 +158,9 @@ void *PerOpAllocator::AllocateRaw(size_t alignment, size_t num_bytes,
         if (!ptr) {
             scope.rollback();
         }
-        checkMemory(ptr, num_bytes);
     } else {
         // No enough memory
-        AllocLog(DEBUG) << "TFAllocator failed to allocate.";
+        LogAlloc() << "TFAllocator failed to allocate.";
         return nullptr;
     }
 
@@ -173,11 +168,12 @@ void *PerOpAllocator::AllocateRaw(size_t alignment, size_t num_bytes,
         return ptr;
     }
 
+    checkMemory(ptr, num_bytes);
     recordSize(ptr, num_bytes);
 
     Ref();
 
-    AllocLog(INFO) << "TFAllocator called for attributes " << attr << " of " << num_bytes
+    LogAlloc() << "TFAllocator called for attributes " << attr << " of " << num_bytes
                    << " bytes of memory at " << as_hex(ptr) << " with alignment " << alignment
                    << " using allocator " << nameOrNull(m_actualAlloc) << "@" << as_hex(m_actualAlloc)
                    << " with " << *m_rctx;
@@ -196,26 +192,34 @@ tf::int64 PerOpAllocator::AllocationId(void *ptr)
 
 void PerOpAllocator::DeallocateRaw(void *ptr)
 {
-    TIMED_FUNC(timeObj);
-
     auto num_bytes = RequestedSize(ptr);
 
-    AllocLog(INFO) << "TFAllocator deallocating memory at " << as_hex(ptr) << " size " << num_bytes
-                   << " using allocator " << nameOrNull(m_actualAlloc) << "@" << as_hex(m_actualAlloc)
-                   << " with " << *m_rctx;
+    LogAlloc() << "TFAllocator deallocating memory at " << as_hex(ptr) << " size " << num_bytes
+               << " using allocator " << nameOrNull(m_actualAlloc) << "@" << as_hex(m_actualAlloc)
+               << " with " << *m_rctx;
 
     m_actualAlloc->DeallocateRaw(ptr);
     m_rctx->dealloc(ResourceType::MEMORY, num_bytes);
 
+    std::unordered_map<void*, size_t>::node_type nh;
     {
-        sstl::Guard g(m_mu);
-        m_allocated.erase(ptr);
+        auto g = sstl::with_guard(m_mu);
+        nh = m_allocated.extract(ptr);
         if (m_allocated.empty()) {
+            // FIXME: have a add ticket to session?
             m_rctx->removeTicketFromSession();
         }
+        if (nh) {
+            m_currentAlloc -= nh.mapped();
+        }
     }
-
-    Unref();
+    if (nh) {
+        Unref();
+    } else {
+        LOG(ERROR) << "Un recognized deallocation at " << as_hex(ptr)
+                   << " using allocator " << nameOrNull(m_actualAlloc) << "@" << as_hex(m_actualAlloc)
+                   << " with " << *m_rctx;
+    }
 }
 
 bool PerOpAllocator::ShouldAllocateEmptyTensors()
@@ -225,16 +229,18 @@ bool PerOpAllocator::ShouldAllocateEmptyTensors()
 
 void PerOpAllocator::recordSize(void *ptr, size_t size)
 {
-    sstl::Guard g(m_mu);
+    auto g = sstl::with_guard(m_mu);
     m_lastFailedAllocSize = size;
     if (ptr) {
         m_allocated[ptr] = size;
+        m_currentAlloc += size;
+        m_peakAllocSize = std::max(m_currentAlloc, m_peakAllocSize);
     }
 }
 
 size_t PerOpAllocator::findSize(void *ptr)
 {
-    sstl::Guard g(m_mu);
+    auto g = sstl::with_guard(m_mu);
     auto it = m_allocated.find(ptr);
     if (it == m_allocated.end()) {
         return 0;

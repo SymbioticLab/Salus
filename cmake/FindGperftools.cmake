@@ -40,6 +40,10 @@ find_library(profiler_LIBRARY
     NAMES profiler
     PATHS ${PC_profiler_LIBRARY_DIRS}
 )
+find_library(tcmalloc_and_profiler_LIBRARY
+    NAMES tcmalloc_and_profiler
+    PATHS ${PC_profiler_LIBRARY_DIRS}
+)
 set(profiler_VERSION ${PC_profiler_VERSION})
 
 # Find tcmalloc
@@ -53,7 +57,7 @@ find_path(tcmalloc_INCLUDE_DIR
     PATH_SUFFIXES gperftools
 )
 
-foreach(lib IN tcmalloc tcmalloc_debug tcmalloc_minimal tcmalloc_debug)
+foreach(lib IN ITEMS tcmalloc tcmalloc_debug tcmalloc_minimal tcmalloc_minimal_debug)
     find_library(${lib}_LIBRARY
         NAMES ${lib}
         PATHS ${PC_${lib}_LIBRARY_DIRS}
@@ -71,7 +75,7 @@ find_library(tcmalloc_and_profiler_LIBRARY
 set(Gperftools_VERSION ${profiler_VERSION})
 
 include(FindPackageHandleStandardArgs)
-find_package_handle_standard_args(Foo
+find_package_handle_standard_args(Gperftools
     FOUND_VAR Gperftools_FOUND
     REQUIRED_VARS
         profiler_LIBRARY
@@ -85,24 +89,46 @@ find_package_handle_standard_args(Foo
 )
 
 if(Gperftools_FOUND)
-    foreach(lib IN profiler tcmalloc)
+    if(NOT TARGET gperftools::profiler)
+        add_library(gperftools::profiler UNKNOWN IMPORTED)
+        set_property(TARGET gperftools::profiler
+            PROPERTY IMPORTED_LOCATION
+            "${profiler_LIBRARY}"
+        )
+        set_property(TARGET gperftools::profiler
+            PROPERTY INTERFACE_COMPILE_OPTIONS
+            "${PC_profiler_CFLAGS_OTHER}"
+            -fno-omit-frame-pointer
+        )
+        set_property(TARGET gperftools::profiler
+            PROPERTY INTERFACE_INCLUDE_DIRECTORIES
+            "${profiler_INCLUDE_DIR}"
+        )
+    endif()
+    if(NOT TARGET gperftools::tcmalloc_and_profiler)
+        add_library(gperftools::tcmalloc_and_profiler UNKNOWN IMPORTED)
+        set_property(TARGET gperftools::tcmalloc_and_profiler
+            PROPERTY IMPORTED_LOCATION
+            "${tcmalloc_and_profiler_LIBRARY}"
+        )
+        set_property(TARGET gperftools::tcmalloc_and_profiler
+            PROPERTY INTERFACE_COMPILE_OPTIONS
+            "${PC_profiler_CFLAGS_OTHER}"
+            "${PC_tcmalloc_CFLAGS_OTHER}"
+            -fno-omit-frame-pointer
+        )
+        set_property(TARGET gperftools::tcmalloc_and_profiler
+            PROPERTY INTERFACE_INCLUDE_DIRECTORIES
+            "${profiler_INCLUDE_DIR}"
+            "${tcmalloc_INCLUDE_DIR}"
+        )
+    endif()
+    foreach(lib IN ITEMS tcmalloc tcmalloc_debug tcmalloc_minimal tcmalloc_minimal_debug)
         if(NOT TARGET gperftools::${lib})
             add_library(gperftools::${lib} UNKNOWN IMPORTED)
-            set_target_properties(gperftools::${lib}
-                IMPORTED_LOCATION "${${lib}_LIBRARY}"
-                INTERFACE_COMPILE_OPTIONS "${PC_${lib}_CFLAGS_OTHER}"
-                INTERFACE_INCLUDE_DIRECTORIES "${${lib}_INCLUDE_DIR}"
-            )
-        endif()
-    endforeach()
-    foreach(lib IN tcmalloc_debug tcmalloc_minimal tcmalloc_minimal_debug)
-        if(NOT TARGET gperftools::${lib})
-            add_library(gperftools::${lib} UNKNOWN IMPORTED)
-            set_target_properties(gperftools::${lib}
-                IMPORTED_LOCATION "${${lib}_LIBRARY}"
-                INTERFACE_COMPILE_OPTIONS "${PC_${lib}_CFLAGS_OTHER}"
-                INTERFACE_INCLUDE_DIRECTORIES "${tcmalloc_INCLUDE_DIR}"
-                )
+            set_property(TARGET gperftools::${lib} PROPERTY IMPORTED_LOCATION "${${lib}_LIBRARY}")
+            set_property(TARGET gperftools::${lib} PROPERTY INTERFACE_COMPILE_OPTIONS "${PC_${lib}_CFLAGS_OTHER}")
+            set_property(TARGET gperftools::${lib} PROPERTY INTERFACE_INCLUDE_DIRECTORIES "${tcmalloc_INCLUDE_DIR}")
         endif()
     endforeach()
 endif()

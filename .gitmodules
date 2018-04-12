@@ -5,3 +5,7 @@
 	path = thirdparty/easyloggingpp
 	url = https://github.com/muflihun/easyloggingpp.git
 	ignore = dirty
+[submodule "thirdparty/concurrentqueue"]
+	path = thirdparty/concurrentqueue
+	url = https://github.com/cameron314/concurrentqueue.git
+	ignore = dirty

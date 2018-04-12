@@ -1,38 +1,42 @@
 /*
  * <one line to give the scheduler's name and an idea of what it does.>
  * Copyright (C) 2017  Aetf <aetf@unlimitedcodeworks.xyz>
- * 
+ *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation, either version 3 of the License, or
  * (at your option) any later version.
- * 
+ *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
- * 
+ *
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
+#include <utils/debugging.h>
 #include "basescheduler.h"
 
 #include "execution/operationtask.h"
 #include "execution/scheduler/operationitem.h"
-#include "utils/threadutils.h"
-#include "utils/macros.h"
-#include "utils/envutils.h"
 #include "platform/logging.h"
+#include "utils/debugging.h"
+#include "utils/envutils.h"
+#include "utils/macros.h"
+#include "utils/threadutils.h"
 
-#include <chrono>
-
-using std::chrono::system_clock;
+using std::chrono::duration_cast;
+using FpMS = std::chrono::duration<double, std::chrono::milliseconds::period>;
+using namespace std::chrono_literals;
+using namespace date;
+using namespace salus;
 
 namespace {
 bool useGPU()
 {
-    auto use = sstl::fromEnvVar("EXEC_SCHED_USE_GPU", true);
+    auto use = sstl::fromEnvVar("SALUS_SCHED_USE_GPU", true);
     VLOG(2) << "Scheduling using: " << (use ? "GPU,CPU" : "CPU");
     return use;
 }
@@ -51,7 +55,7 @@ SchedulerRegistary::~SchedulerRegistary() = default;
 SchedulerRegistary::Register::Register(std::string_view name, SchedulerFactory factory)
 {
     auto &registary = SchedulerRegistary::instance();
-    sstl::Guard guard(registary.m_mu);
+    auto guard = sstl::with_guard(registary.m_mu);
     auto [iter, inserted] = registary.m_schedulers.try_emplace(std::string(name), std::move(factory));
     UNUSED(iter);
     if (!inserted) {
@@ -59,9 +63,10 @@ SchedulerRegistary::Register::Register(std::string_view name, SchedulerFactory f
     }
 }
 
-std::unique_ptr<BaseScheduler> SchedulerRegistary::create(std::string_view name, ExecutionEngine &engine) const
+std::unique_ptr<BaseScheduler> SchedulerRegistary::create(std::string_view name,
+                                                          ExecutionEngine &engine) const
 {
-    sstl::Guard guard(m_mu);
+    auto guard = sstl::with_guard(m_mu);
     auto iter = m_schedulers.find(name);
     if (iter == m_schedulers.end()) {
         LOG(ERROR) << "No scheduler registered under name: " << name;
@@ -70,18 +75,22 @@ std::unique_ptr<BaseScheduler> SchedulerRegistary::create(std::string_view name,
     return iter->second.factory(engine);
 }
 
-BaseScheduler::BaseScheduler(ExecutionEngine &engine) : m_engine(engine) {}
+BaseScheduler::BaseScheduler(ExecutionEngine &engine)
+    : m_engine(engine)
+{
+}
 
 BaseScheduler::~BaseScheduler() = default;
 
-void BaseScheduler::notifyPreSchedulingIteration(const SessionList &sessions, const SessionChangeSet &changeset,
+void BaseScheduler::notifyPreSchedulingIteration(const SessionList &sessions,
+                                                 const SessionChangeSet &changeset,
                                                  sstl::not_null<CandidateList *> candidates)
 {
     UNUSED(sessions);
     UNUSED(changeset);
     UNUSED(candidates);
 
-    sstl::Guard g(m_muRes);
+    auto g = sstl::with_guard(m_muRes);
     m_missingRes.clear();
 }
 
@@ -99,16 +108,12 @@ bool BaseScheduler::maybePreAllocateFor(OperationItem &opItem, const DeviceSpec 
         usage[{ResourceType::GPU_STREAM, spec}] = 1;
     }
 
-    Resources *missing;
-    {
-        sstl::Guard g(m_muRes);
-        missing = &m_missingRes[&opItem];
-    }
-    DCHECK_NOTNULL(missing);
-
-    auto rctx = m_engine.makeResourceContext(item, spec, usage, missing);
+    Resources missing;
+    auto rctx = m_engine.makeResourceContext(item, spec, usage, &missing);
     if (!rctx->isGood()) {
         // Failed to pre allocate resources
+        auto g = sstl::with_guard(m_muRes);
+        m_missingRes.emplace(&opItem, std::move(missing));
         return false;
     }
 
@@ -117,16 +122,21 @@ bool BaseScheduler::maybePreAllocateFor(OperationItem &opItem, const DeviceSpec 
         return false;
     }
 
-    sstl::Guard g(item->tickets_mu);
+    auto g = sstl::with_guard(item->tickets_mu);
     item->tickets.insert(ticket);
     return true;
 }
 
 bool BaseScheduler::insufficientMemory(const DeviceSpec &spec)
 {
-    sstl::Guard g(m_muRes);
+    auto g = sstl::with_guard(m_muRes);
+
+    if (m_missingRes.empty()) {
+        return false;
+    }
 
     // we need paging if all not scheduled opItems in this iteration
+    // are missing memory resource on the device
     for (const auto &[pOpItem, missing] : m_missingRes) {
         UNUSED(pOpItem);
         for (const auto &[tag, amount] : missing) {
@@ -159,23 +169,25 @@ POpItem BaseScheduler::submitTask(POpItem &&opItem)
         return nullptr;
     }
 
-    VLOG(3) << "Scheduling opItem in session " << item->sessHandle << ": " << opItem->op->DebugString();
-    TIMED_SCOPE_IF(timerInnerObj, "BaseScheduler::submitTask", VLOG_IS_ON(1));
+    VLOG(3) << "Scheduling opItem in session " << item->sessHandle << ": " << opItem->op;
 
-    opItem->tInspected = system_clock::now();
+    LogOpTracing() << "OpItem Event " << opItem->op << " event: inspected";
     bool scheduled = false;
     DeviceSpec spec{};
     for (auto dt : opItem->op->supportedDeviceTypes()) {
         if (dt == DeviceType::GPU && !useGPU()) {
             continue;
         }
-        spec = {dt, 0};
+        spec.type = dt;
+        spec.id = 0;
         if (maybePreAllocateFor(*opItem, spec)) {
-            VLOG(3) << "Task scheduled on " << spec.DebugString();
+            VLOG(3) << "Task scheduled on " << spec;
             scheduled = true;
             break;
         }
     }
+
+    LogOpTracing() << "OpItem Event " << opItem->op << " event: prealloced";
 
     // Send to thread pool
     if (scheduled) {
@@ -208,11 +220,12 @@ size_t BaseScheduler::submitAllTaskFromQueue(const PSessionItem &item)
             scheduled += 1;
         }
     } else {
-        // Do all schedule in queue in parallel
         auto size = queue.size();
         SessionItem::UnsafeQueue stage;
         stage.swap(queue);
 
+#if defined(SALUS_ENABLE_PARALLEL_SCHED)
+        // Do all schedule in queue in parallel
         std::vector<std::future<std::shared_ptr<OperationItem>>> futures;
         futures.reserve(stage.size());
         for (auto &opItem : stage) {
@@ -223,14 +236,21 @@ size_t BaseScheduler::submitAllTaskFromQueue(const PSessionItem &item)
             futures.emplace_back(std::move(fu));
         }
 
-        VLOG(2) << "All opItem in session " << item->sessHandle << " examined";
-
         for (auto &fu : futures) {
             auto poi = fu.get();
             if (poi) {
                 queue.emplace_back(std::move(poi));
             }
         }
+#else
+        for (auto &opItem : stage) {
+            auto poi = submitTask(std::move(opItem));
+            if (poi) {
+                queue.emplace_back(std::move(poi));
+            }
+        }
+#endif
+        VLOG(2) << "All opItem in session " << item->sessHandle << " examined";
 
         scheduled = size - queue.size();
     }

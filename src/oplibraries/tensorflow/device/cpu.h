@@ -8,9 +8,11 @@
 #include "oplibraries/tensorflow/tensorflow_headers.h"
 #include "oplibraries/tensorflow/device/salusdevices.h"
 #include "utils/pointerutils.h"
+#include "utils/objectpool.h"
 
 namespace salus::oplib::tensorflow {
 
+class PerTaskCPUDevice;
 class SalusCPUDevice : public ISalusDevice, public tf::LocalDevice
 {
 public:
@@ -34,16 +36,27 @@ public:
     Status MakeTensorFromProto(const tf::TensorProto &tensor_proto, const tf::AllocatorAttributes alloc_attrs,
                                tf::Tensor *tensor) override;
 
-    void flushCacheFor(const tf::Graph *graph) override
+    void flushCacheFor(sstl::not_null<const tf::Graph *>) override
     {
-        UNUSED(graph);
     }
 
-    std::unique_ptr<PerTaskDevice> createPerTaskDevice(const tf::Graph *graph,
+    std::shared_ptr<PerTaskDevice> createPerTaskDevice(sstl::not_null<const tf::Graph *> graph,
                                                        std::unique_ptr<ResourceContext> &&rctx) override;
+
+    tf::Device &as_tfdevice() override
+    {
+        return *this;
+    }
+
+    const tf::Device &as_tfdevice() const override
+    {
+        return *this;
+    }
 
 private:
     sstl::not_null<tf::Allocator *> m_allocator; // not owned
+
+    std::shared_ptr<sstl::ObjectPool<PerTaskCPUDevice>> m_pool;
 };
 
 class SalusCPUDeviceFactory : public tf::DeviceFactory

@@ -25,17 +25,24 @@
 
 #include "md_executor_impl.h"
 
+#include "oplibraries/tensorflow/device/salusdevices.h"
+#include "oplibraries/tensorflow/tfexception.h"
 #include "oplibraries/tensorflow/v2/tfallocator.h"
 #include "oplibraries/tensorflow/worker/rendezvousmgr.h"
-#include "oplibraries/tensorflow/device/salusdevices.h"
 #include "utils/containerutils.h"
+#include "utils/cpp17.h"
 #include "utils/stringutils.h"
-
+#include "utils/debugging.h"
 #include <boost/iterator/indirect_iterator.hpp>
 #include <boost/thread/lock_algorithms.hpp>
-
 #include <unordered_set>
 #include <vector>
+#include <oplibraries/tensorflow/tfinstance.h>
+
+using std::chrono::duration_cast;
+using FpMS = std::chrono::duration<double, std::chrono::milliseconds::period>;
+using namespace std::chrono_literals;
+using namespace date;
 
 namespace salus::oplib::tensorflow {
 
@@ -226,7 +233,7 @@ void ExecutorState::fetchRecvShape(const tf::Node *n)
 
     tf::Tensor t;
     if (zr->FindTensor(key, t)) {
-        tf::mutex_lock l(refinerMu_);
+        auto l = sstl::with_guard(refinerMu_);
         sendShapes_[key] = tf::PartialTensorShape(t.shape().dim_sizes());
     } else {
         VLOG(2) << "Recv key not found for a client terminated recv op : " << key;
@@ -235,7 +242,7 @@ void ExecutorState::fetchRecvShape(const tf::Node *n)
 
 void ExecutorState::addNodeToRefiner(const TaggedNode &tn)
 {
-    tf::mutex_lock l(refinerMu_);
+    auto l = sstl::with_guard(refinerMu_);
     auto node = tn.node;
 
     if (node->type_string() == "Slice") {
@@ -302,7 +309,7 @@ size_t ExecutorImpl::handlePagingRequest(uint64_t oldTicket, std::unique_ptr<Res
     sg += [&totalReleased]() { VLOG(2) << "Paging released " << totalReleased << " bytes of memory"; };
 
     {
-        sstl::TGuard g(entry_mu_, "PagingStart");
+        auto g = sstl::with_guard(entry_mu_);
         auto range = active_buffers_.equal_range(oldTicket);
         if (range.first == range.second) {
             LOG(ERROR) << "Requested ticket for paging not found: " << oldTicket;
@@ -328,7 +335,7 @@ size_t ExecutorImpl::handlePagingRequest(uint64_t oldTicket, std::unique_ptr<Res
 
     // Remember to add them back to active entries with updated value when exit
     sg += [this, &parts, oldTicket]() {
-        sstl::TGuard g(entry_mu_, "PagingEnd");
+        auto g = sstl::with_guard(entry_mu_);
         for (auto part : parts) {
             VLOG(2) << "Adding buffer tree of ticket " << part->ticket << " (was " << oldTicket
                     << ") due to paging";
@@ -389,7 +396,7 @@ size_t ExecutorImpl::handlePagingRequest(uint64_t oldTicket, std::unique_ptr<Res
 
 void ExecutorImpl::forceEvicted()
 {
-    sstl::Guard g(entry_mu_);
+    auto g = sstl::with_guard(entry_mu_);
     for (auto state : active_states_) {
         state->ForceInterrupt(tf::errors::ResourceExhausted("Forcely killed due to paging"));
     }
@@ -398,29 +405,21 @@ void ExecutorImpl::forceEvicted()
 
 tf::Status ExecutorImpl::LookupTFDevice(const DeviceSpec &spec, tf::Device **tfdev)
 {
-    std::string name;
-    switch (spec.type) {
-        case DeviceType::CPU:
-            name = "CPU:";
-            break;
-        case DeviceType::GPU:
-            name = "GPU:";
-            break;
+    *tfdev = TFInstance::instance().tfdevice(spec);
+    if (*tfdev) {
+        return tf::Status::OK();
     }
-    name += std::to_string(spec.id);
-
-    auto ok = params_.deviceMgr.LookupDevice(name, tfdev);
-    if (!ok.ok()) {
-        LOG(ERROR) << "Cannot find device for " << spec << ": " << ok;
-        return ok;
-    }
-
-    return tf::Status::OK();
+    return tf::errors::InvalidArgument("Cannot find device for ", spec.debugString());
 }
 
-tf::Status ExecutorImpl::LookupDevice(const DeviceSpec &spec, std::unique_ptr<ResourceContext> &&rctx, DeviceItem *item)
+tf::Status ExecutorImpl::LookupDevice(const DeviceSpec &spec, std::unique_ptr<ResourceContext> &&rctx,
+                                      DeviceItem *item)
 {
-    TIMED_FUNC_IF(timerObj, VLOG_IS_ON(1));
+    sstl::TimeoutWarning tw(2ms, [&](auto limit, auto dur){
+        LOG(WARNING) << "LookupDevice took more than " << duration_cast<FpMS>(limit)
+                     << " to finish: " << duration_cast<FpMS>(dur)
+                     << " for " << spec;
+    });
 
     tf::Device *tfdev = nullptr;
     auto ok = LookupTFDevice(spec, &tfdev);
@@ -430,16 +429,48 @@ tf::Status ExecutorImpl::LookupDevice(const DeviceSpec &spec, std::unique_ptr<Re
 
     auto sdev = ISalusDevice::safe_cast(tfdev);
     if (!sdev) {
-        ok == tf::errors::Internal(tf::strings::StrCat("Device is not an ISalusDevice: ", spec.DebugString()));
+        ok = tf::errors::Internal(
+                   tf::strings::StrCat("Device is not an ISalusDevice: ", spec.debugString()));
         return ok;
     }
 
-    item->device = sdev->createPerTaskDevice(graph_, std::move(rctx));
+    item->device = sdev->createPerTaskDevice(graph_.get(), std::move(rctx));
 
     item->function_library = params_.create_fruntime(item->device.get());
 
     item->device_record_tensor_access = item->device->RequiresRecordingAccessedTensors();
     return tf::Status::OK();
+}
+
+POpKernel ExecutorImpl::SetupKernel(sstl::not_null<const tf::Node *> node, const DeviceItem &ditem)
+{
+    sstl::TimeoutWarning tw(2ms, [&](auto limit, auto dur){
+        LOG(WARNING) << "SetupKernel took more than " << duration_cast<FpMS>(limit)
+                     << " to finish: " << duration_cast<FpMS>(dur)
+                     << " for " << node->name() << " on " << ditem.device->name();
+    });
+    // first check if we have a cache for this kernel and if so, if the kernel is on the same device
+    {
+        auto g = sstl::with_guard(kernel_dev_mu_);
+        auto it = kernel_dev_.find(node->name());
+        if (it != kernel_dev_.end())
+            if (it->second != &ditem.device->underlayingDevice()) {
+                throw TFException(
+                    tf::errors::AlreadyExists("Kernel previously created on another device:", node->name(),
+                                              " previous device: ", it->second->name(), " requested device: ",
+                                              ditem.device->underlayingDevice().name()));
+            }
+    }
+
+    VLOG(2) << "Creating a kernel for device: " << ditem.device->name();
+    auto popkernel = params_.get_kernel(node->def(), ditem.function_library.get());
+
+    // only record device placement after create kernel, because get_kernel may throw
+    {
+        auto g = sstl::with_guard(kernel_dev_mu_);
+        kernel_dev_.emplace(node->name(), &ditem.device->underlayingDevice());
+    }
+    return popkernel;
 }
 
 /**
@@ -452,15 +483,13 @@ tf::Status ExecutorImpl::LookupDevice(const DeviceSpec &spec, std::unique_ptr<Re
  */
 void ExecutorImpl::updateBufferTree(Entry *entry, uint64_t ticket)
 {
-    TIMED_FUNC_IF(timerObj, VLOG_IS_ON(1));
-
     DCHECK(entry);
     DCHECK(entry->has_value);
 
     const auto buf = tf::remote::PagingHelper::bufferOf(*entry->RefOrVal());
     const auto root_buf = buf ? buf->root_buffer() : nullptr;
 
-    sstl::TGuard g(entry_mu_, "UpdateBufferTree");
+    auto g = sstl::with_guard(entry_mu_);
     auto &tree = entry->alloc_tree;
     if (!tree) {
         auto range = active_buffers_.equal_range(ticket);
@@ -511,7 +540,6 @@ void ExecutorImpl::updateBufferTree(Entry *entry, uint64_t ticket)
 
 void ExecutorImpl::removeFromBufferTree(const Entry *entry, EntryVec *needUpdate)
 {
-    TIMED_FUNC_IF(timerObj, VLOG_IS_ON(1));
     DCHECK(entry);
 
     auto tree = entry->alloc_tree;
@@ -535,7 +563,7 @@ void ExecutorImpl::removeFromBufferTree(const Entry *entry, EntryVec *needUpdate
         return false;
     };
 
-    sstl::TGuard g(entry_mu_, "RemoveFromBufferTree");
+    auto g = sstl::with_guard(entry_mu_);
 
     if (sstl::erase_if(tree->roots, matchRefs)) {
         return;

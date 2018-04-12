@@ -20,10 +20,6 @@
 #ifndef LOGGING_H
 #define LOGGING_H
 
-#ifdef NDEBUG
-#define ELPP_DISABLE_DEBUG_LOGS
-#endif
-
 #include "easylogging++.h"
 
 #include <type_traits>
@@ -128,9 +124,9 @@ void initialize(const Params &params);
 
 } // namespace logging
 
-#define PerfLog(level) CLOG(level, logging::kPerfTag)
-#define AllocLog(level) CLOG(level, logging::kAllocTag)
-#define AllocVLog(level) CVLOG(level, logging::kAllocTag)
+#define LogPerf() CLOG(TRACE, logging::kPerfTag)
+#define LogAlloc() CLOG(TRACE, logging::kAllocTag)
+#define LogOpTracing() CLOG(TRACE, logging::kOpTracing)
 
 // Additional operator<< implementations
 MAKE_LOGGABLE(std::exception_ptr, ep, os);

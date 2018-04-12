@@ -47,6 +47,15 @@ macro(add_compile_options_with_check flag)
   endif()
 endmacro()
 
+# Add compile option to a build type with check
+macro(build_type_add_compile_option_with_check buildtype flag)
+    string(REPLACE "-" "_" retvar "COMPILER_SUPPORT_${flag}")
+    check_cxx_compiler_flag(${flag} ${retvar})
+    if(${retvar})
+        set(CMAKE_CXX_FLAGS_${buildtype} "${CMAKE_CXX_FLAGS_${buildtype}}" ${flag})
+    endif()
+endmacro()
+
 # Print all properties for a target
 # From https://stackoverflow.com/questions/32183975/how-to-print-all-the-properties-of-a-target-in-cmake
 

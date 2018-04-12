@@ -52,6 +52,11 @@ from_chars_result from_chars(const char *first, const char *last, T &value, int 
     return fcr;
 }
 
+template <typename E>
+constexpr typename std::underlying_type<E>::type to_underlying(E e) noexcept {
+    return static_cast<typename std::underlying_type<E>::type>(e);
+}
+
 } // namespace sstl
 
 #endif // SALUS_SSTL_CPP17_H

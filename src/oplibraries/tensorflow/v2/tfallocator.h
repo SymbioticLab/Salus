@@ -27,6 +27,7 @@
  */
 #include "oplibraries/tensorflow/tensorflow_headers.h"
 #include "execution/resources.h"
+#include "utils/threadutils.h"
 #include <memory>
 
 class ResourceContext;
@@ -70,7 +71,14 @@ public:
 
     size_t lastFailedAllocSize() const
     {
+        auto g = sstl::with_guard(m_mu);
         return m_lastFailedAllocSize;
+    }
+
+    size_t peakAllocSize() const
+    {
+        auto g = sstl::with_guard(m_mu);
+        return m_peakAllocSize;
     }
 
 private:
@@ -81,10 +89,12 @@ private:
 
     tf::Allocator *m_actualAlloc;
 
-    std::mutex m_mu;
-    std::unordered_map<void *, size_t> m_allocated;
+    mutable std::mutex m_mu;
+    std::unordered_map<void *, size_t> m_allocated GUARDED_BY(m_mu);
 
-    size_t m_lastFailedAllocSize = 0;
+    size_t m_lastFailedAllocSize = 0 GUARDED_BY(m_mu);
+    size_t m_peakAllocSize = 0 GUARDED_BY(m_mu);
+    size_t m_currentAlloc = 0 GUARDED_BY(m_mu);
 };
 
 } // namespace salus::oplib::tensorflow

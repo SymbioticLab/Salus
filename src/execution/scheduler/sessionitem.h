@@ -48,10 +48,6 @@ private:
     KernelQueue queue GUARDED_BY(mu);
     // total number of executed op in this session
     uint64_t totalExecutedOp = 0 GUARDED_BY(mu);
-    // ratio over op jct (tQueued - tRunning) / (tQueued - now)
-    double avgOpOverhead = 0.0 GUARDED_BY(mu);
-    // (tQueued - now) in us
-    uint64_t avgOpJct = 0 GUARDED_BY(mu);
 
     std::mutex mu;
 
@@ -67,7 +63,6 @@ private:
     std::atomic_bool protectOOM{true};
 
     friend class ExecutionEngine;
-    friend class ResourceContext;
     friend class BaseScheduler;
 
 public:
@@ -84,8 +79,8 @@ public:
         resUsage[resources::GPU0Memory].get() = 0;
         resUsage[resources::GPU1Memory].get() = 0;
         resUsage[resources::CPU0Memory].get() = 0;
-        resUsage[{ResourceType::GPU_STREAM, devices::GPU0}].get() = 0;
-        resUsage[{ResourceType::GPU_STREAM, devices::GPU1}].get() = 0;
+        resUsage[{ResourceType::GPU_STREAM, salus::devices::GPU0}].get() = 0;
+        resUsage[{ResourceType::GPU_STREAM, salus::devices::GPU1}].get() = 0;
     }
 
     ~SessionItem();
@@ -110,6 +105,18 @@ public:
      * ```
      */
     void prepareDelete(std::function<void()> cb);
+
+    /**
+     * @brief Allocator should call when there is memory allocation happens
+     * @param ticket
+     */
+    void notifyMemoryAllocation(uint64_t ticket);
+
+    /**
+     * @brief Allocator should call when there is no more memory allocation
+     * @param ticket
+     */
+    void removeMemoryAllocationTicket(uint64_t ticket);
 
 private:
     using AtomicResUsages = std::unordered_map<ResourceTag, sstl::MutableAtom>;

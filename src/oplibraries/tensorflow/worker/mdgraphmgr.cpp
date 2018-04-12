@@ -16,27 +16,56 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include "mdgraphmgr.h"
+#include "oplibraries/tensorflow/worker/mdgraphmgr.h"
 #include "oplibraries/tensorflow/v2/md_executor.h"
+#include "oplibraries/tensorflow/device/salusdevices.h"
+#include "oplibraries/tensorflow/tfexception.h"
 #include "utils/pointerutils.h"
-
-namespace tf = ::tensorflow;
 
 namespace salus::oplib::tensorflow {
 
-MDGraphMgr::MDGraphMgr(const tf::WorkerEnv *env, tf::DeviceMgr *device_mgr, ExecutionContext execCtx)
-    : GraphMgr(env, device_mgr)
+MDGraphMgr::MDGraphMgr(const tf::WorkerEnv *env, ExecutionContext execCtx)
+    : GraphMgr(env, env->device_mgr)
     , m_execCtx(std::move(execCtx))
 {
 }
 
 MDGraphMgr::~MDGraphMgr() = default;
 
-Status MDGraphMgr::InitItem(const std::string &session, const tf::GraphDef &gdef,
-                            const tf::GraphOptions &graph_options, const tf::DebugOptions &debug_options,
-                            tf::DistributedFunctionLibraryRuntime *cluster_flr, Item *item)
+Status MDGraphMgr::Register(const std::string& session, const tf::GraphDef& gdef,
+                            const tf::GraphOptions& graph_options, const tf::DebugOptions& debug_options,
+                            tf::DistributedFunctionLibraryRuntime* cluster_flr, std::string* handle)
+{
+    auto item = sstl::make_scoped_unref<MDItem>();
+    std::string tempHandle;
+    {
+        tf::mutex_lock l(mu_);
+        tempHandle = tf::strings::Printf("%016llx", ++next_id_);
+        item->handle = tempHandle;
+    }
+
+    auto s = InitMDItem(session, gdef, graph_options, debug_options, cluster_flr, item);
+    if (!s.ok()) {
+        return s;
+    }
+
+    // Inserts one item into table_.
+    {
+        tf::mutex_lock l(mu_);
+        *handle = tf::strings::Printf("%016llx", ++next_id_);
+        item->handle = *handle;
+        CHECK(table_.emplace(*handle, item.release()).second);
+    }
+    return Status::OK();
+}
+
+Status MDGraphMgr::InitMDItem(const std::string &session, const tf::GraphDef &gdef,
+                              const tf::GraphOptions &graph_options, const tf::DebugOptions &debug_options,
+                              tf::DistributedFunctionLibraryRuntime *cluster_flr, MDItem *item)
 {
     item->session = session;
+    item->devices = device_mgr_->ListDevices();
+
     item->lib_def = std::make_unique<tf::FunctionLibraryDefinition>(tf::OpRegistry::Global(), gdef.library());
 
     if (gdef.versions().producer() >= 5) {
@@ -128,12 +157,14 @@ Status MDGraphMgr::InitItem(const std::string &session, const tf::GraphDef &gdef
         // Top-level nodes in the graph uses the op segment to cache
         // kernels. Therefore, as long as the executor is alive, we need
         // to ensure the kernels cached for the session are alive.
-        // FIXME: why use global shared op_segment?
-        // NOTE: unit->device->op_segment()->RemoveHold is called in Item destructor.
-        // Though it's not harmful as it doesn't delete things if not found. We should look into this.
-        // auto opseg = unit->device->op_segment();
-        auto &opseg = m_opseg;
-        opseg.AddHold(session);
+
+        // Add a hold on op_segment on every device
+        // These holds are removed in ~MDItem.
+        // NOTE: unit->device->op_segment()->RemoveHold is called in Item destructor, but we don't
+        // add that hold, although it's not harmful as it doesn't delete things if not found.
+        for (auto tfdev : item->devices) {
+            tfdev->op_segment()->AddHold(session);
+        }
 
         auto producer = subgraph->versions().producer();
         params.create_fruntime = [worker_env = worker_env_, producer, item, optimizer_opts](auto dev)
@@ -148,30 +179,8 @@ Status MDGraphMgr::InitItem(const std::string &session, const tf::GraphDef &gdef
             });
         };
 
-        // Construct the root executor for the subgraph.
-        params.find_kernel = [this, session, &opseg](const auto &ndef, auto *devName, auto **kernel) {
-            *kernel = nullptr;
-            devName->clear();
-
-            bool found = true;
-            auto ok = opseg.FindOrCreate(session, ndef.name(), kernel, [&found](auto) {
-                found = false;
-                return tf::Status::OK();
-            });
-            if (!ok.ok() || !found) {
-                return ok;
-            }
-
-            sstl::Guard l(m_mu);
-            auto it = m_kernelToDevice.find(*kernel);
-            if (it == m_kernelToDevice.end()) {
-                return tf::errors::Internal("We've created the kernel, but don't remember its device");
-            }
-            *devName = it->second;
-            return tf::Status::OK();
-        };
-
-        params.create_kernel = [this, session, &opseg](const auto &ndef, auto *lib, auto **kernel) {
+        params.get_kernel = [item](const auto &ndef, auto *lib) -> POpKernel {
+            tf::OpKernel *kernel = nullptr;
             // We do not share the kernel via the OpSegment if the node is
             // stateless, or a function.
             // NOTE(mrry): We must not share function kernels (implemented
@@ -180,26 +189,27 @@ Status MDGraphMgr::InitItem(const std::string &session, const tf::GraphDef &gdef
             // is stateful, the `CallOp` that invokes it is not.
             if (!lib->IsStateful(ndef.op())
                 || lib->GetFunctionLibraryDefinition()->Find(ndef.op()) != nullptr) {
-                return lib->CreateKernel(ndef, kernel);
+                SALUS_THROW_IF_ERROR(lib->CreateKernel(ndef, &kernel));
+                return {kernel, default_delete_opkernel};
             }
 
-            auto create_fn = [this, lib, &ndef](auto **kernel) {
-                auto s = lib->CreateKernel(ndef, kernel);
-                sstl::Guard l(m_mu);
-                m_kernelToDevice[*kernel] = lib->device()->name();
-                return s;
+            // the kernel should hold a reference for item, but the function library runtime
+            // already holds one, so to simplify things, we omit the item->Ref() and Unref
+            // for kernel
+            auto create_fn = [item, lib, &ndef](auto **pkernel) {
+                auto ok = lib->CreateKernel(ndef, pkernel);
+                VLOG(2) << "Creating cached kernel " << ndef << "@" << as_hex(*pkernel)
+                        << " on device " << lib->device()->name() << " for graphHandle=" << item->handle;
+                return ok;
             };
-            // Kernels created for subgraph nodes need to be cached.  On
-            // cache miss, create_fn() is invoked to create a kernel based
+            // Cache the kernel in base SalusDevice's op segment, rather than in per task device
+            auto &tfdev = static_cast<PerTaskDevice*>(lib->device())->underlayingDevice();
+            // On cache miss, create_fn() is invoked to create a kernel based
             // on the function library here + global op registry.
-            return opseg.FindOrCreate(session, ndef.name(), kernel, create_fn);
-        };
-
-        params.delete_kernel = [](auto *kernel, auto *lib) {
-            // If the node is stateful, opseg owns it. Otherwise, delete it.
-            if (kernel && !lib->IsStateful(kernel->type_string())) {
-                delete kernel;
-            }
+            SALUS_THROW_IF_ERROR(tfdev.op_segment()->FindOrCreate(item->session, ndef.name(), &kernel, create_fn));
+            VLOG(2) << "Using cached kernel " << ndef << "@" << as_hex(kernel)
+                    << " on device " << tfdev.name() << " for graphHandle=" << item->handle;
+            return {kernel, skip_delete_opkernel};
         };
 
         unit.lib = item->proc_flr->GetFLR(unit.device->name());
@@ -221,7 +231,7 @@ Status MDGraphMgr::InitItem(const std::string &session, const tf::GraphDef &gdef
         skip_cost_models_ = true;
 
         params.ins = m_execCtx;
-        TF_RETURN_IF_ERROR(NewMultiDeviceExecutor(params, subgraph.release(), &unit.root));
+        TF_RETURN_IF_ERROR(NewMultiDeviceExecutor(params, std::move(subgraph), &unit.root));
     }
     return tf::Status::OK();
 }
