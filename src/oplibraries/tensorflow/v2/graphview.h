@@ -22,6 +22,7 @@
 
 #include "oplibraries/tensorflow/tensorflow_headers.h"
 #include "execution/devices.h"
+#include "oplibraries/tensorflow/v2/md_executor.h"
 
 #include <memory>
 #include <unordered_map>
@@ -44,7 +45,14 @@ struct NodeItem
     // A graph node.
     const tf::Node *node = nullptr;
 
+    /**
+     * @brief Potentially create a kernel
+     */
+    POpKernel kernel {nullptr, skip_delete_opkernel};
+    DeviceItem ditem;
+
     bool kernel_is_expensive : 1; // True iff kernel->IsExpensive()
+    bool kernel_is_async : 1;     // True iff kernel->AsAsync() != nullptr
     bool is_merge : 1;            // True iff IsMerge(node)
     bool is_enter : 1;            // True iff IsEnter(node)
     bool is_exit : 1;             // True iff IsExit(node)
@@ -176,6 +184,11 @@ private:
 
     SALUS_DISALLOW_COPY_AND_ASSIGN(GraphView);
 };
+
+/**
+ * Only works for Const and HostConst op
+ */
+Resources estimateMemoryUsageForNode(const NodeItem &item, const DeviceSpec &dev);
 
 } // namespace salus::oplib::tensorflow
 

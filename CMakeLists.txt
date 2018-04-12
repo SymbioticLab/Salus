@@ -31,6 +31,8 @@ option(WITH_TF_REFINER "Enable ShapeRefiner in TF oplibrary" OFF)
 
 option(WITH_PARALLEL_SCHED "Enable parallel processing in scheduler" OFF)
 
+option(WITH_MULTI_DEVICE "Enable multi-device scheduling support" OFF)
+
 option(DISABLE_LOGGING "Disable all logging except INFO level" OFF)
 
 #---------------------------------------------------------------------------------------
@@ -83,6 +85,7 @@ add_feature_info(WITH_TESTS WITH_TESTS "build test suite with default target")
 add_feature_info(WITH_TCMALLOC WITH_TCMALLOC "build with tcmalloc")
 add_feature_info(WITH_TF_REFINER WITH_TF_REFINER "enable ShapeRefiner in TF oplibrary")
 add_feature_info(WITH_PARALLEL_SCHED WITH_WITH_PARALLEL_SCHED "enable parallel processing in scheduler")
+add_feature_info(WITH_MULTI_DEVICE WITH_MULTI_DEVICE "enable multi-device scheduling support")
 add_feature_info(DISABLE_LOGGING DISABLE_LOGGING "disable all logging except INFO level")
 feature_summary(INCLUDE_QUIET_PACKAGES FATAL_ON_MISSING_REQUIRED_PACKAGES WHAT ALL)
 
@@ -107,6 +110,10 @@ endif(WITH_TF_REFINER)
 if(WITH_PARALLEL_SCHED)
     set(SALUS_ENABLE_PARALLEL_SCHED 1)
 endif(WITH_PARALLEL_SCHED)
+
+if(WITH_MULTI_DEVICE)
+    set(SALUS_ENABLE_MULTI_DEVICE 1)
+endif(WITH_MULTI_DEVICE)
 
 configure_file(src/config.h.in ${CMAKE_CURRENT_BINARY_DIR}/config.h)
 include_directories(${CMAKE_CURRENT_BINARY_DIR})

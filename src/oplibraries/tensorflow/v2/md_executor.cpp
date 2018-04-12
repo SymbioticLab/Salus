@@ -26,8 +26,10 @@ limitations under the License.
 #include "execution/devices.h"
 #include "execution/executionengine.h"
 #include "oplibraries/tensorflow/v2/exectask.h"
+#include "oplibraries/tensorflow/tfexception.h"
 #include "oplibraries/tensorflow/device/salusdevices.h"
 #include "oplibraries/tensorflow/v2/tfallocator.h"
+#include "utils/cpp17.h"
 #include "utils/stringutils.h"
 #include "utils/threadutils.h"
 
@@ -118,14 +120,17 @@ void GetMaxPendingCounts(const tf::Node *n, int *max_pending, int *max_dead_coun
 void FillinSupportedDeviceSpecs(sstl::not_null<NodeItem*> item)
 {
     const auto &node = *item->node;
+    item->supported_devices.clear();
     // A little cheat here, default to use TF device assignment
-    auto device = node.def().device();
-    if (!device.empty()) {
-        item->supported_devices.clear();
-        item->supported_devices.push_back(tfDeviceNameToSpec(device).type);
-        return;
+    if (node.has_assigned_device_name()) {
+        item->supported_devices.push_back(tfDeviceNameToSpec(node.assigned_device_name()).type);
+    } else if (sstl::is_in(node.name(), "_SOURCE", "_SINK")) {
+        item->supported_devices.push_back(DeviceType::CPU);
+    } else {
+        LOG(WARNING) << "Node " << node << " has no assigned device: " << node.def();
     }
 
+#if defined(SALUS_ENABLE_MULTI_DEVICE)
     tf::DeviceTypeVector tftypes;
     auto ok = tf::SupportedDeviceTypesForNode({tf::DEVICE_GPU, tf::DEVICE_CPU}, node.def(), &tftypes);
     if (!ok.ok()) {
@@ -135,6 +140,11 @@ void FillinSupportedDeviceSpecs(sstl::not_null<NodeItem*> item)
     item->supported_devices.reserve(tftypes.size());
     for (const auto &tft : tftypes) {
         item->supported_devices.emplace_back(tfDeviceTypeToType(tft));
+    }
+#endif // SALUS_ENABLE_MULTI_DEVICE
+
+    if (item->supported_devices.empty()) {
+        throw TFException(tf::errors::Internal("No assigned device found on node ", node.DebugString()));
     }
 }
 
@@ -154,6 +164,8 @@ tf::Status ExecutorImpl::Initialize()
         EnsureFrameInfo(it)->nodes = new std::vector<const tf::Node *>;
     }
 
+    VLOG(2) << "Created graph@" << as_hex(graph_) << " of graphHandle=" << params_.graphHandle
+            << " for session " << params_.session;
     // Preprocess every node in the graph to create an instance of op
     // kernel for each node.
     for (const auto *n : graph_->nodes()) {
@@ -191,6 +203,19 @@ tf::Status ExecutorImpl::Initialize()
         frame_info->total_inputs += n->num_inputs();
 
         FillinSupportedDeviceSpecs(item);
+
+#if !defined(SALUS_ENABLE_MULTI_DEVICE)
+        // Create ditem for item
+        DCHECK(item->supported_devices.size() == 1);
+        DeviceSpec spec{ item->supported_devices.at(0), 0 };
+        auto usage = estimateMemoryUsageForNode(*item, spec);
+        LookupDevice(spec, params_.ins.makeResourceContext(spec, usage), &item->ditem);
+
+        // Build kernel
+        item->kernel = SetupKernel(n, item->ditem);
+        item->kernel_is_async = (item->kernel->AsAsync() != nullptr);
+#endif // SALUS_ENABLE_MULTI_DEVICE
+
         // Mark all kernel as expensive to put them in our threadpool.
         item->kernel_is_expensive = true;
         item->is_merge = IsMerge(n);
@@ -361,7 +386,8 @@ ExecutorState::~ExecutorState()
 
 void ExecutorState::RunAsync(const tf::Executor::DoneCallback &done)
 {
-    VLOG(3) << "ExecutorState::RunAsync";
+    VLOG(3) << "ExecutorState::RunAsync for graph@" << as_hex(impl_->graph_)
+            << " of graphHandle=" << impl_->params_.graphHandle;
 
     // Precompute a contextmap, this is used to setup cache in the device
     for (auto *tfdev : impl_->params_.deviceMgr.ListDevices()) {

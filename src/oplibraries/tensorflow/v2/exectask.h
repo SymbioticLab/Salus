@@ -94,7 +94,7 @@ private:
     Resources failedAlloc;
 
     // Owned
-    ExecutorImpl::DeviceItem ditem;
+    DeviceItem ditem;
     tf::Status statusInPrepare;
     ExecutorState::TaggedNode tagged_node;
 

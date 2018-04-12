@@ -32,6 +32,7 @@
 #include "oplibraries/tensorflow/worker/rendezvouswithhook.h"
 #include "utils/date.h"
 #include "utils/macros.h"
+#include "utils/cpp17.h"
 #include "utils/threadutils.h"
 #include "utils/debugging.h"
 #include <boost/range/algorithm.hpp>
@@ -76,7 +77,9 @@ ExecTask::ExecTask(ExecutorState *state, sstl::semaphore &num_finished_ops,
     // pre compute debug string
     std::ostringstream oss;
     oss << "ExecTask(name=" << tagged_node.node->name() << ", type=" << tagged_node.node->op_def().name()
-        << ", session=" << m_state->impl_->params_.session << ", step_id=" << m_state->step_id_ << ")";
+        << ", session=" << m_state->impl_->params_.session
+        << ", graphHandle=" << m_state->impl_->params_.graphHandle
+        << ", step_id=" << m_state->step_id_ << ")";
     m_cachedDebugString = oss.str();
 }
 
@@ -113,12 +116,14 @@ bool ExecTask::prepare(std::unique_ptr<ResourceContext> &&rctx) noexcept
             return false;
         }
 
+        LogAlloc() << "Pre allocated " << ditem.device->resourceContext() << " for " << *this;
+
+    #if defined(SALUS_ENABLE_MULTI_DEVICE)
         // In case anything go wrong, don't leak resource
         sstl::ScopeGuards onReturn([this]() {
             // Release the resource context and the device we've given
             ditem.device.reset();
         });
-
         // Instantiate kernel if not already done
         try {
             op_kernel = m_state->impl_->SetupKernel(tagged_node.node, ditem);
@@ -133,10 +138,10 @@ bool ExecTask::prepare(std::unique_ptr<ResourceContext> &&rctx) noexcept
         }
         kernel_is_async = (op_kernel->AsAsync() != nullptr);
 
-        LogAlloc() << "Pre allocated " << ditem.device->resourceContext() << " for " << *this;
-
         // Now we are sure things succeeded, cancel the rollback
         onReturn.dismiss();
+    #endif // SALUS_ENABLE_MULTI_DEVICE
+
         return true;
     } catch (const TFException &ex) {
         LOG(ERROR) << "Exception caught when preparing opItem " << *this << ": " << ex.what();
@@ -147,7 +152,11 @@ bool ExecTask::prepare(std::unique_ptr<ResourceContext> &&rctx) noexcept
 
 bool ExecTask::isAsync() const
 {
+#if defined(SALUS_ENABLE_MULTI_DEVICE)
     return kernel_is_async;
+#else
+    return item.kernel_is_async;
+#endif // SALUS_ENABLE_MULTI_DEVICE
 }
 
 Resources ExecTask::estimatedUsage(const DeviceSpec &dev)
@@ -210,34 +219,14 @@ Resources ExecTask::calcUsageFromShape(const DeviceSpec &dev)
 {
     // Slow path to calculate the usage
     auto &res = cachedUsage[dev];
+    const auto *node = item.node;
 
-#if !defined(SALUS_ENABLE_REFINER)
-    return res;
-#endif // SALUS_ENABLE_REFINER
-
-    const auto *node = tagged_node.node;
+#if defined(SALUS_ENABLE_REFINER)
     auto ctx = m_state->shapeForNode(node);
     if (!ctx) {
         LOG(WARNING) << "Shape information not available for node: " << node->name();
         return res;
     }
-
-    ExecutorImpl::DeviceItem ditem;
-    tf::MemoryTypeVector input_mtypes;
-    tf::MemoryTypeVector output_mtypes;
-    tf::Device *tfdev;
-    auto mtypeStatus = m_state->impl_->LookupTFDevice(dev, &tfdev);
-    if (mtypeStatus.ok()) {
-        mtypeStatus.Update(tf::remote::MemoryTypesForNode(m_state->impl_->graph_->op_registry(),
-                                                          tf::DeviceType(tfdev->device_type()), node->def(),
-                                                          &input_mtypes, &output_mtypes));
-    }
-    if (!mtypeStatus.ok()) {
-        LOG(WARNING) << "Kernel not found on device " << dev << ", resource estimation may be inaccurate.";
-    }
-
-    ResourceTag devTag{ResourceType::MEMORY, dev};
-    ResourceTag cpuTag{ResourceType::MEMORY, dev};
 
     for (int i = 0; i != ctx->num_outputs(); ++i) {
         auto shp = ctx->output(i);
@@ -262,10 +251,23 @@ Resources ExecTask::calcUsageFromShape(const DeviceSpec &dev)
         VLOG(3) << "    dtype " << dtype;
         double subtotal = count * tf::DataTypeSize(dtype);
 
-        if (mtypeStatus.ok() && output_mtypes[i] == tf::HOST_MEMORY) {
+        if (item.output_attrs()[i].on_host()) {
             res[cpuTag] += subtotal;
         } else {
             res[devTag] += subtotal;
+        }
+    }
+#else
+    res = estimateMemoryUsageForNode(item, dev);
+#endif // SALUS_ENABLE_REFINER
+
+    if (sstl::is_in(node->type_string(), "Const", "HostConst")) {
+        // NOTE: const op doesn't need a gpu stream to operate
+        return res;
+    } else {
+        // TODO: use an algorithm to decide streams
+        if (dev.type == DeviceType::GPU) {
+            res[{ResourceType::GPU_STREAM, dev}] = 1;
         }
     }
 
@@ -305,6 +307,12 @@ void ExecTask::run(Callbacks cbs) noexcept
     // clear early
     params.rendezvous = nullptr;
 
+#if defined(SALUS_ENABLE_MULTI_DEVICE)
+    auto kernel = op_kernel.get();
+#else
+    auto kernel = item.kernel.get();
+#endif // SALUS_ENABLE_MULTI_DEVICE
+
     try {
         if (!statusInPrepare.ok()) {
             m_state->MaybeMarkCompleted(input_frame, input_iter, id);
@@ -312,11 +320,11 @@ void ExecTask::run(Callbacks cbs) noexcept
             return;
         }
 
-        DCHECK(op_kernel);
+        DCHECK(kernel);
         DCHECK(ditem.device);
 
         // Start run
-        auto s = gview.SetAllocAttrForNode(node, ditem.device.get(), op_kernel.get());
+        auto s = gview.SetAllocAttrForNode(node, ditem.device.get(), kernel);
         if (!s.ok()) {
             m_state->MaybeMarkCompleted(input_frame, input_iter, id);
             afterRun(s, cbs);
@@ -351,7 +359,7 @@ void ExecTask::run(Callbacks cbs) noexcept
 
         // Prepares inputs.
         bool is_input_dead = false;
-        s = m_state->PrepareInputs(item, op_kernel.get(), ditem.device, params.op_device_context, first_input,
+        s = m_state->PrepareInputs(item, kernel, ditem.device, params.op_device_context, first_input,
                                    &inputs, &buflocks, &input_device_contexts, &input_alloc_attrs,
                                    &is_input_dead);
         if (!s.ok()) {
@@ -383,7 +391,7 @@ void ExecTask::run(Callbacks cbs) noexcept
         }
 
         // Set up compute params.
-        params.op_kernel = op_kernel.get();
+        params.op_kernel = kernel;
         params.frame_iter = tf::FrameAndIter(input_frame->frame_id, input_iter);
         params.is_input_dead = is_input_dead;
         params.output_attr_array = item.output_attrs();
@@ -393,7 +401,7 @@ void ExecTask::run(Callbacks cbs) noexcept
         if (kernel_is_async) {
             // Asynchronous computes.
             VLOG(2) << "Launch Async kernel";
-            auto async = op_kernel->AsAsync();
+            auto async = kernel->AsAsync();
             DCHECK_NOTNULL(async);
 
             // Ensure OpKernelContext constructor will make a new eigen GPU device if
@@ -410,8 +418,8 @@ void ExecTask::run(Callbacks cbs) noexcept
             VLOG(2) << "Launch sync kernel";
             pctx = std::make_unique<tf::OpKernelContext>(&params, item.num_outputs);
 
-            DCHECK_NOTNULL(op_kernel);
-            ditem.device->Compute(op_kernel.get(), pctx.get());
+            DCHECK_NOTNULL(kernel);
+            ditem.device->Compute(kernel, pctx.get());
 
             VLOG(2) << "Kernel done: " << tagged_node.node->def();
             afterCompute(false, cbs);

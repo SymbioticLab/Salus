@@ -90,7 +90,8 @@ class ExecutionContext
             : item(std::forward<PSessionItem>(item))
             , resOffer(resOffer)
             , engine(engine)
-        {}
+        {
+        }
 
         ~Data();
 
@@ -100,6 +101,17 @@ class ExecutionContext
         void removeFromEngine();
         void insertIntoEngine();
         void enqueueOperation(std::unique_ptr<salus::OperationTask> &&task);
+
+        /**
+         * @brief Make a resource context that first allocate from session's resources
+         * @param spec
+         * @param res
+         * @param missing
+         * @return
+         */
+        std::unique_ptr<ResourceContext> makeResourceContext(const salus::DeviceSpec &spec,
+                                                             const Resources &res,
+                                                             Resources *missing = nullptr);
 
         PSessionItem item;
         uint64_t resOffer;
@@ -137,6 +149,9 @@ public:
     void registerPagingCallbacks(PagingCallbacks &&pcb);
 
     void deleteSession(std::function<void()> cb);
+
+    std::unique_ptr<ResourceContext> makeResourceContext(const salus::DeviceSpec &spec, const Resources &res,
+                                                         Resources *missing = nullptr);
 };
 
 /**
@@ -184,7 +199,7 @@ private:
     // Task life cycle
     friend class BaseScheduler;
     std::unique_ptr<ResourceContext> makeResourceContext(PSessionItem sess, const salus::DeviceSpec &spec,
-                                                         const Resources &res, Resources *missing=nullptr);
+                                                         const Resources &res, Resources *missing = nullptr);
 
     POpItem submitTask(POpItem &&opItem);
     void taskStopped(OperationItem &opItem, bool failed);

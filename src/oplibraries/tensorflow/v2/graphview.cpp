@@ -19,6 +19,7 @@
 
 #include "oplibraries/tensorflow/tensorflow_headers.h"
 #include "oplibraries/tensorflow/v2/graphview.h"
+#include "utils/cpp17.h"
 
 namespace salus::oplib::tensorflow {
 
@@ -262,4 +263,30 @@ Status GraphView::SetAllocAttrForNode(const tf::Node *n, const tf::Device *devic
     return s;
 }
 
+Resources estimateMemoryUsageForNode(const NodeItem &item, const DeviceSpec &dev)
+{
+    const auto *node = item.node;
+
+    Resources res;
+
+    ResourceTag devTag{ResourceType::MEMORY, dev};
+    ResourceTag cpuTag{ResourceType::MEMORY, dev};
+    if (sstl::is_in(node->type_string(), "Const", "HostConst")) {
+        const tf::TensorProto *proto;
+        tf::GetNodeAttr(node->def(), "value", &proto);
+        auto shape = proto->tensor_shape();
+        size_t count = 1;
+        for (const auto &protodim : shape.dim()) {
+            auto dim = protodim.size();
+            CHECK_GE(dim, 0);
+            count *= dim;
+        }
+        double subtotal = count * tf::DataTypeSize(proto->dtype());
+
+        DCHECK_EQ(node->num_outputs(), 1);
+        res[item.output_attrs()[0].on_host()? cpuTag : devTag] += subtotal;
+    }
+
+    return res;
+}
 } // namespace salus::oplib::tensorflow

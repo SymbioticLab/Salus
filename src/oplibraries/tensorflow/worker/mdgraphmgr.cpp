@@ -49,11 +49,11 @@ Status MDGraphMgr::Register(const std::string& session, const tf::GraphDef& gdef
         return s;
     }
 
+    *handle = tempHandle;
     // Inserts one item into table_.
     {
         tf::mutex_lock l(mu_);
-        *handle = tf::strings::Printf("%016llx", ++next_id_);
-        item->handle = *handle;
+        // This release transfers one ref into table_
         CHECK(table_.emplace(*handle, item.release()).second);
     }
     return Status::OK();
@@ -134,6 +134,7 @@ Status MDGraphMgr::InitMDItem(const std::string &session, const tf::GraphDef &gd
 
     MultiDeviceExecutorParams params(*worker_env_->device_mgr, m_resourceMgr);
     params.session = session;
+    params.graphHandle = item->handle;
 
     item->units.reserve(partitions.size());
     item->graph_mgr = this;
@@ -190,6 +191,8 @@ Status MDGraphMgr::InitMDItem(const std::string &session, const tf::GraphDef &gd
             if (!lib->IsStateful(ndef.op())
                 || lib->GetFunctionLibraryDefinition()->Find(ndef.op()) != nullptr) {
                 SALUS_THROW_IF_ERROR(lib->CreateKernel(ndef, &kernel));
+                VLOG(2) << "Using noncached kernel " << ndef.name() << "@" << as_hex(kernel)
+                        << " on device " << lib->device()->name();
                 return {kernel, default_delete_opkernel};
             }
 
@@ -202,7 +205,8 @@ Status MDGraphMgr::InitMDItem(const std::string &session, const tf::GraphDef &gd
                         << " on device " << lib->device()->name() << " for graphHandle=" << item->handle;
                 return ok;
             };
-            // Cache the kernel in base SalusDevice's op segment, rather than in per task device
+
+            // Cache the kernel in underlaying device's op segment, which has separate storage per session
             auto &tfdev = static_cast<PerTaskDevice*>(lib->device())->underlayingDevice();
             // On cache miss, create_fn() is invoked to create a kernel based
             // on the function library here + global op registry.

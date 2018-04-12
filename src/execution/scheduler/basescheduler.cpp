@@ -103,11 +103,6 @@ bool BaseScheduler::maybePreAllocateFor(OperationItem &opItem, const DeviceSpec 
 
     auto usage = opItem.op->estimatedUsage(spec);
 
-    // TODO: use an algorithm to decide streams
-    if (spec.type == DeviceType::GPU) {
-        usage[{ResourceType::GPU_STREAM, spec}] = 1;
-    }
-
     Resources missing;
     auto rctx = m_engine.makeResourceContext(item, spec, usage, &missing);
     if (!rctx->isGood()) {

@@ -57,6 +57,18 @@ constexpr typename std::underlying_type<E>::type to_underlying(E e) noexcept {
     return static_cast<typename std::underlying_type<E>::type>(e);
 }
 
+template<typename T, typename ... Args>
+constexpr bool is_in(const T &val, const Args & ... args)
+{
+    if constexpr (sizeof...(args) == 0) {
+        return false;
+    } else {
+        return [](const auto & ... p) {
+            return (... || p);
+        }((val == args) ...);
+    }
+}
+
 } // namespace sstl
 
 #endif // SALUS_SSTL_CPP17_H

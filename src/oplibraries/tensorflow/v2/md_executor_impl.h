@@ -98,13 +98,6 @@ private:
         return sstl::optionalGet(cachedUsages_, name);
     }
 
-    struct DeviceItem
-    {
-        std::shared_ptr<salus::oplib::tensorflow::PerTaskDevice> device = nullptr;
-        std::shared_ptr<tf::FunctionLibraryRuntime> function_library = nullptr;
-        bool device_record_tensor_access = false;
-    };
-
     tf::Status LookupDevice(const DeviceSpec &spec, std::unique_ptr<ResourceContext> &&rctx, DeviceItem *item);
 
     tf::Status LookupTFDevice(const DeviceSpec &spec, tf::Device **tfdev);
@@ -163,7 +156,6 @@ private:
     MultiDeviceExecutorParams params_;
     std::unique_ptr<const tf::Graph> graph_;
     GraphView gview_;
-    ExecutionContext inserter_;
 
     // Active entries. Used for handle paging request
     std::mutex entry_mu_;

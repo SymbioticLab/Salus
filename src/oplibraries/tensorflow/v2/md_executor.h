@@ -46,6 +46,13 @@ constexpr void default_delete_opkernel(tf::OpKernel *k)
     delete k;
 }
 
+struct DeviceItem
+{
+    std::shared_ptr<salus::oplib::tensorflow::PerTaskDevice> device = nullptr;
+    std::shared_ptr<tf::FunctionLibraryRuntime> function_library = nullptr;
+    bool device_record_tensor_access = false;
+};
+
 struct MultiDeviceExecutorParams
 {
     MultiDeviceExecutorParams(tf::DeviceMgr &deviceMgr, tf::ResourceMgr &resourceMgr)
@@ -55,6 +62,9 @@ struct MultiDeviceExecutorParams
     }
 
     std::string session;
+
+    // Graph handle
+    std::string graphHandle;
 
     ExecutionContext ins;
 

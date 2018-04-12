@@ -176,6 +176,23 @@ void ExecutionContext::deleteSession(std::function<void()> cb)
     m_data->removeFromEngine();
 }
 
+std::unique_ptr<ResourceContext> ExecutionContext::makeResourceContext(const salus::DeviceSpec &spec,
+                                                                       const Resources &res,
+                                                                       Resources *missing)
+{
+    DCHECK(m_data);
+
+    return m_data->makeResourceContext(spec, res, missing);
+}
+
+std::unique_ptr<ResourceContext> ExecutionContext::Data::makeResourceContext(const salus::DeviceSpec &spec,
+                                                                             const Resources &res,
+                                                                             Resources *missing)
+{
+    DCHECK(item);
+    return engine.makeResourceContext(item, spec, res, missing);
+}
+
 void ExecutionEngine::pushToSessionQueue(POpItem &&opItem)
 {
     auto sess = opItem->sess.lock();

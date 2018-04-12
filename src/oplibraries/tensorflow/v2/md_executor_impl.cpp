@@ -444,11 +444,6 @@ tf::Status ExecutorImpl::LookupDevice(const DeviceSpec &spec, std::unique_ptr<Re
 
 POpKernel ExecutorImpl::SetupKernel(sstl::not_null<const tf::Node *> node, const DeviceItem &ditem)
 {
-    sstl::TimeoutWarning tw(2ms, [&](auto limit, auto dur){
-        LOG(WARNING) << "SetupKernel took more than " << duration_cast<FpMS>(limit)
-                     << " to finish: " << duration_cast<FpMS>(dur)
-                     << " for " << node->name() << " on " << ditem.device->name();
-    });
     // first check if we have a cache for this kernel and if so, if the kernel is on the same device
     {
         auto g = sstl::with_guard(kernel_dev_mu_);
