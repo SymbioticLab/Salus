@@ -219,56 +219,50 @@ Resources ExecTask::calcUsageFromShape(const DeviceSpec &dev)
 {
     // Slow path to calculate the usage
     auto &res = cachedUsage[dev];
-    const auto *node = item.node;
 
 #if defined(SALUS_ENABLE_REFINER)
-    auto ctx = m_state->shapeForNode(node);
-    if (!ctx) {
-        LOG(WARNING) << "Shape information not available for node: " << node->name();
-        return res;
-    }
-
-    for (int i = 0; i != ctx->num_outputs(); ++i) {
-        auto shp = ctx->output(i);
-        if (!ctx->RankKnown(shp)) {
-            VLOG(3) << i << "-th output of node " << node->name() << " has unknown rank";
-            continue;
-        }
-        VLOG(3) << "Shape of " << i << "-th output of node " << node->name();
-        size_t count = 1;
-        for (int j = 0; j != ctx->Rank(shp); ++j) {
-            auto dim = ctx->Dim(shp, j);
-            if (!ctx->ValueKnown(dim)) {
-                VLOG(3) << "    Unknown";
+    const auto *node = item.node;
+    if (auto ctx = m_state->shapeForNode(node)) {
+        for (int i = 0; i != ctx->num_outputs(); ++i) {
+            auto shp = ctx->output(i);
+            if (!ctx->RankKnown(shp)) {
+                VLOG(3) << i << "-th output of node " << node->name() << " has unknown rank";
                 continue;
             }
+            VLOG(3) << "Shape of " << i << "-th output of node " << node->name();
+            size_t count = 1;
+            for (int j = 0; j != ctx->Rank(shp); ++j) {
+                auto dim = ctx->Dim(shp, j);
+                if (!ctx->ValueKnown(dim)) {
+                    VLOG(3) << "    Unknown";
+                    continue;
+                }
 
-            auto val = ctx->Value(dim);
-            VLOG(3) << "    " << val;
-            count *= val;
-        }
-        auto dtype = node->output_type(i);
-        VLOG(3) << "    dtype " << dtype;
-        double subtotal = count * tf::DataTypeSize(dtype);
+                auto val = ctx->Value(dim);
+                VLOG(3) << "    " << val;
+                count *= val;
+            }
+            auto dtype = node->output_type(i);
+            VLOG(3) << "    dtype " << dtype;
+            double subtotal = count * tf::DataTypeSize(dtype);
 
-        if (item.output_attrs()[i].on_host()) {
-            res[cpuTag] += subtotal;
-        } else {
-            res[devTag] += subtotal;
+            if (item.output_attrs()[i].on_host()) {
+                res[cpuTag] += subtotal;
+            } else {
+                res[devTag] += subtotal;
+            }
         }
+    } else {
+        LOG(WARNING) << "Shape information not available for node: " << node->name();
+        res = estimateMemoryUsageForNode(item, dev);
     }
 #else
     res = estimateMemoryUsageForNode(item, dev);
 #endif // SALUS_ENABLE_REFINER
 
-    if (sstl::is_in(node->type_string(), "Const", "HostConst")) {
-        // NOTE: const op doesn't need a gpu stream to operate
-        return res;
-    } else {
-        // TODO: use an algorithm to decide streams
-        if (dev.type == DeviceType::GPU) {
-            res[{ResourceType::GPU_STREAM, dev}] = 1;
-        }
+    // TODO: use an algorithm to decide streams
+    if (dev.type == DeviceType::GPU && !isAsync()) {
+        res[{ResourceType::GPU_STREAM, dev}] = 1;
     }
 
     return res;
@@ -398,7 +392,7 @@ void ExecTask::run(Callbacks cbs) noexcept
 
         LogOpTracing() << "OpItem Event " << *this << " event: afterPrepInput";
 
-        if (kernel_is_async) {
+        if (isAsync()) {
             // Asynchronous computes.
             VLOG(2) << "Launch Async kernel";
             auto async = kernel->AsAsync();
