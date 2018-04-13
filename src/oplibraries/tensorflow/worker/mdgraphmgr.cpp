@@ -32,6 +32,23 @@ MDGraphMgr::MDGraphMgr(const tf::WorkerEnv *env, ExecutionContext execCtx)
 
 MDGraphMgr::~MDGraphMgr() = default;
 
+MDGraphMgr::MDItem::~MDItem()
+{
+    // Manually clear units
+    // because ExecutorImpl holds some ditem, which in turn holds some flr, which
+    // should be deleted before this goes out of scope.
+    for (const auto& unit : units) {
+        CHECK_NOTNULL(unit.device);
+        delete unit.root;
+    }
+    // Clear the list so Item::~Item won't do anything
+    units.clear();
+
+    for (auto dev : devices) {
+        dev->op_segment()->RemoveHold(session);
+    }
+}
+
 Status MDGraphMgr::Register(const std::string& session, const tf::GraphDef& gdef,
                             const tf::GraphOptions& graph_options, const tf::DebugOptions& debug_options,
                             tf::DistributedFunctionLibraryRuntime* cluster_flr, std::string* handle)
@@ -161,8 +178,6 @@ Status MDGraphMgr::InitMDItem(const std::string &session, const tf::GraphDef &gd
 
         // Add a hold on op_segment on every device
         // These holds are removed in ~MDItem.
-        // NOTE: unit->device->op_segment()->RemoveHold is called in Item destructor, but we don't
-        // add that hold, although it's not harmful as it doesn't delete things if not found.
         for (auto tfdev : item->devices) {
             tfdev->op_segment()->AddHold(session);
         }
@@ -170,14 +185,10 @@ Status MDGraphMgr::InitMDItem(const std::string &session, const tf::GraphDef &gd
         auto producer = subgraph->versions().producer();
         params.create_fruntime = [worker_env = worker_env_, producer, item, optimizer_opts](auto dev)
         {
-            item->Ref();
             auto flib =
                 tf::NewFunctionLibraryRuntime(worker_env->device_mgr, worker_env->env, dev, producer,
                                               item->lib_def.get(), optimizer_opts, item->proc_flr.get());
-            return std::shared_ptr<tf::FunctionLibraryRuntime>(flib.release(), [item](auto r) {
-                sstl::wrap_unref(item);
-                delete r;
-            });
+            return std::shared_ptr<tf::FunctionLibraryRuntime>(std::move(flib));
         };
 
         params.get_kernel = [item](const auto &ndef, auto *lib) -> POpKernel {

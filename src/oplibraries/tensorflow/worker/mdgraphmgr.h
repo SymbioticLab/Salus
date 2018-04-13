@@ -51,13 +51,7 @@ protected:
         // Used to remove holds on devices' opsegment
         std::vector<tf::Device *> devices;
 
-        ~MDItem() override
-        {
-            for (auto dev : devices) {
-                VLOG(1) << "Removing session's hold on device: " << session << " " << dev->name();
-                dev->op_segment()->RemoveHold(session);
-            }
-        }
+        ~MDItem() override;
     };
 
     tf::Status InitMDItem(const std::string &session, const tf::GraphDef &gdef,
