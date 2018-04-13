@@ -40,10 +40,16 @@ SessionItem::~SessionItem()
     VLOG(2) << "Stats for Session " << sessHandle << ": totalExecutedOp=" << totalExecutedOp;
 }
 
-void SessionItem::setPagingCallbacks(PagingCallbacks pcb)
+void SessionItem::setPagingCallbacks(ExecutionCallbacks pcb)
 {
     auto g = sstl::with_guard(mu);
     pagingCb = std::move(pcb);
+}
+
+void SessionItem::setInterruptCallback(std::function<void()> cb)
+{
+    auto g = sstl::with_guard(mu);
+    interruptCb = std::move(cb);
 }
 
 void SessionItem::prepareDelete(std::function<void()> cb)
@@ -59,6 +65,21 @@ void SessionItem::notifyMemoryAllocation(uint64_t ticket)
 {
     auto g = sstl::with_guard(tickets_mu);
     tickets.emplace(ticket);
+}
+
+void SessionItem::interrupt()
+{
+    if (forceEvicted) {
+        return;
+    }
+    forceEvicted = true;
+
+    std::function<void()> cb;
+    {
+        auto g = sstl::with_guard(mu);
+        cb = interruptCb;
+    }
+    cb();
 }
 
 void SessionItem::removeMemoryAllocationTicket(uint64_t ticket)

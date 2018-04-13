@@ -394,15 +394,6 @@ size_t ExecutorImpl::handlePagingRequest(uint64_t oldTicket, std::unique_ptr<Res
     return totalReleased;
 }
 
-void ExecutorImpl::forceEvicted()
-{
-    auto g = sstl::with_guard(entry_mu_);
-    for (auto state : active_states_) {
-        state->ForceInterrupt(tf::errors::ResourceExhausted("Forcely killed due to paging"));
-    }
-    active_states_.clear();
-}
-
 tf::Status ExecutorImpl::LookupTFDevice(const DeviceSpec &spec, tf::Device **tfdev)
 {
     *tfdev = TFInstance::instance().tfdevice(spec);

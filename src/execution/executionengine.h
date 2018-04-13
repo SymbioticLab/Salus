@@ -62,14 +62,13 @@ struct SchedulingParam
     std::string scheduler = "fair";
 };
 
-struct PagingCallbacks
+struct ExecutionCallbacks
 {
-    std::function<void()> forceEvicted;
     std::function<size_t(uint64_t, std::unique_ptr<ResourceContext> &&)> volunteer;
 
-    operator bool() const
+    operator bool() const // NOLINT(google-explicit-constructor)
     {
-        return forceEvicted && volunteer;
+        return volunteer != nullptr;
     }
 };
 
@@ -146,7 +145,9 @@ public:
 
     void enqueueOperation(std::unique_ptr<salus::OperationTask> &&task);
 
-    void registerPagingCallbacks(PagingCallbacks &&pcb);
+    void registerPagingCallbacks(ExecutionCallbacks &&pcb);
+
+    void setInterruptCallback(std::function<void()> cb);
 
     void deleteSession(std::function<void()> cb);
 
@@ -191,6 +192,7 @@ private:
     // scheduler parameters
     SchedulingParam m_schedParam;
 
+    std::atomic<bool> m_interrupting{false};
     std::atomic<bool> m_shouldExit{false};
     std::unique_ptr<std::thread> m_schedThread;
     void scheduleLoop();

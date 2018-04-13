@@ -113,10 +113,14 @@ void TFInstance::handleCreateSession(const tf::CreateSessionRequest &req, tf::Cr
     SALUS_THROW_IF_ERROR(ValidateExternalGraphDefSyntax(req.graph_def()));
 
     auto *gdef = const_cast<tf::CreateSessionRequest &>(req).mutable_graph_def();
-    auto session = std::make_shared<TFSession>(*this, std::move(inserter), req.config(), gdef);
-
+    auto session = std::make_shared<TFSession>(*this, inserter, req.config(), gdef);
     auto handle = session->handle();
-    resp.set_session_handle(handle);
+
+    // Register force interrupt handler
+    inserter.setInterruptCallback([this, handle]() {
+        popSession(handle)->safeClose();
+    });
+
     // Insert into the session map, which takes ownership of the session.
     {
         auto l = sstl::with_guard(m_mu);
@@ -126,6 +130,8 @@ void TFInstance::handleCreateSession(const tf::CreateSessionRequest &req, tf::Cr
     }
     LOG(INFO) << "Accepting and created session " << handle;
 
+    // reply
+    resp.set_session_handle(handle);
     cb(Status::OK());
 }
 
@@ -159,9 +165,7 @@ void TFInstance::handleCloseSession(const tf::CloseSessionRequest &req, tf::Clos
                                     HandlerCallback &&cb)
 {
     UNUSED(resp);
-    auto sess = popSession(req.session_handle());
-    LOG(INFO) << "Closing session " << sess->handle();
-    sess->safeClose();
+    popSession(req.session_handle())->safeClose();
     cb(Status::OK());
 }
 

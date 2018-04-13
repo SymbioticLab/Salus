@@ -77,7 +77,7 @@ public:
     std::unique_ptr<SalusRendezvousMgr> m_rendezvousMgr;
 };
 
-TFSession::TFSession(TFInstance &inst, ExecutionContext &&ctx, const tf::ConfigProto &config,
+TFSession::TFSession(TFInstance &inst, ExecutionContext ctx, const tf::ConfigProto &config,
                      tf::GraphDef *gdef)
     : d(std::make_unique<TFSessionPrivate>(inst, std::move(ctx), config, gdef))
 {
@@ -185,9 +185,11 @@ void TFSession::TFSessionPrivate::safeClose(std::shared_ptr<TFSession> &&self)
 {
     DCHECK(m_masterSess);
     DCHECK(self);
+    LOG(INFO) << "Closing session " << handle();
 
     SALUS_THROW_IF_ERROR(m_masterSess->Close());
     VLOG(3) << "There is still " << self.use_count() << " reference to TFSession@" << as_hex(self);
+    m_execCtx.deleteSession({});
 }
 
 void TFSession::TFSessionPrivate::handleExtendSession(const tf::ExtendSessionRequest &req,

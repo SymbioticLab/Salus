@@ -43,8 +43,12 @@ struct SessionItem
     using UnsafeQueue = std::list<POpItem>;
 private:
     // protected by mu (may be accessed both in schedule thread and close session thread)
-    PagingCallbacks pagingCb GUARDED_BY(mu);
+    ExecutionCallbacks pagingCb GUARDED_BY(mu);
     std::function<void()> cleanupCb GUARDED_BY(mu);
+
+    // called if the execution engine requires to interrupt the session
+    std::function<void()> interruptCb GUARDED_BY(mu);
+
     KernelQueue queue GUARDED_BY(mu);
     // total number of executed op in this session
     uint64_t totalExecutedOp = 0 GUARDED_BY(mu);
@@ -90,7 +94,8 @@ public:
         return resUsage.at(tag).get();
     }
 
-    void setPagingCallbacks(PagingCallbacks pcb);
+    void setPagingCallbacks(ExecutionCallbacks pcb);
+    void setInterruptCallback(std::function<void()> cb);
 
     /**
      * @brief prepare to remove session from execution engine.
@@ -111,6 +116,8 @@ public:
      * @param ticket
      */
     void notifyMemoryAllocation(uint64_t ticket);
+
+    void interrupt();
 
     /**
      * @brief Allocator should call when there is no more memory allocation

@@ -22,6 +22,7 @@
 #include "execution/devices.h"
 #include "utils/macros.h"
 #include "utils/pointerutils.h"
+#include "platform/thread_annotations.h"
 
 #include <list>
 #include <mutex>
@@ -200,15 +201,15 @@ public:
 private:
     mutable std::mutex m_mu;
 
-    bool m_disabled = false;
+    bool m_disabled = false GUARDED_BY(m_mu);
 
-    uint64_t m_tickets = 0;
+    uint64_t m_tickets = 0 GUARDED_BY(m_mu);
 
-    Resources m_limits;
+    Resources m_limits GUARDED_BY(m_mu);
 
-    std::unordered_map<uint64_t, ResourceMap> m_sessions;
+    std::unordered_map<uint64_t, ResourceMap> m_sessions GUARDED_BY(m_mu);
 
-    std::list<ResourceMap *> m_peak;
+    std::list<ResourceMap *> m_peak GUARDED_BY(m_mu);
 };
 
 /**

@@ -161,7 +161,6 @@ private:
     std::mutex entry_mu_;
     boost::intrusive::list<TensorBufferTree, boost::intrusive::constant_time_size<false>> buffer_trees_;
     std::unordered_multimap<uint64_t, TensorBufferTree *> active_buffers_;
-    std::unordered_set<ExecutorState *> active_states_;
 
     // Root nodes (with no in edges) that should form the initial ready queue
     std::vector<const tf::Node *> root_nodes_;
@@ -194,9 +193,6 @@ public:
     ~ExecutorState();
 
     void RunAsync(const tf::Executor::DoneCallback &done);
-
-    // Something wrong happened.
-    void ForceInterrupt(const tf::Status &s);
 
 private:
     friend class ExecTask;

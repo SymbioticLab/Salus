@@ -78,16 +78,14 @@ void ExecutionEngine::startScheduler()
 
 void ExecutionEngine::stopScheduler()
 {
-    // stop scheduling thread
-    m_shouldExit = true;
-    // also unblock scheduling thread
-    m_note_has_work.notify();
-    m_schedThread->join();
+    m_interrupting = true;
 
-    // remove any pending new or delete session
-    // NOTE: has to be done *after* the scheduling thread exits.
-    m_newSessions.clear();
-    m_deletedSessions.clear();
+    // unblock scheduling thread
+    m_note_has_work.notify();
+
+    if (m_schedThread->joinable()) {
+        m_schedThread->join();
+    }
 }
 
 ExecutionEngine::~ExecutionEngine()
@@ -125,6 +123,10 @@ std::optional<ResourceMap> ExecutionContext::offeredSessionResource() const
 
 void ExecutionEngine::insertSession(PSessionItem item)
 {
+    if (m_interrupting) {
+        return;
+    }
+
     {
         std::lock_guard<std::mutex> g(m_newMu);
         m_newSessions.emplace_back(std::move(item));
@@ -158,11 +160,18 @@ void ExecutionContext::Data::enqueueOperation(std::unique_ptr<OperationTask> &&t
     engine.pushToSessionQueue(std::move(opItem));
 }
 
-void ExecutionContext::registerPagingCallbacks(PagingCallbacks &&pcb)
+void ExecutionContext::registerPagingCallbacks(ExecutionCallbacks &&pcb)
 {
     DCHECK(m_data);
     DCHECK(m_data->item);
     m_data->item->setPagingCallbacks(std::move(pcb));
+}
+
+void ExecutionContext::setInterruptCallback(std::function<void()> cb)
+{
+    DCHECK(m_data);
+    DCHECK(m_data->item);
+    m_data->item->setInterruptCallback(std::move(cb));
 }
 
 void ExecutionContext::deleteSession(std::function<void()> cb)
@@ -219,15 +228,14 @@ void ExecutionContext::Data::removeFromEngine()
     if (item) {
         engine.deleteSession(std::move(item));
     }
+    if (resOffer) {
+        SessionResourceTracker::instance().free(resOffer);
+    }
 }
 
 ExecutionContext::Data::~Data()
 {
     removeFromEngine();
-
-    if (resOffer) {
-        SessionResourceTracker::instance().free(resOffer);
-    }
 }
 
 bool ExecutionEngine::maybeWaitForAWhile(size_t scheduled)
@@ -278,6 +286,7 @@ void ExecutionEngine::scheduleLoop()
     const auto kNameBufLen = 256;
     char schedIterNameBuf[kNameBufLen];
     boost::container::small_vector<PSessionItem, 5> candidates;
+    bool interrupted = false;
 
     while (!m_shouldExit) {
         snprintf(schedIterNameBuf, kNameBufLen, "sched-iter-%zu", schedIterCount++);
@@ -319,6 +328,14 @@ void ExecutionEngine::scheduleLoop()
             DCHECK(m_newSessions.empty());
         }
 
+        if (m_interrupting && !interrupted) {
+            interrupted = true;
+            // Request interrupt on any existing sessions
+            for (const auto &sess : m_sessions) {
+                sess->interrupt();
+            }
+        }
+
         // Prepare session ready for this iter of schedule:
         // - move from front end queue to backing storage
         // - reset lastScheduled
@@ -343,6 +360,17 @@ void ExecutionEngine::scheduleLoop()
 
             item->protectOOM = enableOOMProtect;
             item->lastScheduled = 0;
+        }
+
+        if (interrupted) {
+            // only do session acception and deletion if interrupted
+            changeset.deletedSessions.clear();
+            if (m_sessions.empty()) {
+                break;
+            } else {
+                LOG(INFO) << "Waiting for " << m_sessions.size() << " sessions to finish";
+            }
+            continue;
         }
 
         // Select and sort candidates.
@@ -416,7 +444,10 @@ void ExecutionEngine::scheduleLoop()
     }
 
     // Cleanup
-    m_sessions.clear();
+    CHECK(m_deletedSessions.empty());
+    CHECK(m_newSessions.empty());
+    CHECK(m_sessions.empty());
+    LOG(INFO) << "ExecutionEngine stopped";
 }
 
 std::unique_ptr<ResourceContext> ExecutionEngine::makeResourceContext(PSessionItem sess,
@@ -622,18 +653,15 @@ bool ExecutionEngine::doPaging(const DeviceSpec &spec, const DeviceSpec &target)
 
     // Forcely kill one session
     for (auto [usage, pSess] : candidates) {
-        auto g = sstl::with_guard(pSess.get()->mu);
-        if (!pSess.get()->pagingCb) {
-            continue;
-        }
+        // for logging
         forceEvicitedSess = pSess.get()->sessHandle;
 
         // Don't retry anymore for OOM kernels in this session
         pSess.get()->protectOOM = false;
-        pSess.get()->forceEvicted = true;
 
         VLOG(2) << "Force evict session: " << pSess.get()->sessHandle << " with usage " << usage;
-        pSess.get()->pagingCb.forceEvicted();
+        pSess.get()->interrupt();
+
         return true;
     }
     LOG(ERROR) << "Nothing to force evict";

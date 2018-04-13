@@ -81,7 +81,6 @@ ExecutorImpl::ExecutorImpl(MultiDeviceExecutorParams &&p, std::unique_ptr<const 
 
     using namespace std::placeholders;
     params_.ins.registerPagingCallbacks({
-        std::bind(&ExecutorImpl::forceEvicted, this),
         std::bind(&ExecutorImpl::handlePagingRequest, this, _1, _2),
     });
 }
@@ -348,12 +347,6 @@ ExecutorState::ExecutorState(const tf::Executor::Args &args, ExecutorImpl *impl)
     , num_outstanding_ops_(0)
     , num_emitted_ops_(0)
 {
-    // Insert ourself into active list
-    {
-        auto g = sstl::with_guard(impl->entry_mu_);
-        impl->active_states_.insert(this);
-    }
-
     // We start the entire execution in iteration 0 of the root frame
     // so let us create the root frame and the state for iteration 0.
     // We assume root_frame_->frame_name.empty().
@@ -371,14 +364,6 @@ ExecutorState::ExecutorState(const tf::Executor::Args &args, ExecutorImpl *impl)
 
 ExecutorState::~ExecutorState()
 {
-    // Remove ourself into active list only if this is not caused by
-    // force interupption. In that case the ExecutorImpl takes care
-    // of clearing active_states_
-    if (!forceInterrupted) {
-        auto g = sstl::with_guard(impl_->entry_mu_);
-        impl_->active_states_.erase(this);
-    }
-
     for (auto name_frame : outstanding_frames_) {
         delete name_frame.second;
     }
@@ -943,29 +928,6 @@ void ExecutorState::PropagateOutputs(const TaggedNode &tagged_node, const NodeIt
             CleanupFramesIterations(parent_frame, parent_iter, ready);
             VLOG(3) << "Cleanup frame iterations finished";
         }
-    }
-}
-
-void ExecutorState::ForceInterrupt(const tf::Status &s)
-{
-    forceInterrupted = true;
-    // Some error happened. This thread of computation is done.
-    {
-        VLOG(3) << "Try get lock for error handle";
-        auto l = sstl::with_guard(mu_);
-        VLOG(2) << "Error handle";
-        if (status_.ok()) {
-            status_ = s;
-        }
-    }
-
-    VLOG(3) << "StartAbort: " << s;
-    if (rendezvous_) {
-        rendezvous_->StartAbort(s);
-    }
-
-    if (cancellation_manager_) {
-        cancellation_manager_->StartCancel();
     }
 }
 
