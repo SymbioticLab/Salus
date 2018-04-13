@@ -228,8 +228,9 @@ void ExecutionContext::Data::removeFromEngine()
     if (item) {
         engine.deleteSession(std::move(item));
     }
-    if (resOffer) {
+    if (resOffer != SessionResourceTracker::kInvalidTicket) {
         SessionResourceTracker::instance().free(resOffer);
+        resOffer = SessionResourceTracker::kInvalidTicket;
     }
 }
 

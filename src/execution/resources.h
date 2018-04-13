@@ -198,6 +198,8 @@ public:
 
     std::string DebugString() const;
 
+    static constexpr uint64_t kInvalidTicket = 0;
+
 private:
     mutable std::mutex m_mu;
 
