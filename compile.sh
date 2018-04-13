@@ -1,6 +1,6 @@
 #! /bin/bash
 set -e
-BUILD_TYPES=(Debug Release TSan ASan OpTracing Gperf)
+BUILD_TYPES=(Debug Release TSan ASan OpTracing)
 
 # Configure
 for build_type in ${BUILD_TYPES[@]}; do
@@ -19,5 +19,5 @@ done
 #wait
 
 export CLICOLOR_FORCE=1
-parallel --tag --lb "cmake --build build/{} -- -j" ::: "${BUILD_TYPES[@]}"
+parallel --tag --lb -j 1 "cmake --build build/{} -- -j" ::: "${BUILD_TYPES[@]}"
 

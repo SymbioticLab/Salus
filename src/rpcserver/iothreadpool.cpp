@@ -24,7 +24,7 @@ namespace salus {
 
 IOThreadPoolImpl::IOThreadPoolImpl()
     : m_numThreads(std::max(std::thread::hardware_concurrency() / 2, 1u))
-    , m_context(m_numThreads)
+    , m_context(static_cast<int>(m_numThreads))
     , m_workguard(boost::asio::make_work_guard(m_context))
 {
     while (m_threads.size() < m_numThreads) {

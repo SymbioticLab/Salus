@@ -35,17 +35,25 @@ class IOThreadPoolImpl
 
     boost::thread_group m_threads;
 
+    /**
+     * @brief A wrapper class that is copy-able to pass move-only objects.
+     *
+     * The copy constructor/assignment should not be called
+     * @tparam F
+     */
     template<typename F>
     struct move_wrapper : F
     {
-        move_wrapper(F &&f)
-            : F(std::move(f))
+        move_wrapper(F &&f) // NOLINT(google-explicit-constructor)
+            : F(std::forward<F>(f))
         {
         }
 
-        move_wrapper(move_wrapper &&) = default;
-        move_wrapper &operator=(move_wrapper &&) = default;
+        move_wrapper(move_wrapper &&) noexcept = default;
+        move_wrapper &operator=(move_wrapper &&) noexcept = default;
 
+        // The following are intentially unimplemented
+        // as an assert that they are not called.
         move_wrapper(const move_wrapper &);
         move_wrapper &operator=(const move_wrapper &);
     };
@@ -53,7 +61,7 @@ class IOThreadPoolImpl
     template<typename T>
     auto move_handler(T &&t) -> move_wrapper<typename std::decay<T>::type>
     {
-        return std::move(t);
+        return std::forward<T>(t);
     }
 
 public:

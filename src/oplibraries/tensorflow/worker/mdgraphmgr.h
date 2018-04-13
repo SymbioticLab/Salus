@@ -54,6 +54,7 @@ protected:
         ~MDItem() override
         {
             for (auto dev : devices) {
+                VLOG(1) << "Removing session's hold on device: " << session << " " << dev->name();
                 dev->op_segment()->RemoveHold(session);
             }
         }
