@@ -103,7 +103,7 @@ public:
     Resources failedResourceRequest() const;
     Resources peakResourceUsage() const;
 
-    virtual tf::DeviceContext *deviceContextForNode(int id) const = 0;
+    virtual tf::DeviceContext *deviceContextForNode(int id, bool isAsync) = 0;
 
     // Hook allocators
     tf::Allocator *GetAllocator(tf::AllocatorAttributes attr) override;

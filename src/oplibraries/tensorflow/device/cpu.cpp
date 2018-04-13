@@ -18,7 +18,7 @@ public:
     {
     }
 
-    tf::DeviceContext *deviceContextForNode(int) const override
+    tf::DeviceContext *deviceContextForNode(int, bool) override
     {
         return nullptr;
     }

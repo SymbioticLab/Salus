@@ -23,7 +23,7 @@ public:
     void ComputeAsync(tf::AsyncOpKernel *op_kernel, tf::OpKernelContext *context,
                       tf::AsyncOpKernel::DoneCallback done) override;
 
-    tf::DeviceContext *deviceContextForNode(int id) const override;
+    tf::DeviceContext *deviceContextForNode(int id, bool isAsync) override;
 
     ~PerTaskGPUDevice() override;
 
@@ -31,7 +31,7 @@ private:
     void requestStreams();
 
 private:
-    sstl::ScopeGuards streamReleaser();
+    sstl::ScopeGuards useStreams();
     void releaseStreams();
 
     std::vector<int> m_streams;
@@ -141,17 +141,21 @@ void SalusGPUDevice::freeStreams(std::vector<int> &&streams)
 PerTaskGPUDevice::PerTaskGPUDevice(sstl::not_null<tf::Device *> base, std::unique_ptr<ResourceContext> &&rctx)
     : PerTaskDevice(base, std::move(rctx))
 {
-    requestStreams();
 }
 
 void PerTaskGPUDevice::reset(sstl::not_null<tf::Device *> base, std::unique_ptr<ResourceContext> &&rctx)
 {
+    releaseStreams();
     PerTaskDevice::reset(base, std::move(rctx));
-    requestStreams();
 }
 
 void PerTaskGPUDevice::requestStreams()
 {
+    if (!m_streams.empty()) {
+        LOG(WARNING) << "Duplicate call to PerTaskGPUDevice::requestStreams";
+        return;
+    }
+
     const auto numStreams = 1;
     auto &sdev = underlayingDevice<SalusGPUDevice>();
 
@@ -165,29 +169,30 @@ void PerTaskGPUDevice::requestStreams()
     }
 }
 
-tf::DeviceContext *PerTaskGPUDevice::deviceContextForNode(int id) const
+tf::DeviceContext *PerTaskGPUDevice::deviceContextForNode(int id, bool isAsync)
 {
     UNUSED(id);
-    if (m_streams.empty()) {
-        LOG(ERROR) << "No GPU streams available for device context";
-        return nullptr;
+
+    if (!isAsync) {
+        requestStreams();
     }
 
-    auto stream = m_streams[0];
-    auto &sdev = underlayingDevice<SalusGPUDevice>();
+    // use default stream if we have none
+    auto stream = m_streams.empty() ? 0 : m_streams[0];
 
-    return sdev.deviceContext(stream).get();
+    return underlayingDevice<SalusGPUDevice>().deviceContext(stream).get();
 }
 
 void PerTaskGPUDevice::releaseStreams()
 {
+    VLOG(3) << "Releasing GPU stream: " << m_streams;
     if (auto num = m_streams.size()) {
         underlayingDevice<SalusGPUDevice>().freeStreams(std::move(m_streams));
         resourceContext().dealloc(ResourceType::GPU_STREAM, num);
     }
 }
 
-sstl::ScopeGuards PerTaskGPUDevice::streamReleaser()
+sstl::ScopeGuards PerTaskGPUDevice::useStreams()
 {
     // release stream when finish
     return sstl::ScopeGuards([this](){
@@ -197,14 +202,18 @@ sstl::ScopeGuards PerTaskGPUDevice::streamReleaser()
 
 void PerTaskGPUDevice::Compute(tf::OpKernel *op_kernel, tf::OpKernelContext *context)
 {
-    auto sr = streamReleaser();
+    if (m_streams.empty()) {
+        LOG(ERROR) << "No GPU streams available for " << op_kernel->name() << " using default one";
+    }
+    auto sr = useStreams();
     PerTaskDevice::Compute(op_kernel, context);
 }
 
 void PerTaskGPUDevice::ComputeAsync(tf::AsyncOpKernel *op_kernel, tf::OpKernelContext *context,
                                     tf::AsyncOpKernel::DoneCallback done)
 {
-    auto sr = streamReleaser();
+    CHECK(m_streams.empty());
+    // Async compute don't need stream
     PerTaskDevice::ComputeAsync(op_kernel, context, done);
 }
 

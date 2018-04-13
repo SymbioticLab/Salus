@@ -332,7 +332,7 @@ void ExecTask::run(Callbacks cbs) noexcept
         params.record_tensor_accesses = ditem.device_record_tensor_access;
         params.function_library = ditem.function_library.get();
         // Set the device_context for this node id, if it exists.
-        params.op_device_context = ditem.device->deviceContextForNode(id);
+        params.op_device_context = ditem.device->deviceContextForNode(id, isAsync());
 
         // Don't track allocations. Not implemented.
         params.track_allocations = false;
