@@ -32,7 +32,7 @@ class SalusConfig(object):
         self.logconf = 'disable'
         self.logconf_dir = None if FLAGS.logconf_dir is None else Path(FLAGS.logconf_dir)  # type: Path
         self.use_nvprof = False
-        self.use_gperf = True
+        self.use_gperf = False
         self.hide_output = True
         self.scheduler = 'fair'
         self.disable_adc = False

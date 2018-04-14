@@ -26,10 +26,6 @@ def main(argv):
     def create_wl(ex):
         return WTL.create('vgg11', 25, 405, executor=ex)
 
-    # Run alexnet_25 on TF
-    wl = create_wl(Executor.TF)
-    run_tf(FLAGS.save_dir / 'tf', wl)
-
     # Run alexnet_25 on Salus
     wl = create_wl(Executor.Salus)
     run_seq(scfg.copy(output_dir=FLAGS.save_dir / "salus" / '1'), wl)
@@ -39,3 +35,8 @@ def main(argv):
             create_wl(Executor.Salus),
             create_wl(Executor.Salus),
             )
+
+    # Run alexnet_25 on TF
+    wl = create_wl(Executor.TF)
+    run_tf(FLAGS.save_dir / 'tf', wl)
+
