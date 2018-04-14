@@ -9,7 +9,7 @@ import tensorflow as tf
 
 from parameterized import parameterized
 
-from . import run_on_rpc_and_cpu, run_on_sessions, run_on_devices
+from . import run_on_rpc_and_gpu, run_on_sessions, run_on_devices
 from . import networks, datasets
 from .lib import tfhelper
 
@@ -82,14 +82,14 @@ class ResNetCaseBase(unittest.TestCase):
     @parameterized.expand([(25,), (50,), (75,)])
     def test_rpc(self, batch_size):
         run_on_sessions(self._get_func(batch_size),
-                        'zrpc://tcp://127.0.0.1:5501',
+                        'zrpc://tcp://127.0.0.1:5501', dev='/device:GPU:0',
                         config=self._config(batch_size=batch_size))
 
     @parameterized.expand([(50,)])
     def test_correctness(self, batch_size):
         config = self._config(batch_size=batch_size)
         config.allow_soft_placement = True
-        actual, expected = run_on_rpc_and_cpu(self._get_func(batch_size), config=config)
+        actual, expected = run_on_rpc_and_gpu(self._get_func(batch_size), config=config)
         self.assertEquals(actual, expected)
 
 
@@ -106,6 +106,7 @@ class TestResNetCifar10(ResNetCaseBase):
         batch_size = kwargs.get('batch_size', 100)
 
         config = tf.ConfigProto()
+        config.allow_soft_placement = True
         config.zmq_options.resource_map.temporary['MEMORY:GPU'] = memusages[batch_size][0]
         config.zmq_options.resource_map.persistant['MEMORY:GPU'] = memusages[batch_size][1]
         return config
@@ -130,6 +131,7 @@ class TestResNetFakeData(ResNetCaseBase):
         batch_size = kwargs.get('batch_size', 100)
 
         config = tf.ConfigProto()
+        config.allow_soft_placement = True
         config.zmq_options.resource_map.temporary['MEMORY:GPU'] = memusages[batch_size][0]
         config.zmq_options.resource_map.persistant['MEMORY:GPU'] = memusages[batch_size][1]
         return config

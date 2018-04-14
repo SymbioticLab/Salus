@@ -9,7 +9,7 @@ import tensorflow as tf
 
 from parameterized import parameterized
 
-from . import run_on_rpc_and_cpu, run_on_rpc_and_gpu, run_on_sessions, run_on_devices
+from . import run_on_rpc_and_gpu, run_on_rpc_and_gpu, run_on_sessions, run_on_devices
 from . import networks, datasets
 from .lib import tfhelper
 
@@ -100,7 +100,8 @@ class VGGCaseBase(unittest.TestCase):
             sess = tf.get_default_session()
             return run_vgg(self._vgg(), sess, input_data, batch_size=batch_size)
 
-        run_on_sessions(func, 'zrpc://tcp://127.0.0.1:5501', config=self._config(batch_size=batch_size))
+        run_on_sessions(func, 'zrpc://tcp://127.0.0.1:5501', dev='/device:GPU:0',
+                        config=self._config(batch_size=batch_size))
 
     def test_fake_data(self):
         def func():
@@ -109,7 +110,7 @@ class VGGCaseBase(unittest.TestCase):
             sess = tf.get_default_session()
             return run_vgg(self._vgg(), sess, input_data)
 
-        actual, expected = run_on_rpc_and_cpu(func, config=tf.ConfigProto(allow_soft_placement=True))
+        actual, expected = run_on_rpc_and_gpu(func, config=tf.ConfigProto(allow_soft_placement=True))
         self.assertEquals(actual, expected)
 
     @unittest.skip("Not yet implemented")
@@ -130,7 +131,7 @@ class VGGCaseBase(unittest.TestCase):
             sess = tf.get_default_session()
             return run_vgg(self._vgg(), sess, input_data)
 
-        actual, expected = run_on_rpc_and_cpu(func)
+        actual, expected = run_on_rpc_and_gpu(func)
         self.assertEquals(actual, expected)
 
     @unittest.skip("Skip distributed runtime")
@@ -168,6 +169,7 @@ class TestVgg11(VGGCaseBase):
         batch_size = kwargs.get('batch_size', 100)
 
         config = tf.ConfigProto()
+        config.allow_soft_placement = True
         config.zmq_options.resource_map.temporary['MEMORY:GPU'] = memusages[batch_size][0]
         config.zmq_options.resource_map.persistant['MEMORY:GPU'] = memusages[batch_size][1]
         return config
@@ -186,6 +188,7 @@ class TestVgg16(VGGCaseBase):
         batch_size = kwargs.get('batch_size', 100)
 
         config = tf.ConfigProto()
+        config.allow_soft_placement = True
         config.zmq_options.resource_map.temporary['MEMORY:GPU'] = memusages[batch_size][0]
         config.zmq_options.resource_map.persistant['MEMORY:GPU'] = memusages[batch_size][1]
         return config
@@ -205,6 +208,7 @@ class TestVgg19(VGGCaseBase):
         batch_size = kwargs.get('batch_size', 100)
 
         config = tf.ConfigProto()
+        config.allow_soft_placement = True
         config.zmq_options.resource_map.temporary['MEMORY:GPU'] = memusages[batch_size][0]
         config.zmq_options.resource_map.persistant['MEMORY:GPU'] = memusages[batch_size][1]
         return config

@@ -8,7 +8,7 @@ import tensorflow as tf
 
 from parameterized import parameterized
 
-from . import run_on_rpc_and_cpu, run_on_sessions, run_on_devices
+from . import run_on_rpc_and_gpu, run_on_sessions, run_on_devices
 from . import networks, datasets
 from .lib import tfhelper
 from .lib.seq2seq.ptb.ptb_word_lm import get_config
@@ -82,12 +82,12 @@ class SeqCaseBase(unittest.TestCase):
 
     @parameterized.expand(model_sizes)
     def test_rpc(self, model_size):
-        run_on_sessions(self.get_func_to_run(model_size), 'zrpc://tcp://127.0.0.1:5501',
+        run_on_sessions(self.get_func_to_run(model_size), 'zrpc://tcp://127.0.0.1:5501', dev='/device:GPU:0',
                         config=self._config(model_size))
 
     @parameterized.expand(['small'])
     def test_correctness(self, model_size):
-        actual, expected = run_on_rpc_and_cpu(self.get_func_to_run(model_size),
+        actual, expected = run_on_rpc_and_gpu(self.get_func_to_run(model_size),
                                               config=self._config(model_size))
         self.assertEquals(actual, expected)
 
@@ -109,6 +109,7 @@ class TestSeqPtb(SeqCaseBase):
         }
 
         config = tf.ConfigProto()
+        config.allow_soft_placement = True
         config.zmq_options.resource_map.temporary['MEMORY:GPU'] = memusages[model_size][0]
         config.zmq_options.resource_map.persistant['MEMORY:GPU'] = memusages[model_size][1]
         return config

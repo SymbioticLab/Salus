@@ -239,8 +239,9 @@ plt.ioff()
 #
 # Set paths
 #
+model = 'alexnet_25'
 logdir = 'logs/optracing/'
-outputdir = '/home/aetf/desktop/'
+outputdir = '/home/peifeng/desktop/'
 figsize = (40, 70)
 set_y = True
 
@@ -251,7 +252,7 @@ set_y = True
 #set_y = False
 
 #%% Load data
-steptf = load_tf(os.path.join(logdir, 'tf/vgg11_25.tf.10iter.0.output'))
+steptf = load_tf(os.path.join(logdir, 'tf/{}.tf.10iter.0.output'.format(model)))
 stepsalus = load_salus(os.path.join(logdir, 'salus/1/perf.output'))
 twosess = load_salus(os.path.join(logdir, 'salus/2/perf.output'))
 

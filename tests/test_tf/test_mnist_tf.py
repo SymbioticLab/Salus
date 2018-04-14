@@ -10,7 +10,7 @@ from parameterized import parameterized
 
 import tensorflow as tf
 
-from . import run_on_rpc_and_cpu, run_on_devices, run_on_sessions, assertAllClose
+from . import run_on_rpc_and_gpu, run_on_devices, run_on_sessions, assertAllClose
 from .lib import tfhelper
 from .lib.datasets import fake_data
 
@@ -238,7 +238,7 @@ class MnistConvBase(unittest.TestCase):
     def _config(self, **kwargs):
         c = tf.ConfigProto()
         c.graph_options.optimizer_options.opt_level = tf.OptimizerOptions.L0
-        c.log_device_placement = True
+        c.allow_soft_placement = True
         return c
 
     @parameterized.expand([(25,)])
@@ -264,7 +264,7 @@ class MnistConvBase(unittest.TestCase):
         def func():
             sess = tf.get_default_session()
             return self._runner()(sess, batch_size=batch_size)
-        run_on_sessions(func, 'zrpc://tcp://127.0.0.1:5501',
+        run_on_sessions(func, 'zrpc://tcp://127.0.0.1:5501', dev='/device:GPU:0',
                         config=self._config(batch_size=batch_size))
 
     def test_correctness(self):
@@ -272,7 +272,7 @@ class MnistConvBase(unittest.TestCase):
             sess = tf.get_default_session()
             return self._runner()(sess)
 
-        actual, expected = run_on_rpc_and_cpu(func, config=self._config())
+        actual, expected = run_on_rpc_and_gpu(func, config=self._config())
         assertAllClose(actual, expected, rtol=1e-3)
 
 
@@ -295,6 +295,7 @@ class TestMnistConv(MnistConvBase):
         batch_size = kwargs.get('batch_size', 50)
 
         config = tf.ConfigProto()
+        config.allow_soft_placement = True
         config.zmq_options.resource_map.temporary['MEMORY:GPU'] = memusages[batch_size][0]
         config.zmq_options.resource_map.persistant['MEMORY:GPU'] = memusages[batch_size][1]
         return config
@@ -314,6 +315,7 @@ class TestMnistLarge(MnistConvBase):
         batch_size = kwargs.get('batch_size', 50)
 
         config = tf.ConfigProto()
+        config.allow_soft_placement = True
         config.zmq_options.resource_map.temporary['MEMORY:GPU'] = memusages[batch_size][0]
         config.zmq_options.resource_map.persistant['MEMORY:GPU'] = memusages[batch_size][1]
         return config
