@@ -127,6 +127,7 @@ public:
     tf::Status Sync() override;
     tf::Status MaybeRewriteGraph(std::unique_ptr<tf::Graph> *graph) override;
     tf::Status FillContextMap(const tf::Graph *graph, tf::DeviceContextMap *device_context_map) override;
+    tf::ResourceMgr *resource_manager() override;
 
 private:
     void reinitialize();

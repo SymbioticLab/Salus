@@ -30,7 +30,12 @@ MDGraphMgr::MDGraphMgr(const tf::WorkerEnv *env, ExecutionContext execCtx)
 {
 }
 
-MDGraphMgr::~MDGraphMgr() = default;
+MDGraphMgr::~MDGraphMgr()
+{
+    // We have to do this before m_resourceMgr goes out of scope
+    for (auto p : table_) p.second->Unref();
+    table_.clear();
+}
 
 MDGraphMgr::MDItem::~MDItem()
 {

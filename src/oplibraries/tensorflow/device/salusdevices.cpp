@@ -157,6 +157,11 @@ tf::Status PerTaskDevice::FillContextMap(const tf::Graph *graph, tf::DeviceConte
     return m_base->FillContextMap(graph, device_context_map);
 }
 
+tf::ResourceMgr *PerTaskDevice::resource_manager()
+{
+    return m_base->resource_manager();
+}
+
 tf::Allocator *PerTaskDevice::GetAllocator(tf::AllocatorAttributes attr)
 {
     auto a = m_base->GetAllocator(attr);

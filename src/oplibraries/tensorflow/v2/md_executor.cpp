@@ -204,15 +204,18 @@ tf::Status ExecutorImpl::Initialize()
         FillinSupportedDeviceSpecs(item);
 
 #if !defined(SALUS_ENABLE_MULTI_DEVICE)
-        // Create ditem for item
-        DCHECK(item->supported_devices.size() == 1);
-        DeviceSpec spec{ item->supported_devices.at(0), 0 };
-        auto usage = estimateMemoryUsageForNode(*item, spec);
-        LookupDevice(spec, params_.ins.makeResourceContext(spec, usage), &item->ditem);
+        {
+            DeviceItem ditem;
+            // Create ditem for item
+            DCHECK(item->supported_devices.size() == 1);
+            DeviceSpec spec{ item->supported_devices.at(0), 0 };
+            auto usage = estimateMemoryUsageForNode(*item, spec);
+            LookupDevice(spec, params_.ins.makeResourceContext(spec, usage), &ditem);
 
-        // Build kernel
-        item->kernel = SetupKernel(n, item->ditem);
-        item->kernel_is_async = (item->kernel->AsAsync() != nullptr);
+            // Build kernel
+            item->kernel = SetupKernel(n, ditem);
+            item->kernel_is_async = (item->kernel->AsAsync() != nullptr);
+        }
 #endif // SALUS_ENABLE_MULTI_DEVICE
 
         // Mark all kernel as expensive to put them in our threadpool.

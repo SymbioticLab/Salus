@@ -49,7 +49,6 @@ struct NodeItem
      * @brief Potentially create a kernel
      */
     POpKernel kernel {nullptr, skip_delete_opkernel};
-    DeviceItem ditem;
 
     bool kernel_is_expensive : 1; // True iff kernel->IsExpensive()
     bool kernel_is_async : 1;     // True iff kernel->AsAsync() != nullptr
