@@ -67,7 +67,7 @@ class ResNetCaseBase(unittest.TestCase):
     def _get_func(self, batch_size):
         return None
 
-    @parameterized.expand([(25,), (50,), (75,)])
+    @parameterized.expand([(50,)])
     def test_gpu(self, batch_size):
         config = self._config(batch_size=batch_size)
         config.allow_soft_placement = True
@@ -85,7 +85,7 @@ class ResNetCaseBase(unittest.TestCase):
                         'zrpc://tcp://127.0.0.1:5501',
                         config=self._config(batch_size=batch_size))
 
-    @parameterized.expand([(25,), (50,), (75,)])
+    @parameterized.expand([(50,)])
     def test_correctness(self, batch_size):
         config = self._config(batch_size=batch_size)
         config.allow_soft_placement = True

@@ -70,7 +70,7 @@ class SeqCaseBase(unittest.TestCase):
     def get_func_to_run(self, config_name):
         return lambda: self._runner()(tf.get_default_session(), config_name)
 
-    @parameterized.expand(model_sizes)
+    @parameterized.expand(['small'])
     def test_gpu(self, model_size):
         run_on_devices(self.get_func_to_run(model_size), '/device:GPU:0',
                        config=tf.ConfigProto(allow_soft_placement=True))
@@ -85,7 +85,7 @@ class SeqCaseBase(unittest.TestCase):
         run_on_sessions(self.get_func_to_run(model_size), 'zrpc://tcp://127.0.0.1:5501',
                         config=self._config(model_size))
 
-    @parameterized.expand(model_sizes)
+    @parameterized.expand(['small'])
     def test_correctness(self, model_size):
         actual, expected = run_on_rpc_and_cpu(self.get_func_to_run(model_size),
                                               config=self._config(model_size))

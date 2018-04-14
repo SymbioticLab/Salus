@@ -241,7 +241,7 @@ class MnistConvBase(unittest.TestCase):
         c.log_device_placement = True
         return c
 
-    @parameterized.expand([(25,), (50,), (100,)])
+    @parameterized.expand([(25,)])
     def test_gpu(self, batch_size):
         def func():
             sess = tf.get_default_session()
