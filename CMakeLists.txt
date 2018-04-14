@@ -121,7 +121,7 @@ include_directories(${CMAKE_CURRENT_BINARY_DIR})
 # Disable verbose logging in non debug builds
 if(CMAKE_BUILD_TYPE STREQUAL "Debug")
     #add_definitions(-DELPP_DISABLE_DEBUG_LOGS)
-    add_definitions(-DELPP_DISABLE_TRACE_LOGS)
+    #add_definitions(-DELPP_DISABLE_TRACE_LOGS)
     #add_definitions(-DELPP_DISABLE_VERBOSE_LOGS)
 elseif(CMAKE_BUILD_TYPE STREQUAL "OpTracing")
     add_definitions(-DELPP_DISABLE_DEBUG_LOGS)
