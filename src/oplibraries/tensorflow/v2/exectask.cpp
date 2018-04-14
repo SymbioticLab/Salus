@@ -491,7 +491,11 @@ void ExecTask::updateRefEntryTickets(const std::vector<Entry *> &entries)
         auto tensor = entry->ref;
         DCHECK(tensor);
         auto buf = tf::remote::PagingHelper::bufferOf(*tensor);
-        DCHECK(buf);
+        if (!buf) {
+            // shouldn't happen very often
+            LOG(WARNING) << "Skip one entry with nullptr buf in updateRefEntryTickets. Probably OOM caused an empty tensor";
+            continue;
+        }
         auto root_buf = buf->root_buffer();
         DCHECK(root_buf);
 
