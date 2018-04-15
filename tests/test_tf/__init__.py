@@ -77,16 +77,9 @@ def run_on_sessions(func, targets, *args, **kwargs):
                     res = func()
                     results.append(res)
                     retry = False
-            except Exception as ex:
-                import traceback
-                traceback.print_exc()
+            except tf.errors.UnavailableError as ex:
                 time.sleep(1)
-
-                retry = not isinstance(ex,tf.errors.ResourceExhaustedError)
-                if retry:
-                    eprint("Retrying due to error:", ex)
-                else:
-                    raise
+                eprint("Retrying due to error:", ex)
         duration = default_timer() - start_time
         print("JCT: {:.3f} s".format(duration))
 

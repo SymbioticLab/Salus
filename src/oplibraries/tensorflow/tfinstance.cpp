@@ -107,7 +107,7 @@ void TFInstance::handleCreateSession(const tf::CreateSessionRequest &req, tf::Cr
         LOG(WARNING) << "Rejecting session due to unsafe resource usage. Predicted usage: "
                      << rm.DebugString()
                      << ", current usage: " << SessionResourceTracker::instance().DebugString();
-        throw TFException(tf::errors::Internal("Session memory usage unsafe"));
+        throw TFException(tf::errors::Unavailable("Session memory usage unsafe"));
     }
 
     SALUS_THROW_IF_ERROR(ValidateExternalGraphDefSyntax(req.graph_def()));
