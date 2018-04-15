@@ -53,45 +53,54 @@ def load_tfmem(path):
     df['act'] = df.type * df['size']
     return df
 
-dfa = load_mem('/tmp/workspace/alex.csv')
-dfv = load_mem('/tmp/workspace/vgg.csv')
+#dfa = load_mem('/tmp/workspace/alex.csv')
+#dfv = load_mem('/tmp/workspace/vgg.csv')
 #%%
 
 def plot_cs(cs):
-    return cs.plot()
+    ax = cs.plot()
+    return ax
 
 
-def plot_df(df):
+def plot_df(df, marker=False):
     cs = df.set_index('timestamp')
+    cs.index = (cs.index - cs.index[0]) / pd.Timedelta(microseconds=1)
     cs['act'] = cs.act.cumsum() / 1024 / 1024
-    return plot_cs(cs.act)
+    ax = plot_cs(cs.act)
+    if marker:
+        css = cs.reset_index()
+        ax = css.plot(kind='scatter', x='timestamp', y='act', c='type', cmap=plt.cm.get_cmap('bwr'), ax=ax)
+    return ax
     
-plot_df(dfa)
-plot_df(dfv)
+#plot_df(dfa)
+#plot_df(dfv)
 
 #%%
-def find_minmax(df):
+def find_minmax(df, plot=False):
     cs = df.set_index('timestamp').act.cumsum() / 1024 / 1024
     # first find max
     ma = cs.max()
     
+    # start from first non zero
+    cspartial = cs[cs > 1]
     # duration
-    dur = cs.index[-1] - cs.index[0]
+    dur = cspartial.index[-1] - cspartial.index[0]
     
     # we only want later half of the duration
-    st = cs.index[-1] - dur * 0.5
-    ed = cs.index[-1] - dur * 0.1
+    st = cspartial.index[-1] - dur * 0.5
+    ed = cspartial.index[-1] - dur * 0.1
     
     # select
-    cspartial = cs[(cs.index >= st) & (cs.index <= ed)]
+    cspartial = cspartial[(cspartial.index >= st) & (cspartial.index <= ed)]
     # visual
-    ax = plot_cs(cspartial)
+    ax = None
+    if plot:
+        ax = plot_cs(cspartial)
     
     # find min (persistant mem)
     persist = cspartial.min()
     
     # find average
-    
     # convert to relative time
     rcs = cs.reset_index()
     rcs['timestamp'] = rcs.timestamp - rcs.timestamp[0]
@@ -101,20 +110,38 @@ def find_minmax(df):
     avg = np.trapz(rcs.act, x=rcs.timestamp) / durus
     
     return ma, persist, avg, ax
-
 #%%
 from pathlib import Path
+import multiprocessing as mp
 
-
-data = []
-for item in Path('logs/mem/tf').iterdir():
+def process_mem(item):
+    print(f"{item.name}: Loading log file")
     df = load_tfmem(str(item / 'alloc.output'))
-    fig = plt.figure()
-    ma, persist, avg, ax = find_minmax(df)
-    data.append((item.name, persist, ma, avg, ma - persist))
+    print(f"{item.name}: figure")
+    plt.figure()
+    ma, persist, avg, ax = find_minmax(df, plot=True)
+    ax.set_title(item.name)
+    print(f"{item.name}: found")
+    return (item.name, persist, ma, avg, ma - persist)
+
+data = [process_mem(item) for item in Path('logs/mem/tf').iterdir()]
 data = pd.DataFrame(data, columns=['Network',
                              'Persistent Mem (MB)',
                              'Peak Mem (MB)',
                              'Average',
                              'Peak'])
 data.to_csv('/tmp/workspace/mem.csv', index=False)
+
+#%%
+if False:
+    datasalus = []
+    for item in Path('logs/mem/salus').iterdir():
+        df = load_mem(str(item / 'alloc.output'))
+        ma, persist, avg, ax = find_minmax(df)
+        datasalus.append((item.name, persist, ma, avg, ma - persist))
+    datasalus = pd.DataFrame(datasalus, columns=['Network',
+                                 'Persistent Mem (MB)',
+                                 'Peak Mem (MB)',
+                                 'Average',
+                                 'Peak'])
+    datasalus.to_csv('/tmp/workspace/mem-salus.csv', index=False)

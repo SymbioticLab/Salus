@@ -20,6 +20,8 @@ T = TypeVar('T')
 logger = logging.getLogger(__name__)
 FLAGS = flags.FLAGS
 
+flags.DEFINE_boolean('ignore_error', False, 'Ignore error on workload')
+
 
 class Pause(int):
     """Represent a pause in an action sequence"""
@@ -93,7 +95,8 @@ def run_tf(output_dir, *actions):
 
         # check each workloads and fix workload output_file path
         for w in workloads:
-            if w.proc.returncode != 0:
+            if not FLAGS.ignore_error and w.proc.returncode != 0:
+                prompt.pause()
                 raise RuntimeError(f'Workload {w.canonical_name} did not finish cleanly: {w.proc.returncode}')
             w.output_file = output_dir / w.output_file.name
 
@@ -135,7 +138,8 @@ def run_seq(scfg, *actions):
 
         # check each workloads and fix workload output_file path
         for w in workloads:
-            if w.proc.returncode != 0:
+            if not FLAGS.ignore_error and w.proc.returncode != 0:
+                prompt.pause()
                 raise RuntimeError(f'Workload {w.canonical_name} did not finish cleanly: {w.proc.returncode}')
             w.output_file = scfg.output_dir / w.output_file.name
     return workloads

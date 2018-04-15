@@ -91,8 +91,8 @@ def select_steps(df):
     else:
         slist = []
         # nothing we can find programmatically, let the user decide
-        for _, s, ker, op in counts:
-            if confirm(f'Step {s} has {op} tasks, with {ker} kernels, select?'):
+        for _, s, ker, op in counts.itertuples():
+            if confirm('Step {} has {} tasks, with {} kernels, select?'.format(s, op, ker)):
                 slist.append(s)
         return slist
 
@@ -124,7 +124,7 @@ tf_events = ['task_ready', 'task_start', 'task_done']
 def load_tf(path):
     logs = pl.load_file(path)
     df = pd.DataFrame(l.__dict__ for l in logs)
-    df = df[df.type != 'unknown'].drop(['level','loc', 'entry_type'], axis=1)
+    df = df[df.type.isin(tf_events)].drop(['level','loc', 'entry_type'], axis=1)
     # make sure step is int
     df['step'] = df.step.astype(int)
     

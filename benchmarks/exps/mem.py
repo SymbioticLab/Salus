@@ -13,7 +13,7 @@ from benchmarks.driver.runner import RunConfig
 from benchmarks.driver.server import SalusServer
 from benchmarks.driver.server.config import presets
 from benchmarks.driver.workload import WTL, Executor
-from benchmarks.driver.utils import atomic_directory, unique
+from benchmarks.driver.utils import atomic_directory, unique, execute
 from benchmarks.driver.utils.compatiblity import pathlib
 from benchmarks.exps import maybe_forced_preset, run_tf
 
@@ -49,6 +49,8 @@ def select_workloads(argv):
 def do_mem(logdir, network, batch_size):
     """Do basic JCT on workload"""
     batch_num = 20
+    if network == "speech":
+        batch_num = 5
 
     logger.info(f'Measuring memory for {network}_{batch_size} for {batch_num} iter')
 
@@ -58,12 +60,15 @@ def do_mem(logdir, network, batch_size):
         if not FLAGS.use_salus:
             logger.info('    Running on TF')
             wl = WTL.create(network, batch_size, batch_num, Executor.TF)
-            wl.env['TF_CPP_MIN_VLOG_LEVEL'] = '2'
+            wl.env['TF_CPP_MIN_VLOG_LEVEL'] = '1'
             wl.env['TF_CPP_MIN_LOG_LEVEL'] = ''
             run_tf(outputdir, wl)
-            # move file to a more convinent name
+            # filter and move file to a more convinent name
             for f in pathlib.Path(outputdir).iterdir():
-                f.rename(f.with_name('alloc.output'))
+                with f.with_name('alloc.output').open('w') as file:
+                    grep = execute(['egrep', r"] (\+|-)", f.name], stdout=file, cwd=str(f.parent))
+                    grep.wait()
+                f.unlink()
                 break
         else:
             scfg = maybe_forced_preset(presets.AllocProf)
