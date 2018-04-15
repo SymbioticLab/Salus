@@ -202,7 +202,7 @@ def atomic_directory(final_dest):
 
     final_dest.mkdir(exist_ok=True, parents=True)
 
-    with tempfile.TemporaryDirectory() as name:
+    with tempfile.TemporaryDirectory(dir='/dev/shm') as name:
         name = Path(name)
 
         logger.info(f'Using temporary directory: {name!s}')
