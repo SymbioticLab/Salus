@@ -168,6 +168,8 @@ class WorkloadTemplate(object):
         try:
             w.run(outputfile)
             w.proc.wait()
+        except Exception as ex:
+            logger.exception(f'Got exception while running the experiment:')
         finally:
             if w.proc is not None and w.proc.poll() is None:
                 logger.warning(f'Killing workload that is not stopped yet: {w.canonical_name}')

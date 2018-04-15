@@ -177,8 +177,8 @@ class FathomRunner(Runner):
             'python', '-m', 'fathom.cli',
             '--workload', self.wl.name,
             '--action', 'train',
-            '--num_iters', self.wl.batch_num,
-            '--batch_size', self.wl.batch_size,
+            '--num_iters', str(self.wl.batch_num),
+            '--batch_size', str(self.wl.batch_size),
             '--dev', '/gpu:0',
         ]
         if executor == Executor.Salus:

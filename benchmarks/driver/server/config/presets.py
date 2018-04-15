@@ -38,7 +38,7 @@ def OpTracing(**kwargs):
 def Profiling(**kwargs):
     # type: (...) -> SalusConfig
     return SalusConfig(
-        build_type='Release',
+        build_type='OpTracing',
         logconf='perf',
         hide_output=False,
         extra_args=['--perflog', '/tmp/perf.output'],
@@ -49,7 +49,7 @@ def Profiling(**kwargs):
 def AllocProf(**kwargs):
     # type: (...) -> SalusConfig
     return SalusConfig(
-        build_type='Release',
+        build_type='OpTracing',
         logconf='alloc',
         hide_output=False
     ).update(**kwargs)

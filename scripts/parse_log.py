@@ -476,7 +476,10 @@ ptn_tf_node_done = re.compile(
 # NodeReady: 11 step 30 _retval_AssignAdd_0_0 = _Retval[T=DT_INT64, index=0, _device="/job:localhost/replica:0/task:0/device:CPU:0"](AssignAdd)
 ptn_tf_node_ready = re.compile(
     r"""NodeReady: (?P<nid>\d+) step (?P<step>[-\d]+) (?P<op>[\w/]+) = (?P<kernel>[^[]+).*""")
-
+# +12345, 0xabcde
+ptn_tf_alloc = re.compile(r"""^\+(?P<size>\d+), (?P<addr>.+)$""")
+# -, 0xabcde
+ptn_tf_dealloc = re.compile(r"""^-(?P<size>\d+), (?P<addr>.+)$""")
 
 def match_tf_content(content, entry):
     m = ptn_rpc_run.match(content)
@@ -598,6 +601,21 @@ def match_tf_content(content, entry):
             'step': int(m.group('step')),
             'op': m.group('op'),
             'kernel': m.group('kernel'),
+        }
+        
+    m = ptn_tf_alloc.match(content)
+    if m:
+        return {
+            'type': 'tf_alloc',
+            'size': int(m.group('size')),
+            'addr': m.group('addr')
+        }
+    
+    m = ptn_tf_dealloc.match(content)
+    if m:
+        return {
+            'type': 'tf_dealloc',
+            'addr': m.group('addr')
         }
 
     return {}

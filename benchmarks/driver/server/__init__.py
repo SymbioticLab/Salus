@@ -158,7 +158,7 @@ class SalusServer(object):
             with self.as_current():
                 yield
         except Exception as ex:
-            logger.error(f'Got exception while running the experiment: {ex!s}')
+            logger.error(f'Got exception while running the server: {ex!s}')
         finally:
             self.kill()
 
