@@ -48,6 +48,7 @@ public:
 
     // Estimate usage and cache the result
     virtual Resources estimatedUsage(const DeviceSpec &dev) = 0;
+    virtual bool hasExactEstimation(const DeviceSpec &dev) = 0;
 
     // All supported device types for this task
     using DeviceTypes =

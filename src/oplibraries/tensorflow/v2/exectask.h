@@ -58,6 +58,7 @@ public:
     }
 
     Resources estimatedUsage(const DeviceSpec &dev) override;
+    bool hasExactEstimation(const DeviceSpec &dev) override;
 
     DeviceTypes supportedDeviceTypes() const override;
 

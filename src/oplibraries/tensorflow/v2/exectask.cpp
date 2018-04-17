@@ -159,6 +159,12 @@ bool ExecTask::isAsync() const
 #endif // SALUS_ENABLE_MULTI_DEVICE
 }
 
+bool ExecTask::hasExactEstimation(const DeviceSpec &dev)
+{
+    auto usage = m_state->impl_->cachedUsageForNode(item, dev.type);
+    return bool(usage);
+}
+
 Resources ExecTask::estimatedUsage(const DeviceSpec &dev)
 {
     sstl::TimeoutWarning tw(1ms, [&](auto limit, auto dur){
@@ -169,7 +175,7 @@ Resources ExecTask::estimatedUsage(const DeviceSpec &dev)
     // First see if we have usage for this node in session
     // but only if we haven't failed before, otherwise,
     // the session cached usage maybe be just a lucky case
-    auto usage = m_state->impl_->cachedUsageForNode(tagged_node.node->name());
+    auto usage = m_state->impl_->cachedUsageForNode(item, dev.type);
     if (usage && failureTimes == 0) {
         return std::move(*usage);
     }
@@ -525,8 +531,8 @@ void ExecTask::afterRun(const tf::Status &s, const Callbacks &cbs)
     DCHECK(ditem.device);
     if (s.ok()) {
         // save succeed estimation
-        auto usage = ditem.device->peakResourceUsage();
-        m_state->impl_->saveSucceedUsageForNode(tagged_node.node->name(), usage);
+        m_state->impl_->saveSucceedUsageForNode(item, resourceContext().spec().type,
+                                                ditem.device->peakResourceUsage());
     }
     auto completed = m_state->NodeDone(s, tagged_node.node, ditem.device.get(), params.rendezvous, ready);
 

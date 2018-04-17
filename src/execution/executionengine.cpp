@@ -500,7 +500,7 @@ POpItem ExecutionEngine::submitTask(POpItem &&opItem)
                             << opItem->op;
                     return false;
                 }
-                if (!item->protectOOM) {
+                if (opItem->op->hasExactEstimation(opItem->op->resourceContext().spec()) && !item->protectOOM) {
                     VLOG(2) << "Pass through OOM failed task back to client: " << opItem->op;
                     return false;
                 }

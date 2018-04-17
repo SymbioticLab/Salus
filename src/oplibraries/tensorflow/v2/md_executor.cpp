@@ -163,6 +163,9 @@ tf::Status ExecutorImpl::Initialize()
         EnsureFrameInfo(it)->nodes = new std::vector<const tf::Node *>;
     }
 
+    // Initialize cached usages
+    cachedUsages_.resize(graph_->num_node_ids());
+
     VLOG(2) << "Created graph@" << as_hex(graph_) << " of graphHandle=" << params_.graphHandle
             << " for session " << params_.session;
     // Preprocess every node in the graph to create an instance of op
@@ -202,6 +205,7 @@ tf::Status ExecutorImpl::Initialize()
         frame_info->total_inputs += n->num_inputs();
 
         FillinSupportedDeviceSpecs(item);
+        cachedUsages_.at(id).reserve(item->supported_devices.size());
 
 #if !defined(SALUS_ENABLE_MULTI_DEVICE)
         {
@@ -1119,7 +1123,11 @@ void ExecutorState::DumpState()
             auto frame_lock = sstl::with_guard(frame_state->mu);
             for (IterationState *iteration : frame_state->iterations) {
                 VLOG(2) << "  Iteration:";
-                DumpIterationState(frame_state, iteration);
+                if (iteration) {
+                    DumpIterationState(frame_state, iteration);
+                } else {
+                    VLOG(2) << " nullptr";
+                }
             }
         }
         dumped_on_error_ = true;

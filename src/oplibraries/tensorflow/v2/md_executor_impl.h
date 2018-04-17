@@ -33,6 +33,7 @@
 #include "utils/threadutils.h"
 #include "utils/pointerutils.h"
 #include <boost/intrusive/list.hpp>
+#include <boost/container/flat_map.hpp>
 #include <optional>
 #include <mutex>
 #include <unordered_map>
@@ -84,18 +85,19 @@ private:
     void removeFromBufferTree(const Entry *entry, EntryVec *needUpdate);
     void updateBufferTree(Entry *entry, uint64_t ticket);
 
-    void saveSucceedUsageForNode(const std::string &name, const Resources &res)
+    void saveSucceedUsageForNode(const NodeItem &item, const DeviceType &dt, const Resources &res)
     {
         auto g = sstl::with_guard(usage_mu_);
-        if (!resources::contains(cachedUsages_[name], res)) {
-            cachedUsages_[name] = res;
+        auto &saved = cachedUsages_.at(item.node->id())[dt];
+        if (!resources::contains(saved, res)) {
+            saved = res;
         }
     }
 
-    std::optional<Resources> cachedUsageForNode(const std::string &name)
+    std::optional<Resources> cachedUsageForNode(const NodeItem &item, const DeviceType &dt)
     {
         auto g = sstl::with_guard(usage_mu_);
-        return sstl::optionalGet(cachedUsages_, name);
+        return sstl::optionalGet(cachedUsages_.at(item.node->id()), dt);
     }
 
     tf::Status LookupDevice(const DeviceSpec &spec, std::unique_ptr<ResourceContext> &&rctx, DeviceItem *item);
@@ -174,7 +176,7 @@ private:
     gtl::FlatMap<std::string, FrameInfo *> frame_info_;
 
     // Known succeed node resource usage
-    std::unordered_map<std::string, Resources> cachedUsages_;
+    std::vector<boost::container::flat_map<DeviceType, Resources>> cachedUsages_ GUARDED_BY(usage_mu_);
     std::mutex usage_mu_;
 
     TF_DISALLOW_COPY_AND_ASSIGN(ExecutorImpl);
