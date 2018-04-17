@@ -33,9 +33,12 @@ class ResourceGeometry(object):
         self.peakmem = None  # type: int
         self.persistmem = None  # type: int
 
-        for f in ResourceGeometry.__slots__[len(args):]:
+        for f, v in zip(ResourceGeometry.__slots__, args):
             if f not in kwargs:
-                kwargs[f] = None
+                kwargs[f] = v
+
+        for f, v in kwargs.items():
+            setattr(self, f, v)
 
     def __repr__(self):
         content = ', '.join([f'{f}={getattr(self, f)!r}' for f in ResourceGeometry.__slots__])
@@ -109,7 +112,7 @@ class WorkloadTemplate(object):
         """Return all known batch sizes under this template"""
         return self._batch_sizes
 
-    def avaiable_batch_nums(self, batch_size):
+    def available_batch_nums(self, batch_size):
         # type: (Union[int, str]) -> Iterable[int]
         """Return all known batch nums for a given batch_size under this template"""
         return unique(
@@ -218,6 +221,100 @@ class WorkloadTemplate(object):
                 count += 1
 
             logger.info(f'Loaded {count} records')
+
+    @classmethod
+    def load_jctcsv(cls, csvfile):
+        csvfile = Path(csvfile)
+        count = 0
+        with csvfile.open() as f:
+            logger.info(f'Loading extra JCT info from: {csvfile!s}')
+
+            if 'salus' in csvfile.name:
+                ex = Executor.Salus
+            elif 'baseline' in csvfile.name:
+                ex = Executor.TF
+            else:
+                ex = Executor.TF
+
+            reader = csv.DictReader(f)
+            for row in reader:
+                name, bs = row['Network'].split('_')
+                bs = try_with_default(int, bs, ValueError)(bs)
+
+                # first add batch_size if not present
+                wtl = cls.known_workloads[name]
+                wtl._batch_sizes.add(bs)
+
+                # 20iter
+                jct = try_with_default(float, None, ValueError)(row['20iter-jct'])
+                # update geometry of the rcfg
+                rcfg = RunConfig(bs, 20, None)
+                wtl.add_geometry(rcfg, ex, ResourceGeometry(jct, None, None))
+
+                # 1min
+                jct = try_with_default(float, None, ValueError)(row['1min-jct'])
+                bn = try_with_default(float, None, ValueError)(row['1min-num'])
+                bn = int(bn)
+                # update geometry of the rcfg
+                rcfg = RunConfig(bs, bn, None)
+                wtl.add_geometry(rcfg, ex, ResourceGeometry(jct, None, None))
+
+                # 5min
+                jct = try_with_default(float, None, ValueError)(row['5min-jct'])
+                bn = try_with_default(float, None, ValueError)(row['5min-num'])
+                bn = int(bn)
+                # update geometry of the rcfg
+                rcfg = RunConfig(bs, bn, None)
+                wtl.add_geometry(rcfg, ex, ResourceGeometry(jct, None, None))
+
+                # 10min
+                jct = try_with_default(float, None, ValueError)(row['10min-jct'])
+                bn = try_with_default(float, None, ValueError)(row['10min-num'])
+                bn = int(bn)
+                # update geometry of the rcfg
+                rcfg = RunConfig(bs, bn, None)
+                wtl.add_geometry(rcfg, ex, ResourceGeometry(jct, None, None))
+
+                count += 1
+        logger.info(f'Loaded {count} records')
+
+    @classmethod
+    def load_memcsv(cls, csvfile):
+        csvfile = Path(csvfile)
+        count = 0
+        with csvfile.open() as f:
+            logger.info(f'Loading extra mem info from: {csvfile!s}')
+
+            if 'salus' in csvfile.name:
+                ex = Executor.Salus
+            elif 'baseline' in csvfile.name:
+                ex = Executor.TF
+            else:
+                ex = Executor.TF
+
+            MB = 1024 * 1024
+            reader = csv.DictReader(f)
+            for row in reader:
+                name, bs = row['Network'].split('_')
+                bs = try_with_default(int, bs, ValueError)(bs)
+
+                peakmem = try_with_default(float, None, ValueError)(row['Peak'])
+                if peakmem is not None:
+                    peakmem = peakmem * MB
+                persistmem = try_with_default(float, None, ValueError)(row['Persistent Mem (MB)']) * MB
+                if persistmem is not None:
+                    persistmem = persistmem * MB
+
+                wtl = cls.known_workloads[name]
+                # first add batch_size if not present
+                wtl._batch_sizes.add(bs)
+                # for all batch num
+                for bn in wtl.available_batch_nums(bs):
+                    # update geometry of the rcfg
+                    rcfg = RunConfig(bs, bn, None)
+                    wtl.add_geometry(rcfg, ex, ResourceGeometry(None, peakmem, persistmem))
+                count += 1
+        logger.info(f'Loaded {count} records')
 
 
 # An alias

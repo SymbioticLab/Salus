@@ -103,6 +103,10 @@ def only_step(steps, idx):
         idx = len(ss) - 1
     return steps[steps.step == ss[idx]]
 
+def only_steps(steps, idxs):
+    ss = steps.step.sort_values().unique().tolist()
+    return steps[steps.step.isin([ss[idx] for idx in idxs])]
+
 
 def unify_names(*dfs):
     # make sure names map to same idx
@@ -228,13 +232,44 @@ def draw_lines(ax, step, checkpoints, colors=['g', 'y', 'r'], offset=None,
         ax.set_yticklabels(step.name)
     return ax, offset
 
+def draw_lines2(ax, step, checkpoints, colors=['g', 'y', 'r'], offset=None,
+               labels=None, set_y=True, sort=False):
+    """
+    step is a pd.DataFrame contains a:
+        timestamp, op, kernel, task_ready, task_start, task_done
+    """
+    # sort first
+    if sort:
+        step = unify_names(step.sort_values(by=checkpoints))
+    # with offset subtracted
+    if offset is None:
+        offset = step[checkpoints].min().min()
+    columns = [step[col] - offset for col in checkpoints]
+    
+    if labels is None:
+        labels = [''] * len(colors)
+    for st, ed, c, l in zip(columns, columns[1:], colors, labels):
+        ax.hlines(y=step.nameid, xmin=st, xmax=ed, color=c, label=l)
+    
+    # put name on yaxis
+    if set_y:
+        ax.set_yticks(step.nameid)
+        ax.set_yticklabels(step.name)
+    return ax, offset
 
-def draw_compute_tf(ax, steps):
-    pass
+def draw_tf(ax, df, **kwargs):
+    draw_lines(axs[0], df, tf_events, colors=['g', 'r'], **kwargs)
 
+def draw_salus(ax, df, **kwargs):
+    return draw_lines2(ax, df, salus_events,
+           colors=plt.rcParams['axes.prop_cycle'].by_key()['color'],
+           labels=['Queuing', 'Prealloc', 'TPWait', 'DevCtx',
+                   'PrepInput', 'Compute', 'ClrInput',
+                   'PropOut', 'Misc'],
+           **kwargs)
 
 sns.set_style("dark")
-plt.ioff()
+#plt.ioff()
 #%%
 #
 # Set paths

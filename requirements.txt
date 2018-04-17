@@ -1,7 +1,6 @@
-tensorflow
 psutil
 absl-py
-numpy==1.14.0
+numpy
 green==2.11.0
 parameterized==0.6.1
 future

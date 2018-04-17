@@ -81,6 +81,7 @@ def do_mem(logdir, network, batch_size):
                 break
         else:
             scfg = maybe_forced_preset(presets.AllocProf)
+            scfg.logconf = "memop"
             scfg.output_dir = outputdir
             server = SalusServer(scfg)
             with server.run():

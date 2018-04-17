@@ -19,7 +19,7 @@ def main(argv):
 
     # Firstly run concurrently on salus
     run_seq(scfg.copy(output_dir=FLAGS.save_dir / "conc"),
-            WTL.create("vgg11", 25, 405),
+            WTL.create("resnet50", 25, 271),
             WTL.create("alexnet", 25, 2307),
             )
     return

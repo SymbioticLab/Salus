@@ -36,6 +36,8 @@ def main(argv):
     wl = create_wl(Executor.Salus)
     run_seq(scfg.copy(output_dir=FLAGS.save_dir / "salus" / '1'), wl)
 
+    return
+
     # Run 2 on Salus
     run_seq(scfg.copy(output_dir=FLAGS.save_dir / "salus" / '2'),
             create_wl(Executor.Salus),

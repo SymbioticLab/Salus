@@ -52,7 +52,8 @@ class HelpfullFlag(flags.BooleanFlag):
 
 flags.DEFINE_string('save_dir', 'scripts/templogs', 'Output direcotry')
 flags.DEFINE_boolean('clear_save', False, 'Remove anything previously in the output directory')
-flags.DEFINE_string('extra_wl', None, 'Path to the CSV containing extra workload info')
+flags.DEFINE_multi_string('extra_wl', [], 'Path to the CSV containing extra workload info')
+flags.DEFINE_multi_string('extra_mem', [], 'Path to the CSV containing extra mem info')
 flags.DEFINE_string('force_preset', None, 'Force to use specific server config preset')
 flags.DEFINE_flag(HelpFlag())
 flags.DEFINE_flag(HelpfullFlag())
@@ -148,8 +149,11 @@ def main():
     progname, argv = parse_flags_with_usage(argv)
 
     # process any variables and sanity check
-    if FLAGS.extra_wl is not None:
-        WorkloadTemplate.load_extra(FLAGS.extra_wl)
+    for wl in FLAGS.extra_wl:
+        WorkloadTemplate.load_jctcsv(wl)
+
+    for mem in FLAGS.extra_mem:
+        WorkloadTemplate.load_memcsv(mem)
 
     save_dir = (Path(FLAGS.save_dir) / exp).resolve(strict=False)
     if save_dir.is_dir() and FLAGS.clear_save:

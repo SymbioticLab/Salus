@@ -57,20 +57,37 @@ def load_tfmem(path):
 #dfv = load_mem('/tmp/workspace/vgg.csv')
 #%%
 
-def plot_cs(cs):
-    ax = cs.plot()
+def plot_cs(cs, **kwargs):
+    ax = cs.plot(**kwargs)
     return ax
 
 
-def plot_df(df, marker=False):
+def plot_df(df, marker=False, offset=None, **kwargs):
     cs = df.set_index('timestamp')
-    cs.index = (cs.index - cs.index[0]) / pd.Timedelta(microseconds=1)
+    if marker:
+        if offset is None:
+            offset = cs.index[0]
+        cs.index = (cs.index - offset) / pd.Timedelta(microseconds=1)
+    elif offset is not None:
+        cs.index = (cs.index - offset) / pd.Timedelta(microseconds=1)
+        
     cs['act'] = cs.act.cumsum() / 1024 / 1024
-    ax = plot_cs(cs.act)
+    ax = plot_cs(cs.act, **kwargs)
     if marker:
         css = cs.reset_index()
         ax = css.plot(kind='scatter', x='timestamp', y='act', c='type', cmap=plt.cm.get_cmap('bwr'), ax=ax)
     return ax
+
+def plot_df_withop(df, offset, **kwargs):
+    # columns as unix timestamp in us
+    df['timestamp'] = df.timestamp.astype(np.int64)
+    # with offset subtracted
+    if offset is None:
+        offset = np.min(df.timestamp)
+    df['timestamp'] = df.timestamp - offset
+    df = df.set_index('timestamp')
+    df['act'] = df.act.cumsum() / 1024 / 1024
+    return plot_cs(df.act, **kwargs)
     
 #plot_df(dfa)
 #plot_df(dfv)
@@ -82,7 +99,7 @@ def find_minmax(df, plot=False):
     ma = cs.max()
     
     # start from first non zero
-    cspartial = cs[cs > 1]
+    cspartial = cs[cs > (ma * 0.05)]
     # duration
     dur = cspartial.index[-1] - cspartial.index[0]
     
@@ -96,6 +113,8 @@ def find_minmax(df, plot=False):
     ax = None
     if plot:
         ax = plot_cs(cspartial)
+    else:
+        ax = cspartial
     
     # find min (persistant mem)
     persist = cspartial.min()
@@ -114,17 +133,24 @@ def find_minmax(df, plot=False):
 from pathlib import Path
 import multiprocessing as mp
 
-def process_mem(item):
+def process_mem(item, loader=load_tfmem):
     print(f"{item.name}: Loading log file")
-    df = load_tfmem(str(item / 'alloc.output'))
+    df = loader(str(item / 'alloc.output'))
     print(f"{item.name}: figure")
-    plt.figure()
-    ma, persist, avg, ax = find_minmax(df, plot=True)
-    ax.set_title(item.name)
+    ma, persist, avg, cspartial = find_minmax(df, plot=False)
     print(f"{item.name}: found")
-    return (item.name, persist, ma, avg, ma - persist)
+    return (item.name, persist, ma, avg, ma - persist, cspartial)
 
-data = [process_mem(item) for item in Path('logs/mem/tf').iterdir()]
+with mp.Pool() as pool:
+    data = pool.map(process_mem, Path('logs/mem/tf').iterdir())
+    
+for n, p, m, a, _, csp in data:
+    plt.figure()
+    ax = plot_cs(csp)
+    ax.set_title(n)
+data = [x[:-1] for x in data]
+
+#data = [process_mem(item) for item in Path('logs/mem/tf').iterdir()]
 data = pd.DataFrame(data, columns=['Network',
                              'Persistent Mem (MB)',
                              'Peak Mem (MB)',
@@ -133,15 +159,18 @@ data = pd.DataFrame(data, columns=['Network',
 data.to_csv('/tmp/workspace/mem.csv', index=False)
 
 #%%
-if False:
-    datasalus = []
-    for item in Path('logs/mem/salus').iterdir():
-        df = load_mem(str(item / 'alloc.output'))
-        ma, persist, avg, ax = find_minmax(df)
-        datasalus.append((item.name, persist, ma, avg, ma - persist))
-    datasalus = pd.DataFrame(datasalus, columns=['Network',
-                                 'Persistent Mem (MB)',
-                                 'Peak Mem (MB)',
-                                 'Average',
-                                 'Peak'])
-    datasalus.to_csv('/tmp/workspace/mem-salus.csv', index=False)
+import functools
+with mp.Pool() as pool:
+    datasalus = pool.map(functools.partial(process_mem, loader=load_mem),
+                         Path('logs/mem/salus').iterdir())
+for n, p, m, a, _, csp in datasalus:
+    plt.figure()
+    ax = plot_cs(csp)
+    ax.set_title(n)
+datasalus = [x[:-1] for x in datasalus]
+datasalus = pd.DataFrame(datasalus, columns=['Network',
+                             'Persistent Mem (MB)',
+                             'Peak Mem (MB)',
+                             'Average',
+                             'Peak'])
+datasalus.to_csv('/tmp/workspace/mem-salus.csv', index=False)
