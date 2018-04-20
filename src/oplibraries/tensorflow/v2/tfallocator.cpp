@@ -117,9 +117,6 @@ void *PerOpAllocator::AllocateRaw(size_t alignment, size_t num_bytes)
         if (!ptr) {
             scope.rollback();
         }
-    } else {
-        // No enough memory
-        LogAlloc() << "TFAllocator failed to allocate.";
     }
 
     checkMemory(ptr, num_bytes);
@@ -155,9 +152,6 @@ void *PerOpAllocator::AllocateRaw(size_t alignment, size_t num_bytes,
         if (!ptr) {
             scope.rollback();
         }
-    } else {
-        // No enough memory
-        LogAlloc() << "TFAllocator failed to allocate.";
     }
 
     checkMemory(ptr, num_bytes);
@@ -220,11 +214,13 @@ bool PerOpAllocator::ShouldAllocateEmptyTensors()
 
 void PerOpAllocator::recordSize(void *ptr, size_t size)
 {
-    if (!ptr) {
-        return;
-    }
     auto g = sstl::with_guard(m_mu);
     m_lastFailedAllocSize = size;
+    if (!ptr) {
+        // No enough memory
+        LOG(WARNING) << "TFAllocator failed to allocate.";
+        return;
+    }
     m_allocated[ptr] = size;
     m_currentAlloc += size;
     m_peakAllocSize = std::max(m_currentAlloc, m_peakAllocSize);

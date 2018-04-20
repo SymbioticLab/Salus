@@ -175,7 +175,9 @@ void TaskExecutor::scheduleLoop()
         // - move from front end queue to backing storage
         // - reset lastScheduled
         size_t totalRemainingCount = 0;
-        bool enableOOMProtect = m_sessions.size() > 1;
+
+        // since iteration based execution, we can enable this
+        const bool enableOOMProtect = true;
         for (auto &item : m_sessions) {
             {
                 auto g = sstl::with_guard(item->mu);
