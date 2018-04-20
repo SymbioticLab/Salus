@@ -20,144 +20,30 @@
 #ifndef SALUS_EXEC_EXECUTIONENGINE_H
 #define SALUS_EXEC_EXECUTIONENGINE_H
 
-#include "devices.h"
-
-#include "execution/resources.h"
+#include "execution/devices.h"
+#include "execution/engine/taskexecutor.h"
+#include "resources/resources.h"
+#include "execution/scheduler/schedulingparam.h"
 #include "execution/threadpool/threadpool.h"
 #include "platform/logging.h"
 #include "utils/containerutils.h"
 #include "utils/pointerutils.h"
 #include "utils/threadutils.h"
 
+#include <concurrentqueue.h>
+
 #include <atomic>
 #include <chrono>
 #include <future>
 #include <list>
 #include <memory>
-#include <type_traits>
 #include <unordered_map>
 #include <unordered_set>
 
 namespace salus {
-class OperationTask;
-} // namespace salus
-class ResourceContext;
-struct SessionItem;
-struct OperationItem;
+class IterationTask;
+class ExecutionContext;
 
-struct SchedulingParam
-{
-    /**
-     * Maximum head-of-line waiting tasks allowed before refuse to schedule
-     * later tasks in the same queue.
-     */
-    uint64_t maxHolWaiting = 50;
-    /**
-     * Whether to be work conservative. This has no effect when using scheduler 'pack'
-     */
-    bool workConservative = true;
-    /**
-     * The scheduler to use
-     */
-    std::string scheduler = "fair";
-};
-
-struct ExecutionCallbacks
-{
-    std::function<size_t(uint64_t, std::unique_ptr<ResourceContext> &&)> volunteer;
-
-    operator bool() const // NOLINT(google-explicit-constructor)
-    {
-        return volunteer != nullptr;
-    }
-};
-
-using PSessionItem = std::shared_ptr<SessionItem>;
-using POpItem = std::shared_ptr<OperationItem>;
-class BaseScheduler;
-class ExecutionEngine;
-
-/**
- * @todo write docs
- */
-class ExecutionContext
-{
-    struct Data
-    {
-
-        Data(PSessionItem &&item, uint64_t resOffer, ExecutionEngine &engine)
-            : item(std::forward<PSessionItem>(item))
-            , resOffer(resOffer)
-            , engine(engine)
-        {
-        }
-
-        ~Data();
-
-        /**
-         * @brief remove from engine and give up our reference of session item
-         */
-        void removeFromEngine();
-        void insertIntoEngine();
-        void enqueueOperation(std::unique_ptr<salus::OperationTask> &&task);
-
-        /**
-         * @brief Make a resource context that first allocate from session's resources
-         * @param spec
-         * @param res
-         * @param missing
-         * @return
-         */
-        std::unique_ptr<ResourceContext> makeResourceContext(const salus::DeviceSpec &spec,
-                                                             const Resources &res,
-                                                             Resources *missing = nullptr);
-
-        PSessionItem item;
-        uint64_t resOffer;
-
-    private:
-        ExecutionEngine &engine;
-    };
-
-    friend class ExecutionEngine;
-    std::shared_ptr<Data> m_data;
-
-public:
-    ExecutionContext() = default;
-    ExecutionContext(PSessionItem item, uint64_t resOffer, ExecutionEngine &engine)
-        : m_data(std::make_shared<Data>(std::move(item), resOffer, engine))
-    {
-    }
-
-    ExecutionContext(const ExecutionContext &) = default;
-    ExecutionContext(ExecutionContext &&) = default;
-    ExecutionContext &operator=(const ExecutionContext &) = default;
-    ExecutionContext &operator=(ExecutionContext &&) = default;
-
-    operator bool() const
-    {
-        return m_data != nullptr;
-    }
-
-    void acceptOffer(const std::string &sessHandle);
-
-    std::optional<ResourceMap> offeredSessionResource() const;
-
-    void enqueueOperation(std::unique_ptr<salus::OperationTask> &&task);
-
-    void registerPagingCallbacks(ExecutionCallbacks &&pcb);
-
-    void setInterruptCallback(std::function<void()> cb);
-
-    void deleteSession(std::function<void()> cb);
-
-    std::unique_ptr<ResourceContext> makeResourceContext(const salus::DeviceSpec &spec, const Resources &res,
-                                                         Resources *missing = nullptr);
-};
-
-/**
- * @brief
- */
 class ExecutionEngine
 {
 
@@ -165,8 +51,6 @@ public:
     static ExecutionEngine &instance();
 
     ~ExecutionEngine();
-
-    ExecutionContext createSessionOffer(ResourceMap rm);
 
     void startScheduler();
     void stopScheduler();
@@ -176,189 +60,107 @@ public:
         return m_pool;
     }
 
-    void setSchedulingParam(const SchedulingParam &param)
+    void setSchedulingParam(const salus::SchedulingParam &param)
     {
         m_schedParam = param;
     }
 
-    const SchedulingParam &schedulingParam() const
+    const salus::SchedulingParam &schedulingParam() const
     {
         return m_schedParam;
     }
 
+    std::shared_ptr<ExecutionContext> makeContext();
+
 private:
-    ExecutionEngine() = default;
+    friend class ExecutionContext;
+
+    ExecutionEngine();
 
     // scheduler parameters
-    SchedulingParam m_schedParam;
+    salus::SchedulingParam m_schedParam;
 
-    std::atomic<bool> m_interrupting{false};
-    std::atomic<bool> m_shouldExit{false};
+    ThreadPool m_pool;
+
+    ResourceMonitor m_resMonitor;
+    AllocationRegulator m_allocReg;
+
+    // Task executor
+    salus::TaskExecutor m_taskExecutor;
+
+    // Iteration scheduling
+    std::mutex m_mu;
+
+    struct IterationItem
+    {
+        std::weak_ptr<ExecutionContext> wectx;
+        std::unique_ptr<IterationTask> iter;
+    };
+    using IterQueue = std::list<IterationItem>;
+    IterQueue m_iterQueue GUARDED_BY(m_mu);
+    void scheduleIteration(IterationItem &&item);
+
     std::unique_ptr<std::thread> m_schedThread;
+    std::atomic<bool> m_interrupting{false};
+    sstl::notification m_note_has_work;
+
     void scheduleLoop();
     bool maybeWaitForAWhile(size_t scheduled);
-
-    // Task life cycle
-    friend class BaseScheduler;
-    std::unique_ptr<ResourceContext> makeResourceContext(PSessionItem sess, const salus::DeviceSpec &spec,
-                                                         const Resources &res, Resources *missing = nullptr);
-
-    POpItem submitTask(POpItem &&opItem);
-    void taskStopped(OperationItem &opItem, bool failed);
-    void taskRunning(OperationItem &opItem);
-
-    // Bookkeeping
-    ResourceMonitor m_resMonitor;
-    std::atomic_int_fast64_t m_runningTasks{0};
-    std::atomic_int_fast64_t m_noPagingRunningTasks{0};
-
-    /**
-     * @brief Do paging on device 'spec'
-     * @param spec
-     * @param target page out to device 'target'
-     * @return
-     */
-    bool doPaging(const salus::DeviceSpec &spec, const salus::DeviceSpec &target);
-
-    // Incoming kernels
-    void pushToSessionQueue(POpItem &&opItem);
-
-    friend class ResourceContext;
-
-    std::list<PSessionItem> m_newSessions;
-    std::mutex m_newMu;
-
-    std::unordered_set<PSessionItem> m_deletedSessions;
-    std::mutex m_delMu;
-
-    sstl::notification m_note_has_work;
-    // Use a minimal linked list because the only operation we need is
-    // iterate through the whole list, insert at end, and delete.
-    // Insert and delete rarely happens, and delete is handled in the same thread
-    // as iteration.
-    std::list<PSessionItem> m_sessions;
-
-    friend struct ExecutionContext::Data;
-    void insertSession(PSessionItem item);
-    void deleteSession(PSessionItem item);
-
-    // Backend thread pool
-    ThreadPool m_pool;
 };
 
-class ResourceContext
+/**
+ * @todo write docs
+ */
+class ExecutionContext : public std::enable_shared_from_this<ExecutionContext>
 {
-    ResourceMonitor &resMon;
-    salus::DeviceSpec m_spec;
+    ExecutionEngine &m_engine;
 
-    uint64_t m_ticket;
-    PSessionItem session;
-    bool hasStaging;
+    friend class ExecutionEngine;
+
+    /**
+     * @brief remove from engine and give up our reference of session item
+     */
+    void removeFromEngine();
 
 public:
-    const salus::DeviceSpec &spec() const
-    {
-        return m_spec;
-    }
-    uint64_t ticket() const
-    {
-        return m_ticket;
-    }
 
-    bool isGood() const
+    AllocationRegulator::Ticket m_ticket;
+    PSessionItem m_item;
+
+    explicit ExecutionContext(ExecutionEngine &engine, AllocationRegulator::Ticket ticket, PSessionItem item)
+        : m_engine(engine)
+        , m_ticket(ticket)
+        , m_item(std::move(item))
     {
-        return hasStaging;
     }
 
-    /**
-     * @brief Construct a new resource context with a different spec
-     * @param other
-     * @param spec
-     */
-    ResourceContext(const ResourceContext &other, const salus::DeviceSpec &spec);
+    ~ExecutionContext()
+    {
+        removeFromEngine();
+    }
+
+    void scheduleIteartion(std::unique_ptr<IterationTask> &&iterTask);
+
+    void registerPagingCallbacks(PagingCallbacks &&pcb);
+    void setInterruptCallback(std::function<void()> cb);
+
+    void setSessionHandle(const std::string &h);
 
     /**
-     * @brief Construct a resource context
-     * @param item
-     * @param resMon
-     */
-    ResourceContext(PSessionItem item, ResourceMonitor &resMon);
-    ~ResourceContext();
-
-    /**
-     * @brief Initialize staging
+     * @brief Make a resource context that first allocate from session's resources
      * @param spec
      * @param res
      * @param missing
      * @return
      */
-    bool initializeStaging(const salus::DeviceSpec &spec, const Resources &res, Resources *missing);
-    void releaseStaging();
+    std::unique_ptr<ResourceContext> makeResourceContext(const std::string &graphId,
+                                                         const DeviceSpec &spec,
+                                                         const Resources &res,
+                                                         Resources *missing = nullptr);
 
-    struct OperationScope
-    {
-        explicit OperationScope(const ResourceContext &context, ResourceMonitor::LockedProxy &&proxy)
-            : valid(false)
-            , proxy(std::move(proxy))
-            , res()
-            , context(context)
-        {
-        }
-
-        OperationScope(OperationScope &&scope) noexcept
-            : valid(scope.valid)
-            , proxy(std::move(scope.proxy))
-            , res(std::move(scope.res))
-            , context(scope.context)
-        {
-            scope.valid = false;
-        }
-
-        ~OperationScope()
-        {
-            commit();
-        }
-
-        operator bool() const
-        {
-            return valid;
-        }
-
-        void rollback();
-
-        const Resources &resources() const
-        {
-            return res;
-        }
-
-    private:
-        void commit();
-
-        friend class ResourceContext;
-
-        bool valid;
-        ResourceMonitor::LockedProxy proxy;
-        Resources res;
-        const ResourceContext &context;
-    };
-
-    /**
-     * @brief Allocate all resource of type `type' in staging area
-     * @param type
-     * @return
-     */
-    OperationScope alloc(ResourceType type) const;
-
-    OperationScope alloc(ResourceType type, size_t num) const;
-
-    void dealloc(ResourceType type, size_t num) const;
-
-    /**
-     * @brief Called by PerOpAllocator when no allocation is hold by the ticket
-     *
-     */
-    void removeTicketFromSession() const;
+    void finish(std::function<void()> cb);
 };
-std::ostream &operator<<(std::ostream &os, const ResourceContext &c);
+
+} // namespace salus
 
 #endif // SALUS_EXEC_EXECUTIONENGINE_H

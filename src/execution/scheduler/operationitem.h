@@ -36,9 +36,6 @@ struct OperationItem
     {
         return reinterpret_cast<size_t>(this);
     }
-
-private:
-    friend class ExecutionEngine;
 };
 using POpItem = std::shared_ptr<OperationItem>;
 

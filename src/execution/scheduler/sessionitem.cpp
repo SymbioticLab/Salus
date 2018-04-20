@@ -17,30 +17,19 @@
  */
 
 #include "sessionitem.h"
-#include "utils/pointerutils.h"
+
+using namespace salus;
 
 SessionItem::~SessionItem()
 {
     bgQueue.clear();
     queue.clear();
 
-    std::function<void()> cb;
-    {
-        auto g = sstl::with_guard(mu);
-        cb = std::move(cleanupCb);
-    }
-    if (cb) {
-        cb();
-        // reset cb to release anything that may depend on this
-        // before going out of destructor.
-        cb = nullptr;
-    }
-
     // output stats
     VLOG(2) << "Stats for Session " << sessHandle << ": totalExecutedOp=" << totalExecutedOp;
 }
 
-void SessionItem::setPagingCallbacks(ExecutionCallbacks pcb)
+void SessionItem::setPagingCallbacks(PagingCallbacks pcb)
 {
     auto g = sstl::with_guard(mu);
     pagingCb = std::move(pcb);
@@ -61,12 +50,6 @@ void SessionItem::prepareDelete(std::function<void()> cb)
     pagingCb = {};
 }
 
-void SessionItem::notifyMemoryAllocation(uint64_t ticket)
-{
-    auto g = sstl::with_guard(tickets_mu);
-    tickets.emplace(ticket);
-}
-
 void SessionItem::interrupt()
 {
     if (forceEvicted) {
@@ -77,14 +60,64 @@ void SessionItem::interrupt()
     std::function<void()> cb;
     {
         auto g = sstl::with_guard(mu);
-        cb = interruptCb;
+        cb = std::move(interruptCb);
     }
-    cb();
+    if (cb) cb();
 }
 
-void SessionItem::removeMemoryAllocationTicket(uint64_t ticket)
+void SessionItem::queueTask(POpItem &&opItem)
 {
-    VLOG(2) << "Removing ticket " << ticket << " from session " << sessHandle;
-    auto g = sstl::with_guard(tickets_mu);
-    tickets.erase(ticket);
+    auto g = sstl::with_guard(mu);
+    queue.emplace_back(std::move(opItem));
+}
+
+void SessionItem::notifyAlloc(const std::string &graphId, uint64_t ticket, const ResourceTag &tag, size_t num)
+{
+    resourceUsage(tag) += num;
+
+    {
+        auto g = sstl::with_guard(tickets_mu);
+        tickets.emplace(ticket);
+    }
+
+    updateTracker(graphId, tag);
+}
+
+void SessionItem::notifyDealloc(const std::string &graphId, uint64_t ticket, const ResourceTag &tag, size_t num, bool last)
+{
+    resourceUsage(tag) -= num;
+    if (last) {
+        VLOG(2) << "Removing ticket " << ticket << " from session " << sessHandle;
+        auto g = sstl::with_guard(tickets_mu);
+        tickets.erase(ticket);
+    }
+
+    updateTracker(graphId, tag);
+}
+
+void SessionItem::updateTracker(const std::string &graphId, const ResourceTag &tag)
+{
+    if (tag == trackerTag) {
+        VLOG(2) << "SessionItem::updateTracker graphid=" << graphId;
+        auto g = sstl::with_guard(mu);
+        auto it = allocTrackers.find(graphId);
+        if (it != allocTrackers.end()) {
+            it->second.update(resourceUsage(tag));
+        }
+    }
+}
+
+bool SessionItem::beginIteration(AllocationRegulator::Ticket t, ResStats newRm, const std::string &name)
+{
+    VLOG(2) << "SessionItem::beginIteration graphid=" << name;
+    auto g = sstl::with_guard(mu);
+    auto it = allocTrackers.try_emplace(name, trackerTag).first;
+    return it->second.beginIter(t, newRm);
+}
+
+void SessionItem::endIteration(const std::string &graphId)
+{
+    VLOG(2) << "SessionItem::endIteration graphid=" << graphId;
+    auto g = sstl::with_guard(mu);
+    allocTrackers.at(graphId).endIter();
 }

@@ -4,7 +4,7 @@
 
 #include "oplibraries/tensorflow/tensorflow_headers.h"
 #include "oplibraries/tensorflow/device/gpu.h"
-#include "execution/executionengine.h"
+#include "execution/engine/resourcecontext.h"
 #include "utils/threadutils.h"
 
 #include <utility>

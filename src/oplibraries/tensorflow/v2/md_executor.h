@@ -66,7 +66,9 @@ struct MultiDeviceExecutorParams
     // Graph handle
     std::string graphHandle;
 
-    ExecutionContext ins;
+    std::shared_ptr<ExecutionContext> ins;
+
+    ResStats rm;
 
     // The devices this executor should use.
     tf::DeviceMgr &deviceMgr;

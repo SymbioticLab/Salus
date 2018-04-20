@@ -20,7 +20,7 @@
 #include "rpcservercore.h"
 
 #include "execution/executionengine.h"
-#include "memorymgr/memorymgr.h"
+#include "resources/memorymgr.h"
 #include "oplibraries/ioplibrary.h"
 #include "platform/logging.h"
 #include "utils/macros.h"

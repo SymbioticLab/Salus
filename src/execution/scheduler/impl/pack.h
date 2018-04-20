@@ -29,7 +29,7 @@
 class PackScheduler : public BaseScheduler
 {
 public:
-    explicit PackScheduler(ExecutionEngine &engine);
+    explicit PackScheduler(salus::TaskExecutor &engine);
     ~PackScheduler() override;
 
     std::string name() const override;

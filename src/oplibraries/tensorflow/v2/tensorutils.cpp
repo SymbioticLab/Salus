@@ -25,7 +25,7 @@
 
 #include "tensorutils.h"
 
-#include "execution/executionengine.h"
+#include "execution/engine/resourcecontext.h"
 #include "oplibraries/tensorflow/device/salusdevices.h"
 
 namespace salus::oplib::tensorflow {

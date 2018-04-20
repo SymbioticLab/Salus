@@ -37,6 +37,7 @@ using std::chrono::system_clock;
 using FpSeconds = std::chrono::duration<double, seconds::period>;
 using namespace std::chrono_literals;
 using namespace date;
+using namespace salus;
 
 namespace {
 SchedulerRegistary::Register reg("fair", [](auto &engine) {
@@ -45,7 +46,7 @@ SchedulerRegistary::Register reg("fair", [](auto &engine) {
 
 } // namespace
 
-FairScheduler::FairScheduler(ExecutionEngine &engine) : BaseScheduler(engine) {}
+FairScheduler::FairScheduler(TaskExecutor &engine) : BaseScheduler(engine) {}
 
 FairScheduler::~FairScheduler() = default;
 
@@ -109,7 +110,7 @@ std::pair<size_t, bool> FairScheduler::maybeScheduleFrom(PSessionItem item)
 
 std::pair<size_t, bool> FairScheduler::reportScheduleResult(size_t scheduled) const
 {
-    static auto workConservative = m_engine.schedulingParam().workConservative;
+    static auto workConservative = m_taskExec.schedulingParam().workConservative;
     // make sure the first session (with least progress) is
     // get scheduled solely, thus can keep up, without other
     // sessions interfere

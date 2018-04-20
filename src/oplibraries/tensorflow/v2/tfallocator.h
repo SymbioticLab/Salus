@@ -26,13 +26,16 @@
  * with ours.
  */
 #include "oplibraries/tensorflow/tensorflow_headers.h"
-#include "execution/resources.h"
+
+#include "resources/resources.h"
 #include "utils/threadutils.h"
+
 #include <memory>
 
+namespace salus {
 class ResourceContext;
 
-namespace salus::oplib::tensorflow {
+namespace oplib::tensorflow {
 class PerOpAllocator : public tf::Allocator, public tf::core::RefCounted
 {
 public:
@@ -97,6 +100,7 @@ private:
     size_t m_currentAlloc = 0 GUARDED_BY(m_mu);
 };
 
-} // namespace salus::oplib::tensorflow
+} // namespace oplib::tensorflow
+} // namespace salus
 
 #endif // TFALLOCATOR_H

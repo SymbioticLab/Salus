@@ -24,10 +24,9 @@
  */
 #include "oplibraries/tensorflow/tensorflow_headers.h"
 
-#include "tfallocator.h"
+#include "oplibraries/tensorflow/v2/tfallocator.h"
 
-#include "execution/executionengine.h"
-#include "memorymgr/memorymgr.h"
+#include "execution/engine/resourcecontext.h"
 #include "platform/logging.h"
 #include "utils/macros.h"
 #include "utils/stringutils.h"
@@ -109,9 +108,8 @@ std::string PerOpAllocator::Name()
 
 void *PerOpAllocator::AllocateRaw(size_t alignment, size_t num_bytes)
 {
-    LogAlloc() << "TFAllocator allocating " << num_bytes << " bytes of memory with alignment "
-                    << alignment << " using allocator " << nameOrNull(m_actualAlloc) << "@"
-                    << as_hex(m_actualAlloc);
+    LogAlloc() << "TFAllocator allocating " << num_bytes << " bytes of memory with alignment " << alignment
+               << " using allocator " << nameOrNull(m_actualAlloc) << "@" << as_hex(m_actualAlloc);
 
     void *ptr = nullptr;
     if (auto scope = m_rctx->alloc(ResourceType::MEMORY, num_bytes)) {
@@ -134,8 +132,8 @@ void *PerOpAllocator::AllocateRaw(size_t alignment, size_t num_bytes)
     Ref();
 
     LogAlloc() << "TFAllocator allocated " << num_bytes << " bytes of memory at " << as_hex(ptr)
-                   << " with alignment " << alignment << " using allocator " << nameOrNull(m_actualAlloc)
-                   << "@" << as_hex(m_actualAlloc) << " with " << *m_rctx;
+               << " with alignment " << alignment << " using allocator " << nameOrNull(m_actualAlloc) << "@"
+               << as_hex(m_actualAlloc) << " with " << *m_rctx;
 
     return ptr;
 }
@@ -148,8 +146,8 @@ void *PerOpAllocator::AllocateRaw(size_t alignment, size_t num_bytes,
     attr.no_retry_on_failure = true;
 
     LogAlloc() << "TFAllocator allocating attributes " << attr << " of " << num_bytes
-                    << " bytes of memory with alignment " << alignment << " using allocator "
-                    << nameOrNull(m_actualAlloc) << "@" << as_hex(m_actualAlloc);
+               << " bytes of memory with alignment " << alignment << " using allocator "
+               << nameOrNull(m_actualAlloc) << "@" << as_hex(m_actualAlloc);
 
     void *ptr = nullptr;
     if (auto scope = m_rctx->alloc(ResourceType::MEMORY, num_bytes)) {
@@ -172,9 +170,9 @@ void *PerOpAllocator::AllocateRaw(size_t alignment, size_t num_bytes,
     Ref();
 
     LogAlloc() << "TFAllocator called for attributes " << attr << " of " << num_bytes
-                   << " bytes of memory at " << as_hex(ptr) << " with alignment " << alignment
-                   << " using allocator " << nameOrNull(m_actualAlloc) << "@" << as_hex(m_actualAlloc)
-                   << " with " << *m_rctx;
+               << " bytes of memory at " << as_hex(ptr) << " with alignment " << alignment
+               << " using allocator " << nameOrNull(m_actualAlloc) << "@" << as_hex(m_actualAlloc) << " with "
+               << *m_rctx;
     return ptr;
 }
 
@@ -193,20 +191,16 @@ void PerOpAllocator::DeallocateRaw(void *ptr)
     auto num_bytes = RequestedSize(ptr);
 
     LogAlloc() << "TFAllocator deallocating memory at " << as_hex(ptr) << " size " << num_bytes
-               << " using allocator " << nameOrNull(m_actualAlloc) << "@" << as_hex(m_actualAlloc)
-               << " with " << *m_rctx;
+               << " using allocator " << nameOrNull(m_actualAlloc) << "@" << as_hex(m_actualAlloc) << " with "
+               << *m_rctx;
 
     m_actualAlloc->DeallocateRaw(ptr);
     m_rctx->dealloc(ResourceType::MEMORY, num_bytes);
 
-    std::unordered_map<void*, size_t>::node_type nh;
+    std::unordered_map<void *, size_t>::node_type nh;
     {
         auto g = sstl::with_guard(m_mu);
         nh = m_allocated.extract(ptr);
-        if (m_allocated.empty()) {
-            // FIXME: have a add ticket to session?
-            m_rctx->removeTicketFromSession();
-        }
         if (nh) {
             m_currentAlloc -= nh.mapped();
         }
@@ -214,9 +208,8 @@ void PerOpAllocator::DeallocateRaw(void *ptr)
     if (nh) {
         Unref();
     } else {
-        LOG(ERROR) << "Un recognized deallocation at " << as_hex(ptr)
-                   << " using allocator " << nameOrNull(m_actualAlloc) << "@" << as_hex(m_actualAlloc)
-                   << " with " << *m_rctx;
+        LOG(ERROR) << "Un recognized deallocation at " << as_hex(ptr) << " using allocator "
+                   << nameOrNull(m_actualAlloc) << "@" << as_hex(m_actualAlloc) << " with " << *m_rctx;
     }
 }
 

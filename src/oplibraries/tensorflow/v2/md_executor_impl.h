@@ -29,6 +29,7 @@
 #include "oplibraries/tensorflow/v2/md_executor.h"
 #include "oplibraries/tensorflow/v2/tensorutils.h"
 #include "oplibraries/tensorflow/v2/graphview.h"
+#include "oplibraries/tensorflow/v2/costmgr.h"
 #include "utils/containerutils.h"
 #include "utils/threadutils.h"
 #include "utils/pointerutils.h"
@@ -57,6 +58,8 @@ using BufferLockVec = std::vector<boost::shared_lock<boost::upgrade_mutex>>;
 using BufferMutexSet = std::unordered_set<boost::upgrade_mutex *>;
 
 class PerTaskDevice;
+class ExecTask;
+class IterTask;
 class ExecutorState;
 class ExecutorImpl : public tf::Executor
 {
@@ -72,6 +75,7 @@ public:
 private:
     friend class ExecutorState;
     friend class ExecTask;
+    friend class IterTask;
 
     size_t handlePagingRequest(uint64_t oldTicket, std::unique_ptr<ResourceContext> &&rctx);
     void forceEvicted();
@@ -87,17 +91,12 @@ private:
 
     void saveSucceedUsageForNode(const NodeItem &item, const DeviceType &dt, const Resources &res)
     {
-        auto g = sstl::with_guard(usage_mu_);
-        auto &saved = cachedUsages_.at(item.node->id())[dt];
-        if (!resources::contains(saved, res)) {
-            saved = res;
-        }
+        cost_mgr_.updateNode(item, dt, res);
     }
 
     std::optional<Resources> cachedUsageForNode(const NodeItem &item, const DeviceType &dt)
     {
-        auto g = sstl::with_guard(usage_mu_);
-        return sstl::optionalGet(cachedUsages_.at(item.node->id()), dt);
+        return cost_mgr_.getForNode(item, dt);
     }
 
     tf::Status LookupDevice(const DeviceSpec &spec, std::unique_ptr<ResourceContext> &&rctx, DeviceItem *item);
@@ -176,8 +175,7 @@ private:
     gtl::FlatMap<std::string, FrameInfo *> frame_info_;
 
     // Known succeed node resource usage
-    std::vector<boost::container::flat_map<DeviceType, Resources>> cachedUsages_ GUARDED_BY(usage_mu_);
-    std::mutex usage_mu_;
+    IterationCost cost_mgr_;
 
     TF_DISALLOW_COPY_AND_ASSIGN(ExecutorImpl);
 };
@@ -194,7 +192,7 @@ public:
     ExecutorState(const tf::Executor::Args &args, ExecutorImpl *impl);
     ~ExecutorState();
 
-    void RunAsync(const tf::Executor::DoneCallback &done);
+    void RunAsync(const tf::Executor::DoneCallback &done, std::shared_ptr<IterationContext> ictx);
 
 private:
     friend class ExecTask;
@@ -489,7 +487,8 @@ private:
     };
 
     const bool vlog_; // true if VLOG_IS_ON(1). Used to check vlog cheaply.
-    bool forceInterrupted = false;
+
+    std::shared_ptr<IterationContext> ictx_;
 
     tf::ShapeRefiner refiner_;
     std::unordered_map<std::string, tf::PartialTensorShape> sendShapes_;

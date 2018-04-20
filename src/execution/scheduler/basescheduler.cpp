@@ -16,9 +16,11 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include <utils/debugging.h>
-#include "basescheduler.h"
+#include "execution/scheduler/basescheduler.h"
 
+#include "execution/engine/taskexecutor.h"
+#include "execution/scheduler/sessionitem.h"
+#include "execution/engine/resourcecontext.h"
 #include "execution/operationtask.h"
 #include "execution/scheduler/operationitem.h"
 #include "platform/logging.h"
@@ -64,7 +66,7 @@ SchedulerRegistary::Register::Register(std::string_view name, SchedulerFactory f
 }
 
 std::unique_ptr<BaseScheduler> SchedulerRegistary::create(std::string_view name,
-                                                          ExecutionEngine &engine) const
+                                                          TaskExecutor &engine) const
 {
     auto guard = sstl::with_guard(m_mu);
     auto iter = m_schedulers.find(name);
@@ -75,8 +77,8 @@ std::unique_ptr<BaseScheduler> SchedulerRegistary::create(std::string_view name,
     return iter->second.factory(engine);
 }
 
-BaseScheduler::BaseScheduler(ExecutionEngine &engine)
-    : m_engine(engine)
+BaseScheduler::BaseScheduler(TaskExecutor &engine)
+    : m_taskExec(engine)
 {
 }
 
@@ -104,8 +106,8 @@ bool BaseScheduler::maybePreAllocateFor(OperationItem &opItem, const DeviceSpec 
     auto usage = opItem.op->estimatedUsage(spec);
 
     Resources missing;
-    auto rctx = m_engine.makeResourceContext(item, spec, usage, &missing);
-    if (!rctx->isGood()) {
+    auto rctx = m_taskExec.makeResourceContext(item, opItem.op->graphId(), spec, usage, &missing);
+    if (!rctx) {
         // Failed to pre allocate resources
         auto g = sstl::with_guard(m_muRes);
         m_missingRes.emplace(&opItem, std::move(missing));
@@ -186,7 +188,7 @@ POpItem BaseScheduler::submitTask(POpItem &&opItem)
 
     // Send to thread pool
     if (scheduled) {
-        opItem = m_engine.submitTask(std::move(opItem));
+        opItem = m_taskExec.runTask(std::move(opItem));
     } else {
         VLOG(2) << "Failed to schedule opItem in session " << item->sessHandle << ": "
                 << opItem->op->DebugString();
@@ -204,9 +206,9 @@ size_t BaseScheduler::submitAllTaskFromQueue(const PSessionItem &item)
     }
 
     // Exam if queue front has been waiting for a long time
-    if (item->holWaiting > m_engine.schedulingParam().maxHolWaiting) {
+    if (item->holWaiting > m_taskExec.schedulingParam().maxHolWaiting) {
         VLOG(2) << "In session " << item->sessHandle << ": HOL waiting exceeds maximum: " << item->holWaiting
-                << " (max=" << m_engine.schedulingParam().maxHolWaiting << ")";
+                << " (max=" << m_taskExec.schedulingParam().maxHolWaiting << ")";
         // Only try to schedule head in this case
         auto &head = queue.front();
         head = submitTask(std::move(head));
@@ -224,7 +226,7 @@ size_t BaseScheduler::submitAllTaskFromQueue(const PSessionItem &item)
         std::vector<std::future<std::shared_ptr<OperationItem>>> futures;
         futures.reserve(stage.size());
         for (auto &opItem : stage) {
-            auto fu = m_engine.pool().post([opItem = std::move(opItem), this]() mutable {
+            auto fu = m_taskExec.pool().post([opItem = std::move(opItem), this]() mutable {
                 DCHECK(opItem);
                 return submitTask(std::move(opItem));
             });

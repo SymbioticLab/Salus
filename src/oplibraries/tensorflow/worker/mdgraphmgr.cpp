@@ -24,9 +24,10 @@
 
 namespace salus::oplib::tensorflow {
 
-MDGraphMgr::MDGraphMgr(const tf::WorkerEnv *env, ExecutionContext execCtx)
+MDGraphMgr::MDGraphMgr(const tf::WorkerEnv *env, std::shared_ptr<ExecutionContext> execCtx, ResStats rm)
     : GraphMgr(env, env->device_mgr)
     , m_execCtx(std::move(execCtx))
+    , m_rm(std::move(rm))
 {
 }
 
@@ -251,6 +252,7 @@ Status MDGraphMgr::InitMDItem(const std::string &session, const tf::GraphDef &gd
         skip_cost_models_ = true;
 
         params.ins = m_execCtx;
+        params.rm = m_rm;
         TF_RETURN_IF_ERROR(NewMultiDeviceExecutor(params, std::move(subgraph), &unit.root));
     }
     return tf::Status::OK();

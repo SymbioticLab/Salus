@@ -23,21 +23,25 @@
  */
 #include "oplibraries/tensorflow/tensorflow_headers.h"
 
-#include "md_executor_impl.h"
+#include "oplibraries/tensorflow/v2/md_executor_impl.h"
 
+#include "execution/engine/resourcecontext.h"
 #include "oplibraries/tensorflow/device/salusdevices.h"
 #include "oplibraries/tensorflow/tfexception.h"
 #include "oplibraries/tensorflow/v2/tfallocator.h"
 #include "oplibraries/tensorflow/worker/rendezvousmgr.h"
 #include "utils/containerutils.h"
 #include "utils/cpp17.h"
-#include "utils/stringutils.h"
 #include "utils/debugging.h"
+#include "utils/stringutils.h"
+
+#include <oplibraries/tensorflow/tfinstance.h>
+
 #include <boost/iterator/indirect_iterator.hpp>
 #include <boost/thread/lock_algorithms.hpp>
+
 #include <unordered_set>
 #include <vector>
-#include <oplibraries/tensorflow/tfinstance.h>
 
 using std::chrono::duration_cast;
 using FpMS = std::chrono::duration<double, std::chrono::milliseconds::period>;
@@ -406,10 +410,9 @@ tf::Status ExecutorImpl::LookupTFDevice(const DeviceSpec &spec, tf::Device **tfd
 tf::Status ExecutorImpl::LookupDevice(const DeviceSpec &spec, std::unique_ptr<ResourceContext> &&rctx,
                                       DeviceItem *item)
 {
-    sstl::TimeoutWarning tw(2ms, [&](auto limit, auto dur){
+    sstl::TimeoutWarning tw(2ms, [&](auto limit, auto dur) {
         LOG(WARNING) << "LookupDevice took more than " << duration_cast<FpMS>(limit)
-                     << " to finish: " << duration_cast<FpMS>(dur)
-                     << " for " << spec;
+                     << " to finish: " << duration_cast<FpMS>(dur) << " for " << spec;
     });
 
     tf::Device *tfdev = nullptr;
@@ -420,8 +423,7 @@ tf::Status ExecutorImpl::LookupDevice(const DeviceSpec &spec, std::unique_ptr<Re
 
     auto sdev = ISalusDevice::safe_cast(tfdev);
     if (!sdev) {
-        ok = tf::errors::Internal(
-                   tf::strings::StrCat("Device is not an ISalusDevice: ", spec.debugString()));
+        ok = tf::errors::Internal(tf::strings::StrCat("Device is not an ISalusDevice: ", spec.debugString()));
         return ok;
     }
 

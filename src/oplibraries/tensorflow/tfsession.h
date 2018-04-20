@@ -23,10 +23,12 @@
 #include "oplibraries/tensorflow/tfutils.h"
 #include "utils/macros.h"
 #include "utils/pointerutils.h"
+
 #include <memory>
 
+namespace salus {
 class ExecutionContext;
-namespace salus::oplib::tensorflow {
+namespace oplib::tensorflow {
 class TFInstance;
 
 /**
@@ -37,7 +39,8 @@ class TFSession : public std::enable_shared_from_this<TFSession>
 public:
     SALUS_DISALLOW_COPY_AND_ASSIGN(TFSession);
 
-    TFSession(TFInstance &inst, ExecutionContext ctx, const tf::ConfigProto &config, tf::GraphDef *gdef);
+    TFSession(TFInstance &inst, std::shared_ptr<ExecutionContext> ctx, const tf::ConfigProto &config,
+              tf::GraphDef *gdef);
 
     ~TFSession();
 
@@ -49,6 +52,11 @@ public:
      * The resource is deleted later when execution engine actually removes internal structure.
      */
     void safeClose();
+
+    /**
+     * @brief Defer close after the removal of execCtx
+     */
+    void deferClose(HandlerCallback &&cb);
 
 #define DECLARE_HANDLER(name)                                                                                \
     void handle##name(const tf::name##Request &req, tf::name##Response &resp, HandlerCallback &&cb)
@@ -67,6 +75,7 @@ private:
     sstl::PImpl<TFSessionPrivate> d;
 };
 
-} // namespace salus::oplib::tensorflow
+} // namespace oplib::tensorflow
+} // namespace salus
 
 #endif // SALUS_OPLIB_TENSORFLOW_TFSESSION_H

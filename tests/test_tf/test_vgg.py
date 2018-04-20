@@ -170,8 +170,8 @@ class TestVgg11(VGGCaseBase):
 
         config = tf.ConfigProto()
         config.allow_soft_placement = True
-        config.zmq_options.resource_map.temporary['MEMORY:GPU'] = memusages[batch_size][0]
-        config.zmq_options.resource_map.persistant['MEMORY:GPU'] = memusages[batch_size][1]
+        config.salus_options.resource_map.temporary['MEMORY:GPU'] = memusages[batch_size][0]
+        config.salus_options.resource_map.persistant['MEMORY:GPU'] = memusages[batch_size][1]
         return config
 
 
@@ -189,8 +189,8 @@ class TestVgg16(VGGCaseBase):
 
         config = tf.ConfigProto()
         config.allow_soft_placement = True
-        config.zmq_options.resource_map.temporary['MEMORY:GPU'] = memusages[batch_size][0]
-        config.zmq_options.resource_map.persistant['MEMORY:GPU'] = memusages[batch_size][1]
+        config.salus_options.resource_map.temporary['MEMORY:GPU'] = memusages[batch_size][0]
+        config.salus_options.resource_map.persistant['MEMORY:GPU'] = memusages[batch_size][1]
         return config
 
 
@@ -209,8 +209,8 @@ class TestVgg19(VGGCaseBase):
 
         config = tf.ConfigProto()
         config.allow_soft_placement = True
-        config.zmq_options.resource_map.temporary['MEMORY:GPU'] = memusages[batch_size][0]
-        config.zmq_options.resource_map.persistant['MEMORY:GPU'] = memusages[batch_size][1]
+        config.salus_options.resource_map.temporary['MEMORY:GPU'] = memusages[batch_size][0]
+        config.salus_options.resource_map.persistant['MEMORY:GPU'] = memusages[batch_size][1]
         return config
 
 

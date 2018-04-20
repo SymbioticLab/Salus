@@ -110,8 +110,8 @@ class TestSeqPtb(SeqCaseBase):
 
         config = tf.ConfigProto()
         config.allow_soft_placement = True
-        config.zmq_options.resource_map.temporary['MEMORY:GPU'] = memusages[model_size][0]
-        config.zmq_options.resource_map.persistant['MEMORY:GPU'] = memusages[model_size][1]
+        config.salus_options.resource_map.temporary['MEMORY:GPU'] = memusages[model_size][0]
+        config.salus_options.resource_map.persistant['MEMORY:GPU'] = memusages[model_size][1]
         return config
 
 

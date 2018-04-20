@@ -50,6 +50,8 @@ public:
 
     void run(Callbacks cbs) noexcept override;
 
+    std::string graphId() const;
+
     void cancel() override;
 
     int failedTimes() const override

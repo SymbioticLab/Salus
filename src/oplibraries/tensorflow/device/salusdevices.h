@@ -20,7 +20,7 @@
 #ifndef SALUS_OPLIB_TENSORFLOW_SALUSDEVICES
 #define SALUS_OPLIB_TENSORFLOW_SALUSDEVICES
 
-#include "execution/resources.h"
+#include "resources/resources.h"
 #include "oplibraries/tensorflow/v2/tfallocator.h"
 
 #include <functional>

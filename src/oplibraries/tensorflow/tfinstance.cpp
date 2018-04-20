@@ -82,42 +82,21 @@ tf::Device *TFInstance::tfdevice(const DeviceSpec &spec) const
 void TFInstance::handleCreateSession(const tf::CreateSessionRequest &req, tf::CreateSessionResponse &resp,
                                      HandlerCallback &&cb)
 {
-    // Check session resource
-    ResourceMap rm;
-
-    auto &m = req.config().zmq_options().resource_map();
-    for (auto p : m.persistant()) {
-        auto tag = ResourceTag::fromString(p.first);
-        if (tag.type == ResourceType::UNKNOWN) {
-            continue;
-        }
-        rm.persistant[tag] = p.second;
-    }
-
-    for (auto p : m.temporary()) {
-        auto tag = ResourceTag::fromString(p.first);
-        if (tag.type == ResourceType::UNKNOWN) {
-            continue;
-        }
-        rm.temporary[tag] = p.second;
-    }
-
-    auto inserter = ExecutionEngine::instance().createSessionOffer(rm);
-    if (!inserter) {
-        LOG(WARNING) << "Rejecting session due to unsafe resource usage. Predicted usage: "
-                     << rm.DebugString()
-                     << ", current usage: " << SessionResourceTracker::instance().DebugString();
-        throw TFException(tf::errors::Unavailable("Session memory usage unsafe"));
-    }
-
     SALUS_THROW_IF_ERROR(ValidateExternalGraphDefSyntax(req.graph_def()));
+
+    auto inserter = ExecutionEngine::instance().makeContext();
+
+    if (!inserter) {
+        cb(tf::errors::Aborted("Backend end engine interrupted"));
+        return;
+    }
 
     auto *gdef = const_cast<tf::CreateSessionRequest &>(req).mutable_graph_def();
     auto session = std::make_shared<TFSession>(*this, inserter, req.config(), gdef);
     auto handle = session->handle();
 
     // Register force interrupt handler
-    inserter.setInterruptCallback([this, handle]() {
+    inserter->setInterruptCallback([this, handle]() {
         popSession(handle)->safeClose();
     });
 
@@ -165,8 +144,7 @@ void TFInstance::handleCloseSession(const tf::CloseSessionRequest &req, tf::Clos
                                     HandlerCallback &&cb)
 {
     UNUSED(resp);
-    popSession(req.session_handle())->safeClose();
-    cb(Status::OK());
+    popSession(req.session_handle())->deferClose(std::move(cb));
 }
 
 void TFInstance::handleListDevices(const tf::ListDevicesRequest &req, tf::ListDevicesResponse &resp,

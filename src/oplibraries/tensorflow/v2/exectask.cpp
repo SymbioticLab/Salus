@@ -22,8 +22,10 @@
  * with ours.
  */
 #include "oplibraries/tensorflow/tensorflow_headers.h"
-#include "exectask.h"
+#include "oplibraries/tensorflow/v2/exectask.h"
 #include "execution/devices.h"
+#include "execution/engine/resourcecontext.h"
+#include "execution/engine/iterationcontext.h"
 #include "oplibraries/tensorflow/device/salusdevices.h"
 #include "oplibraries/tensorflow/tfexception.h"
 #include "oplibraries/tensorflow/tfutils.h"
@@ -189,27 +191,6 @@ Resources ExecTask::estimatedUsage(const DeviceSpec &dev)
             auto usage = cachedUsage[dev];
             resources::merge(usage, failedAlloc);
             return usage;
-        }
-
-        const auto &sessHandle = m_state->impl_->params_.session;
-        auto rm = m_state->impl_->params_.ins.offeredSessionResource();
-        if (rm) {
-            auto f = failureTimes;
-            if (f > maxFailures) {
-                LOG(WARNING) << "Failure time exceeds maximum: " << f << " max " << maxFailures;
-                f = maxFailures;
-                LOG(WARNING) << "Estimated usage this time: "
-                             << resources::DebugString(rm->temporary, "    ");
-            }
-            uint64_t scale = 1u << (maxFailures - f);
-            resources::scale(rm->temporary, 1.0 / scale);
-
-            // Update cache
-            cachedUsage[dev] = rm->temporary;
-        } else {
-            LOG(ERROR) << "No session usage found for exec task: " << tagged_node.node->name()
-                       << " under session " << sessHandle;
-            // fallback to normal estimation
         }
     }
 
@@ -577,6 +558,11 @@ ResourceContext &ExecTask::resourceContext() const
 {
     DCHECK(ditem.device);
     return ditem.device->resourceContext();
+}
+
+std::string ExecTask::graphId() const
+{
+    return m_state->ictx_->name();
 }
 
 ExecTask::~ExecTask() = default;

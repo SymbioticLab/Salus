@@ -36,6 +36,7 @@ using std::chrono::system_clock;
 using FpSeconds = std::chrono::duration<double, seconds::period>;
 using namespace std::chrono_literals;
 using namespace date;
+using namespace salus;
 
 namespace {
 SchedulerRegistary::Register reg("pack", [](auto &engine) {
@@ -43,7 +44,7 @@ SchedulerRegistary::Register reg("pack", [](auto &engine) {
 });
 } // namespace
 
-PackScheduler::PackScheduler(ExecutionEngine &engine) : BaseScheduler(engine) {}
+PackScheduler::PackScheduler(TaskExecutor &engine) : BaseScheduler(engine) {}
 
 PackScheduler::~PackScheduler() = default;
 

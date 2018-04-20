@@ -3,20 +3,28 @@ include_directories(${CMAKE_CURRENT_SOURCE_DIR})
 set(SRC_LIST
     "oplibraries/ioplibrary.cpp"
 
-    "memorymgr/memorymgr.cpp"
+    "resources/memorymgr.cpp"
+    "resources/iteralloctracker.cpp"
+    "resources/resources.cpp"
 
     "execution/scheduler/operationitem.cpp"
     "execution/scheduler/sessionitem.cpp"
     "execution/scheduler/basescheduler.cpp"
+    "execution/scheduler/schedulingparam.cpp"
     "execution/scheduler/impl/fair.cpp"
     "execution/scheduler/impl/pack.cpp"
     "execution/scheduler/impl/preempt.cpp"
+
     "execution/executionengine.cpp"
+    "execution/engine/taskexecutor.cpp"
+    "execution/engine/iterationcontext.cpp"
+    "execution/engine/resourcecontext.cpp"
+    "execution/engine/allocationlistener.cpp"
+
     "execution/devices.cpp"
     "execution/operationtask.cpp"
-    "execution/resources.cpp"
+    "execution/iterationtask.cpp"
     "execution/threadpool/nonblockingthreadpool.cpp"
-    "execution/scheduler/basescheduler.cpp"
 
     "rpcserver/iothreadpool.cpp"
     "rpcserver/rpcservercore.cpp"
@@ -58,6 +66,8 @@ if(USE_TENSORFLOW)
         "oplibraries/tensorflow/v2/tensorutils.cpp"
         "oplibraries/tensorflow/v2/md_executor_impl.cpp"
         "oplibraries/tensorflow/v2/graphview.cpp"
+        "oplibraries/tensorflow/v2/itertask.cpp"
+        "oplibraries/tensorflow/v2/costmgr.cpp"
 
         "oplibraries/tensorflow/device/salusdevices.cpp"
         "oplibraries/tensorflow/device/cpu.cpp"
