@@ -53,7 +53,7 @@ Options:
                                 [default: tcp://*:5501]
     -s <policy>, --sched=<policy>
                                 Use <policy> for scheduling . Choices: fair, preempt, pack.
-                                [default: fair]
+                                [default: pack]
     --disable-wc                Disable work conservation. Only have effect when
                                 fairness is on.
     --max-hol-waiting=<num>     Maximum number of task allowed go before queue head
