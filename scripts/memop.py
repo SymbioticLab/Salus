@@ -10,12 +10,13 @@ def only_steps(steps, idxs):
     ss = steps.step.sort_values().unique().tolist()
     return steps[steps.step.isin([ss[idx] for idx in idxs])]
 
+path = 'logs/osdi18/paral/resnet101_50'
 
-dfop = load_salus('logs/memop/salus/resnet50_25/perf.output')
+dfop = load_salus(path + '/perf.output')
 dfop = only_steps(dfop, [2,3,4,5,6,7,8,9,10,11,12,13,14,15])
 dfop = unify_names(dfop)
 
-dfmem = load_mem('logs/memop/salus/resnet50_25/alloc.output')
+dfmem = load_mem(path + '/alloc.output')
 
 # to unix timestamp in us
 dfmem['timestamp'] = dfmem.timestamp.astype(np.int64) // 10**3

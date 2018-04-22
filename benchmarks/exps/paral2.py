@@ -14,15 +14,15 @@ FLAGS = flags.FLAGS
 
 
 def main(argv):
-    scfg = maybe_forced_preset(presets.OpTracing)
-    scfg.logconf = 'disable'
+    scfg = maybe_forced_preset(presets.MostEfficient)
+    scfg.scheduler = 'pack'
 
     run_seq(scfg.copy(output_dir=FLAGS.save_dir / "resnet101_50-alone"),
-            WTL.create("resnet101", 50, 31),
+            WTL.create("resnet101", 50, 30),
             )
     run_seq(scfg.copy(output_dir=FLAGS.save_dir / "resnet101_50"),
-            WTL.create("resnet101", 50, 31),
-            WTL.create("resnet101", 50, 31),
+            WTL.create("resnet101", 50, 30),
+            WTL.create("resnet101", 50, 30),
             )
     return
     # Firstly run concurrently on salus

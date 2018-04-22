@@ -241,7 +241,7 @@ class MnistConvBase(unittest.TestCase):
         c.allow_soft_placement = True
         return c
 
-    @parameterized.expand([(25,)])
+    @parameterized.expand([(25,), (50,), (100,)])
     def test_gpu(self, batch_size):
         def func():
             sess = tf.get_default_session()

@@ -96,7 +96,7 @@ class ResNetCaseBase(unittest.TestCase):
 @unittest.skip("Fake data is used as common dataset instead")
 class TestResNetCifar10(ResNetCaseBase):
     def _config(self, **kwargs):
-        # FIXME: update memory usage
+        # TODO: update memory usage
         memusages = {
             25: (6935520748 - 1661494764, 1661494764),
             50: (10211120620 - 1662531248, 1662531248),
