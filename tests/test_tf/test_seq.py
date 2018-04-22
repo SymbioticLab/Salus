@@ -70,7 +70,7 @@ class SeqCaseBase(unittest.TestCase):
     def get_func_to_run(self, config_name):
         return lambda: self._runner()(tf.get_default_session(), config_name)
 
-    @parameterized.expand(['small'])
+    @parameterized.expand(model_sizes)
     def test_gpu(self, model_size):
         run_on_devices(self.get_func_to_run(model_size), '/device:GPU:0',
                        config=tf.ConfigProto(allow_soft_placement=True))
