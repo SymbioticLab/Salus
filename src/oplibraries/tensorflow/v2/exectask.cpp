@@ -247,10 +247,12 @@ Resources ExecTask::calcUsageFromShape(const DeviceSpec &dev)
     res = estimateMemoryUsageForNode(item, dev);
 #endif // SALUS_ENABLE_REFINER
 
+#if !defined(SALUS_ENABLE_STATIC_STREAM)
     // TODO: use an algorithm to decide streams
     if (dev.type == DeviceType::GPU && !isAsync()) {
         res[{ResourceType::GPU_STREAM, dev}] = 1;
     }
+#endif
 
     return res;
 }

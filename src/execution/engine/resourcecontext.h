@@ -36,6 +36,10 @@ class ResourceContext
     void releaseStaging();
 
 public:
+
+#if defined(SALUS_ENABLE_STATIC_STREAM)
+    std::string sessHandle;
+#endif
     /**
      * @brief Construct a resource context
      * @param item

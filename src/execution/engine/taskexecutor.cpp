@@ -249,6 +249,8 @@ void TaskExecutor::scheduleLoop()
 
         // Update conditions and check if we need paging
         bool noProgress = remainingCount > 0 && scheduled == 0 && m_nNoPagingRunningTasks == 0;
+
+        noProgress = false;
         bool didPaging = false;
         // TODO: we currently assume we are paging GPU memory to CPU
         for (const auto &dev : {devices::GPU0}) {
@@ -533,7 +535,13 @@ std::unique_ptr<ResourceContext> TaskExecutor::makeResourceContext(PSessionItem 
     }
 
     auto rctx = std::make_unique<ResourceContext>(m_resMonitor, graphId, spec, *maybeTicket);
+
+#if defined(SALUS_ENABLE_STATIC_STREAM)
+    rctx->sessHandle = sess->sessHandle;
+#endif
+
     rctx->addListener(std::move(sess));
+
 
     return rctx;
 }

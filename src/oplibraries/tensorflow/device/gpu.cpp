@@ -173,12 +173,26 @@ tf::DeviceContext *PerTaskGPUDevice::deviceContextForNode(int id, bool isAsync)
 {
     UNUSED(id);
 
+#if defined(SALUS_ENABLE_STATIC_STREAM)
+    UNUSED(isAsync);
+
+    // use a round robin to assign streams to session
+    static std::unordered_map<std::string, int> seenSessions;
+    static auto nextStream = 0;
+
+    auto [it, newSession] = seenSessions.try_emplace(resourceContext().sessHandle, nextStream);
+    if (newSession) {
+        nextStream = (nextStream + 1) % 128;
+    }
+    auto stream = it->second;
+#else
     if (!isAsync) {
         requestStreams();
     }
 
     // use default stream if we have none
     auto stream = m_streams.empty() ? 0 : m_streams[0];
+#endif
 
     return underlayingDevice<SalusGPUDevice>().deviceContext(stream).get();
 }
@@ -202,10 +216,12 @@ sstl::ScopeGuards PerTaskGPUDevice::useStreams()
 
 void PerTaskGPUDevice::Compute(tf::OpKernel *op_kernel, tf::OpKernelContext *context)
 {
+#if !defined(SALUS_ENABLE_STATIC_STREAM)
     if (m_streams.empty()) {
         LOG(ERROR) << "No GPU streams available for " << op_kernel->name() << " using default one";
     }
     auto sr = useStreams();
+#endif
     PerTaskDevice::Compute(op_kernel, context);
 }
 
@@ -219,7 +235,9 @@ void PerTaskGPUDevice::ComputeAsync(tf::AsyncOpKernel *op_kernel, tf::OpKernelCo
 
 PerTaskGPUDevice::~PerTaskGPUDevice()
 {
+#if !defined(SALUS_ENABLE_STATIC_STREAM)
     releaseStreams();
+#endif
 }
 
 tf::BaseGPUDevice *SalusGPUDeviceFactory::CreateGPUDevice(const tf::SessionOptions &options,
