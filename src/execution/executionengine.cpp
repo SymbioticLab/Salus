@@ -384,5 +384,6 @@ void ExecutionContext::dropExlusiveMode()
 {
     DCHECK(m_item);
     m_item->setExclusiveMode(false);
+    m_engine.m_note_has_work.notify();
 }
 } // namespace salus

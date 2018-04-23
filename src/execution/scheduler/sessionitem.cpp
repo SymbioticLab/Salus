@@ -43,6 +43,7 @@ void SessionItem::setInterruptCallback(std::function<void()> cb)
 
 void SessionItem::prepareDelete(std::function<void()> cb)
 {
+    setExclusiveMode(false);
     auto g = sstl::with_guard(mu);
     cleanupCb = std::move(cb);
     // clear paging callbacks so the executorImpl won't get called after it is deleted
