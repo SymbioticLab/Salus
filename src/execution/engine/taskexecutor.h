@@ -57,7 +57,7 @@ public:
      * @return
      */
     std::unique_ptr<ResourceContext> makeResourceContext(PSessionItem sess,
-                                                         const std::string &graphId,
+                                                         uint64_t graphId,
                                                          const DeviceSpec &spec,
                                                          const Resources &res, Resources *missing = nullptr);
 

@@ -18,7 +18,7 @@ class IterationTask
 public:
     virtual ~IterationTask();
 
-    virtual const std::string &name() const = 0;
+    virtual uint64_t graphId() const = 0;
 
     virtual bool prepare() = 0;
 

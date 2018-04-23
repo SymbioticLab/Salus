@@ -9,22 +9,20 @@
 
 namespace salus::oplib::tensorflow {
 
-std::atomic_int_fast64_t IterTask::NextSeq{0};
-
 IterTask::IterTask(ExecutorImpl &impl, const tf::Executor::Args &args, tf::Executor::DoneCallback done)
     : m_impl(impl)
-    , m_name(tf::strings::StrCat(m_impl.params_.graphHandle, ":", ++NextSeq))
     , m_cm(*args.cancellation_manager)
     , m_args(args)
     , m_done(std::move(done))
 {
+    VLOG(2) << "Created iteration " << m_impl.graph_id_;
 }
 
 IterTask::~IterTask() = default;
 
-const std::string &IterTask::name() const
+uint64_t IterTask::graphId() const
 {
-    return m_name;
+    return m_impl.graph_id_;
 }
 
 bool IterTask::isCanceled() const
@@ -43,13 +41,13 @@ bool IterTask::prepare()
 {
     auto rm = estimatedPeakAllocation(devices::GPU0);
     auto ectx = m_impl.params_.ins;
-    return ectx->m_item->beginIteration(ectx->m_ticket, rm, name());
+    return ectx->m_item->beginIteration(ectx->m_ticket, rm, graphId());
 }
 
 void IterTask::runAsync(std::shared_ptr<IterationContext> &&ictx) noexcept
 {
     std::shared_ptr<IterationContext> sictx(std::move(ictx));
-    sictx->setName(m_name);
+    sictx->setGraphId(graphId());
 
     (new ExecutorState(m_args, &m_impl))->RunAsync(m_done, sictx);
 }

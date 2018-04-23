@@ -14,11 +14,7 @@
 namespace salus::oplib::tensorflow {
 class IterTask : public IterationTask
 {
-    static std::atomic_int_fast64_t NextSeq;
-
     ExecutorImpl &m_impl;
-
-    std::string m_name;
 
     tf::CancellationManager &m_cm;
 
@@ -33,7 +29,7 @@ public:
 
     ~IterTask() override;
 
-    const std::string &name() const override;
+    uint64_t graphId() const override;
 
     bool prepare() override;
 

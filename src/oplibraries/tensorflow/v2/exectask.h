@@ -50,7 +50,7 @@ public:
 
     void run(Callbacks cbs) noexcept override;
 
-    std::string graphId() const;
+    uint64_t graphId() const override;
 
     void cancel() override;
 

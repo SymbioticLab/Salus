@@ -13,7 +13,7 @@ class IterationContext
 {
     TaskExecutor &m_taskExec;
     PSessionItem m_item;
-    std::string m_name;
+    uint64_t m_graphId;
 
 public:
     IterationContext(TaskExecutor &engine, PSessionItem item)
@@ -26,14 +26,14 @@ public:
 
     void scheduleTask(std::unique_ptr<OperationTask> &&task);
 
-    void setName(const std::string &name)
+    void setGraphId(uint64_t graphId)
     {
-        m_name = name;
+        m_graphId = graphId;
     }
 
-    const std::string &name() const
+    uint64_t graphId() const
     {
-        return m_name;
+        return m_graphId;
     }
 
     void finish();

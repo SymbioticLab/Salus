@@ -477,7 +477,7 @@ bool TaskExecutor::doPaging(const DeviceSpec &spec, const DeviceSpec &target)
             // preallocate some CPU memory for use.
             Resources res{{dstTag, usage}};
 
-            auto rctx = makeResourceContext(pSess, "", target, res);
+            auto rctx = makeResourceContext(pSess, 0, target, res);
             if (!rctx) {
                 LOG(ERROR) << "No enough CPU memory for paging. Required: " << res[dstTag] << " bytes";
                 return false;
@@ -520,7 +520,7 @@ bool TaskExecutor::doPaging(const DeviceSpec &spec, const DeviceSpec &target)
     return false;
 }
 
-std::unique_ptr<ResourceContext> TaskExecutor::makeResourceContext(PSessionItem sess, const std::string &graphId,
+std::unique_ptr<ResourceContext> TaskExecutor::makeResourceContext(PSessionItem sess, uint64_t graphId,
                                                                    const DeviceSpec &spec,
                                                                    const Resources &res, Resources *missing)
 {

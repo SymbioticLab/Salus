@@ -562,9 +562,9 @@ ResourceContext &ExecTask::resourceContext() const
     return ditem.device->resourceContext();
 }
 
-std::string ExecTask::graphId() const
+uint64_t ExecTask::graphId() const
 {
-    return m_state->ictx_->name();
+    return m_state->ictx_->graphId();
 }
 
 ExecTask::~ExecTask() = default;

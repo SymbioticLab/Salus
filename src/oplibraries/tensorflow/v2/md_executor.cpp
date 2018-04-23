@@ -75,10 +75,13 @@ tf::Status NewMultiDeviceExecutor(MultiDeviceExecutorParams params, std::unique_
     return s;
 }
 
+std::atomic_int_fast64_t ExecutorImpl::NextSeq{0};
+
 ExecutorImpl::ExecutorImpl(MultiDeviceExecutorParams &&p, std::unique_ptr<const tf::Graph> &&g)
     : params_(std::move(p))
     , graph_(std::move(g))
     , is_main_iter(false)
+    , graph_id_(static_cast<uint64_t>(++NextSeq))
 {
     DCHECK(params_.get_kernel != nullptr);
 
@@ -180,6 +183,7 @@ tf::Status ExecutorImpl::Initialize()
         }
 
         if (n->name() == "salus_main_iter") {
+            VLOG(2) << params_.session << ":" << params_.graphHandle << " is main iteration";
             is_main_iter = true;
         }
 
@@ -217,7 +221,7 @@ tf::Status ExecutorImpl::Initialize()
             DCHECK(item->supported_devices.size() == 1);
             DeviceSpec spec{item->supported_devices.at(0), 0};
             auto usage = estimateMemoryUsageForNode(*item, spec);
-            LookupDevice(spec, params_.ins->makeResourceContext(tf::strings::StrCat(params_.graphHandle, ":1"), spec, usage), &ditem);
+            LookupDevice(spec, params_.ins->makeResourceContext(graph_id_, spec, usage), &ditem);
 
             // Build kernel
             item->kernel = SetupKernel(n, ditem);
@@ -1171,10 +1175,12 @@ void ExecutorState::Finish()
     }
 
     if (impl_->is_main_iter) {
+        VLOG(2) << impl_->params_.session << ":" << impl_->params_.graphHandle
+                << ":" << step_id_ << " drops exclusive mode";
         impl_->params_.ins->dropExlusiveMode();
     }
 
-    VLOG(2) << "ExecutorState about to delete this";
+    VLOG(2) << impl_->params_.session << ":" << impl_->params_.graphHandle << ":" << step_id_ << " finish iteration";
     delete this;
     DCHECK(done_cb != nullptr);
     runner([done = std::move(done_cb), status, ictx = std::move(ictx)]() {

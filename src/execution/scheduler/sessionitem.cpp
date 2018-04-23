@@ -72,7 +72,7 @@ void SessionItem::queueTask(POpItem &&opItem)
     queue.emplace_back(std::move(opItem));
 }
 
-void SessionItem::notifyAlloc(const std::string &graphId, uint64_t ticket, const ResourceTag &tag, size_t num)
+void SessionItem::notifyAlloc(const uint64_t graphId, uint64_t ticket, const ResourceTag &tag, size_t num)
 {
     resourceUsage(tag) += num;
 
@@ -84,7 +84,7 @@ void SessionItem::notifyAlloc(const std::string &graphId, uint64_t ticket, const
     updateTracker(graphId, tag);
 }
 
-void SessionItem::notifyDealloc(const std::string &graphId, uint64_t ticket, const ResourceTag &tag, size_t num, bool last)
+void SessionItem::notifyDealloc(const uint64_t graphId, uint64_t ticket, const ResourceTag &tag, size_t num, bool last)
 {
     resourceUsage(tag) -= num;
     if (last) {
@@ -96,7 +96,7 @@ void SessionItem::notifyDealloc(const std::string &graphId, uint64_t ticket, con
     updateTracker(graphId, tag);
 }
 
-void SessionItem::updateTracker(const std::string &graphId, const ResourceTag &tag)
+void SessionItem::updateTracker(const uint64_t graphId, const ResourceTag &tag)
 {
     if (tag == trackerTag) {
         VLOG(2) << "SessionItem::updateTracker graphid=" << graphId;
@@ -108,15 +108,15 @@ void SessionItem::updateTracker(const std::string &graphId, const ResourceTag &t
     }
 }
 
-bool SessionItem::beginIteration(AllocationRegulator::Ticket t, ResStats newRm, const std::string &name)
+bool SessionItem::beginIteration(AllocationRegulator::Ticket t, ResStats newRm, const uint64_t graphId)
 {
-    VLOG(2) << "SessionItem::beginIteration graphid=" << name;
+    VLOG(2) << "SessionItem::beginIteration graphid=" << graphId;
     auto g = sstl::with_guard(mu);
-    auto it = allocTrackers.try_emplace(name, trackerTag).first;
+    auto it = allocTrackers.try_emplace(graphId, trackerTag).first;
     return it->second.beginIter(t, newRm);
 }
 
-void SessionItem::endIteration(const std::string &graphId)
+void SessionItem::endIteration(const uint64_t graphId)
 {
     VLOG(2) << "SessionItem::endIteration graphid=" << graphId;
     auto g = sstl::with_guard(mu);

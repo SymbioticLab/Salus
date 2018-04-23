@@ -151,7 +151,7 @@ public:
      * @param missing
      * @return
      */
-    std::unique_ptr<ResourceContext> makeResourceContext(const std::string &graphId,
+    std::unique_ptr<ResourceContext> makeResourceContext(uint64_t graphId,
                                                          const DeviceSpec &spec,
                                                          const Resources &res,
                                                          Resources *missing = nullptr);

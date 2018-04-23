@@ -22,7 +22,7 @@ class AllocationListener;
 class ResourceContext
 {
     ResourceMonitor &resMon;
-    const std::string m_graphId;
+    const uint64_t m_graphId;
     const DeviceSpec m_spec;
 
     const uint64_t m_ticket;
@@ -45,7 +45,7 @@ public:
      * @param item
      * @param resMon
      */
-    ResourceContext(ResourceMonitor &resMon, std::string graphId, const DeviceSpec &spec, uint64_t ticket);
+    ResourceContext(ResourceMonitor &resMon, uint64_t graphId, const DeviceSpec &spec, uint64_t ticket);
 
     ResourceContext(const ResourceContext &other, const DeviceSpec &spec);
 

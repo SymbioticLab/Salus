@@ -281,6 +281,8 @@ bool ExecutionEngine::runIter(IterationItem &iterItem, ExecutionContext &ectx)
         return false;
     }
 
+    VLOG(2) << "Running iteration " << ectx.m_item->sessHandle << ":" << iterItem.iter->graphId();
+
     auto iCtx = std::make_shared<IterationContext>(m_taskExecutor, ectx.m_item);
     iterItem.iter->runAsync(std::move(iCtx));
     return true;
@@ -339,7 +341,7 @@ void ExecutionContext::setInterruptCallback(std::function<void()> cb)
     m_item->setInterruptCallback(std::move(cb));
 }
 
-std::unique_ptr<ResourceContext> ExecutionContext::makeResourceContext(const std::string &graphId,
+std::unique_ptr<ResourceContext> ExecutionContext::makeResourceContext(uint64_t graphId,
                                                                        const DeviceSpec &spec,
                                                                        const Resources &res,
                                                                        Resources *missing)

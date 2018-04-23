@@ -17,7 +17,7 @@ public:
      * @param ticket
      * @param res
      */
-    virtual void notifyAlloc(const std::string &graphId, uint64_t ticket, const ResourceTag &rt, size_t num) = 0;
+    virtual void notifyAlloc(uint64_t graphId, uint64_t ticket, const ResourceTag &rt, size_t num) = 0;
 
     /**
      * @brief Called when dealloc happens
@@ -26,7 +26,7 @@ public:
      * @param num amount
      * @param last if this was the last allocation from ticket
      */
-    virtual void notifyDealloc(const std::string &graphId, uint64_t ticket, const ResourceTag &rt, size_t num, bool last) = 0;
+    virtual void notifyDealloc(uint64_t graphId, uint64_t ticket, const ResourceTag &rt, size_t num, bool last) = 0;
 };
 
 } // namespace salus

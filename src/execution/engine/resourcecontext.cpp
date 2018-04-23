@@ -22,10 +22,10 @@ ResourceContext::ResourceContext(const ResourceContext &other, const DeviceSpec 
 {
 }
 
-ResourceContext::ResourceContext(ResourceMonitor &resMon, std::string graphId, const DeviceSpec &spec,
+ResourceContext::ResourceContext(ResourceMonitor &resMon, uint64_t graphId, const DeviceSpec &spec,
                                  uint64_t ticket)
     : resMon(resMon)
-    , m_graphId(std::move(graphId))
+    , m_graphId(graphId)
     , m_spec(spec)
     , m_ticket(ticket)
     , m_hasStaging(true)

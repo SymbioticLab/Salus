@@ -64,9 +64,9 @@ private:
 
     // rm for current iteration
     const static constexpr ResourceTag trackerTag = resources::GPU0Memory;
-    std::unordered_map<std::string, salus::IterAllocTracker> allocTrackers GUARDED_BY(mu);
+    std::unordered_map<uint64_t, salus::IterAllocTracker> allocTrackers GUARDED_BY(mu);
 
-    void updateTracker(const std::string &graphId, const ResourceTag &tag);
+    void updateTracker(uint64_t graphId, const ResourceTag &tag);
 
     std::mutex mu;
 
@@ -122,9 +122,9 @@ public:
 
     void queueTask(POpItem &&opItem);
 
-    bool beginIteration(AllocationRegulator::Ticket t, ResStats newRm, const std::string &name);
+    bool beginIteration(AllocationRegulator::Ticket t, ResStats newRm, uint64_t graphId);
 
-    void endIteration(const std::string &graphId);
+    void endIteration(uint64_t graphId);
 
     /**
      * @brief prepare to remove session from execution engine.
@@ -140,8 +140,8 @@ public:
      */
     void prepareDelete(std::function<void()> cb);
 
-    void notifyAlloc(const std::string &graphId, uint64_t ticket, const ResourceTag &tag, size_t num) override;
-    void notifyDealloc(const std::string &graphId, uint64_t ticket, const ResourceTag &tag, size_t num, bool last) override;
+    void notifyAlloc(uint64_t graphId, uint64_t ticket, const ResourceTag &tag, size_t num) override;
+    void notifyDealloc(uint64_t graphId, uint64_t ticket, const ResourceTag &tag, size_t num, bool last) override;
 
     void interrupt();
 

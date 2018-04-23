@@ -174,9 +174,13 @@ private:
     // the overhead of constructing it for each executor instance.
     gtl::FlatMap<std::string, FrameInfo *> frame_info_;
 
-    // Known succeed node resource usage
     bool is_main_iter;
+    // a combination of graphHandle and partition
+    uint64_t graph_id_;
+    // Known succeed node resource usage
     IterationCost cost_mgr_;
+
+    static std::atomic_int_fast64_t NextSeq;
 
     TF_DISALLOW_COPY_AND_ASSIGN(ExecutorImpl);
 };

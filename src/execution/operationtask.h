@@ -45,7 +45,7 @@ public:
 
     virtual std::string DebugString() const = 0;
 
-    virtual std::string graphId() const = 0;
+    virtual uint64_t graphId() const = 0;
 
     // Estimate usage and cache the result
     virtual Resources estimatedUsage(const DeviceSpec &dev) = 0;

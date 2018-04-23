@@ -23,7 +23,7 @@ void IterationContext::scheduleTask(std::unique_ptr<OperationTask> &&task)
 
 void IterationContext::finish()
 {
-    m_item->endIteration(m_name);
+    m_item->endIteration(m_graphId);
 }
 
 } // namespace salus
