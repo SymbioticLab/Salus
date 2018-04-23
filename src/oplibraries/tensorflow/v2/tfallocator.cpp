@@ -218,7 +218,6 @@ void PerOpAllocator::recordSize(void *ptr, size_t size)
     m_lastFailedAllocSize = size;
     if (!ptr) {
         // No enough memory
-        LOG(WARNING) << "TFAllocator failed to allocate.";
         return;
     }
     m_allocated[ptr] = size;

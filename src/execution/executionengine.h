@@ -127,12 +127,7 @@ public:
     AllocationRegulator::Ticket m_ticket;
     PSessionItem m_item;
 
-    explicit ExecutionContext(ExecutionEngine &engine, AllocationRegulator::Ticket ticket, PSessionItem item)
-        : m_engine(engine)
-        , m_ticket(ticket)
-        , m_item(std::move(item))
-    {
-    }
+    explicit ExecutionContext(ExecutionEngine &engine, AllocationRegulator::Ticket ticket);
 
     ~ExecutionContext()
     {

@@ -96,6 +96,7 @@ void FairScheduler::notifyPreSchedulingIteration(const SessionList &sessions,
         for (auto &sess : sessions) {
             candidates->emplace_back(sess);
             // touch each item once to ensure it's in the map
+            LOG(DEBUG) << "Adding session " << sess->sessHandle;
             aggResUsages[sess->sessHandle] = 0;
         }
     }

@@ -47,7 +47,7 @@ public:
         return m_schedParam;
     }
 
-    PSessionItem insertSession();
+    void insertSession(PSessionItem sess);
 
     /**
      * @brief Make a resource context that first allocate from session's resources

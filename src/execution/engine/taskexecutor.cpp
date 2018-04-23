@@ -67,21 +67,17 @@ void TaskExecutor::stopExecution()
     }
 }
 
-PSessionItem TaskExecutor::insertSession()
+void TaskExecutor::insertSession(PSessionItem sess)
 {
     if (m_interrupting) {
-        return nullptr;
+        return;
     }
-
-    auto item = std::make_shared<SessionItem>("");
 
     {
         auto g = sstl::with_guard(m_newMu);
-        m_newSessions.emplace_back(item);
+        m_newSessions.emplace_back(sess);
     }
     m_note_has_work.notify();
-
-    return item;
 }
 
 void TaskExecutor::deleteSession(PSessionItem item)

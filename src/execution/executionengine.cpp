@@ -91,15 +91,9 @@ std::shared_ptr<ExecutionContext> ExecutionEngine::makeContext()
         // Engine has been iterrupted
         return nullptr;
     }
-    auto pItem = m_taskExecutor.insertSession();
-    if (!pItem) {
-        // Engine has been iterrupted
-        LOG(WARNING) << "Called makeContext on interrupted engine";
-        return nullptr;
-    }
 
     auto ticket = m_allocReg.registerJob();
-    return std::make_shared<ExecutionContext>(*this, ticket, std::move(pItem));
+    return std::make_shared<ExecutionContext>(*this, ticket);
 }
 
 void ExecutionEngine::scheduleIteration(IterationItem &&item)
@@ -220,6 +214,13 @@ bool ExecutionEngine::maybeWaitForAWhile(size_t scheduled)
     return true;
 }
 
+ExecutionContext::ExecutionContext(ExecutionEngine &engine, AllocationRegulator::Ticket ticket)
+    : m_engine(engine)
+    , m_ticket(ticket)
+    , m_item(std::make_shared<SessionItem>(""))
+{
+}
+
 void ExecutionContext::registerPagingCallbacks(PagingCallbacks &&pcb)
 {
     DCHECK(m_item);
@@ -263,6 +264,8 @@ void ExecutionContext::setSessionHandle(const std::string &h)
 {
     DCHECK(m_item);
     m_item->sessHandle = h;
+
+    m_engine.m_taskExecutor.insertSession(m_item);
 }
 
 void ExecutionContext::scheduleIteartion(std::unique_ptr<IterationTask> &&iterTask)
