@@ -37,7 +37,7 @@ def run_mnist_softmax(sess, batch_size=50):
 
             print("{}: Start running step {}".format(datetime.now(), i))
             start_time = default_timer()
-            _, loss_value = sess.run([train_step, cross_entropy])
+            _, loss_value, _ = sess.run([train_step, cross_entropy, tf.random_normal([1], name="salus_main_iter")])
             duration = default_timer() - start_time
             examples_per_sec = batch_size / duration
             sec_per_batch = float(duration)
@@ -112,7 +112,7 @@ def run_mnist_conv(sess, batch_size=50):
                 break
             print("{}: Start running step {}".format(datetime.now(), i))
             start_time = default_timer()
-            sess.run(train_step, feed_dict={keep_prob: 0.5})
+            sess.run([train_step, tf.random_normal([1], name="salus_main_iter")], feed_dict={keep_prob: 0.5})
             duration = default_timer() - start_time
             examples_per_sec = batch_size / duration
             sec_per_batch = float(duration)
@@ -204,7 +204,8 @@ def run_mnist_large(sess, batch_size=50):
 
             print("{}: Start running step {}".format(datetime.now(), i))
             start_time = default_timer()
-            _, loss_value = sess.run([train_step, cross_entropy], feed_dict={keep_prob: 0.5})
+            _, loss_value, _ = sess.run([train_step, cross_entropy, tf.random_normal([1], name="salus_main_iter")],
+                                        feed_dict={keep_prob: 0.5})
             end_time = default_timer()
 
             if last_end_time > 0:

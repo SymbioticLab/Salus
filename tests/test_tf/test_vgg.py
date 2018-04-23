@@ -42,7 +42,8 @@ def run_vgg(vgg, sess, input_data, batch_size=100):
                 break
             print("{}: Start running step {}".format(datetime.now(), i))
             start_time = default_timer()
-            _, loss_value = sess.run([train_step, cross_entropy], feed_dict={train_mode: True})
+            _, loss_value, _ = sess.run([train_step, cross_entropy, tf.random_normal([1], name="salus_main_iter")],
+                                        feed_dict={train_mode: True})
             end_time = default_timer()
             losses.append(loss_value)
 

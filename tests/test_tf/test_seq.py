@@ -48,7 +48,10 @@ def run_seq_ptb(sess, config_name):
             m.assign_lr(sess, config.learning_rate * lr_decay)
 
             print("Epoch: %d Learning rate: %.3f" % (i + 1, sess.run(m.lr)))
-            train_perplexity, speeds = m.run_epoch(sess, eval_op=m.train_op, verbose=True)
+            train_perplexity, speeds = m.run_epoch(sess,
+                                                   eval_op=tf.group(m.train_op,
+                                                                    tf.random_normal([1], name="salus_main_iter")),
+                                                   verbose=True)
             print("Epoch: %d Train Perplexity: %.3f" % (i + 1, train_perplexity))
             print('Average: %.3f sec/batch' % np.average(speeds))
             if len(speeds) > 1:

@@ -175,6 +175,7 @@ private:
     gtl::FlatMap<std::string, FrameInfo *> frame_info_;
 
     // Known succeed node resource usage
+    bool is_main_iter;
     IterationCost cost_mgr_;
 
     TF_DISALLOW_COPY_AND_ASSIGN(ExecutorImpl);

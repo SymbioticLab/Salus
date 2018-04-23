@@ -105,6 +105,7 @@ private:
     sstl::notification m_note_has_work;
 
     void scheduleLoop();
+    bool runIter(IterationItem &iterItem, ExecutionContext &ectx);
     bool maybeWaitForAWhile(size_t scheduled);
 };
 
@@ -140,6 +141,8 @@ public:
     void setInterruptCallback(std::function<void()> cb);
 
     void setSessionHandle(const std::string &h);
+
+    void dropExlusiveMode();
 
     /**
      * @brief Make a resource context that first allocate from session's resources

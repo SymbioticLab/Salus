@@ -6,17 +6,13 @@
 #include "utils/threadutils.h"
 
 namespace salus::oplib::tensorflow {
-void IterationCost::build(const tf::Graph &g, const GraphView &gv, const ResStats &rm)
+void IterationCost::build(const tf::Graph &g, const GraphView &gv, const ResStats &rm, const bool is_main_iter)
 {
     isFirstIter = true;
-    // HACK: only use rm if it's for a real iteration, i.e. has more than a few nodes
-    if (g.num_nodes() > 200) {
+    if (is_main_iter) {
         m_iterationCost = rm;
-        // HACK: not reliable
-        m_iterationCost.exclusiveFirst = false;
     } else {
         m_iterationCost = {};
-        m_iterationCost.exclusiveFirst = false;
     }
 
     m_nodeCosts.resize(static_cast<size_t>(g.num_node_ids()));

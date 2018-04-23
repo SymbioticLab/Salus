@@ -40,6 +40,9 @@
 struct OperationItem;
 using POpItem = std::shared_ptr<OperationItem>;
 
+namespace salus {
+class ExecutionEngine;
+}
 /**
  * @todo write docs
  */
@@ -78,8 +81,12 @@ private:
     // Accessed by multiple scheduling thread
     std::atomic_bool protectOOM{true};
 
+    // Iters should goto blockingIters queue
+    std::atomic_bool exlusiveMode{true};
+
     friend class salus::TaskExecutor;
     friend class BaseScheduler;
+    friend class salus::ExecutionEngine;
 
 public:
     std::string sessHandle;
@@ -108,6 +115,10 @@ public:
 
     void setPagingCallbacks(salus::PagingCallbacks pcb);
     void setInterruptCallback(std::function<void()> cb);
+    void setExclusiveMode(bool mode)
+    {
+        exlusiveMode = mode;
+    }
 
     void queueTask(POpItem &&opItem);
 

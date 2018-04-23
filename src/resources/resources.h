@@ -183,11 +183,6 @@ struct ResStats
      */
     size_t count = 0;
 
-    /**
-     * @brief Whether to run this as exclusive for first iter
-     */
-    bool exclusiveFirst = false;
-
     std::string DebugString() const;
 };
 /**

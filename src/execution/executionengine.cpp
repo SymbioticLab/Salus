@@ -19,9 +19,9 @@
 
 #include "execution/executionengine.h"
 
-#include "execution/iterationtask.h"
 #include "execution/engine/iterationcontext.h"
 #include "execution/engine/resourcecontext.h"
+#include "execution/iterationtask.h"
 #include "platform/logging.h"
 #include "utils/containerutils.h"
 #include "utils/date.h"
@@ -34,6 +34,7 @@
 #include <algorithm>
 #include <functional>
 #include <iomanip>
+#include <boost/container/flat_map.hpp>
 
 using std::chrono::duration_cast;
 using std::chrono::microseconds;
@@ -115,53 +116,138 @@ void ExecutionEngine::scheduleLoop()
     LOG(INFO) << "ExecutionEngine scheduling thread started";
     // a thread local queue
     IterQueue iters;
+    // a higher priority queue. Only one session's iter in this queue can run, and will block iters queue
+    boost::circular_buffer<std::pair<PSessionItem, boost::circular_buffer<IterationItem>>>
+        blockingSessions(128);
+
+    // staging queue
+    IterQueue staging;
 
     while (true) {
         size_t scheduled = 0;
         // accept new iters
         {
             auto g = sstl::with_guard(m_mu);
-            iters.splice(iters.end(), m_iterQueue);
+            staging.swap(m_iterQueue);
         }
+
+        // move things to aproriate queue
+        for (auto &iter : staging) {
+            auto ectx = iter.wectx.lock();
+            if (!ectx) {
+                continue;
+            }
+            if (ectx->m_item->exlusiveMode) {
+                bool found = false;
+                for (auto &[psess, queue] : blockingSessions) {
+                    if (psess == ectx->m_item) {
+                        found = true;
+                        queue.push_back(std::move(iter));
+                        break;
+                    }
+                }
+                if (!found) {
+                    blockingSessions.push_back();
+                    blockingSessions.back().first = ectx->m_item;
+                    blockingSessions.back().second.set_capacity(4);
+                    blockingSessions.back().second.push_back(std::move(iter));
+                }
+            } else {
+                iters.emplace_back(std::move(iter));
+            }
+        }
+        staging.clear();
 
         if (m_interrupting) {
             break;
         }
 
-        IterQueue staging;
+        // schedule in blocking queue
+        bool hasBlocking = false;
+        while (!blockingSessions.empty()) {
+            auto &[pSess, queue] = blockingSessions.front();
+            if (queue.empty() && !pSess->exlusiveMode) {
+                // this session has done with exlusive mode
+                blockingSessions.pop_front();
+                continue;
+            }
+            hasBlocking = true;
+
+            while (!queue.empty()) {
+                auto &iterItem = queue.front();
+
+                if (iterItem.iter->isCanceled()) {
+                    queue.pop_front();
+                    continue;
+                }
+
+                auto ectx = iterItem.wectx.lock();
+                if (!ectx) {
+                    queue.pop_front();
+                    continue;
+                }
+
+                if (runIter(iterItem, *ectx)) {
+                    queue.pop_front();
+                    scheduled += 1;
+                }
+            }
+            break;
+        }
+
+        if (hasBlocking && scheduled > 0) {
+            maybeWaitForAWhile(scheduled);
+
+            bool noWork = blockingSessions.empty() && iters.empty();
+            if (noWork) {
+                for (auto &[pSess, queue] : blockingSessions) {
+                    UNUSED(pSess);
+                    if (!queue.empty()) {
+                        noWork = false;
+                        break;
+                    }
+                }
+            }
+            if (noWork) {
+                VLOG(2) << "ExecutionEngine wait on m_note_has_work";
+                m_note_has_work.wait();
+            }
+            continue;
+        }
+
         iters.swap(staging);
         for (auto &iterItem : staging) {
             if (iterItem.iter->isCanceled()) {
                 continue;
             }
 
-            // automatically place back if we can't schedule to run it by the end of this iteration
-            sstl::ScopeGuards put_back([&](){
-                iters.emplace_back(std::move(iterItem));
-            });
-
             auto ectx = iterItem.wectx.lock();
             if (!ectx) {
                 continue;
             }
 
-            DCHECK(ectx->m_item);
+            // automatically place back if we can't schedule to run it by the end of this iteration
+            sstl::ScopeGuards put_back([&]() { iters.emplace_back(std::move(iterItem)); });
 
-            // FUTURE: support other devices
-            if (!iterItem.iter->prepare()) {
-                continue;
+            if (runIter(iterItem, *ectx)) {
+                put_back.dismiss();
+                scheduled += 1;
             }
-
-            auto iCtx = std::make_shared<IterationContext>(m_taskExecutor, ectx->m_item);
-            iterItem.iter->runAsync(std::move(iCtx));
-
-            scheduled += 1;
-            put_back.dismiss();
         } // for (auto &[wectx, iter] : staging) {
 
         maybeWaitForAWhile(scheduled);
 
-        if (iters.empty()) {
+        bool noWork = blockingSessions.empty() && iters.empty();
+        if (noWork) {
+            for (auto &[pSess, queue] : blockingSessions) {
+                UNUSED(pSess);
+                if (!queue.empty()) {
+                    noWork = false;
+                    break;
+                }
+            }
+        }
+        if (noWork) {
             VLOG(2) << "ExecutionEngine wait on m_note_has_work";
             m_note_has_work.wait();
         }
@@ -177,7 +263,27 @@ void ExecutionEngine::scheduleLoop()
     for (const auto &iterItem : iters) {
         iterItem.iter->cancel();
     }
+    for (const auto &[pSess, queue] : blockingSessions) {
+        UNUSED(pSess);
+        for (const auto &iterItem : queue) {
+            iterItem.iter->cancel();
+        }
+    }
     LOG(INFO) << "ExecutionEngine stopped";
+}
+
+bool ExecutionEngine::runIter(IterationItem &iterItem, ExecutionContext &ectx)
+{
+    DCHECK(ectx.m_item);
+
+    // FUTURE: support other devices
+    if (!iterItem.iter->prepare()) {
+        return false;
+    }
+
+    auto iCtx = std::make_shared<IterationContext>(m_taskExecutor, ectx.m_item);
+    iterItem.iter->runAsync(std::move(iCtx));
+    return true;
 }
 
 bool ExecutionEngine::maybeWaitForAWhile(size_t scheduled)
@@ -234,7 +340,8 @@ void ExecutionContext::setInterruptCallback(std::function<void()> cb)
 }
 
 std::unique_ptr<ResourceContext> ExecutionContext::makeResourceContext(const std::string &graphId,
-                                                                       const DeviceSpec &spec, const Resources &res,
+                                                                       const DeviceSpec &spec,
+                                                                       const Resources &res,
                                                                        Resources *missing)
 {
     DCHECK(m_item);
@@ -271,5 +378,11 @@ void ExecutionContext::setSessionHandle(const std::string &h)
 void ExecutionContext::scheduleIteartion(std::unique_ptr<IterationTask> &&iterTask)
 {
     m_engine.scheduleIteration({shared_from_this(), std::move(iterTask)});
+}
+
+void ExecutionContext::dropExlusiveMode()
+{
+    DCHECK(m_item);
+    m_item->setExclusiveMode(false);
 }
 } // namespace salus

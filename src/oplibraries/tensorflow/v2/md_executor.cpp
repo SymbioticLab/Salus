@@ -78,6 +78,7 @@ tf::Status NewMultiDeviceExecutor(MultiDeviceExecutorParams params, std::unique_
 ExecutorImpl::ExecutorImpl(MultiDeviceExecutorParams &&p, std::unique_ptr<const tf::Graph> &&g)
     : params_(std::move(p))
     , graph_(std::move(g))
+    , is_main_iter(false)
 {
     DCHECK(params_.get_kernel != nullptr);
 
@@ -178,6 +179,10 @@ tf::Status ExecutorImpl::Initialize()
             VLOG(3) << "Node " << id << " in graph@" << as_hex(graph_) << ": " << n->def();
         }
 
+        if (n->name() == "salus_main_iter") {
+            is_main_iter = true;
+        }
+
         const int num_in_edges = n->in_edges().size();
         bool client_terminated = false;
         // See if this node is a client terminated recv node
@@ -251,7 +256,7 @@ tf::Status ExecutorImpl::Initialize()
     InitializePending(graph_.get(), cf_info);
 
     // Build and initialize cost mgr
-    cost_mgr_.build(*graph_, gview_, params_.rm);
+    cost_mgr_.build(*graph_, gview_, params_.rm, is_main_iter);
 
     return tf::Status::OK();
 }
@@ -1163,6 +1168,10 @@ void ExecutorState::Finish()
         int n = static_cast<int>(num_emitted_ops_);
         VLOG(3) << "Waiting for " << n << " ops to complete";
         num_finished_ops_.wait(n);
+    }
+
+    if (impl_->is_main_iter) {
+        impl_->params_.ins->dropExlusiveMode();
     }
 
     VLOG(2) << "ExecutorState about to delete this";

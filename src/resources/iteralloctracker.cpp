@@ -54,11 +54,6 @@ bool IterAllocTracker::beginIter(AllocationRegulator::Ticket ticket, ResStats es
     // reserve res
     Resources cap;
     cap[m_tag] = m_est.temporary;
-    if (m_numIters == 0 && m_est.exclusiveFirst) {
-        cap[{ResourceType::EXCLUSIVE, m_tag.device}] = 1;
-        cap[m_tag] += m_est.persist;
-    }
-
     VLOG(3) << "IterAllocTracker@" << as_hex(this) << " reserve: " << cap;
     m_inIter = m_ticket.beginAllocation(cap);
     if (m_inIter) {
@@ -122,9 +117,6 @@ void IterAllocTracker::endIter()
     Resources toRelease{
         {m_tag, m_est.temporary}
     };
-    if (m_numIters == 1 && m_est.exclusiveFirst) {
-        toRelease[{ResourceType::EXCLUSIVE, m_tag.device}] = 1;
-    }
     VLOG(3) << "IterAllocTracker@" << as_hex(this) << "::endIter ticket=" << m_ticket.as_int << ", estimation=" << m_est.DebugString()
             << ", numIter=" << m_numIters << ", toRelease=" << toRelease;
     m_ticket.endAllocation(toRelease);

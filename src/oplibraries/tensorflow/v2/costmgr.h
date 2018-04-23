@@ -23,7 +23,7 @@ class IterationCost
     std::vector<boost::container::flat_map<DeviceType, Resources>> m_nodeCosts GUARDED_BY(m_mu);
 
 public:
-    void build(const tf::Graph &g, const GraphView &gv, const ResStats &rm);
+    void build(const tf::Graph &g, const GraphView &gv, const ResStats &rm, bool is_main_iter);
     std::optional<Resources> getForNode(const NodeItem &item, const DeviceType &dt) const;
     ResStats getForIteration() const;
 
