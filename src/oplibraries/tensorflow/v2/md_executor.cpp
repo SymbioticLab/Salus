@@ -170,6 +170,7 @@ tf::Status ExecutorImpl::Initialize()
     }
 
     VLOG(2) << "Created graph@" << as_hex(graph_) << " of graphHandle=" << params_.graphHandle
+            << ", graphId=" << graph_id_
             << " for session " << params_.session;
     // Preprocess every node in the graph to create an instance of op
     // kernel for each node.
@@ -179,7 +180,7 @@ tf::Status ExecutorImpl::Initialize()
         auto frame_info = EnsureFrameInfo(frame_name);
 
         if (VLOG_IS_ON(3)) {
-            VLOG(3) << "Node " << id << " in graph@" << as_hex(graph_) << ": " << n->def();
+            VLOG(3) << "Node " << id << " in graphHandle=" << params_.graphHandle << ", graphId=" << graph_id_ << ": " << n->def();
         }
 
         if (n->name() == "salus_main_iter") {
@@ -389,7 +390,7 @@ ExecutorState::~ExecutorState()
 void ExecutorState::RunAsync(const tf::Executor::DoneCallback &done, std::shared_ptr<IterationContext> ictx)
 {
     VLOG(3) << "ExecutorState::RunAsync for graph@" << as_hex(impl_->graph_)
-            << " of graphHandle=" << impl_->params_.graphHandle;
+            << " of graphHandle=" << impl_->params_.graphHandle << " for iter graphId=" << impl_->graph_id_;
 
     ictx_ = std::move(ictx);
     // Precompute a contextmap, this is used to setup cache in the device
@@ -1176,17 +1177,15 @@ void ExecutorState::Finish()
 
     if (impl_->is_main_iter) {
         VLOG(2) << impl_->params_.session << ":" << impl_->params_.graphHandle
-                << ":" << step_id_ << " drops exclusive mode";
+                << ":" << impl_->graph_id_ << " drops exclusive mode";
         impl_->params_.ins->dropExlusiveMode();
+        ictx->finish();
     }
 
-    VLOG(2) << impl_->params_.session << ":" << impl_->params_.graphHandle << ":" << step_id_ << " finish iteration";
+    VLOG(2) << impl_->params_.session << ":" << impl_->params_.graphHandle << ":" << impl_->graph_id_ << " finish iteration";
     delete this;
     DCHECK(done_cb != nullptr);
-    runner([done = std::move(done_cb), status, ictx = std::move(ictx)]() {
-        if (ictx) {
-            ictx->finish();
-        }
+    runner([done = std::move(done_cb), status]() {
         done(status);
     });
 }

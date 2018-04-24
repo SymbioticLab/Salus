@@ -15,7 +15,8 @@ IterTask::IterTask(ExecutorImpl &impl, const tf::Executor::Args &args, tf::Execu
     , m_args(args)
     , m_done(std::move(done))
 {
-    VLOG(2) << "Created iteration " << m_impl.graph_id_;
+    VLOG(2) << "Created iteration " << m_impl.graph_id_
+            << " for graph " << m_impl.params_.graphHandle << " in session " << m_impl.params_.session;
 }
 
 IterTask::~IterTask() = default;
@@ -39,6 +40,10 @@ ResStats IterTask::estimatedPeakAllocation(const DeviceSpec &dev) const
 
 bool IterTask::prepare()
 {
+    if (!m_impl.is_main_iter) {
+        return true;
+    }
+
     auto rm = estimatedPeakAllocation(devices::GPU0);
     auto ectx = m_impl.params_.ins;
     return ectx->m_item->beginIteration(ectx->m_ticket, rm, graphId());
