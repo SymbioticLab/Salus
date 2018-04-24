@@ -99,7 +99,7 @@ void SessionItem::notifyDealloc(const uint64_t graphId, uint64_t ticket, const R
 void SessionItem::updateTracker(const uint64_t graphId, const ResourceTag &tag)
 {
     if (tag == trackerTag) {
-        VLOG(2) << "SessionItem::updateTracker graphid=" << graphId;
+        VLOG(2) << "SessionItem::updateTracker graphid=" << graphId << ", sess=" << sessHandle;
         auto g = sstl::with_guard(mu);
         auto it = allocTrackers.find(graphId);
         if (it != allocTrackers.end()) {
@@ -110,7 +110,7 @@ void SessionItem::updateTracker(const uint64_t graphId, const ResourceTag &tag)
 
 bool SessionItem::beginIteration(AllocationRegulator::Ticket t, ResStats newRm, const uint64_t graphId)
 {
-    VLOG(2) << "SessionItem::beginIteration graphid=" << graphId;
+    VLOG(2) << "SessionItem::beginIteration graphid=" << graphId << ", sess=" << sessHandle;
     auto g = sstl::with_guard(mu);
     auto it = allocTrackers.try_emplace(graphId, trackerTag).first;
     return it->second.beginIter(t, newRm);
@@ -118,7 +118,7 @@ bool SessionItem::beginIteration(AllocationRegulator::Ticket t, ResStats newRm, 
 
 void SessionItem::endIteration(const uint64_t graphId)
 {
-    VLOG(2) << "SessionItem::endIteration graphid=" << graphId;
+    VLOG(2) << "SessionItem::endIteration graphid=" << graphId << ", sess=" << sessHandle;
     auto g = sstl::with_guard(mu);
     allocTrackers.at(graphId).endIter();
 }

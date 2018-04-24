@@ -261,6 +261,8 @@ tf::Status ExecutorImpl::Initialize()
     InitializePending(graph_.get(), cf_info);
 
     // Build and initialize cost mgr
+    VLOG(2) << "Set CostMgr with rm=" << params_.rm.DebugString() << ", is_main_iter=" << is_main_iter
+            << ", for graphId=" << graph_id_ << ", sess=" << params_.ins->m_item->sessHandle;
     cost_mgr_.build(*graph_, gview_, params_.rm, is_main_iter);
 
     return tf::Status::OK();

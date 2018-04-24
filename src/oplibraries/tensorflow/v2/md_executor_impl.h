@@ -176,7 +176,7 @@ private:
 
     bool is_main_iter;
     // a combination of graphHandle and partition
-    uint64_t graph_id_;
+    const uint64_t graph_id_;
     // Known succeed node resource usage
     IterationCost cost_mgr_;
 

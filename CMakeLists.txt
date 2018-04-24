@@ -35,7 +35,7 @@ option(WITH_MULTI_DEVICE "Enable multi-device scheduling support" OFF)
 
 option(DISABLE_LOGGING "Disable all logging except INFO level" OFF)
 
-option(WITH_STATIC_STREAM "Use static GPU stream assignment, for debug only" OFF)
+option(WITH_STATIC_STREAM "Use static GPU stream assignment, for debug only" ON)
 
 #---------------------------------------------------------------------------------------
 # Find packages

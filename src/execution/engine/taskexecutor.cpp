@@ -32,11 +32,11 @@ inline void logScheduleFailure(const Resources &usage, const ResourceMonitor &re
     UNUSED(resMon);
 
 #ifndef NDEBUG
-    LogAlloc() << "Try to allocate resource failed. Requested: " << usage;
+    VLOG(2) << "Try to allocate resource failed. Requested: " << usage;
     // Don't call resMon.DebugString directly in log line, as logging acquires lock, and
     // may causing deadlock.
     const auto &str = resMon.DebugString();
-    LogAlloc() << "Available: " << str;
+    VLOG(2) << "Available: " << str;
 #endif
 }
 
@@ -537,7 +537,6 @@ std::unique_ptr<ResourceContext> TaskExecutor::makeResourceContext(PSessionItem 
 #endif
 
     rctx->addListener(std::move(sess));
-
 
     return rctx;
 }

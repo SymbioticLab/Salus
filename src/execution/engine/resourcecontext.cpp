@@ -109,7 +109,14 @@ std::ostream &operator<<(std::ostream &os, const ResourceContext &c)
     if (c.ticket() == 0) {
         return os << "AllocationTicket(Invalid)";
     }
-    return os << "AllocationTicket(" << c.ticket() << ", device=" << c.spec() << ")";
+    os << "AllocationTicket(" << c.ticket() << ", device=" << c.spec();
+
+#if defined(SALUS_ENABLE_STATIC_STREAM)
+    os << ", sess=" << c.sessHandle;
+#endif
+
+    os << ")";
+    return os;
 }
 
 } // namespace salus
