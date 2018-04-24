@@ -111,6 +111,28 @@ void ExecutionEngine::scheduleIteration(IterationItem &&item)
     m_note_has_work.notify();
 }
 
+void ExecutionEngine::maybeWaitForWork(const BlockingQueues & blockingSessions, const IterQueue&iters, size_t scheduled)
+{
+    maybeWaitForAWhile(scheduled);
+
+    bool noWork = blockingSessions.empty();
+    if (!noWork) {
+        noWork = true;
+        for (auto &[pSess, queue] : blockingSessions) {
+            UNUSED(pSess);
+            if (!queue.empty()) {
+                noWork = false;
+                break;
+            }
+        }
+    }
+    noWork = noWork && iters.empty();
+    if (noWork) {
+        VLOG(2) << "ExecutionEngine wait on m_note_has_work";
+        m_note_has_work.wait();
+    }
+}
+
 void ExecutionEngine::scheduleLoop()
 {
     LOG(INFO) << "ExecutionEngine scheduling thread started";
@@ -125,6 +147,7 @@ void ExecutionEngine::scheduleLoop()
 
     while (true) {
         size_t scheduled = 0;
+        DCHECK(staging.empty());
         // accept new iters
         {
             auto g = sstl::with_guard(m_mu);
@@ -196,22 +219,7 @@ void ExecutionEngine::scheduleLoop()
         }
 
         if (hasBlocking && scheduled > 0) {
-            maybeWaitForAWhile(scheduled);
-
-            bool noWork = blockingSessions.empty() && iters.empty();
-            if (noWork) {
-                for (auto &[pSess, queue] : blockingSessions) {
-                    UNUSED(pSess);
-                    if (!queue.empty()) {
-                        noWork = false;
-                        break;
-                    }
-                }
-            }
-            if (noWork) {
-                VLOG(2) << "ExecutionEngine wait on m_note_has_work";
-                m_note_has_work.wait();
-            }
+            maybeWaitForWork(blockingSessions, iters, scheduled);
             continue;
         }
 
@@ -234,23 +242,9 @@ void ExecutionEngine::scheduleLoop()
                 scheduled += 1;
             }
         } // for (auto &[wectx, iter] : staging) {
+        staging.clear();
 
-        maybeWaitForAWhile(scheduled);
-
-        bool noWork = blockingSessions.empty() && iters.empty();
-        if (noWork) {
-            for (auto &[pSess, queue] : blockingSessions) {
-                UNUSED(pSess);
-                if (!queue.empty()) {
-                    noWork = false;
-                    break;
-                }
-            }
-        }
-        if (noWork) {
-            VLOG(2) << "ExecutionEngine wait on m_note_has_work";
-            m_note_has_work.wait();
-        }
+        maybeWaitForWork(blockingSessions, iters, scheduled);
     }
 
     // Cleanup
@@ -276,8 +270,10 @@ bool ExecutionEngine::runIter(IterationItem &iterItem, ExecutionContext &ectx)
 {
     DCHECK(ectx.m_item);
 
+    VLOG(2) << "Try iteration " << ectx.m_item->sessHandle << ":" << iterItem.iter->graphId();
     // FUTURE: support other devices
     if (!iterItem.iter->prepare()) {
+        VLOG(2) << "Skipped iteration " << ectx.m_item->sessHandle << ":" << iterItem.iter->graphId();
         return false;
     }
 

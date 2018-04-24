@@ -22,15 +22,17 @@
 
 #include "execution/devices.h"
 #include "execution/engine/taskexecutor.h"
-#include "resources/resources.h"
 #include "execution/scheduler/schedulingparam.h"
 #include "execution/threadpool/threadpool.h"
 #include "platform/logging.h"
+#include "resources/resources.h"
 #include "utils/containerutils.h"
 #include "utils/pointerutils.h"
 #include "utils/threadutils.h"
 
 #include <concurrentqueue.h>
+
+#include <boost/circular_buffer.hpp>
 
 #include <atomic>
 #include <chrono>
@@ -97,6 +99,8 @@ private:
         std::unique_ptr<IterationTask> iter;
     };
     using IterQueue = std::list<IterationItem>;
+    using BlockingQueues =
+        boost::circular_buffer<std::pair<PSessionItem, boost::circular_buffer<IterationItem>>>;
     IterQueue m_iterQueue GUARDED_BY(m_mu);
     void scheduleIteration(IterationItem &&item);
 
@@ -107,6 +111,7 @@ private:
     void scheduleLoop();
     bool runIter(IterationItem &iterItem, ExecutionContext &ectx);
     bool maybeWaitForAWhile(size_t scheduled);
+    void maybeWaitForWork(const BlockingQueues &blockingSessions, const IterQueue &iters, size_t scheduled);
 };
 
 /**
@@ -124,7 +129,6 @@ class ExecutionContext : public std::enable_shared_from_this<ExecutionContext>
     void removeFromEngine();
 
 public:
-
     AllocationRegulator::Ticket m_ticket;
     PSessionItem m_item;
 
@@ -151,10 +155,8 @@ public:
      * @param missing
      * @return
      */
-    std::unique_ptr<ResourceContext> makeResourceContext(uint64_t graphId,
-                                                         const DeviceSpec &spec,
-                                                         const Resources &res,
-                                                         Resources *missing = nullptr);
+    std::unique_ptr<ResourceContext> makeResourceContext(uint64_t graphId, const DeviceSpec &spec,
+                                                         const Resources &res, Resources *missing = nullptr);
 
     void finish(std::function<void()> cb);
 };
