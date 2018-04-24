@@ -33,6 +33,7 @@ def run_vgg(vgg, sess, input_data, batch_size=100):
     # vgg.prob: [batch_size, 1000]
     # labels: [batch_size,]
 
+    salus_marker = tf.no_op(name="salus_main_iter")
     with tfhelper.initialized_scope(sess) as coord:
         speeds = []
         losses = []
@@ -42,7 +43,7 @@ def run_vgg(vgg, sess, input_data, batch_size=100):
                 break
             print("{}: Start running step {}".format(datetime.now(), i))
             start_time = default_timer()
-            _, loss_value, _ = sess.run([train_step, cross_entropy, tf.random_normal([1], name="salus_main_iter")],
+            _, loss_value, _ = sess.run([train_step, cross_entropy, salus_marker],
                                         feed_dict={train_mode: True})
             end_time = default_timer()
             losses.append(loss_value)

@@ -29,7 +29,7 @@ def run_resnet(sess, input_data, batch_size=100):
     resnet = networks.ResNet(hps, images, labels, "train")
 
     resnet.build_graph()
-
+    salus_marker = tf.no_op(name="salus_main_iter")
     losses = []
     with tfhelper.initialized_scope(sess) as coord:
         speeds = []
@@ -39,7 +39,7 @@ def run_resnet(sess, input_data, batch_size=100):
                 break
             print("{}: Start running step {}".format(datetime.now(), i))
             start_time = default_timer()
-            _, loss_value, _ = sess.run([resnet.train_op, resnet.cost, tf.random_normal([1], name="salus_main_iter")])
+            _, loss_value, _ = sess.run([resnet.train_op, resnet.cost, salus_marker])
             end_time = default_timer()
 
             duration = end_time - start_time
