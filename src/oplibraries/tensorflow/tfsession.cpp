@@ -126,12 +126,12 @@ TFSession::TFSessionPrivate::TFSessionPrivate(TFInstance &inst, std::shared_ptr<
 {
     // Get resource estimation from client
     ResStats rm{};
-    ResourceTag rt = resources::GPU0Memory;
+    const auto rt = "MEMORY:GPU";
     auto &m = config.salus_options().resource_map();
-    if (auto oval = sstl::optionalGet(m.persistant(), rt.DebugString())) {
+    if (auto oval = sstl::optionalGet(m.persistant(), rt)) {
         rm.persist = static_cast<size_t>(std::round(*oval));
     }
-    if (auto oval = sstl::optionalGet(m.temporary(), rt.DebugString())) {
+    if (auto oval = sstl::optionalGet(m.temporary(), rt)) {
         rm.temporary = static_cast<size_t>(std::round(*oval));
     }
     rm.count = 0;
