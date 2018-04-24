@@ -213,6 +213,8 @@ void ExecutionEngine::scheduleLoop()
                 if (runIter(iterItem, *ectx)) {
                     queue.pop_front();
                     scheduled += 1;
+                } else {
+                    break;
                 }
             }
             break;
@@ -369,6 +371,8 @@ void ExecutionContext::setSessionHandle(const std::string &h)
 {
     DCHECK(m_item);
     m_item->sessHandle = h;
+
+    VLOG(2) << "Session " << h << " has tracker ticket " << m_ticket.as_int;
 
     m_engine.m_taskExecutor.insertSession(m_item);
 }
