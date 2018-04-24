@@ -19,10 +19,11 @@
 #ifndef SALUS_EXEC_RESOURCES_H
 #define SALUS_EXEC_RESOURCES_H
 
-#include "../execution/devices.h"
-#include "../utils/macros.h"
-#include "../utils/pointerutils.h"
-#include "../platform/thread_annotations.h"
+#include "execution/devices.h"
+#include "utils/macros.h"
+#include "utils/pointerutils.h"
+#include "utils/threadutils.h"
+#include "platform/thread_annotations.h"
 
 #include <list>
 #include <mutex>
@@ -335,12 +336,13 @@ public:
 
         explicit LockedProxy(sstl::not_null<ResourceMonitor*> resMon)
             : m_resMonitor(resMon)
+            , m_ug(sstl::with_uguard(m_resMonitor->m_mu))
         {
-            m_resMonitor->m_mu.lock();
         }
 
         LockedProxy(LockedProxy &&other) noexcept
             : m_resMonitor(other.m_resMonitor)
+            , m_ug(std::move(other.m_ug))
         {
             other.m_resMonitor = nullptr;
         }
@@ -366,12 +368,15 @@ public:
         void release()
         {
             if (m_resMonitor) {
-                m_resMonitor->m_mu.unlock();
                 m_resMonitor = nullptr;
+            }
+            if (m_ug) {
+                m_ug.unlock();
             }
         }
 
         ResourceMonitor *m_resMonitor;
+        sstl::detail::UGuard m_ug;
     };
 
     LockedProxy lock()

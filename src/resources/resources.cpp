@@ -277,34 +277,43 @@ AllocationRegulator::Ticket AllocationRegulator::registerJob()
 
 bool AllocationRegulator::Ticket::beginAllocation(const Resources &res)
 {
-    auto g = sstl::with_guard(reg->m_mu);
+    {
+        auto g = sstl::with_guard(reg->m_mu);
 
-    if (!contains(reg->m_limits, res)) {
-        return false;
+        if (!contains(reg->m_limits, res)) {
+            return false;
+        }
+
+        subtract(reg->m_limits, res);
+
+        merge(reg->m_jobs[*this].inuse, res);
     }
-
-    subtract(reg->m_limits, res);
-
-    merge(reg->m_jobs[*this].inuse, res);
+    VLOG(3) << "Start session allocation hold: ticket=" << as_int
+            << ", res=" << sstl::getOrDefault(res, resources::GPU0Memory, 0);
 
     return true;
 }
 
 void AllocationRegulator::Ticket::endAllocation(const Resources &res)
 {
-    LogAlloc() << "Free session resource: ticket=" << as_int;
-    auto g = sstl::with_guard(reg->m_mu);
+    Resources released;
+    {
+        auto g = sstl::with_guard(reg->m_mu);
 
-    auto it = reg->m_jobs.find(*this);
-    // HACK: finishJob may be called earlier than endAllocation
-    if (it == reg->m_jobs.end()) {
-        return;
+        auto it = reg->m_jobs.find(*this);
+        // HACK: finishJob may be called earlier than endAllocation
+        if (it == reg->m_jobs.end()) {
+            return;
+        }
+        auto &js = it->second;
+
+        released = subtractBounded(js.inuse, res);
+
+        removeInvalid(js.inuse);
+        merge(reg->m_limits, released);
     }
-    auto &js = it->second;
-
-    auto released = subtractBounded(js.inuse, res);
-    removeInvalid(js.inuse);
-    merge(reg->m_limits, released);
+    VLOG(3) << "End session allocation hold: ticket=" << as_int
+            << ", res=" << sstl::getOrDefault(released, resources::GPU0Memory, 0);
 }
 
 void AllocationRegulator::Ticket::finishJob()
@@ -383,23 +392,28 @@ std::optional<uint64_t> ResourceMonitor::preAllocate(const Resources &req, Resou
 
 bool ResourceMonitor::allocate(uint64_t ticket, const Resources &res)
 {
-    auto g = sstl::with_guard(m_mu);
+    if (ticket == 0) {
+        LOG(ERROR) << "Invalid ticket 0";
+        return false;
+    }
+
+    auto g = sstl::with_uguard(m_mu);
     return allocateUnsafe(ticket, res);
 }
 
 bool ResourceMonitor::LockedProxy::allocate(uint64_t ticket, const Resources &res)
 {
     assert(m_resMonitor);
-    return m_resMonitor->allocateUnsafe(ticket, res);
-}
-
-bool ResourceMonitor::allocateUnsafe(uint64_t ticket, const Resources &res)
-{
     if (ticket == 0) {
         LOG(ERROR) << "Invalid ticket 0";
         return false;
     }
 
+    return m_resMonitor->allocateUnsafe(ticket, res);
+}
+
+bool ResourceMonitor::allocateUnsafe(uint64_t ticket, const Resources &res)
+{
     auto remaining(res);
     auto it = m_staging.find(ticket);
     if (it != m_staging.end()) {
@@ -413,11 +427,7 @@ bool ResourceMonitor::allocateUnsafe(uint64_t ticket, const Resources &res)
         // pre-allocation is not enough, see how much we need
         // to request from global avail...
         subtract(remaining, it->second, true /*skipNonExist*/);
-    } else {
-        LOG(ERROR) << "Unknown ticket for allocation: " << ticket;
     }
-
-    VLOG(2) << "Try allocating from global avail for ticket: " << ticket;
 
     removeInvalid(remaining);
 
@@ -452,10 +462,11 @@ void ResourceMonitor::freeStaging(uint64_t ticket)
         return;
     }
 
-    auto g = sstl::with_guard(m_mu);
+    auto g = sstl::with_uguard(m_mu);
 
     auto it = m_staging.find(ticket);
     if (it == m_staging.end()) {
+        g.unlock();
         LOG(ERROR) << "Unknown ticket for freeStaging: " << ticket;
         return;
     }
