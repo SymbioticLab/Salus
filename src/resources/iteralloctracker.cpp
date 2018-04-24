@@ -59,8 +59,10 @@ bool IterAllocTracker::beginIter(AllocationRegulator::Ticket ticket, ResStats es
     if (m_inIter) {
         ++m_numIters;
     } else {
+        // to avoid deadlock
+        auto str = m_ticket.DebugString();
         VLOG(2) << "Delay iteration due to unsafe resource usage@" << as_hex(this) << ". Ticket: " << m_ticket.as_int << ", Predicted usage: "
-                << cap << ", current usage: " << m_ticket.DebugString();
+                << cap << ", current usage: " << str;
     }
     return m_inIter;
 }
@@ -87,13 +89,27 @@ bool IterAllocTracker::update(size_t num)
     auto [edx, edy] = m_buf.back();
     auto slope = (edy - sty) * 1.0 / (edx - stx);
     if (slope < 0 && num >= m_peakthr * m_est.temporary) {
-        VLOG(3) << "IterAllocTracker@" << as_hex(this) << "::endAlloc ticket=" << m_ticket.as_int << ", estimation=" << m_est.DebugString() << ", numIter=" << m_numIters;
-        m_inIter = false;
-        m_ticket.endAllocation({{m_tag, m_est.temporary}});
+        releaseAllocationHold();
         return true;
     }
 
     return false;
+}
+
+void IterAllocTracker::releaseAllocationHold()
+{
+    if (!m_inIter) {
+        return;
+    }
+
+    m_inIter = false;
+
+    Resources toRelease{
+        {m_tag, m_est.temporary}
+    };
+    VLOG(3) << "IterAllocTracker@" << as_hex(this) << "::endIter ticket=" << m_ticket.as_int << ", estimation=" << m_est.DebugString()
+            << ", numIter=" << m_numIters << ", toRelease=" << toRelease;
+    m_ticket.endAllocation(toRelease);
 }
 
 namespace {
@@ -111,20 +127,11 @@ size_t runningAvg(size_t lastAvg, size_t current, int newCount)
 
 void IterAllocTracker::endIter()
 {
-    CHECK(m_inIter);
-    m_inIter = false;
-
-    Resources toRelease{
-        {m_tag, m_est.temporary}
-    };
-    VLOG(3) << "IterAllocTracker@" << as_hex(this) << "::endIter ticket=" << m_ticket.as_int << ", estimation=" << m_est.DebugString()
-            << ", numIter=" << m_numIters << ", toRelease=" << toRelease;
-    m_ticket.endAllocation(toRelease);
     // update our estimation using running average
     m_est.temporary = runningAvg(m_est.temporary, m_curr.temporary, m_numIters);
     m_est.count = runningAvg(m_est.count, m_curr.count, m_numIters);
 
-    VLOG(3) << "IterAllocTracker@" << as_hex(this) << "::endIter curr=" << m_curr.DebugString() << ", newestimation=" << m_est.DebugString() << ", numIter=" << m_numIters;
+    releaseAllocationHold();
 }
 
 } // namespace salus

@@ -28,6 +28,7 @@ class IterAllocTracker
 
     boost::circular_buffer<std::pair<long, size_t>> m_buf;
 
+    void releaseAllocationHold();
 public:
     IterAllocTracker(const ResourceTag &tag, size_t window = 0, double peakthr = 0.9);
 
