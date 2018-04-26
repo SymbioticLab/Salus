@@ -255,6 +255,16 @@ def unique(array, stable=False):
     return list(set(array))
 
 
+def format_timespan(num_seconds, threhold=1):
+    """Format timespan in seconds, with maximum presicion"""
+    units = ['s', 'ms', 'us', 'ns']
+    for unit in units:
+        if num_seconds > threhold:
+            return f'{num_seconds:.2f}{unit}'
+        num_seconds *= 1000
+    return f'{num_seconds / 1000:.2f}{unit}'
+
+
 __all__ = [
     'is_unix',
     'Popen',
@@ -274,4 +284,5 @@ __all__ = [
     'format_secs',
     'maybe_path',
     'unique',
+    'format_timespan',
 ]
