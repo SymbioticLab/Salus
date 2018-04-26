@@ -113,7 +113,7 @@ bool SessionItem::beginIteration(AllocationRegulator::Ticket t, ResStats newRm, 
     VLOG(2) << "SessionItem::beginIteration graphid=" << graphId << ", sess=" << sessHandle;
     auto g = sstl::with_guard(mu);
     auto it = allocTrackers.try_emplace(graphId, trackerTag).first;
-    return it->second.beginIter(t, newRm);
+    return it->second.beginIter(t, newRm, resourceUsage(trackerTag));
 }
 
 void SessionItem::endIteration(const uint64_t graphId)

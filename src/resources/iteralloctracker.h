@@ -22,8 +22,10 @@ class IterAllocTracker
     int m_numIters = 0;
     ResStats m_est{};
     // in iter state
-    bool m_inIter = 0;
-    ResStats m_curr{};
+    bool m_holding = false;
+    uint64_t m_currPersist = 0;
+    uint64_t m_currPeak = 0;
+    size_t m_count = 0;
     AllocationRegulator::Ticket m_ticket{};
 
     boost::circular_buffer<std::pair<long, size_t>> m_buf;
@@ -32,7 +34,7 @@ class IterAllocTracker
 public:
     IterAllocTracker(const ResourceTag &tag, size_t window = 0, double peakthr = 0.9);
 
-    bool beginIter(AllocationRegulator::Ticket ticket, ResStats estimation);
+    bool beginIter(AllocationRegulator::Ticket ticket, ResStats estimation, uint64_t currentUsage);
     bool update(size_t num);
     void endIter();
 };
