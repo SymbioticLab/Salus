@@ -87,6 +87,7 @@ void ResourceContext::dealloc(ResourceType type, size_t num) const
 void ResourceContext::OperationScope::rollback()
 {
     DCHECK(valid);
+    valid = false;
     proxy.free(context.ticket(), res);
 }
 
