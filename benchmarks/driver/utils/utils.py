@@ -206,12 +206,15 @@ def atomic_directory(final_dest):
         name = Path(name)
 
         logger.info(f'Using temporary directory: {name!s}')
-        yield name
-
-        # move content to final dest
-        if final_dest.exists() and not final_dest.is_dir():
-            raise FileExistsError(f"Destination exists and is not a directory: {final_dest}")
-        merge_directory(name, final_dest)
+        try:
+            yield name
+        except Exception:
+            logger.exception("Caught exception:")
+        finally:
+            # move content to final dest
+            if final_dest.exists() and not final_dest.is_dir():
+                raise FileExistsError(f"Destination exists and is not a directory: {final_dest}")
+            merge_directory(name, final_dest)
 
 
 def format_secs(sec):
