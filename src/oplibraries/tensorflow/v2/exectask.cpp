@@ -545,6 +545,12 @@ bool ExecTask::maybeMemoryFailure(const tf::Status &s, const MemFailCallback &me
         DCHECK(ditem.device);
         resources::merge(failedAlloc, ditem.device->failedResourceRequest());
 
+        if (failureTimes > 10) {
+            LOG(WARNING) << "Failed more than 10 times: " << failureTimes <<
+                         " current estimation:" << estimatedUsage(devices::GPU0)
+                         << " total failed request: " << failedAlloc << " " << DebugString();
+        }
+
         if (memFailure && memFailure()) {
             VLOG(1) << "OOM happened and catched by scheduler: " << *this;
             return true;

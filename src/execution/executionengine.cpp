@@ -289,7 +289,7 @@ bool ExecutionEngine::runIter(IterationItem &iterItem, ExecutionContext &ectx)
 bool ExecutionEngine::maybeWaitForAWhile(size_t scheduled)
 {
     static constexpr auto initialSleep = 10ms;
-    static constexpr auto getBored = 20ms;
+    static constexpr auto getBored = 1s;
 
     static auto last = system_clock::now();
     static auto sleep = initialSleep;
@@ -313,9 +313,6 @@ bool ExecutionEngine::maybeWaitForAWhile(size_t scheduled)
     // give out our time slice to avoid using too much cycles
     //             std::this_thread::yield();
     std::this_thread::sleep_for(sleep);
-
-    // Next time we'll sleep longer
-    sleep *= 2;
 
     return true;
 }
@@ -372,7 +369,7 @@ void ExecutionContext::setSessionHandle(const std::string &h)
     DCHECK(m_item);
     m_item->sessHandle = h;
 
-    VLOG(2) << "Session " << h << " has tracker ticket " << m_ticket.as_int;
+    LogAlloc() << "Session " << h << " has tracker ticket " << m_ticket.as_int;
 
     m_engine.m_taskExecutor.insertSession(m_item);
 }

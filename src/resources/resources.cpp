@@ -288,7 +288,7 @@ bool AllocationRegulator::Ticket::beginAllocation(const Resources &res)
 
         merge(reg->m_jobs[*this].inuse, res);
     }
-    VLOG(3) << "Start session allocation hold: ticket=" << as_int
+    LogAlloc() << "Start session allocation hold: ticket=" << as_int
             << ", res=" << sstl::getOrDefault(res, resources::GPU0Memory, 0);
 
     return true;
@@ -312,7 +312,7 @@ void AllocationRegulator::Ticket::endAllocation(const Resources &res)
         removeInvalid(js.inuse);
         merge(reg->m_limits, released);
     }
-    VLOG(3) << "End session allocation hold: ticket=" << as_int
+    LogAlloc() << "End session allocation hold: ticket=" << as_int
             << ", res=" << sstl::getOrDefault(released, resources::GPU0Memory, 0);
 }
 
