@@ -45,7 +45,8 @@ bool IterAllocTracker::beginIter(AllocationRegulator::Ticket ticket, ResStats es
     // reset buffer
     m_buf.clear();
     if (m_window == 0 && m_est.count != 0) {
-        m_buf.set_capacity(m_est.count / 50);
+        auto cap = std::max(m_est.count / 50, size_t{2});
+        m_buf.set_capacity(cap);
     } else if (m_window == 0){
         m_buf.set_capacity(50);
     } else {
@@ -136,8 +137,10 @@ void IterAllocTracker::endIter()
     // update our estimation using running average
 
     // persist usage
-    auto newTemporary = m_currPeak - m_currPersist;
-    m_est.temporary = runningAvg(m_est.temporary, newTemporary, m_numIters);
+    if (m_currPeak > m_currPersist) {
+        auto newTemporary = m_currPeak - m_currPersist;
+        m_est.temporary = runningAvg(m_est.temporary, newTemporary, m_numIters);
+    }
     m_est.count = runningAvg(m_est.count, m_count, m_numIters);
 
 }
