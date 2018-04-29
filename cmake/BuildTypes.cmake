@@ -1,15 +1,15 @@
 # Add new build types for sanitizer and profiler
 # Address sanitizer and undefined beheavior sanitizer
-set(CMAKE_CXX_FLAGS_ASAN "-g -O1 -fno-omit-frame-pointer -fsanitize=address -fsanitize=undefined"
+set(CMAKE_CXX_FLAGS_ASAN "-g -O1 -fno-omit-frame-pointer -fsanitize=address"
     CACHE STRING "Flags used by the C++ compiler during ASan builds." FORCE)
 
 set(CMAKE_C_FLAGS_ASAN "${CMAKE_CXX_FLAGS_ASAN}"
     CACHE STRING "Flags used by the C compiler during ASan builds." FORCE)
 
-set(CMAKE_EXE_LINKER_FLAGS_ASAN "-fsanitize=address -fsanitize=undefined"
+set(CMAKE_EXE_LINKER_FLAGS_ASAN "-fsanitize=address"
     CACHE STRING "Flags used for linking binaries during ASan builds." FORCE)
 
-set(CMAKE_SHARED_LINKER_FLAGS_ASAN "-fsanitize=address -fsanitize=undefined"
+set(CMAKE_SHARED_LINKER_FLAGS_ASAN "-fsanitize=address"
     CACHE STRING "Flags used by the shared libraries linker during ASan builds." FORCE)
 
 # Thread sanitizer
