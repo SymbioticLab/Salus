@@ -64,19 +64,27 @@ set(CMAKE_EXE_LINKER_FLAGS_OPTRACING ""
 set(CMAKE_SHARED_LINKER_FLAGS_OPTRACING ""
     CACHE STRING "Flags used by the shared libraries linker during OpTracing builds." FORCE)
 
-foreach(build IN ITEMS ASAN TSAN MSAN OPTRACING GPERF)
+set(KNOWN_BUILD_TYPES "")
+foreach(build IN ITEMS ASan TSan MSan OpTracing Gperf)
+    string(TOUPPER ${build} build_upper)
     mark_as_advanced(
-        CMAKE_CXX_FLAGS_${build}
-        CMAKE_C_FLAGS_${build}
-        CMAKE_EXE_LINKER_FLAGS_${build}
-        CMAKE_SHARED_LINKER_FLAGS_${build}
+        CMAKE_CXX_FLAGS_${build_upper}
+        CMAKE_C_FLAGS_${build_upper}
+        CMAKE_EXE_LINKER_FLAGS_${build_upper}
+        CMAKE_SHARED_LINKER_FLAGS_${build_upper}
     )
+    list(APPEND KNOWN_BUILD_TYPES ${build})
 endforeach()
+list(APPEND KNOWN_BUILD_TYPES Debug Release RelWithDebInfo MinSizeRel)
+
+if (NOT CMAKE_BUILD_TYPE IN_LIST KNOWN_BUILD_TYPES)
+    message(FATAL_ERROR "Unknown build type: ${CMAKE_BUILD_TYPE}. Choices are ${KNOWN_BUILD_TYPES}")
+endif()
 
 # Update the documentation string of CMAKE_BUILD_TYPE for GUIs
 set(CMAKE_BUILD_TYPE "${CMAKE_BUILD_TYPE}"
     CACHE STRING
-    "Choose the type of build, options are: None Debug Release RelWithDebInfo MinSizeRel ASan TSan MSan OpTracing Gperf."
+    "Choose the type of build, options are: None;${KNOWN_BUILD_TYPES}."
     FORCE)
 
 message(STATUS "Using build type: ${CMAKE_BUILD_TYPE}")
