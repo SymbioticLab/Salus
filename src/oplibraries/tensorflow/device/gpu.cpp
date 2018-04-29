@@ -177,14 +177,20 @@ tf::DeviceContext *PerTaskGPUDevice::deviceContextForNode(int id, bool isAsync)
     UNUSED(isAsync);
 
     // use a round robin to assign streams to session
+    static std::mutex mu;
     static std::unordered_map<std::string, int> seenSessions;
     static auto nextStream = 0;
 
-    auto [it, newSession] = seenSessions.try_emplace(resourceContext().sessHandle, nextStream);
-    if (newSession) {
-        nextStream = (nextStream + 1) % 128;
+    auto stream = 0;
+    {
+        auto g = sstl::with_guard(mu);
+
+        auto [it, newSession] = seenSessions.try_emplace(resourceContext().sessHandle, nextStream);
+        if (newSession) {
+            nextStream = (nextStream + 1) % 128;
+        }
+        stream = it->second;
     }
-    auto stream = it->second;
 #else
     if (!isAsync) {
         requestStreams();

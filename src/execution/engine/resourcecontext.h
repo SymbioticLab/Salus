@@ -6,6 +6,7 @@
 #define SALUS_EXEC_RESOURCECONTEXT_H
 
 #include "resources/resources.h"
+#include "config.h"
 
 #include <boost/container/small_vector.hpp>
 
@@ -38,7 +39,7 @@ class ResourceContext
 public:
 
 #if defined(SALUS_ENABLE_STATIC_STREAM)
-    std::string sessHandle;
+    std::string sessHandle{};
 #endif
     /**
      * @brief Construct a resource context
