@@ -13,10 +13,15 @@ import numpy as np
 import matplotlib.pyplot as plt
 from pathlib import Path
 import multiprocessing as mp
+from tqdm import tqdm
+tqdm.pandas()
 
+def load_mem(path, return_logs=False, parallel_workers=0):
+    try:
+        logs = pl.load_file(path, parallel_workers)
+    except TypeError:
+        logs = path
 
-def load_mem(path):
-    logs = pl.load_file(path)
     df = pd.DataFrame(l.__dict__ for l in logs)
     df = df[df.type.isin(['mem_alloc', 'mem_dealloc'])]
     df = df.drop(['entry_type', 'level', 'loc', 'thread'], axis=1)
@@ -33,25 +38,58 @@ def load_mem(path):
     df['act'] = df.act.cumsum() / 1024 / 1024
     # make sure index is consequtive
     df = df.reset_index(drop=True)
+    
+    if return_logs:
+        return df, logs
+    else:
+        return df
+
+def load_holds(path):
+    try:
+        logs = pl.load_file(path)
+    except TypeError:
+        logs = path
+    
+    df = pd.DataFrame(l.__dict__ for l in logs)
+    
+    # get sess to ticket mapping
+    mapping = df[df.type == 'tracker_ticket'][['sess', 'ticket']].set_index('ticket')
+    mapping = mapping.to_dict()['sess']
+    
+    df = df[df.type.isin(['tracker_hold', 'tracker_unhold'])]
+    df = df.drop(['entry_type', 'level', 'loc', 'thread'], axis=1)
+    
+    df.type.replace({
+        'tracker_hold': 1,
+        'tracker_unhold': -1,
+    }, inplace=True)
+    
+    df['sess'] = df.ticket.replace(mapping)
+    df = df.set_index('timestamp').sort_index().reset_index()
+    
     return df
 
-
 def load_tfmem(path):
-    logs = pl.load_file(path)
+    try:
+        logs = pl.load_file(path)
+    except TypeError:
+        logs = path
+
     df = pd.DataFrame(l.__dict__ for l in logs)
     df = df[df.type.isin(['tf_alloc', 'tf_dealloc'])]
     df = df[['addr', 'size', 'type', 'timestamp']].set_index('timestamp').sort_index()
 
     # fill na size in tf_dealloc
+    addrs = {}
     def find_size(row):
         addr, size, t = row
-        ts = row.name
         if pd.isna(size):
-            s = df.query('timestamp < @ts & addr == @addr & type == "tf_alloc"')['size'][-1]
-            row['size'] = s
+            row['size'] = addrs[addr]
+        else:
+            addrs[addr] = size
         return row
 
-    df = df.apply(find_size, axis=1).reset_index()
+    df = df.progress_apply(find_size, axis=1).reset_index()
 
     # compute act
     mapping = {
@@ -68,7 +106,7 @@ def load_tfmem(path):
 
 # dfa = load_mem('/tmp/workspace/alex.csv')
 # dfv = load_mem('/tmp/workspace/vgg.csv')
-# %%
+#%%
 
 def plot_cs(cs, **kwargs):
     ax = cs.plot(**kwargs)
@@ -91,6 +129,49 @@ def plot_df(df, marker=False, offset=None, **kwargs):
     return ax
 
 
+def plot_df_persess(df, marker=False, offset=None, fill=False, sessaxs=None, **kwargs):
+    cs = df.set_index('timestamp')
+    if marker:
+        if offset is None:
+            offset = cs.index[0]
+        cs.index = (cs.index - offset) / pd.Timedelta(microseconds=1)
+    elif offset is not None:
+        cs.index = (cs.index - offset) / pd.Timedelta(microseconds=1)
+
+    if sessaxs is None:
+        _, axs = plt.subplots(nrows=len(cs.sess.unique()), sharex=True,
+                              squeeze=False)
+        axs = axs.flatten()
+        sessaxs = {}
+    for idx, (sess, dfsess) in enumerate(cs.groupby('sess')):
+        if sess not in sessaxs:
+            ax = axs[idx]
+            sessaxs[sess] = ax
+        else:
+            ax = sessaxs[sess]
+            
+        act = dfsess.type * dfsess['size']
+        act = act.cumsum() / 1024 / 1024
+        
+        if fill:
+            # fill nans
+            act = pd.DataFrame(act).reset_index()
+            nans = np.where(np.empty_like(act.values), np.nan, np.nan)
+            data = np.hstack([nans, act.values]).reshape(-1, act.shape[1])
+            act = pd.DataFrame(data, columns=act.columns)
+            act[0] = act[0].ffill()
+            act['timestamp'] = act['timestamp'].bfill()
+            act = act.set_index('timestamp').dropna()
+        
+        plot_cs(act, ax=ax, **kwargs)
+        if marker:
+            css = dfsess.reset_index()
+            ax = css.plot(kind='scatter',
+                          x=dfsess.timestamp, y=act, c=dfsess.type,
+                          cmap=plt.cm.get_cmap('bwr'), ax=ax)
+    return sessaxs
+
+
 def plot_df_withop(df, offset, **kwargs):
     # columns as unix timestamp in us
     df['timestamp'] = df.timestamp.astype(np.int64)
@@ -105,7 +186,7 @@ def plot_df_withop(df, offset, **kwargs):
 # plot_df(dfa)
 # plot_df(dfv)
 
-# %%
+#%%
 def find_minmax(df, plot=False):
     cs = df.set_index('timestamp').act
     # first find max
@@ -144,7 +225,7 @@ def find_minmax(df, plot=False):
     return ma, persist, avg, ax
 
 
-# %% Simulation of consequtave deallocation
+#%% Simulation of consequtave deallocation
 
 def load_iters(path):
     _, iters = pn.parse_iterations(str(path))
@@ -265,11 +346,13 @@ def sim_dealloc(path):
 def draw_sim(df, iters, phasechanging):
     offset = df.timestamp[0]
     riters = (iters - offset) / pd.Timedelta(microseconds=1)
-    phasechanging['timestamp'] = (phasechanging.timestamp - offset) / pd.Timedelta(microseconds=1)
+    if phasechanging is not None:
+        phasechanging['timestamp'] = (phasechanging.timestamp - offset) / pd.Timedelta(microseconds=1)
 
     ax = plot_df(df, marker=True, offset=offset)
     ax.vlines(riters, *ax.get_ylim())
-    ax.vlines(phasechanging.timestamp, *ax.get_ylim(), colors='r', linestyles='dashed')
+    if phasechanging is not None:
+        ax.vlines(phasechanging.timestamp, *ax.get_ylim(), colors='r', linestyles='dashed')
     return ax
 
 
@@ -282,7 +365,7 @@ for n, df, iters, pc in data:
     ax.set_title(n)
 
 
-# %%
+#%% Produce mem.csv
 def process_mem(item, loader=load_tfmem):
     print(f"{item.name}: Loading log file")
     df = loader(str(item / 'alloc.output'))
@@ -308,10 +391,10 @@ data = pd.DataFrame(data, columns=['Network',
                                    'Peak'])
 data.to_csv('/tmp/workspace/mem.csv', index=False)
 
-# %%
+#%% Produce mem-salus.csv
 with mp.Pool() as pool:
     datasalus = pool.map(functools.partial(process_mem, loader=load_mem),
-                         Path('logs/mem/salus').iterdir())
+                         Path('logs/osdi18/cc/mem/salus').iterdir())
 for n, p, m, a, _, csp in datasalus:
     plt.figure()
     plot_cs(csp).set_title(n)
@@ -322,3 +405,11 @@ datasalus = pd.DataFrame(datasalus, columns=['Network',
                                              'Average',
                                              'Peak'])
 datasalus.to_csv('/tmp/workspace/mem-salus.csv', index=False)
+
+#%% Draw session alloc
+
+dfmem, logs = load_mem('logs/osdi18/cc/exp10/alloc.output', return_logs=True, parallel_workers=5)
+df = load_holds(logs)
+
+axs = plot_df_persess(dfmem)
+axs = plot_df_persess(df, fill=True, sessaxs=axs)

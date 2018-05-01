@@ -59,7 +59,10 @@ def do_mem(logdir, network, batch_size):
     """Do basic JCT on workload"""
     batch_num = 20
     if network == "speech":
-        batch_num = 5
+        # batch_num = 5
+        return
+    if network == "inception4" and batch_size == 75:
+        return
 
     logger.info(f'Measuring memory for {network}_{batch_size} for {batch_num} iter')
 

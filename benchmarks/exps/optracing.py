@@ -32,6 +32,12 @@ def main(argv):
     def create_wl(ex):
         return WTL.create(name, bs, 10, executor=ex)
 
+    # Run on TF
+    wl = create_wl(Executor.TF)
+    wl.env['TF_CPP_MIN_VLOG_LEVEL'] = '2'
+    wl.env['TF_CPP_MIN_LOG_LEVEL'] = ''
+    run_tf(FLAGS.save_dir / 'tf', wl)
+
     # Run on Salus
     wl = create_wl(Executor.Salus)
     run_seq(scfg.copy(output_dir=FLAGS.save_dir / "salus" / '1'), wl)
@@ -43,10 +49,4 @@ def main(argv):
             create_wl(Executor.Salus),
             create_wl(Executor.Salus),
             )
-
-    # Run on TF
-    wl = create_wl(Executor.TF)
-    wl.env['TF_CPP_MIN_VLOG_LEVEL'] = '2'
-    wl.env['TF_CPP_MIN_LOG_LEVEL'] = ''
-    run_tf(FLAGS.save_dir / 'tf', wl)
 

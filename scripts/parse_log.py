@@ -118,7 +118,7 @@ def load_file(path, reinitialize=True, parallel_workers=0):
 
     if parallel_workers == 0:
         logs = []
-        with open(path) as f:
+        with pu.pbopen(path) as f:
             entry = None
             for line in f:
                 line = line.rstrip('\n')
@@ -213,12 +213,14 @@ ptn_mem_pre = re.compile(r"""Pre \s allocated \s AllocationTicket\((?P<ticket>\d
 ptn_mem_alloc = re.compile(r"""TFAllocator\s.+\s(?P<size>\d+)\sbytes\sof\smemory\sat\s
                                (?P<addr>\w+)\s.*\susing\sallocator\s
                                (?P<mem_type>\w+)@(?P<alloc_inst>\w+)\s
-                               with \s AllocationTicket\((?P<ticket>\d+).+""",
+                               with \s AllocationTicket\((?P<ticket>\d+).+
+                               sess=(?P<sess>\w+).+""",
                            re.VERBOSE)
 ptn_mem_dealloc = re.compile(r"""TFAllocator\sdeallocating\smemory\sat\s(?P<addr>\w+)\s
                                  size\s(?P<size>\d+)\s
                                  using\sallocator\s(?P<mem_type>\w+)@(?P<alloc_inst>\w+)\s
-                                 with \s AllocationTicket\((?P<ticket>\d+).+""",
+                                 with \s AllocationTicket\((?P<ticket>\d+).+
+                                 sess=(?P<sess>\w+).+""",
                              re.VERBOSE)
 ptn_progcnt = re.compile(r"""Progress counter for session (?P<sess>\w+): (?P<cnt>\d+)""")
 
@@ -237,10 +239,24 @@ ptn_optracing = re.compile(r"""OpItem\sStat.*name=(?P<op>[^,]+),.*
 ptn_optracing_evt = re.compile(r"""OpItem\sEvent.*name=(?P<op>[^,]+),.*
                                    type=(?P<kernel>[^,]+),.*
                                    session=(?P<sess>[^,]+).*
-                                   step_id=(?P<step>[^,()]+).*
+                                   step_id=(?P<step>[^,()]+).*?
+                                   failed=(?P<failed>\d+)?\s
                                    event:\s(?P<evt>[^,]+)$""",
                                re.VERBOSE)
 
+# Session abcdefg has tracker ticket 123
+ptn_tracker_ticket = re.compile(r"""Session\s(?P<sess>\w+)\shas\s
+                                    tracker\sticket\s(?P<ticket>\d+)$
+                                """, re.VERBOSE)
+
+# Start session allocation hold: ticket=123, res=1213.5
+ptn_tracker_hold = re.compile(r"""Start\ssession\sallocation.+ticket=(?P<ticket>\d+)
+                                  ,.+res=(?P<res>[\d.]+)$
+                              """, re.VERBOSE)
+# End session allocation hold: ticket=123, res=1213.5
+ptn_tracker_unhold = re.compile(r"""End\ssession\sallocation.+ticket=(?P<ticket>\d+)
+                                  ,.+res=(?P<res>[\d.]+)$
+                              """, re.VERBOSE)
 
 def seq_from_entry(entry):
     map_to_use = thread_seq_map
@@ -378,6 +394,7 @@ def match_exec_content(content, entry):
             'type': 'mem_alloc',
             'size': size,
             'addr': addr,
+            'sess': m.group('sess'),
             'block': block
         }
 
@@ -399,6 +416,7 @@ def match_exec_content(content, entry):
             'type': 'mem_dealloc',
             'addr': addr,
             'size': size,
+            'sess': m.group('sess'),
             'block': block
         }
 
@@ -407,7 +425,7 @@ def match_exec_content(content, entry):
         return {
             'type': 'mem_pre',
             'ticket': int(m.group('ticket')),
-            'sess': m.group('sess')
+            'sess': m.group('sess'),
         }
 
     m = ptn_progcnt.match(content)
@@ -446,6 +464,8 @@ def match_exec_content(content, entry):
     m = ptn_optracing_evt.match(content)
     if m:
         sess = m.group('sess')
+        failed = m.group('failed')
+        failed = None if failed is None else int(failed)
         return {
             'type': 'optracing_evt',
             'sess': sess,
@@ -453,6 +473,37 @@ def match_exec_content(content, entry):
             'kernel': m.group('kernel'),
             'step': int(m.group('step')),
             'evt': m.group('evt'),
+            'failed': failed,
+        }
+        
+    m = ptn_tracker_ticket.match(content)
+    if m:
+        sess = m.group('sess')
+        ticket = m.group('ticket')
+        return {
+            'type': 'tracker_ticket',
+            'sess': sess,
+            'ticket': ticket
+        }
+    
+    m = ptn_tracker_hold.match(content)
+    if m:
+        ticket = m.group('ticket')
+        res = float(m.group('res'))
+        return {
+            'type': 'tracker_hold',
+            'ticket': ticket,
+            'size': res
+        }
+    
+    m = ptn_tracker_unhold.match(content)
+    if m:
+        ticket = m.group('ticket')
+        res = float(m.group('res'))
+        return {
+            'type': 'tracker_unhold',
+            'ticket': ticket,
+            'size': res
         }
 
     return {}

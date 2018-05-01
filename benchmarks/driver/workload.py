@@ -47,6 +47,9 @@ class ResourceGeometry(object):
     def __getitem__(self, key):
         return getattr(self, key)
 
+    def __setitem__(self, key, value):
+        return setattr(self, key, value)
+
     def copy(self):
         # type: () -> ResourceGeometry
         """Make a shadow copy"""
@@ -247,33 +250,37 @@ class WorkloadTemplate(object):
 
                 # 20iter
                 jct = try_with_default(float, None, ValueError)(row['20iter-jct'])
-                # update geometry of the rcfg
-                rcfg = RunConfig(bs, 20, None)
-                wtl.add_geometry(rcfg, ex, ResourceGeometry(jct, None, None))
+                if jct is not None:
+                    # update geometry of the rcfg
+                    rcfg = RunConfig(bs, 20, None)
+                    wtl.add_geometry(rcfg, ex, ResourceGeometry(jct, None, None))
 
                 # 1min
                 jct = try_with_default(float, None, ValueError)(row['1min-jct'])
                 bn = try_with_default(float, None, ValueError)(row['1min-num'])
-                bn = int(bn)
-                # update geometry of the rcfg
-                rcfg = RunConfig(bs, bn, None)
-                wtl.add_geometry(rcfg, ex, ResourceGeometry(jct, None, None))
+                if jct is not None and bn is not None:
+                    bn = int(bn)
+                    # update geometry of the rcfg
+                    rcfg = RunConfig(bs, bn, None)
+                    wtl.add_geometry(rcfg, ex, ResourceGeometry(jct, None, None))
 
                 # 5min
                 jct = try_with_default(float, None, ValueError)(row['5min-jct'])
                 bn = try_with_default(float, None, ValueError)(row['5min-num'])
-                bn = int(bn)
-                # update geometry of the rcfg
-                rcfg = RunConfig(bs, bn, None)
-                wtl.add_geometry(rcfg, ex, ResourceGeometry(jct, None, None))
+                if jct is not None and bn is not None:
+                    bn = int(bn)
+                    # update geometry of the rcfg
+                    rcfg = RunConfig(bs, bn, None)
+                    wtl.add_geometry(rcfg, ex, ResourceGeometry(jct, None, None))
 
                 # 10min
                 jct = try_with_default(float, None, ValueError)(row['10min-jct'])
                 bn = try_with_default(float, None, ValueError)(row['10min-num'])
-                bn = int(bn)
-                # update geometry of the rcfg
-                rcfg = RunConfig(bs, bn, None)
-                wtl.add_geometry(rcfg, ex, ResourceGeometry(jct, None, None))
+                if jct is not None and bn is not None:
+                    bn = int(bn)
+                    # update geometry of the rcfg
+                    rcfg = RunConfig(bs, bn, None)
+                    wtl.add_geometry(rcfg, ex, ResourceGeometry(jct, None, None))
 
                 count += 1
         logger.info(f'Loaded {count} records')
@@ -298,10 +305,10 @@ class WorkloadTemplate(object):
                 name, bs = row['Network'].split('_')
                 bs = try_with_default(int, bs, ValueError)(bs)
 
-                peakmem = try_with_default(float, None, ValueError)(row['Peak'])
+                peakmem = try_with_default(float, None, ValueError)(row['Peak Mem (MB)'])
                 if peakmem is not None:
                     peakmem = peakmem * MB
-                persistmem = try_with_default(float, None, ValueError)(row['Persistent Mem (MB)']) * MB
+                persistmem = try_with_default(float, None, ValueError)(row['Persistent Mem (MB)'])
                 if persistmem is not None:
                     persistmem = persistmem * MB
 
@@ -309,7 +316,11 @@ class WorkloadTemplate(object):
                 # first add batch_size if not present
                 wtl._batch_sizes.add(bs)
                 # for all batch num
-                for bn in wtl.available_batch_nums(bs):
+                abns = wtl.available_batch_nums(bs)
+                if not abns:
+                    # no batch num available, add a default one
+                    abns = [20]
+                for bn in abns:
                     # update geometry of the rcfg
                     rcfg = RunConfig(bs, bn, None)
                     wtl.add_geometry(rcfg, ex, ResourceGeometry(None, peakmem, persistmem))
@@ -326,7 +337,7 @@ class Workload(object):
     def __init__(self, wtl, rcfg, executor, geo):
         # type: (WorkloadTemplate, RunConfig, Executor, ResourceGeometry) -> None
         super().__init__()
-        self._wtl = wtl
+        self.wtl = wtl
         self.env = os.environ.copy()
         self.rcfg = rcfg
         self.executor = executor
@@ -337,7 +348,7 @@ class Workload(object):
     @property
     def name(self):
         # type: () -> str
-        return self._wtl.name
+        return self.wtl.name
 
     @property
     def batch_size(self):
@@ -353,7 +364,7 @@ class Workload(object):
     def canonical_name(self):
         # type: () -> str
         """Format a canonical name for specific run config"""
-        return self._wtl.canonical_name(self.rcfg)
+        return self.wtl.canonical_name(self.rcfg)
 
     @property
     def output_name(self):
@@ -374,7 +385,7 @@ class Workload(object):
     def run(self, output_file):
         # type: (Path) -> Popen
         """Run workload on executor"""
-        _runner = self._wtl.runnerCls(self)
+        _runner = self.wtl.runnerCls(self)
 
         if self.proc is not None:
             raise RuntimeError("This workload is already started")

@@ -1,12 +1,11 @@
 # -*- coding: future_fstrings -*-
 """
-OSDI Experiment 13
+OSDI Experiment 14
 
 Tasks start at begining
 For TF-Salus: JCT of running 2 jobs together, using packing scheduling
-For TF: run the same jobs sequentially.
 
-Show packing can improve JCT
+Show op tracing, more tasks are running in parallel
 
 Scheduler: pack
 Work conservation: True
@@ -25,7 +24,7 @@ FLAGS = flags.FLAGS
 
 
 def main(argv):
-    scfg = maybe_forced_preset(presets.MostEfficient)
+    scfg = maybe_forced_preset(presets.OpTracing)
     scfg.scheduler = 'pack'
 
     # Firstly run concurrently on salus
@@ -34,9 +33,3 @@ def main(argv):
             WTL.create("resnet101", 50, 47),
             )
 
-    # Then run on tf
-    run_seq(scfg.copy(output_dir=FLAGS.save_dir / "tf"),
-            WTL.create("resnet101", 50, 47, executor=Executor.TF),
-            Pause.Wait,
-            WTL.create("resnet101", 50, 47, executor=Executor.TF),
-            )

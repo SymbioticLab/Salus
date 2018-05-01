@@ -3,7 +3,7 @@ from builtins import input
 import parse_log as pl
 import pandas as pd
 import numpy as np
-import seaborn as sns
+#import seaborn as sns
 import matplotlib.pyplot as plt
 import os
 
@@ -320,9 +320,10 @@ plt.close(fig)
 #
 # Running one with matching iter
 #
-fig, axs = plt.subplots(nrows=2, ncols=1, sharex=True, figsize=figsize)
+#fig, axs = plt.subplots(nrows=2, ncols=1, sharex=True, figsize=figsize)
+fig, axs = plt.subplots(nrows=2, ncols=1, sharex=True)
 draw_lines(axs[0], only_step(steptf, 6), tf_events, colors=['g', 'r'], set_y=set_y)
-axs[0].set_title('alexnet_25 on TF')
+axs[0].set_title('alexnet_25 on TensorFlow')
 # use second normal iter
 draw_lines(axs[1], only_step(stepsalus, 10), salus_events,
            colors=plt.rcParams['axes.prop_cycle'].by_key()['color'],
@@ -331,13 +332,14 @@ draw_lines(axs[1], only_step(stepsalus, 10), salus_events,
                    'PropOut', 'Misc'],
            set_y=set_y, sort=True)
 
-axs[1].legend()
+axs[1].legend(loc='lower right', bbox_to_anchor=(1,1.5), ncol=2)
 axs[1].set_title('alexnet_25 on Salus')
 axs[1].set_xlabel('Normalized time (us)')
-axs[1].set_xlim(0, 60000)
+axs[1].set_ylabel('Tasks')
+axs[1].set_xlim(0, 40000)
 fig.tight_layout()
 fig.savefig(os.path.join(outputdir, 'tfsalus-later.pdf'), dpi=300)
-plt.close(fig)
+#plt.close(fig)
 
 #%%
 #
@@ -371,3 +373,45 @@ axs[1].set_xlabel('Normalized time (us)')
 fig.tight_layout()
 fig.savefig(os.path.join(outputdir, 'salusab.pdf'), dpi=300)
 plt.close(fig)
+
+#%% CDF of task length
+
+def cdf(X, ax=None, **kws):
+    if ax is None:
+        _, ax = plt.subplots()
+    n = np.arange(1,len(X)+1) / np.float(len(X))
+    Xs = np.sort(X)
+    ax.step(Xs, n, **kws)
+    ax.set_ylim(0, 1)
+    return ax
+
+
+import os
+logdir = 'logs/osdi18/cc/exp18'
+model = 'alexnet_25'
+steptf = load_tf(os.path.join(logdir, 'tf/{}.tf.10iter.0.output'.format(model)))
+stepsalus = load_salus(os.path.join(logdir, 'salus/1/perf.output'))
+
+steptf = unify_names(steptf)
+stepsalus = unify_names(stepsalus)
+
+tflength = steptf[tf_events[-1]] - steptf[tf_events[0]]
+saluslength = stepsalus[salus_events[-1]] - stepsalus[salus_events[0]]
+
+tflength = tflength / pd.Timedelta(microseconds=1)
+saluslength = saluslength / pd.Timedelta(microseconds=1)
+
+plt.style.use(['seaborn-paper', 'mypaper'])
+
+fig, ax = plt.subplots()
+cdf(tflength, ax=ax, label='TensorFlow')
+cdf(saluslength, ax=ax, label='Salus')
+
+ax.set_ylabel('CDF')
+ax.set_xlabel('Tasks')
+ax.legend()
+
+fig.set_size_inches(3.45, 1.75, forward=True)
+fig.tight_layout()
+fig.savefig('/tmp/workspace/exp18.pdf', dpi=300)
+#plt.close()
