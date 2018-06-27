@@ -58,8 +58,10 @@ def handle_20iter(target, name, path):
             '20iter-avg': content['avg'],
         }
         target.append(data)
-    except OSError as err:
+    except (OSError, IOError) as err:
         print('WARNING: file not found: ', err)
+    except KeyError as err:
+        print('File content is missing {} entries: {}'.format(err.args[0], path))
 
 
 def handle_1min(target, name, path):
@@ -72,8 +74,10 @@ def handle_1min(target, name, path):
             '1min-avg': content['avg'],
         }
         target.append(data)
-    except OSError as err:
+    except (OSError, IOError) as err:
         print('WARNING: file not found: ', err)
+    except KeyError as err:
+        print('File content is missing {} entries: {}'.format(err.args[0], path))
 
 
 def handle_5min(target, name, path):
@@ -86,8 +90,10 @@ def handle_5min(target, name, path):
             '5min-avg': content['avg'],
         }
         target.append(data)
-    except OSError as err:
+    except (OSError, IOError) as err:
         print('WARNING: file not found: ', err)
+    except KeyError as err:
+        print('File content is missing {} entries: {}'.format(err.args[0], path))
 
 
 def handle_10min(target, name, path):
@@ -100,8 +106,10 @@ def handle_10min(target, name, path):
             '10min-avg': content['avg'],
         }
         target.append(data)
-    except OSError as err:
+    except (OSError, IOError) as err:
         print('WARNING: file not found: ', err)
+    except KeyError as err:
+        print('File content is missing {} entries: {}'.format(err.args[0], path))
 
 
 def generate_csv(logs_dir, output_dir):

@@ -16,7 +16,7 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include "resources.h"
+#include "resources/resources.h"
 
 #include "platform/logging.h"
 #include "utils/containerutils.h"
@@ -45,6 +45,8 @@ std::string enumToString(const ResourceType &rt)
         return "MEMORY";
     case ResourceType::GPU_STREAM:
         return "GPU_STREAM";
+    case ResourceType::EXCLUSIVE:
+        return "EXCLUSIVE";
     default:
         return "Unknown ResourceType";
     }
@@ -90,14 +92,10 @@ std::string ResourceTag::DebugString() const
     return oss.str();
 }
 
-std::string ResourceMap::DebugString() const
+std::string ResStats::DebugString() const
 {
     std::ostringstream oss;
-    oss << "ResourceMap" << std::endl;
-    oss << "    Temporary" << std::endl;
-    oss << resources::DebugString(temporary, "        ");
-    oss << "    Persistant (handle='" << persistantHandle << "')" << std::endl;
-    oss << resources::DebugString(persistant, "        ");
+    oss << "ResStats(temporary=" << temporary << ", persist=" << persist << ", count=" << count << ")";
     return oss.str();
 }
 
@@ -183,6 +181,22 @@ Resources &subtract(Resources &lhs, const Resources &rhs, bool skipNonExist)
     return lhs;
 }
 
+Resources subtractBounded(Resources &lhs, const Resources &rhs)
+{
+    const auto lend = lhs.end();
+    Resources res;
+    for (auto [tag, val] : rhs) {
+        auto it = lhs.find(tag);
+        if (it == lend) {
+            continue;
+        }
+        auto v = std::min(val, it->second);
+        it->second -= v;
+        res[tag] = v;
+    }
+    return res;
+}
+
 Resources &scale(Resources &lhs, double scale)
 {
     for (auto &p : lhs) {
@@ -214,36 +228,38 @@ std::string DebugString(const Resources &res, const std::string &indent)
     return oss.str();
 }
 
+Resources platformLimits()
+{
+    Resources res;
+    res[{ResourceType::MEMORY, devices::CPU0}] = 100_sz * 1024 * 1024 * 1024;
+
+    // 14 G for GPU 0
+    res[{ResourceType::MEMORY, devices::GPU0}] = 14_sz * 1024 * 1024 * 1024;
+
+    // 128 streams for GPU 0
+    res[{ResourceType::GPU_STREAM, devices::GPU0}] = 128;
+
+    res[{ResourceType::EXCLUSIVE, devices::GPU0}] = 1;
+
+    return res;
+}
+
 } // namespace resources
 
 using namespace resources;
 
-/* static */ SessionResourceTracker &SessionResourceTracker::instance()
-{
-    static SessionResourceTracker srt;
-
-    return srt;
-}
-
 // Read limits from hardware, and capped by cap
-SessionResourceTracker::SessionResourceTracker()
+AllocationRegulator::AllocationRegulator()
 {
-    // 100 G for CPU
-    m_limits[{ResourceType::MEMORY, devices::CPU0}] = 100_sz * 1024 * 1024 * 1024;
-
-    // 14 G for GPU 0
-    m_limits[{ResourceType::MEMORY, devices::GPU0}] = 14_sz * 1024 * 1024 * 1024;
+    m_limits = resources::platformLimits();
 }
 
-SessionResourceTracker::SessionResourceTracker(const Resources &cap)
-    : SessionResourceTracker()
+AllocationRegulator::AllocationRegulator(const Resources &cap)
+    : AllocationRegulator()
 {
     auto lend = m_limits.end();
 
-    ResourceTag tag{};
-    size_t val;
-    for (auto p : cap) {
-        std::tie(tag, val) = p;
+    for (auto [tag, val] : cap) {
         auto it = m_limits.find(tag);
         if (it != lend) {
             it->second = std::min(it->second, val);
@@ -251,125 +267,77 @@ SessionResourceTracker::SessionResourceTracker(const Resources &cap)
     }
 }
 
-void SessionResourceTracker::setDisabled(bool val)
+AllocationRegulator::Ticket AllocationRegulator::registerJob()
 {
     auto g = sstl::with_guard(m_mu);
-    m_disabled = val;
+    Ticket t{++m_next, this};
+    m_jobs.try_emplace(t);
+    return t;
 }
 
-bool SessionResourceTracker::disabled() const
+bool AllocationRegulator::Ticket::beginAllocation(const Resources &res)
 {
-    auto g = sstl::with_guard(m_mu);
-    return m_disabled;
-}
+    {
+        auto g = sstl::with_guard(reg->m_mu);
 
-// If it is safe to admit this session, given its persistant and temporary memory usage.
-bool SessionResourceTracker::canAdmitUnsafe(const ResourceMap &cap) const
-{
-    if (!contains(m_limits, cap.persistant)) {
-        return false;
+        if (!contains(reg->m_limits, res)) {
+            return false;
+        }
+
+        subtract(reg->m_limits, res);
+
+        merge(reg->m_jobs[*this].inuse, res);
     }
-
-    auto temp(m_limits);
-    subtract(temp, cap.persistant);
-
-    if (m_peak.empty()) {
-        return true;
-    } else {
-        return contains(temp, m_peak.front()->temporary);
-    }
-}
-
-// Take the session
-bool SessionResourceTracker::admit(const ResourceMap &cap, uint64_t &ticket)
-{
-    auto g = sstl::with_guard(m_mu);
-
-    if (m_disabled) {
-        return true;
-    }
-
-    if (!canAdmitUnsafe(cap)) {
-        return false;
-    }
-
-    ticket = ++m_tickets;
-
-    subtract(m_limits, cap.persistant);
-
-    m_sessions[ticket] = cap;
-
-    auto it = m_peak.begin();
-    auto itend = m_peak.end();
-    while (it != itend && contains((*it)->temporary, cap.temporary)) {
-        it++;
-    }
-    m_peak.insert(it, &m_sessions[ticket]);
+    LogAlloc() << "Start session allocation hold: ticket=" << as_int
+            << ", res=" << sstl::getOrDefault(res, resources::GPU0Memory, 0);
 
     return true;
 }
 
-void SessionResourceTracker::acceptAdmission(uint64_t ticket, const std::string &sessHandle)
+void AllocationRegulator::Ticket::endAllocation(const Resources &res)
 {
-    auto g = sstl::with_guard(m_mu);
-    if (m_disabled) {
-        return;
-    }
+    Resources released;
+    {
+        auto g = sstl::with_guard(reg->m_mu);
 
-    m_sessions[ticket].persistantHandle = sessHandle;
+        auto it = reg->m_jobs.find(*this);
+        // HACK: finishJob may be called earlier than endAllocation
+        if (it == reg->m_jobs.end()) {
+            return;
+        }
+        auto &js = it->second;
+
+        released = subtractBounded(js.inuse, res);
+
+        removeInvalid(js.inuse);
+        merge(reg->m_limits, released);
+    }
+    LogAlloc() << "End session allocation hold: ticket=" << as_int
+            << ", res=" << sstl::getOrDefault(released, resources::GPU0Memory, 0);
 }
 
-optional<ResourceMap> SessionResourceTracker::usage(uint64_t ticket) const
+void AllocationRegulator::Ticket::finishJob()
 {
-    auto g = sstl::with_guard(m_mu);
+    auto g = sstl::with_guard(reg->m_mu);
 
-    auto it = m_sessions.find(ticket);
-    if (it == m_sessions.end()) {
-        return {};
+    if (auto it = reg->m_jobs.find(*this); it != reg->m_jobs.end()) {
+        merge(reg->m_limits, it->second.inuse);
+        reg->m_jobs.erase(it);
     }
-
-    return it->second;
 }
 
-void SessionResourceTracker::freeUnsafe(uint64_t ticket)
-{
-    auto it = m_sessions.find(ticket);
-    if (it == m_sessions.end()) {
-        LOG(ERROR) << "SessionResourceTracker: unknown ticket: " << ticket;
-        return;
-    }
-
-    merge(m_limits, it->second.persistant);
-
-    m_peak.erase(std::remove_if(m_peak.begin(), m_peak.end(),
-                 [&it](auto pr) { return pr == &(it->second); }),
-                 m_peak.end());
-
-    m_sessions.erase(it);
-}
-
-void SessionResourceTracker::free(uint64_t ticket)
-{
-    LogAlloc() << "Free session resource: ticket=" << ticket;
-    auto g = sstl::with_guard(m_mu);
-    if (m_disabled) {
-        return;
-    }
-
-    freeUnsafe(ticket);
-}
-
-std::string SessionResourceTracker::DebugString() const
+std::string AllocationRegulator::DebugString() const
 {
     auto g = sstl::with_guard(m_mu);
 
     std::ostringstream oss;
 
-    oss << "SessionResourceTracker" << std::endl;
+    oss << "AllocationRegulator(Free:" << m_limits << std::endl;
     oss << "    Issued tickets:" << std::endl;
-    for (auto &p : m_sessions) {
-        oss << "      " << p.first << " -> " << p.second.DebugString();
+    for (const auto &[ticket, state] : m_jobs) {
+        oss << "      " << ticket.as_int << " -> " << state.inuse;
     }
+    oss << ")";
     return oss.str();
 }
 
@@ -377,14 +345,7 @@ void ResourceMonitor::initializeLimits()
 {
     auto g = sstl::with_guard(m_mu);
 
-    // 100 G for CPU
-    m_limits[{ResourceType::MEMORY, devices::CPU0}] = 100_sz * 1024 * 1024 * 1024;
-
-    // 14 G for GPU 0
-    m_limits[{ResourceType::MEMORY, devices::GPU0}] = 14_sz * 1024 * 1024 * 1024;
-
-    // 128 streams for GPU 0
-    m_limits[{ResourceType::GPU_STREAM, devices::GPU0}] = 128;
+    m_limits = resources::platformLimits();
 }
 
 void ResourceMonitor::initializeLimits(const Resources &cap)
@@ -408,6 +369,8 @@ void ResourceMonitor::initializeLimits(const Resources &cap)
 
 std::optional<uint64_t> ResourceMonitor::preAllocate(const Resources &req, Resources *missing)
 {
+    // TODO: check ticket
+
     auto g = sstl::with_guard(m_mu);
     if (!contains(m_limits, req)) {
         if (missing) {
@@ -429,23 +392,28 @@ std::optional<uint64_t> ResourceMonitor::preAllocate(const Resources &req, Resou
 
 bool ResourceMonitor::allocate(uint64_t ticket, const Resources &res)
 {
-    auto g = sstl::with_guard(m_mu);
+    if (ticket == 0) {
+        LOG(ERROR) << "Invalid ticket 0";
+        return false;
+    }
+
+    auto g = sstl::with_uguard(m_mu);
     return allocateUnsafe(ticket, res);
 }
 
 bool ResourceMonitor::LockedProxy::allocate(uint64_t ticket, const Resources &res)
 {
     assert(m_resMonitor);
-    return m_resMonitor->allocateUnsafe(ticket, res);
-}
-
-bool ResourceMonitor::allocateUnsafe(uint64_t ticket, const Resources &res)
-{
     if (ticket == 0) {
         LOG(ERROR) << "Invalid ticket 0";
         return false;
     }
 
+    return m_resMonitor->allocateUnsafe(ticket, res);
+}
+
+bool ResourceMonitor::allocateUnsafe(uint64_t ticket, const Resources &res)
+{
     auto remaining(res);
     auto it = m_staging.find(ticket);
     if (it != m_staging.end()) {
@@ -459,11 +427,7 @@ bool ResourceMonitor::allocateUnsafe(uint64_t ticket, const Resources &res)
         // pre-allocation is not enough, see how much we need
         // to request from global avail...
         subtract(remaining, it->second, true /*skipNonExist*/);
-    } else {
-        LOG(ERROR) << "Unknown ticket: " << ticket;
     }
-
-    VLOG(2) << "Try allocating from global avail for ticket: " << ticket;
 
     removeInvalid(remaining);
 
@@ -494,15 +458,16 @@ bool ResourceMonitor::allocateUnsafe(uint64_t ticket, const Resources &res)
 void ResourceMonitor::freeStaging(uint64_t ticket)
 {
     if (ticket == 0) {
-        LOG(ERROR) << "Invalid ticket 0";
+        LOG(ERROR) << "Invalid ticket 0 for freeStaging";
         return;
     }
 
-    auto g = sstl::with_guard(m_mu);
+    auto g = sstl::with_uguard(m_mu);
 
     auto it = m_staging.find(ticket);
     if (it == m_staging.end()) {
-        LOG(ERROR) << "Unknown ticket: " << ticket;
+        g.unlock();
+        LOG(ERROR) << "Unknown ticket for freeStaging: " << ticket;
         return;
     }
 

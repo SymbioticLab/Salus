@@ -20,7 +20,7 @@
 #define SALUS_EXEC_OPEARTIONTASK_H
 
 #include "execution/devices.h"
-#include "execution/resources.h"
+#include "resources/resources.h"
 
 #include <boost/range/any_range.hpp>
 
@@ -28,9 +28,8 @@
 #include <memory>
 #include <vector>
 
-class ResourceContext;
-
 namespace salus {
+class ResourceContext;
 class OperationTask
 {
 public:
@@ -46,8 +45,11 @@ public:
 
     virtual std::string DebugString() const = 0;
 
+    virtual uint64_t graphId() const = 0;
+
     // Estimate usage and cache the result
     virtual Resources estimatedUsage(const DeviceSpec &dev) = 0;
+    virtual bool hasExactEstimation(const DeviceSpec &dev) = 0;
 
     // All supported device types for this task
     using DeviceTypes =

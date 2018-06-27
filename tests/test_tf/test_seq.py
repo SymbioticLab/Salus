@@ -39,6 +39,7 @@ def run_seq_ptb(sess, config_name):
         tf.summary.scalar("Training Loss", m.cost)
         tf.summary.scalar("Learning Rate", m.lr)
 
+    salus_marker = tf.no_op(name="salus_main_iter")
     with tfhelper.initialized_scope(sess) as coord:
         for i in range(config.max_max_epoch):
             if coord.should_stop():
@@ -48,7 +49,10 @@ def run_seq_ptb(sess, config_name):
             m.assign_lr(sess, config.learning_rate * lr_decay)
 
             print("Epoch: %d Learning rate: %.3f" % (i + 1, sess.run(m.lr)))
-            train_perplexity, speeds = m.run_epoch(sess, eval_op=m.train_op, verbose=True)
+            train_perplexity, speeds = m.run_epoch(sess,
+                                                   eval_op=tf.group(m.train_op,
+                                                                    salus_marker),
+                                                   verbose=True)
             print("Epoch: %d Train Perplexity: %.3f" % (i + 1, train_perplexity))
             print('Average: %.3f sec/batch' % np.average(speeds))
             if len(speeds) > 1:
@@ -70,7 +74,7 @@ class SeqCaseBase(unittest.TestCase):
     def get_func_to_run(self, config_name):
         return lambda: self._runner()(tf.get_default_session(), config_name)
 
-    @parameterized.expand(['small'])
+    @parameterized.expand(model_sizes)
     def test_gpu(self, model_size):
         run_on_devices(self.get_func_to_run(model_size), '/device:GPU:0',
                        config=tf.ConfigProto(allow_soft_placement=True))
@@ -110,8 +114,8 @@ class TestSeqPtb(SeqCaseBase):
 
         config = tf.ConfigProto()
         config.allow_soft_placement = True
-        config.zmq_options.resource_map.temporary['MEMORY:GPU'] = memusages[model_size][0]
-        config.zmq_options.resource_map.persistant['MEMORY:GPU'] = memusages[model_size][1]
+        config.salus_options.resource_map.temporary['MEMORY:GPU'] = memusages[model_size][0]
+        config.salus_options.resource_map.persistant['MEMORY:GPU'] = memusages[model_size][1]
         return config
 
 

@@ -17,7 +17,7 @@
  */
 
 #include "oplibraries/tensorflow/tensorflow_headers.h"
-#include "tfsession.h"
+#include "oplibraries/tensorflow/tfsession.h"
 #include "execution/executionengine.h"
 #include "oplibraries/tensorflow/tfexception.h"
 #include "oplibraries/tensorflow/tfinstance.h"
@@ -25,6 +25,8 @@
 #include "oplibraries/tensorflow/worker/dummyworkercache.h"
 #include "oplibraries/tensorflow/worker/mdgraphmgr.h"
 #include "oplibraries/tensorflow/worker/rendezvousmgr.h"
+
+#include <cmath>
 
 namespace salus::oplib::tensorflow {
 
@@ -41,7 +43,7 @@ auto computePool(tf::Env &env)
 class TFSession::TFSessionPrivate
 {
 public:
-    TFSessionPrivate(TFInstance &inst, ExecutionContext &&ctx, const tf::ConfigProto &config,
+    TFSessionPrivate(TFInstance &inst, std::shared_ptr<ExecutionContext> &&ctx, const tf::ConfigProto &config,
                      tf::GraphDef *gdef);
 
     ~TFSessionPrivate();
@@ -63,7 +65,7 @@ public:
 
     // execution context must be the last to be destroied.
     // which also removes the session item from execution engine.
-    ExecutionContext m_execCtx;
+    std::shared_ptr<ExecutionContext> m_execCtx;
 
     tf::WorkerEnv m_workerEnv;
     tf::MasterEnv m_masterEnv;
@@ -77,7 +79,7 @@ public:
     std::unique_ptr<SalusRendezvousMgr> m_rendezvousMgr;
 };
 
-TFSession::TFSession(TFInstance &inst, ExecutionContext ctx, const tf::ConfigProto &config,
+TFSession::TFSession(TFInstance &inst, std::shared_ptr<ExecutionContext> ctx, const tf::ConfigProto &config,
                      tf::GraphDef *gdef)
     : d(std::make_unique<TFSessionPrivate>(inst, std::move(ctx), config, gdef))
 {
@@ -116,22 +118,33 @@ std::string TFSession::TFSessionPrivate::handle() const
     return m_masterSess->handle();
 }
 
-TFSession::TFSessionPrivate::TFSessionPrivate(TFInstance &inst, ExecutionContext &&ctx,
+TFSession::TFSessionPrivate::TFSessionPrivate(TFInstance &inst, std::shared_ptr<ExecutionContext> &&ctx,
                                               const tf::ConfigProto &config, tf::GraphDef *gdef)
     : m_inst(inst)
     , m_sessMgr(nullptr)
     , m_rendezvousMgr(nullptr)
 {
+    // Get resource estimation from client
+    ResStats rm{};
+    const auto rt = "MEMORY:GPU";
+    auto &m = config.salus_options().resource_map();
+    if (auto oval = sstl::optionalGet(m.persistant(), rt)) {
+        rm.persist = static_cast<size_t>(std::round(*oval));
+    }
+    if (auto oval = sstl::optionalGet(m.temporary(), rt)) {
+        rm.temporary = static_cast<size_t>(std::round(*oval));
+    }
+    rm.count = 0;
+
     // Setup session manager that creates worker session later
-    m_sessMgr = std::make_unique<LocalSessionMgr>([this, ctx](auto sessHandle) {
+    m_sessMgr = std::make_unique<LocalSessionMgr>([this, ctx, rm](auto sessHandle) {
         // worker session takes ownership of a deviceMgr, so we create shadow devices for it.
         return std::make_unique<tf::WorkerSession>(sessHandle, m_inst.namePrefix(),
                                                    std::make_unique<EmptyWorkerCache>(),
                                                    // use an empty device mgr for session, because we should use
                                                    // the device mgr from worker_env to make sure we use ISalusDevice
                                                    std::make_unique<tf::DeviceMgr>(std::vector<tf::Device*>{}),
-                                                   std::make_unique<MDGraphMgr>(&m_workerEnv, ctx));
-
+                                                   std::make_unique<MDGraphMgr>(&m_workerEnv, ctx, rm));
     });
 
     // Populate worker env, which uses the session manager
@@ -178,7 +191,7 @@ TFSession::TFSessionPrivate::TFSessionPrivate(TFInstance &inst, ExecutionContext
 
     // Only take passed in ctx after we are sure to succeed
     m_execCtx = std::move(ctx);
-    m_execCtx.acceptOffer(handle());
+    m_execCtx->setSessionHandle(handle());
 }
 
 void TFSession::TFSessionPrivate::safeClose(std::shared_ptr<TFSession> &&self)
@@ -188,8 +201,6 @@ void TFSession::TFSessionPrivate::safeClose(std::shared_ptr<TFSession> &&self)
     LOG(INFO) << "Closing session " << handle();
 
     SALUS_THROW_IF_ERROR(m_masterSess->Close());
-    VLOG(3) << "There is still " << self.use_count() << " reference to TFSession@" << as_hex(self);
-    m_execCtx.deleteSession({});
 }
 
 void TFSession::TFSessionPrivate::handleExtendSession(const tf::ExtendSessionRequest &req,
@@ -217,4 +228,21 @@ void TFSession::TFSessionPrivate::handleRunStep(const tf::RunStepRequest &req, t
     SALUS_THROW_IF_ERROR(m_masterSess->Run(&opts, wreq, &wresp));
     cb(Status::OK());
 }
+
+void TFSession::deferClose(HandlerCallback &&cb)
+{
+    // cb is move-only, can't be captured and pass to std::function.
+    // so we extract and reconstruct inside the lambda
+    auto raw_tfresp = cb.tfresp.release();
+
+    d->m_execCtx->finish([self = shared_from_this(), cb = std::move(cb.cb), raw_tfresp]() mutable {
+        HandlerCallback hcb;
+        hcb.tfresp = sstl::wrap_unique(raw_tfresp);
+        hcb.cb = std::move(cb);
+
+        self->safeClose();
+        hcb(Status::OK());
+    });
+}
+
 } // namespace salus::oplib::tensorflow

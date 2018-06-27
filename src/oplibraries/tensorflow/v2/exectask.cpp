@@ -22,8 +22,10 @@
  * with ours.
  */
 #include "oplibraries/tensorflow/tensorflow_headers.h"
-#include "exectask.h"
+#include "oplibraries/tensorflow/v2/exectask.h"
 #include "execution/devices.h"
+#include "execution/engine/resourcecontext.h"
+#include "execution/engine/iterationcontext.h"
 #include "oplibraries/tensorflow/device/salusdevices.h"
 #include "oplibraries/tensorflow/tfexception.h"
 #include "oplibraries/tensorflow/tfutils.h"
@@ -159,6 +161,12 @@ bool ExecTask::isAsync() const
 #endif // SALUS_ENABLE_MULTI_DEVICE
 }
 
+bool ExecTask::hasExactEstimation(const DeviceSpec &dev)
+{
+    auto usage = m_state->impl_->cachedUsageForNode(item, dev.type);
+    return bool(usage);
+}
+
 Resources ExecTask::estimatedUsage(const DeviceSpec &dev)
 {
     sstl::TimeoutWarning tw(1ms, [&](auto limit, auto dur){
@@ -166,11 +174,17 @@ Resources ExecTask::estimatedUsage(const DeviceSpec &dev)
                      << " to finish: " << duration_cast<FpMS>(dur)
                      << " for " << *this;
     });
+    const static constexpr auto DevCapacity = 14ll * 1024ll * 1024ll * 1024ll;
     // First see if we have usage for this node in session
     // but only if we haven't failed before, otherwise,
     // the session cached usage maybe be just a lucky case
-    auto usage = m_state->impl_->cachedUsageForNode(tagged_node.node->name());
+    auto usage = m_state->impl_->cachedUsageForNode(item, dev.type);
     if (usage && failureTimes == 0) {
+        if (sstl::optionalGet(usage, resources::GPU0Memory) > DevCapacity) {
+            LOG(WARNING) << "Cap resource usage estimation larger than device capacity: " << *usage << " capacity: " << DevCapacity;
+            usage.value()[resources::GPU0Memory] = DevCapacity;
+        }
+        cachedUsage[dev] = *usage;
         return std::move(*usage);
     }
 
@@ -182,28 +196,11 @@ Resources ExecTask::estimatedUsage(const DeviceSpec &dev)
             // anyway.
             auto usage = cachedUsage[dev];
             resources::merge(usage, failedAlloc);
-            return usage;
-        }
-
-        const auto &sessHandle = m_state->impl_->params_.session;
-        auto rm = m_state->impl_->params_.ins.offeredSessionResource();
-        if (rm) {
-            auto f = failureTimes;
-            if (f > maxFailures) {
-                LOG(WARNING) << "Failure time exceeds maximum: " << f << " max " << maxFailures;
-                f = maxFailures;
-                LOG(WARNING) << "Estimated usage this time: "
-                             << resources::DebugString(rm->temporary, "    ");
+            if (sstl::optionalGet(usage, resources::GPU0Memory) > DevCapacity) {
+                LOG(WARNING) << "Cap resource usage estimation larger than device capacity: " << usage << " capacity: " << DevCapacity;
+                usage[resources::GPU0Memory] = DevCapacity;
             }
-            uint64_t scale = 1u << (maxFailures - f);
-            resources::scale(rm->temporary, 1.0 / scale);
-
-            // Update cache
-            cachedUsage[dev] = rm->temporary;
-        } else {
-            LOG(ERROR) << "No session usage found for exec task: " << tagged_node.node->name()
-                       << " under session " << sessHandle;
-            // fallback to normal estimation
+            return usage;
         }
     }
 
@@ -211,6 +208,10 @@ Resources ExecTask::estimatedUsage(const DeviceSpec &dev)
     auto it = cachedUsage.find(dev);
     if (it == cachedUsage.end()) {
         return calcUsageFromShape(dev);
+    }
+    if (sstl::optionalGet(it->second, resources::GPU0Memory) > DevCapacity) {
+        LOG(WARNING) << "Cap resource usage estimation larger than device capacity: " << it->second << " capacity: " << DevCapacity;
+        it->second[resources::GPU0Memory] = DevCapacity;
     }
     return it->second;
 }
@@ -260,10 +261,12 @@ Resources ExecTask::calcUsageFromShape(const DeviceSpec &dev)
     res = estimateMemoryUsageForNode(item, dev);
 #endif // SALUS_ENABLE_REFINER
 
+#if !defined(SALUS_ENABLE_STATIC_STREAM)
     // TODO: use an algorithm to decide streams
     if (dev.type == DeviceType::GPU && !isAsync()) {
         res[{ResourceType::GPU_STREAM, dev}] = 1;
     }
+#endif
 
     return res;
 }
@@ -525,8 +528,8 @@ void ExecTask::afterRun(const tf::Status &s, const Callbacks &cbs)
     DCHECK(ditem.device);
     if (s.ok()) {
         // save succeed estimation
-        auto usage = ditem.device->peakResourceUsage();
-        m_state->impl_->saveSucceedUsageForNode(tagged_node.node->name(), usage);
+        m_state->impl_->saveSucceedUsageForNode(item, resourceContext().spec().type,
+                                                ditem.device->peakResourceUsage());
     }
     auto completed = m_state->NodeDone(s, tagged_node.node, ditem.device.get(), params.rendezvous, ready);
 
@@ -556,6 +559,12 @@ bool ExecTask::maybeMemoryFailure(const tf::Status &s, const MemFailCallback &me
         DCHECK(ditem.device);
         resources::merge(failedAlloc, ditem.device->failedResourceRequest());
 
+        if (failureTimes > 10) {
+            LOG(WARNING) << "Failed more than 10 times: " << failureTimes <<
+                         " current estimation:" << estimatedUsage(devices::GPU0)
+                         << " total failed request: " << failedAlloc << " " << DebugString();
+        }
+
         if (memFailure && memFailure()) {
             VLOG(1) << "OOM happened and catched by scheduler: " << *this;
             return true;
@@ -571,6 +580,11 @@ ResourceContext &ExecTask::resourceContext() const
 {
     DCHECK(ditem.device);
     return ditem.device->resourceContext();
+}
+
+uint64_t ExecTask::graphId() const
+{
+    return m_state->ictx_->graphId();
 }
 
 ExecTask::~ExecTask() = default;

@@ -22,6 +22,7 @@ TBatchSize = Union[str, int]
 flags.DEFINE_boolean('basic_only', False, 'Only run basic 20 iterations JCT only')
 flags.DEFINE_float('threshold', 0.1, 'What ratio is actual time allowed to have within target time')
 flags.DEFINE_integer('max_chance', 10, 'How many times to try')
+flags.DEFINE_boolean('resume', False, 'Check and skip existing configurations')
 
 
 def select_workloads(argv):
@@ -46,23 +47,24 @@ def do_jct(logdir, network, batch_size):
     """Do basic JCT on workload"""
     batch_num = 20
 
-    logger.info(f'Measuring basic JCT for {batch_num} iterations')
-
     final_dst = logdir / WTL.from_name(network).canonical_name(RunConfig(batch_size, batch_num, None))
     with atomic_directory(final_dst) as outputdir:
-        logger.info('    Running on TF')
-        WTL.block_run(network, batch_size, batch_num, Executor.TF, outputdir / 'gpu.output')
+        logger.info(f'Measuring basic JCT for {batch_num} iterations')
+        if not (final_dst / 'gpu.output').exists() or not FLAGS.resume:
+            logger.info('    Running on TF')
+            WTL.block_run(network, batch_size, batch_num, Executor.TF, outputdir / 'gpu.output')
 
-        scfg = maybe_forced_preset(presets.MostEfficient)
-        scfg.output_dir = outputdir
-        server = SalusServer(scfg)
-        with server.run():
-            logger.info('    Warming up Salus')
-            # always use 20 batch num when warming up
-            WTL.block_run(network, batch_size, 20, Executor.Salus, outputdir / 'rpc-warm.output')
+        if not (final_dst / 'rpc.output').exists() or not FLAGS.resume:
+            scfg = maybe_forced_preset(presets.MostEfficient)
+            scfg.output_dir = outputdir
+            server = SalusServer(scfg)
+            with server.run():
+                logger.info('    Warming up Salus')
+                # always use 20 batch num when warming up
+                WTL.block_run(network, batch_size, 20, Executor.Salus, outputdir / 'rpc-warm.output')
 
-            logger.info('    Running on Salus')
-            WTL.block_run(network, batch_size, batch_num, Executor.Salus, outputdir / 'rpc.output')
+                logger.info('    Running on Salus')
+                WTL.block_run(network, batch_size, batch_num, Executor.Salus, outputdir / 'rpc.output')
 
     return final_dst
 
@@ -86,7 +88,12 @@ def calc_periter(outputfile):
 
 def do_jct_hint(logdir, network, batch_size, per_iter, target, tag):
     """Calculate JCT for target time"""
-    with atomic_directory(logdir / f"{network}_{batch_size}_{tag}") as outputdir:
+    final_dst = logdir / f"{network}_{batch_size}_{tag}"
+    with atomic_directory(final_dst) as outputdir:
+        if (final_dst / 'rpc.output').exists() and FLAGS.resume:
+            per_iter = parse_output_float(final_dst / 'rpc.output', r'^Average excluding[^0-9.]+([0-9.]+).*')
+            return per_iter
+
         logger.info(f"Finding suitable batch_num for {tag}")
         actual = 0
         chance = FLAGS.max_chance

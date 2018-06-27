@@ -4,7 +4,7 @@
 
 #include "oplibraries/tensorflow/tensorflow_headers.h"
 #include "oplibraries/tensorflow/device/gpu.h"
-#include "execution/executionengine.h"
+#include "execution/engine/resourcecontext.h"
 #include "utils/threadutils.h"
 
 #include <utility>
@@ -59,6 +59,11 @@ tf::Allocator *SalusGPUDevice::GetAllocator(tf::AllocatorAttributes attr)
         }
     }
     return gpu_allocator_;
+}
+
+bool SalusGPUDevice::RequiresRecordingAccessedTensors() const
+{
+    return BaseGPUDevice::RequiresRecordingAccessedTensors();
 }
 
 Status SalusGPUDevice::FillContextMap(const tf::Graph *, std::vector<tf::DeviceContext *> *)
@@ -173,12 +178,32 @@ tf::DeviceContext *PerTaskGPUDevice::deviceContextForNode(int id, bool isAsync)
 {
     UNUSED(id);
 
+#if defined(SALUS_ENABLE_STATIC_STREAM)
+    UNUSED(isAsync);
+
+    // use a round robin to assign streams to session
+    static std::mutex mu;
+    static std::unordered_map<std::string, int> seenSessions;
+    static auto nextStream = 0;
+
+    auto stream = 0;
+    {
+        auto g = sstl::with_guard(mu);
+
+        auto [it, newSession] = seenSessions.try_emplace(resourceContext().sessHandle, nextStream);
+        if (newSession) {
+            nextStream = (nextStream + 1) % 128;
+        }
+        stream = it->second;
+    }
+#else
     if (!isAsync) {
         requestStreams();
     }
 
     // use default stream if we have none
     auto stream = m_streams.empty() ? 0 : m_streams[0];
+#endif
 
     return underlayingDevice<SalusGPUDevice>().deviceContext(stream).get();
 }
@@ -202,10 +227,12 @@ sstl::ScopeGuards PerTaskGPUDevice::useStreams()
 
 void PerTaskGPUDevice::Compute(tf::OpKernel *op_kernel, tf::OpKernelContext *context)
 {
+#if !defined(SALUS_ENABLE_STATIC_STREAM)
     if (m_streams.empty()) {
         LOG(ERROR) << "No GPU streams available for " << op_kernel->name() << " using default one";
     }
     auto sr = useStreams();
+#endif
     PerTaskDevice::Compute(op_kernel, context);
 }
 
@@ -219,7 +246,9 @@ void PerTaskGPUDevice::ComputeAsync(tf::AsyncOpKernel *op_kernel, tf::OpKernelCo
 
 PerTaskGPUDevice::~PerTaskGPUDevice()
 {
+#if !defined(SALUS_ENABLE_STATIC_STREAM)
     releaseStreams();
+#endif
 }
 
 tf::BaseGPUDevice *SalusGPUDeviceFactory::CreateGPUDevice(const tf::SessionOptions &options,

@@ -21,9 +21,9 @@ FLAGS = flags.FLAGS
 
 
 def main(argv):
-    scfg = maybe_forced_preset(presets.MostEfficient)
+    scfg = maybe_forced_preset(presets.OpTracing)
 
-    name, bs, bn = 'vgg11', 25, 405
+    name, bs, bn = 'resnet50', 50, 10
     if len(argv) > 0:
         name = argv[0]
     if len(argv) > 1:
@@ -34,17 +34,7 @@ def main(argv):
     def create_wl(ex):
         return WTL.create(name, bs, bn, executor=ex)
 
-    # Run alexnet_25 on Salus
-    wl = create_wl(Executor.Salus)
-    run_seq(scfg.copy(output_dir=FLAGS.save_dir / "salus" / '1'), wl)
-
-    # Run 2 alexnet_25 on Salus
-    run_seq(scfg.copy(output_dir=FLAGS.save_dir / "salus" / '2'),
-            create_wl(Executor.Salus),
-            create_wl(Executor.Salus),
-            )
-
-    # Run alexnet_25 on TF
-    wl = create_wl(Executor.TF)
-    run_tf(FLAGS.save_dir / 'tf', wl)
+    for con in range(1, 6):
+        run_seq(scfg.copy(output_dir=FLAGS.save_dir/"salus"/str(con)),
+                *[create_wl(Executor.Salus) for _ in range(con)])
 

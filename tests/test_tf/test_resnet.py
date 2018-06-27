@@ -29,7 +29,7 @@ def run_resnet(sess, input_data, batch_size=100):
     resnet = networks.ResNet(hps, images, labels, "train")
 
     resnet.build_graph()
-
+    salus_marker = tf.no_op(name="salus_main_iter")
     losses = []
     with tfhelper.initialized_scope(sess) as coord:
         speeds = []
@@ -39,7 +39,7 @@ def run_resnet(sess, input_data, batch_size=100):
                 break
             print("{}: Start running step {}".format(datetime.now(), i))
             start_time = default_timer()
-            _, loss_value = sess.run([resnet.train_op, resnet.cost])
+            _, loss_value, _ = sess.run([resnet.train_op, resnet.cost, salus_marker])
             end_time = default_timer()
 
             duration = end_time - start_time
@@ -96,7 +96,7 @@ class ResNetCaseBase(unittest.TestCase):
 @unittest.skip("Fake data is used as common dataset instead")
 class TestResNetCifar10(ResNetCaseBase):
     def _config(self, **kwargs):
-        # FIXME: update memory usage
+        # TODO: update memory usage
         memusages = {
             25: (6935520748 - 1661494764, 1661494764),
             50: (10211120620 - 1662531248, 1662531248),
@@ -107,8 +107,8 @@ class TestResNetCifar10(ResNetCaseBase):
 
         config = tf.ConfigProto()
         config.allow_soft_placement = True
-        config.zmq_options.resource_map.temporary['MEMORY:GPU'] = memusages[batch_size][0]
-        config.zmq_options.resource_map.persistant['MEMORY:GPU'] = memusages[batch_size][1]
+        config.salus_options.resource_map.temporary['MEMORY:GPU'] = memusages[batch_size][0]
+        config.salus_options.resource_map.persistant['MEMORY:GPU'] = memusages[batch_size][1]
         return config
 
     def _get_func(self, batch_size):
@@ -132,8 +132,8 @@ class TestResNetFakeData(ResNetCaseBase):
 
         config = tf.ConfigProto()
         config.allow_soft_placement = True
-        config.zmq_options.resource_map.temporary['MEMORY:GPU'] = memusages[batch_size][0]
-        config.zmq_options.resource_map.persistant['MEMORY:GPU'] = memusages[batch_size][1]
+        config.salus_options.resource_map.temporary['MEMORY:GPU'] = memusages[batch_size][0]
+        config.salus_options.resource_map.persistant['MEMORY:GPU'] = memusages[batch_size][1]
         return config
 
     def _get_func(self, batch_size):

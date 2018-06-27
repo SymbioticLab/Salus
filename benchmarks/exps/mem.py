@@ -40,17 +40,29 @@ def select_workloads(argv):
             for name in piece.split(',')
         ), stable=True)
 
+    def getbs(name):
+        if '_' in name:
+            name, bs = name.split('_')
+            bs = int(bs)
+            return [(name, bs)]
+        else:
+            bss = WTL.from_name(name).available_batch_sizes()
+            names = [name] * len(bss)
+            return zip(names, bss)
     # TODO: return directly WTL instances
-    return [(name, batch_size)
+    return [(n, batch_size)
             for name in names
-            for batch_size in WTL.from_name(name).available_batch_sizes()]
+            for n, batch_size in getbs(name)]
 
 
 def do_mem(logdir, network, batch_size):
     """Do basic JCT on workload"""
     batch_num = 20
     if network == "speech":
-        batch_num = 5
+        # batch_num = 5
+        return
+    if network == "inception4" and batch_size == 75:
+        return
 
     logger.info(f'Measuring memory for {network}_{batch_size} for {batch_num} iter')
 

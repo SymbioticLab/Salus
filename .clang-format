@@ -28,6 +28,7 @@ BraceWrapping:
   AfterObjCDeclaration: true
   AfterStruct:     true
   AfterUnion:      true
+  AfterExternBlock: false
   BeforeCatch:     false
   BeforeElse:      false
   IndentBraces:    false
@@ -58,19 +59,23 @@ ForEachMacros:
   - Q_FOREACH
   - Q_FOREVER
   - BOOST_FOREACH
+IncludeBlocks: Regroup
 IncludeCategories:
+  - Regex:           'tensorflow_headers\.h'
+    Priority:        -1
+  - Regex:           '^"'
+    Priority:        3
   - Regex:           '^(<|")(tensorflow|third_party)/'
     Priority:        5
   - Regex:           '^<boost/'
     Priority:        7
+  - Regex:           '^<.+\.'
+    Priority:        6
   - Regex:           '^<'
     Priority:        10
-  - Regex:           'tensorflow_headers\.h'
-    Priority:        -1
-  - Regex:           '.*'
-    Priority:        3
 IncludeIsMainRegex: '(_test)?$'
 IndentCaseLabels: false
+IndentPPDirectives: None
 IndentWidth:     4
 IndentWrappedFunctionNames: false
 JavaScriptQuotes: Single
@@ -91,6 +96,10 @@ PenaltyBreakString: 1000
 PenaltyExcessCharacter: 1000
 PenaltyReturnTypeOnItsOwnLine: 10000
 PointerAlignment: Right
+RawStringFormats: 
+  - Delimiter:       pb
+    Language:        TextProto
+    BasedOnStyle:    google
 ReflowComments:  true
 SortIncludes:    true
 SortUsingDeclarations: true

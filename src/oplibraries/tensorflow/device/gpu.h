@@ -32,6 +32,8 @@ public:
     Status FillContextMap(const tf::Graph *graph,
                           std::vector<tf::DeviceContext *> *device_context_map) override;
 
+    bool RequiresRecordingAccessedTensors() const override;
+
     void flushCacheFor(sstl::not_null<const tf::Graph *> graph) override;
 
     std::shared_ptr<PerTaskDevice> createPerTaskDevice(sstl::not_null<const tf::Graph *> graph,

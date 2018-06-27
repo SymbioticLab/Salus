@@ -50,6 +50,8 @@ public:
 
     void run(Callbacks cbs) noexcept override;
 
+    uint64_t graphId() const override;
+
     void cancel() override;
 
     int failedTimes() const override
@@ -58,6 +60,7 @@ public:
     }
 
     Resources estimatedUsage(const DeviceSpec &dev) override;
+    bool hasExactEstimation(const DeviceSpec &dev) override;
 
     DeviceTypes supportedDeviceTypes() const override;
 

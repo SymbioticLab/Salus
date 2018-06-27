@@ -19,7 +19,7 @@
 
 #include "oplibraries/tensorflow/tensorflow_headers.h"
 #include "oplibraries/tensorflow/device/salusdevices.h"
-#include "execution/executionengine.h"
+#include "execution/engine/resourcecontext.h"
 #include "oplibraries/tensorflow/device/cpu.h"
 #include "oplibraries/tensorflow/device/gpu.h"
 #include "oplibraries/tensorflow/tfexception.h"
@@ -85,7 +85,7 @@ void PerTaskDevice::reset(sstl::not_null<tf::Device *> other, std::unique_ptr<Re
     m_wrappedAllocators.clear();
     reinitialize();
 
-    if (!m_rctx->isGood()) {
+    if (!m_rctx) {
         LOG(ERROR) << "Resetting to an uninitialized resource context";
     }
 }

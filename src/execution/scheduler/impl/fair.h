@@ -30,7 +30,7 @@
 class FairScheduler : public BaseScheduler
 {
 public:
-    explicit FairScheduler(ExecutionEngine &engine);
+    explicit FairScheduler(salus::TaskExecutor &engine);
     ~FairScheduler() override;
 
     std::string name() const override;

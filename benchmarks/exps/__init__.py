@@ -28,12 +28,12 @@ class Pause(int):
     Manual = None  # type: Pause
     Wait = None  # type: Pause
 
-    def run(self, workloads):
+    def run(self, workloads, **kwargs):
         if self == Pause.Manual:
             prompt.pause()
         elif self == Pause.Wait:
             logger.info(f"Waiting current {len(workloads)} workloads to finish")
-            SalusServer.current_server().wait_workloads(workloads)
+            SalusServer.wait_workloads(workloads)
         else:
             logger.info(f"Sleep {self} seconds")
             time.sleep(self)
@@ -54,8 +54,8 @@ class RunFn(object):
         # type: (Callable[Iterable[Workload], None]) -> None
         self._fn = fn
 
-    def run(self, workloads):
-        return self._fn(workloads)
+    def run(self, workloads, **kwargs):
+        return self._fn(workloads, **kwargs)
 
 
 TAction = Union[Pause, RunFn, Workload]
@@ -78,7 +78,7 @@ def run_tf(output_dir, *actions):
                     act.run(output_file)
                     workloads.append(act)
                 elif isinstance(act, (Pause, RunFn)):
-                    act.run(workloads)
+                    act.run(workloads, temp_dir=temp_dir)
                 else:
                     raise ValueError(f"Unexpected value `{act}' of {type(act)} passed to run_seq")
 
@@ -123,7 +123,7 @@ def run_seq(scfg, *actions):
                         act.run(output_file)
                         workloads.append(act)
                     elif isinstance(act, (Pause, RunFn)):
-                        act.run(workloads)
+                        act.run(workloads, temp_dir=temp_dir)
                     else:
                         raise ValueError(f"Unexpected value `{act}' of {type(act)} passed to run_seq")
 

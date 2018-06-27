@@ -38,7 +38,7 @@ namespace salus::oplib::tensorflow {
 class MDGraphMgr : public tf::GraphMgr
 {
 public:
-    explicit MDGraphMgr(const tf::WorkerEnv *env, ExecutionContext execCtx);
+    explicit MDGraphMgr(const tf::WorkerEnv *env, std::shared_ptr<ExecutionContext> execCtx, ResStats rm);
     ~MDGraphMgr() override;
 
     Status Register(const std::string &session, const tf::GraphDef &gdef,
@@ -59,7 +59,9 @@ protected:
                           tf::DistributedFunctionLibraryRuntime *cluster_flr, MDItem *item);
 
 private:
-    ExecutionContext m_execCtx;
+    std::shared_ptr<ExecutionContext> m_execCtx;
+
+    ResStats m_rm;
 
     // Global Resource manager shared by all local devices.
     // NOTE: Must be valid when destorying opsegment, because

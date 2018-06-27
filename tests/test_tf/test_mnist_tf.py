@@ -27,6 +27,7 @@ def run_mnist_softmax(sess, batch_size=50):
         tf.nn.softmax_cross_entropy_with_logits_v2(labels=tf.stop_gradient(y_), logits=y))
     train_step = tf.train.GradientDescentOptimizer(0.5).minimize(cross_entropy)
 
+    salus_marker = tf.no_op("salus_main_iter")
     with tfhelper.initialized_scope(sess) as coord:
         jct = default_timer()
         speeds = []
@@ -37,7 +38,7 @@ def run_mnist_softmax(sess, batch_size=50):
 
             print("{}: Start running step {}".format(datetime.now(), i))
             start_time = default_timer()
-            _, loss_value = sess.run([train_step, cross_entropy])
+            _, loss_value, _ = sess.run([train_step, cross_entropy, salus_marker])
             duration = default_timer() - start_time
             examples_per_sec = batch_size / duration
             sec_per_batch = float(duration)
@@ -103,6 +104,7 @@ def run_mnist_conv(sess, batch_size=50):
         tf.nn.softmax_cross_entropy_with_logits_v2(labels=tf.stop_gradient(y_), logits=y_fc2))
     train_step = tf.train.AdamOptimizer(1e-4).minimize(cross_entropy)
 
+    salus_marker = tf.no_op("salus_main_iter")
     speeds = []
     losses = []
     with tfhelper.initialized_scope(sess) as coord:
@@ -112,7 +114,7 @@ def run_mnist_conv(sess, batch_size=50):
                 break
             print("{}: Start running step {}".format(datetime.now(), i))
             start_time = default_timer()
-            sess.run(train_step, feed_dict={keep_prob: 0.5})
+            sess.run([train_step, salus_marker], feed_dict={keep_prob: 0.5})
             duration = default_timer() - start_time
             examples_per_sec = batch_size / duration
             sec_per_batch = float(duration)
@@ -192,6 +194,7 @@ def run_mnist_large(sess, batch_size=50):
         tf.nn.softmax_cross_entropy_with_logits_v2(labels=tf.stop_gradient(y_), logits=y_fc2))
     train_step = tf.train.AdamOptimizer(1e-4).minimize(cross_entropy)
 
+    salus_marker = tf.no_op("salus_main_iter")
     speeds = []
     inbetween = []
     last_end_time = 0
@@ -204,7 +207,7 @@ def run_mnist_large(sess, batch_size=50):
 
             print("{}: Start running step {}".format(datetime.now(), i))
             start_time = default_timer()
-            _, loss_value = sess.run([train_step, cross_entropy], feed_dict={keep_prob: 0.5})
+            _, loss_value, _ = sess.run([train_step, cross_entropy, salus_marker], feed_dict={keep_prob: 0.5})
             end_time = default_timer()
 
             if last_end_time > 0:
@@ -237,11 +240,11 @@ class MnistConvBase(unittest.TestCase):
 
     def _config(self, **kwargs):
         c = tf.ConfigProto()
-        c.graph_options.optimizer_options.opt_level = tf.OptimizerOptions.L0
+        #c.graph_options.optimizer_options.opt_level = tf.OptimizerOptions.L0
         c.allow_soft_placement = True
         return c
 
-    @parameterized.expand([(25,)])
+    @parameterized.expand([(25,), (50,), (100,)])
     def test_gpu(self, batch_size):
         def func():
             sess = tf.get_default_session()
@@ -296,8 +299,8 @@ class TestMnistConv(MnistConvBase):
 
         config = tf.ConfigProto()
         config.allow_soft_placement = True
-        config.zmq_options.resource_map.temporary['MEMORY:GPU'] = memusages[batch_size][0]
-        config.zmq_options.resource_map.persistant['MEMORY:GPU'] = memusages[batch_size][1]
+        config.salus_options.resource_map.temporary['MEMORY:GPU'] = memusages[batch_size][0]
+        config.salus_options.resource_map.persistant['MEMORY:GPU'] = memusages[batch_size][1]
         return config
 
 
@@ -316,8 +319,8 @@ class TestMnistLarge(MnistConvBase):
 
         config = tf.ConfigProto()
         config.allow_soft_placement = True
-        config.zmq_options.resource_map.temporary['MEMORY:GPU'] = memusages[batch_size][0]
-        config.zmq_options.resource_map.persistant['MEMORY:GPU'] = memusages[batch_size][1]
+        config.salus_options.resource_map.temporary['MEMORY:GPU'] = memusages[batch_size][0]
+        config.salus_options.resource_map.persistant['MEMORY:GPU'] = memusages[batch_size][1]
         return config
 
 

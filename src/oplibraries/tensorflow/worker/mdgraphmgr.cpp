@@ -24,9 +24,10 @@
 
 namespace salus::oplib::tensorflow {
 
-MDGraphMgr::MDGraphMgr(const tf::WorkerEnv *env, ExecutionContext execCtx)
+MDGraphMgr::MDGraphMgr(const tf::WorkerEnv *env, std::shared_ptr<ExecutionContext> execCtx, ResStats rm)
     : GraphMgr(env, env->device_mgr)
     , m_execCtx(std::move(execCtx))
+    , m_rm(rm)
 {
 }
 
@@ -107,6 +108,13 @@ Status MDGraphMgr::InitMDItem(const std::string &session, const tf::GraphDef &gd
     opts.allow_internal_ops = true;
     opts.expect_device_spec = true;
     TF_RETURN_IF_ERROR(ConvertGraphDefToGraph(opts, gdef, &graph));
+
+    // Make sure salus_main_iter marker is on GPU
+    for (auto *n : graph.nodes()) {
+        if (n->name() == "salus_main_iter") {
+            n->set_assigned_device_name("/job:salus/replica:0/task:0/device:GPU:0");
+        }
+    }
 
     // Splits "graph" into two subgraphs, one on client side, containing only inputs,
     // the other on salus, containing everything else.
@@ -251,6 +259,7 @@ Status MDGraphMgr::InitMDItem(const std::string &session, const tf::GraphDef &gd
         skip_cost_models_ = true;
 
         params.ins = m_execCtx;
+        params.rm = m_rm;
         TF_RETURN_IF_ERROR(NewMultiDeviceExecutor(params, std::move(subgraph), &unit.root));
     }
     return tf::Status::OK();

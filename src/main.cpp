@@ -1,5 +1,5 @@
 #include "execution/executionengine.h"
-#include "execution/resources.h"
+#include "resources/resources.h"
 #include "platform/logging.h"
 #include "platform/signals.h"
 #include "platform/profiler.h"
@@ -25,7 +25,6 @@ namespace flags {
 const static auto listen = "--listen";
 const static auto maxHolWaiting = "--max-hol-waiting";
 const static auto disableFairness = "--disable-fairness";
-const static auto disableAdmissionControl = "--disable-adc";
 const static auto disableWorkConservative = "--disable-wc";
 const static auto scheduler = "--sched";
 
@@ -54,8 +53,7 @@ Options:
                                 [default: tcp://*:5501]
     -s <policy>, --sched=<policy>
                                 Use <policy> for scheduling . Choices: fair, preempt, pack.
-                                [default: fair]
-    --disable-adc               Disable admission control.
+                                [default: pack]
     --disable-wc                Disable work conservation. Only have effect when
                                 fairness is on.
     --max-hol-waiting=<num>     Maximum number of task allowed go before queue head
@@ -184,9 +182,6 @@ void initializeLogging(std::map<std::string, docopt::value> &args)
 
 void configureExecution(std::map<std::string, docopt::value> &args)
 {
-    auto disableAdmissionControl = value_or<bool>(args[flags::disableAdmissionControl], false);
-    SessionResourceTracker::instance().setDisabled(disableAdmissionControl);
-
     auto disableFairness = value_or<bool>(args[flags::disableFairness], false);
     uint64_t maxQueueHeadWaiting = value_or<long>(args[flags::maxHolWaiting], 50u);
     auto disableWorkConservative = value_or<bool>(args[flags::disableWorkConservative], false);
@@ -197,7 +192,7 @@ void configureExecution(std::map<std::string, docopt::value> &args)
         sched = "pack";
     }
 
-    ExecutionEngine::instance().setSchedulingParam({maxQueueHeadWaiting, !disableWorkConservative, sched});
+    salus::ExecutionEngine::instance().setSchedulingParam({maxQueueHeadWaiting, !disableWorkConservative, sched});
 }
 
 void printConfiguration(std::map<std::string, docopt::value> &)
@@ -218,9 +213,8 @@ void printConfiguration(std::map<std::string, docopt::value> &)
         const auto &conf = el::Loggers::getLogger(logging::kAllocTag)->typedConfigurations();
         LOG(INFO) << "Allocation logging: " << (conf->enabled(el::Level::Info) ? "enabled" : "disabled");
     }
-    LOG(INFO) << "Admission control: " << (SessionResourceTracker::instance().disabled() ? "off" : "on");
     LOG(INFO) << "Scheduling parameters:";
-    auto &param = ExecutionEngine::instance().schedulingParam();
+    auto &param = salus::ExecutionEngine::instance().schedulingParam();
     LOG(INFO) << "    Policy: " << param.scheduler;
     LOG(INFO) << "    MaxQueueHeadWaiting: " << param.maxHolWaiting;
     LOG(INFO) << "    WorkConservative: " << (param.workConservative ? "on" : "off");
@@ -241,8 +235,8 @@ int main(int argc, char **argv)
 
     ScopedProfiling sp(value_or<bool>(args[flags::gperf], false));
 
-    // Start scheduling engine
-    ExecutionEngine::instance().startScheduler();
+    // Start scheduling taskExec
+    salus::ExecutionEngine::instance().startScheduler();
 
     // Then start server to accept request
     ZmqServer server;
@@ -252,7 +246,7 @@ int main(int argc, char **argv)
 
     server.join();
 
-    ExecutionEngine::instance().stopScheduler();
+    salus::ExecutionEngine::instance().stopScheduler();
 
     return 0;
 }

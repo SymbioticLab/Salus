@@ -58,9 +58,11 @@ class Runner(with_metaclass(ABCMeta, object)):
         def set_default(d, key, defval):
             if key not in d:
                 d[key] = defval
+            else:
+                logger.info(f'Using custom value {key}={d[key]}')
 
-        set_default(self.env, 'CUDA_VISIBLE_DEVICES', '0,1')
-        set_default(self.env, 'TF_CPP_MIN_LOG_LEVEL', '4')
+        set_default(self.env, 'CUDA_VISIBLE_DEVICES', '0')
+        set_default(self.env, 'TF_CPP_MIN_LOG_LEVEL', '2')
 
     @abstractmethod
     def __call__(self, executor, output_file):

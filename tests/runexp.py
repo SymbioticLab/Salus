@@ -31,7 +31,7 @@ class Workload(object):
 
         self.env = os.environ.copy()
         self.env['EXEC_ITER_NUMBER'] = d['env']
-        self.env['TF_CPP_MIN_LOG_LEVEL'] = '4'
+        self.env['TF_CPP_MIN_LOG_LEVEL'] = '2'
         self.env['CUDA_VISIBLE_DEVICES'] = '0,1'
 
         self.outputpath = os.path.join(config.save_dir, self.name)
@@ -79,7 +79,7 @@ casekey = {
 def runServer(config):
     env = os.environ.copy()
     env['CUDA_VISIBLE_DEVICES'] = '2,3'
-    env['TF_CPP_MIN_LOG_LEVEL'] = '4'
+    env['TF_CPP_MIN_LOG_LEVEL'] = '2'
 
     stdout = DEVNULL if config.hide_server_output else None
     stderr = DEVNULL if config.hide_server_output else None

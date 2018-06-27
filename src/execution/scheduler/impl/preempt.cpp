@@ -36,6 +36,7 @@ using std::chrono::system_clock;
 using FpSeconds = std::chrono::duration<double, seconds::period>;
 using namespace std::chrono_literals;
 using namespace date;
+using namespace salus;
 
 namespace {
 SchedulerRegistary::Register reg("preempt", [](auto &engine) {
@@ -43,7 +44,7 @@ SchedulerRegistary::Register reg("preempt", [](auto &engine) {
 });
 } // namespace
 
-PreemptScheduler::PreemptScheduler(ExecutionEngine &engine) : BaseScheduler(engine) {}
+PreemptScheduler::PreemptScheduler(TaskExecutor &engine) : BaseScheduler(engine) {}
 
 PreemptScheduler::~PreemptScheduler() = default;
 
@@ -91,7 +92,7 @@ std::pair<size_t, bool> PreemptScheduler::maybeScheduleFrom(PSessionItem item)
 
 std::pair<size_t, bool> PreemptScheduler::reportScheduleResult(size_t scheduled) const
 {
-    static auto workConservative = m_engine.schedulingParam().workConservative;
+    static auto workConservative = m_taskExec.schedulingParam().workConservative;
     // make sure the first session (with least progress) is
     // get scheduled solely, thus can keep up, without other
     // sessions interfere

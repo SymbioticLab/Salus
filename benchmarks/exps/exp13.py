@@ -30,13 +30,13 @@ def main(argv):
 
     # Firstly run concurrently on salus
     run_seq(scfg.copy(output_dir=FLAGS.save_dir / "salus"),
-            WTL.create("alexnet", 50, 1714),
-            WTL.create("alexnet", 50, 1714),
+            WTL.create("resnet101", 50, 47),
+            WTL.create("resnet101", 50, 47),
             )
 
     # Then run on tf
     run_seq(scfg.copy(output_dir=FLAGS.save_dir / "tf"),
-            WTL.create("alexnet", 50, 1714, executor=Executor.TF),
+            WTL.create("resnet101", 50, 47, executor=Executor.TF),
             Pause.Wait,
-            WTL.create("alexnet", 50, 1714, executor=Executor.TF),
+            WTL.create("resnet101", 50, 47, executor=Executor.TF),
             )

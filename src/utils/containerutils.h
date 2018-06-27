@@ -94,7 +94,7 @@ struct MutableAtom
     mutable value_type value{0};
 
     MutableAtom() = default;
-    MutableAtom(MutableAtom &&other)
+    MutableAtom(MutableAtom &&other) noexcept
         : value(other.value.load())
     {
     }

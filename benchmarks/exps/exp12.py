@@ -30,7 +30,17 @@ def main(argv):
         return
 
     run_seq(scfg.copy(output_dir=FLAGS.save_dir),
-            WTL.create("inception3", 25, 303),
+            WTL.create("inception3", 25, 1298),
             Pause(60),
-            WTL.create("alexnet", 100, 506),
+            WTL.create("alexnet", 100, 508),
+            )
+
+    if not FLAGS.with_ref:
+        return
+
+    # we also need reference data
+    run_seq(presets.MostEfficient(output_dir=FLAGS.save_dir / 'reference'),
+            WTL.create("alexnet", 100, 508),
+            Pause.Wait,
+            WTL.create("alexnet", 100, 508, executor=Executor.TF),
             )

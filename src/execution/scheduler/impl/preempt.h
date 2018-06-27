@@ -29,7 +29,7 @@
 class PreemptScheduler : public BaseScheduler
 {
 public:
-    explicit PreemptScheduler(ExecutionEngine &engine);
+    explicit PreemptScheduler(salus::TaskExecutor &engine);
     ~PreemptScheduler() override;
 
     std::string name() const override;

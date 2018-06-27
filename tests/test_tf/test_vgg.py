@@ -33,6 +33,7 @@ def run_vgg(vgg, sess, input_data, batch_size=100):
     # vgg.prob: [batch_size, 1000]
     # labels: [batch_size,]
 
+    salus_marker = tf.no_op(name="salus_main_iter")
     with tfhelper.initialized_scope(sess) as coord:
         speeds = []
         losses = []
@@ -42,7 +43,8 @@ def run_vgg(vgg, sess, input_data, batch_size=100):
                 break
             print("{}: Start running step {}".format(datetime.now(), i))
             start_time = default_timer()
-            _, loss_value = sess.run([train_step, cross_entropy], feed_dict={train_mode: True})
+            _, loss_value, _ = sess.run([train_step, cross_entropy, salus_marker],
+                                        feed_dict={train_mode: True})
             end_time = default_timer()
             losses.append(loss_value)
 
@@ -170,8 +172,8 @@ class TestVgg11(VGGCaseBase):
 
         config = tf.ConfigProto()
         config.allow_soft_placement = True
-        config.zmq_options.resource_map.temporary['MEMORY:GPU'] = memusages[batch_size][0]
-        config.zmq_options.resource_map.persistant['MEMORY:GPU'] = memusages[batch_size][1]
+        config.salus_options.resource_map.temporary['MEMORY:GPU'] = memusages[batch_size][0]
+        config.salus_options.resource_map.persistant['MEMORY:GPU'] = memusages[batch_size][1]
         return config
 
 
@@ -189,8 +191,8 @@ class TestVgg16(VGGCaseBase):
 
         config = tf.ConfigProto()
         config.allow_soft_placement = True
-        config.zmq_options.resource_map.temporary['MEMORY:GPU'] = memusages[batch_size][0]
-        config.zmq_options.resource_map.persistant['MEMORY:GPU'] = memusages[batch_size][1]
+        config.salus_options.resource_map.temporary['MEMORY:GPU'] = memusages[batch_size][0]
+        config.salus_options.resource_map.persistant['MEMORY:GPU'] = memusages[batch_size][1]
         return config
 
 
@@ -209,8 +211,8 @@ class TestVgg19(VGGCaseBase):
 
         config = tf.ConfigProto()
         config.allow_soft_placement = True
-        config.zmq_options.resource_map.temporary['MEMORY:GPU'] = memusages[batch_size][0]
-        config.zmq_options.resource_map.persistant['MEMORY:GPU'] = memusages[batch_size][1]
+        config.salus_options.resource_map.temporary['MEMORY:GPU'] = memusages[batch_size][0]
+        config.salus_options.resource_map.persistant['MEMORY:GPU'] = memusages[batch_size][1]
         return config
 
 

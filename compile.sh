@@ -19,5 +19,6 @@ done
 #wait
 
 export CLICOLOR_FORCE=1
-parallel --tag --lb -j 1 "cmake --build build/{} -- -j" ::: "${BUILD_TYPES[@]}"
+ncores=$(($(nproc) / 4))
+parallel --tag --lb -j 1 "cmake --build build/{} -- -j$ncores" ::: "${BUILD_TYPES[@]}"
 

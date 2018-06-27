@@ -21,13 +21,15 @@ limitations under the License.
 #include "oplibraries/tensorflow/tensorflow_headers.h"
 
 #include "md_executor.h"
-#include "md_executor_impl.h"
 
 #include "execution/devices.h"
-#include "execution/executionengine.h"
-#include "oplibraries/tensorflow/v2/exectask.h"
-#include "oplibraries/tensorflow/tfexception.h"
+#include "execution/engine/iterationcontext.h"
+#include "execution/engine/resourcecontext.h"
+#include "md_executor_impl.h"
 #include "oplibraries/tensorflow/device/salusdevices.h"
+#include "oplibraries/tensorflow/tfexception.h"
+#include "oplibraries/tensorflow/v2/exectask.h"
+#include "oplibraries/tensorflow/v2/itertask.h"
 #include "oplibraries/tensorflow/v2/tfallocator.h"
 #include "utils/cpp17.h"
 #include "utils/stringutils.h"
@@ -73,14 +75,18 @@ tf::Status NewMultiDeviceExecutor(MultiDeviceExecutorParams params, std::unique_
     return s;
 }
 
+std::atomic_int_fast64_t ExecutorImpl::NextSeq{0};
+
 ExecutorImpl::ExecutorImpl(MultiDeviceExecutorParams &&p, std::unique_ptr<const tf::Graph> &&g)
     : params_(std::move(p))
     , graph_(std::move(g))
+    , is_main_iter(false)
+    , graph_id_(static_cast<uint64_t>(++NextSeq))
 {
     DCHECK(params_.get_kernel != nullptr);
 
     using namespace std::placeholders;
-    params_.ins.registerPagingCallbacks({
+    params_.ins->registerPagingCallbacks({
         std::bind(&ExecutorImpl::handlePagingRequest, this, _1, _2),
     });
 }
@@ -116,7 +122,7 @@ void GetMaxPendingCounts(const tf::Node *n, int *max_pending, int *max_dead_coun
     *max_dead_count = num_in_edges;
 }
 
-void FillinSupportedDeviceSpecs(sstl::not_null<NodeItem*> item)
+void FillinSupportedDeviceSpecs(sstl::not_null<NodeItem *> item)
 {
     const auto &node = *item->node;
     item->supported_devices.clear();
@@ -164,6 +170,7 @@ tf::Status ExecutorImpl::Initialize()
     }
 
     VLOG(2) << "Created graph@" << as_hex(graph_) << " of graphHandle=" << params_.graphHandle
+            << ", graphId=" << graph_id_
             << " for session " << params_.session;
     // Preprocess every node in the graph to create an instance of op
     // kernel for each node.
@@ -173,7 +180,12 @@ tf::Status ExecutorImpl::Initialize()
         auto frame_info = EnsureFrameInfo(frame_name);
 
         if (VLOG_IS_ON(3)) {
-            VLOG(3) << "Node " << id << " in graph@" << as_hex(graph_) << ": " << n->def();
+            VLOG(3) << "Node " << id << " in graphHandle=" << params_.graphHandle << ", graphId=" << graph_id_ << ": " << n->def();
+        }
+
+        if (n->name() == "salus_main_iter") {
+            VLOG(2) << params_.session << ":" << params_.graphHandle << " is main iteration";
+            is_main_iter = true;
         }
 
         const int num_in_edges = n->in_edges().size();
@@ -208,9 +220,9 @@ tf::Status ExecutorImpl::Initialize()
             DeviceItem ditem;
             // Create ditem for item
             DCHECK(item->supported_devices.size() == 1);
-            DeviceSpec spec{ item->supported_devices.at(0), 0 };
+            DeviceSpec spec{item->supported_devices.at(0), 0};
             auto usage = estimateMemoryUsageForNode(*item, spec);
-            LookupDevice(spec, params_.ins.makeResourceContext(spec, usage), &ditem);
+            LookupDevice(spec, params_.ins->makeResourceContext(graph_id_, spec, usage), &ditem);
 
             // Build kernel
             item->kernel = SetupKernel(n, ditem);
@@ -247,6 +259,11 @@ tf::Status ExecutorImpl::Initialize()
     // Initialize PendingCounts only after item->pending_id is initialized for
     // all nodes.
     InitializePending(graph_.get(), cf_info);
+
+    // Build and initialize cost mgr
+    VLOG(2) << "Set CostMgr with rm=" << params_.rm.DebugString() << ", is_main_iter=" << is_main_iter
+            << ", for graphId=" << graph_id_ << ", sess=" << params_.ins->m_item->sessHandle;
+    cost_mgr_.build(*graph_, gview_, params_.rm, is_main_iter);
 
     return tf::Status::OK();
 }
@@ -372,18 +389,19 @@ ExecutorState::~ExecutorState()
     }
 }
 
-void ExecutorState::RunAsync(const tf::Executor::DoneCallback &done)
+void ExecutorState::RunAsync(const tf::Executor::DoneCallback &done, std::shared_ptr<IterationContext> ictx)
 {
     VLOG(3) << "ExecutorState::RunAsync for graph@" << as_hex(impl_->graph_)
-            << " of graphHandle=" << impl_->params_.graphHandle;
+            << " of graphHandle=" << impl_->params_.graphHandle << " for iter graphId=" << impl_->graph_id_;
 
+    ictx_ = std::move(ictx);
     // Precompute a contextmap, this is used to setup cache in the device
     for (auto *tfdev : impl_->params_.deviceMgr.ListDevices()) {
         auto sdev = ISalusDevice::safe_cast(tfdev);
         if (!sdev) {
             continue;
         }
-        std::vector<tf::DeviceContext*> cmap;
+        std::vector<tf::DeviceContext *> cmap;
         tfdev->FillContextMap(impl_->graph_.get(), &cmap);
 
         // we don't actually use this map, free it
@@ -445,7 +463,8 @@ void ExecutorState::Process(TaggedNode tagged_node)
 
     num_emitted_ops_ += 1;
 
-    impl_->params_.ins.enqueueOperation(std::move(nodeTask));
+    DCHECK(ictx_);
+    ictx_->scheduleTask(std::move(nodeTask));
 }
 
 namespace {
@@ -667,8 +686,7 @@ tf::Status ExecutorState::PrepareInputs(const NodeItem &item, sstl::not_null<tf:
 }
 
 tf::Status ExecutorState::ProcessOutputs(const NodeItem &item, tf::OpKernelContext *ctx,
-                                         const std::shared_ptr<PerTaskDevice> &device,
-                                         EntryVector *outputs)
+                                         const std::shared_ptr<PerTaskDevice> &device, EntryVector *outputs)
 {
     auto node = item.node;
     DCHECK(outputs->empty());
@@ -1100,8 +1118,7 @@ void ExecutorState::DumpIterationState(const FrameState *frame, IterationState *
         auto *tensor = GetTensorValueForDump(input);
         if (tensor->IsInitialized()) {
             VLOG(2) << "      Input " << i << ": Tensor<type: " << tensor->dtype()
-                    << " shape: " << tensor->shape() << " bytes: " << tensor->TotalBytes()
-                    << ">";
+                    << " shape: " << tensor->shape() << " bytes: " << tensor->TotalBytes() << ">";
             total_bytes += tensor->TotalBytes();
         }
     }
@@ -1119,7 +1136,11 @@ void ExecutorState::DumpState()
             auto frame_lock = sstl::with_guard(frame_state->mu);
             for (IterationState *iteration : frame_state->iterations) {
                 VLOG(2) << "  Iteration:";
-                DumpIterationState(frame_state, iteration);
+                if (iteration) {
+                    DumpIterationState(frame_state, iteration);
+                } else {
+                    VLOG(2) << " nullptr";
+                }
             }
         }
         dumped_on_error_ = true;
@@ -1138,11 +1159,12 @@ void ExecutorState::Finish()
     }
 
     // Get out handlers
-    mu_.lock();
+    auto l = sstl::with_uguard(mu_);
     auto status = status_;
     auto done_cb = std::move(done_cb_);
     auto runner = std::move(runner_);
-    mu_.unlock();
+    auto ictx = std::move(ictx_);
+    l.unlock();
 
     // Wait for finish
     if (sync_on_finish_ && status.ok()) {
@@ -1150,15 +1172,24 @@ void ExecutorState::Finish()
         // devices like GPUs that continue to execute Ops after their Compute
         // methods have completed, this ensures that control is not returned to
         // the user until the step (and its side-effects) has actually completed.
-        int n = num_emitted_ops_;
+        int n = static_cast<int>(num_emitted_ops_);
         VLOG(3) << "Waiting for " << n << " ops to complete";
         num_finished_ops_.wait(n);
     }
 
-    VLOG(2) << "ExecutorState about to delete this";
+    if (impl_->is_main_iter) {
+        VLOG(2) << impl_->params_.session << ":" << impl_->params_.graphHandle
+                << ":" << impl_->graph_id_ << " drops exclusive mode";
+        impl_->params_.ins->dropExlusiveMode();
+        ictx->finish();
+    }
+
+    VLOG(2) << impl_->params_.session << ":" << impl_->params_.graphHandle << ":" << impl_->graph_id_ << " finish iteration";
     delete this;
     DCHECK(done_cb != nullptr);
-    runner([=]() { done_cb(status); });
+    runner([done = std::move(done_cb), status]() {
+        done(status);
+    });
 }
 
 void ExecutorState::FindOrCreateChildFrame(FrameState *frame, int64_t iter, const tf::Node *node,
@@ -1505,7 +1536,7 @@ bool ExecutorState::FrameState::CleanupIterations(const GraphView &gview, int64_
 
 void ExecutorImpl::RunAsync(const Args &args, DoneCallback done)
 {
-    (new ExecutorState(args, this))->RunAsync(done);
+    params_.ins->scheduleIteartion(std::make_unique<IterTask>(*this, args, std::move(done)));
 }
 
 } // namespace salus::oplib::tensorflow

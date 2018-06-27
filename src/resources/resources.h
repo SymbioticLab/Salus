@@ -22,6 +22,7 @@
 #include "execution/devices.h"
 #include "utils/macros.h"
 #include "utils/pointerutils.h"
+#include "utils/threadutils.h"
 #include "platform/thread_annotations.h"
 
 #include <list>
@@ -36,6 +37,10 @@ enum class ResourceType
     COMPUTE,
     MEMORY,
     GPU_STREAM,
+    /**
+     * @brief A special type of resource that has only 1 unit of it.
+     */
+    EXCLUSIVE,
 
     UNKNOWN = 1000,
 };
@@ -135,6 +140,14 @@ Resources &merge(Resources &lhs, const Resources &rhs, bool skipNonExist = false
 Resources &subtract(Resources &lhs, const Resources &rhs, bool skipNonExist = false);
 
 /**
+ * @brief Subtract 'rhs' from 'lhs', anything not contained in 'lhs' is skipped
+ * @param lhs
+ * @param rhs
+ * @return actual res subtracted
+ */
+Resources subtractBounded(Resources &lhs, const Resources &rhs);
+
+/**
  * @brief Multiply a scale to every resource type in 'lhs'
  * @param lhs
  * @param scale
@@ -155,63 +168,117 @@ inline std::ostream& operator<<(std::ostream& out, const Resources& res)
     return out << resources::DebugString(res);
 }
 
-struct ResourceMap
+struct ResStats
 {
-    Resources temporary;
-    Resources persistant;
-    std::string persistantHandle;
+    /**
+     * @brief Peak usage excluding persist
+     */
+    size_t temporary = 0;
+    /**
+     * @brief Persist usage across iterations
+     */
+    size_t persist = 0;
+
+    /**
+     * @brief Number of allocations per iter
+     */
+    size_t count = 0;
 
     std::string DebugString() const;
 };
-
-class SessionResourceTracker
+/**
+ * @brief Tracks iterations' allocation, making sure no two iterations with
+ * risk allocations can run at the same time.
+ */
+class AllocationRegulator
 {
-    SessionResourceTracker();
-    // Read limits from hardware, and capped by cap
-    explicit SessionResourceTracker(const Resources &cap);
-
-    // If it is safe to admit this session, given its persistant and temporary memory usage.
-    bool canAdmitUnsafe(const ResourceMap &cap) const;
-
-    void freeUnsafe(uint64_t ticket);
-
 public:
-    static SessionResourceTracker &instance();
+    struct Ticket {
+        uint64_t as_int;
 
-    ~SessionResourceTracker() = default;
+        Ticket() = default;
+        constexpr Ticket(uint64_t v, AllocationRegulator *r) : as_int(v), reg(r) {}
+        Ticket(const Ticket &) = default;
 
-    void setDisabled(bool val);
+        Ticket &operator=(const Ticket &) = default;
+        Ticket &operator=(uint64_t v) { as_int = v; return *this; }
 
-    bool disabled() const;
+        bool operator==(const Ticket &rhs) const noexcept { return as_int == rhs.as_int; }
+        bool operator!=(const Ticket &rhs) const noexcept { return !(*this == rhs); }
 
-    // Take the session
-    bool admit(const ResourceMap &cap, uint64_t &ticket);
+        constexpr operator bool() const { return as_int != 0; }
 
-    // Associate ticket with handle
-    void acceptAdmission(uint64_t ticket, const std::string &sessHandle);
+        /**
+         * @brief Start an allocation phase using a ticket. Making sure
+         * at least 'cap' resource is available or will be available
+         * for allocation without deadlocking
+         * @param cap
+         * @return the allocation ticket, or an empty optional if the request
+         * can not be fulfilled
+         */
+        bool beginAllocation(const Resources &res);
 
-    // Query the usage of session.
-    std::optional<ResourceMap> usage(uint64_t ticket) const;
+        /**
+         * @brief Stop current allocation phase, releasing 'res' amount of holding resources.
+         *
+         * Note that the ticket is still
+         * @param res
+         * @return
+         */
+        void endAllocation(const Resources &res);
 
-    // Free the session
-    void free(uint64_t ticket);
+        /**
+         * @brief Finish the use of the ticket, releasing any remaining resources
+         * associated with the ticket.
+         * @param ticket
+         */
+        void finishJob();
+
+        std::string DebugString() const
+        {
+            return reg->DebugString();
+        }
+
+    private:
+        AllocationRegulator *reg;
+    };
+
+    AllocationRegulator();
+    // Read limits from hardware, and capped by cap
+    explicit AllocationRegulator(const Resources &cap);
+
+    ~AllocationRegulator() = default;
+
+    /**
+     * @brief Register and get a ticket that can be used to start
+     * allocation phases
+     */
+    Ticket registerJob();
 
     std::string DebugString() const;
-
-    static constexpr uint64_t kInvalidTicket = 0;
 
 private:
     mutable std::mutex m_mu;
 
-    bool m_disabled = false GUARDED_BY(m_mu);
-
-    uint64_t m_tickets = 0 GUARDED_BY(m_mu);
+    uint64_t m_next = 0 GUARDED_BY(m_mu);
 
     Resources m_limits GUARDED_BY(m_mu);
 
-    std::unordered_map<uint64_t, ResourceMap> m_sessions GUARDED_BY(m_mu);
+    struct JobState
+    {
+        Resources inuse;
+    };
 
-    std::list<ResourceMap *> m_peak GUARDED_BY(m_mu);
+    struct TicketHasher
+    {
+        size_t operator() (Ticket t) const noexcept
+        {
+            using std::hash;
+            return hash<uint64_t>{}(t.as_int);
+        }
+    };
+
+    std::unordered_map<Ticket, JobState, TicketHasher> m_jobs GUARDED_BY(m_mu);
 };
 
 /**
@@ -233,6 +300,7 @@ public:
 
     /**
      * @brief Try pre-allocate resources
+     * @param iterTicket making sure you get an iteration allocation ticket
      * @param req Requested resources to pre-allocate
      * @param missing If not null, contains missing resources that would have make the allocation succeed. Ignored when
      * the allocation succeed.
@@ -264,19 +332,22 @@ public:
 
     struct LockedProxy
     {
+        SALUS_DISALLOW_COPY_AND_ASSIGN(LockedProxy);
+
         explicit LockedProxy(sstl::not_null<ResourceMonitor*> resMon)
             : m_resMonitor(resMon)
+            , m_ug(sstl::with_uguard(m_resMonitor->m_mu))
         {
-            m_resMonitor->m_mu.lock();
         }
 
-        LockedProxy(LockedProxy &&other)
+        LockedProxy(LockedProxy &&other) noexcept
             : m_resMonitor(other.m_resMonitor)
+            , m_ug(std::move(other.m_ug))
         {
             other.m_resMonitor = nullptr;
         }
 
-        LockedProxy &operator=(LockedProxy &&other)
+        LockedProxy &operator=(LockedProxy &&other) noexcept
         {
             release();
             using std::swap;
@@ -297,14 +368,15 @@ public:
         void release()
         {
             if (m_resMonitor) {
-                m_resMonitor->m_mu.unlock();
                 m_resMonitor = nullptr;
             }
+            if (m_ug) {
+                m_ug.unlock();
+            }
         }
-        LockedProxy(const LockedProxy &other) = delete;
-        LockedProxy &operator=(const LockedProxy &other) = delete;
 
         ResourceMonitor *m_resMonitor;
+        sstl::detail::UGuard m_ug;
     };
 
     LockedProxy lock()

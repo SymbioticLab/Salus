@@ -29,10 +29,12 @@
 #include "oplibraries/tensorflow/v2/md_executor.h"
 #include "oplibraries/tensorflow/v2/tensorutils.h"
 #include "oplibraries/tensorflow/v2/graphview.h"
+#include "oplibraries/tensorflow/v2/costmgr.h"
 #include "utils/containerutils.h"
 #include "utils/threadutils.h"
 #include "utils/pointerutils.h"
 #include <boost/intrusive/list.hpp>
+#include <boost/container/flat_map.hpp>
 #include <optional>
 #include <mutex>
 #include <unordered_map>
@@ -56,6 +58,8 @@ using BufferLockVec = std::vector<boost::shared_lock<boost::upgrade_mutex>>;
 using BufferMutexSet = std::unordered_set<boost::upgrade_mutex *>;
 
 class PerTaskDevice;
+class ExecTask;
+class IterTask;
 class ExecutorState;
 class ExecutorImpl : public tf::Executor
 {
@@ -71,6 +75,7 @@ public:
 private:
     friend class ExecutorState;
     friend class ExecTask;
+    friend class IterTask;
 
     size_t handlePagingRequest(uint64_t oldTicket, std::unique_ptr<ResourceContext> &&rctx);
     void forceEvicted();
@@ -84,18 +89,14 @@ private:
     void removeFromBufferTree(const Entry *entry, EntryVec *needUpdate);
     void updateBufferTree(Entry *entry, uint64_t ticket);
 
-    void saveSucceedUsageForNode(const std::string &name, const Resources &res)
+    void saveSucceedUsageForNode(const NodeItem &item, const DeviceType &dt, const Resources &res)
     {
-        auto g = sstl::with_guard(usage_mu_);
-        if (!resources::contains(cachedUsages_[name], res)) {
-            cachedUsages_[name] = res;
-        }
+        cost_mgr_.updateNode(item, dt, res);
     }
 
-    std::optional<Resources> cachedUsageForNode(const std::string &name)
+    std::optional<Resources> cachedUsageForNode(const NodeItem &item, const DeviceType &dt)
     {
-        auto g = sstl::with_guard(usage_mu_);
-        return sstl::optionalGet(cachedUsages_, name);
+        return cost_mgr_.getForNode(item, dt);
     }
 
     tf::Status LookupDevice(const DeviceSpec &spec, std::unique_ptr<ResourceContext> &&rctx, DeviceItem *item);
@@ -173,9 +174,13 @@ private:
     // the overhead of constructing it for each executor instance.
     gtl::FlatMap<std::string, FrameInfo *> frame_info_;
 
+    bool is_main_iter;
+    // a combination of graphHandle and partition
+    const uint64_t graph_id_;
     // Known succeed node resource usage
-    std::unordered_map<std::string, Resources> cachedUsages_;
-    std::mutex usage_mu_;
+    IterationCost cost_mgr_;
+
+    static std::atomic_int_fast64_t NextSeq;
 
     TF_DISALLOW_COPY_AND_ASSIGN(ExecutorImpl);
 };
@@ -192,7 +197,7 @@ public:
     ExecutorState(const tf::Executor::Args &args, ExecutorImpl *impl);
     ~ExecutorState();
 
-    void RunAsync(const tf::Executor::DoneCallback &done);
+    void RunAsync(const tf::Executor::DoneCallback &done, std::shared_ptr<IterationContext> ictx);
 
 private:
     friend class ExecTask;
@@ -487,7 +492,8 @@ private:
     };
 
     const bool vlog_; // true if VLOG_IS_ON(1). Used to check vlog cheaply.
-    bool forceInterrupted = false;
+
+    std::shared_ptr<IterationContext> ictx_;
 
     tf::ShapeRefiner refiner_;
     std::unordered_map<std::string, tf::PartialTensorShape> sendShapes_;

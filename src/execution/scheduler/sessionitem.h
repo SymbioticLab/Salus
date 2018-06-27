@@ -20,8 +20,11 @@
 #define SALUS_EXEC_SESSIONITEM_H
 
 #include "utils/containerutils.h"
-#include "execution/resources.h"
-#include "execution/executionengine.h"
+#include "resources/resources.h"
+#include "resources/iteralloctracker.h"
+#include "execution/devices.h"
+#include "execution/engine/taskexecutor.h"
+#include "execution/engine/allocationlistener.h"
 #include "platform/thread_annotations.h"
 
 #include <list>
@@ -34,16 +37,22 @@
 #include <any>
 #include <utility>
 
+struct OperationItem;
+using POpItem = std::shared_ptr<OperationItem>;
+
+namespace salus {
+class ExecutionEngine;
+}
 /**
  * @todo write docs
  */
-struct SessionItem
+struct SessionItem : public salus::AllocationListener
 {
     using KernelQueue = std::list<POpItem>;
     using UnsafeQueue = std::list<POpItem>;
 private:
     // protected by mu (may be accessed both in schedule thread and close session thread)
-    ExecutionCallbacks pagingCb GUARDED_BY(mu);
+    salus::PagingCallbacks pagingCb GUARDED_BY(mu);
     std::function<void()> cleanupCb GUARDED_BY(mu);
 
     // called if the execution engine requires to interrupt the session
@@ -52,6 +61,12 @@ private:
     KernelQueue queue GUARDED_BY(mu);
     // total number of executed op in this session
     uint64_t totalExecutedOp = 0 GUARDED_BY(mu);
+
+    // rm for current iteration
+    const static constexpr ResourceTag trackerTag = resources::GPU0Memory;
+    std::unordered_map<uint64_t, salus::IterAllocTracker> allocTrackers GUARDED_BY(mu);
+
+    void updateTracker(uint64_t graphId, const ResourceTag &tag);
 
     std::mutex mu;
 
@@ -66,8 +81,12 @@ private:
     // Accessed by multiple scheduling thread
     std::atomic_bool protectOOM{true};
 
-    friend class ExecutionEngine;
+    // Iters should goto blockingIters queue
+    std::atomic_bool exlusiveMode{true};
+
+    friend class salus::TaskExecutor;
     friend class BaseScheduler;
+    friend class salus::ExecutionEngine;
 
 public:
     std::string sessHandle;
@@ -87,15 +106,25 @@ public:
         resUsage[{ResourceType::GPU_STREAM, salus::devices::GPU1}].get() = 0;
     }
 
-    ~SessionItem();
+    ~SessionItem() override;
 
     sstl::MutableAtom::value_type &resourceUsage(const ResourceTag &tag)
     {
         return resUsage.at(tag).get();
     }
 
-    void setPagingCallbacks(ExecutionCallbacks pcb);
+    void setPagingCallbacks(salus::PagingCallbacks pcb);
     void setInterruptCallback(std::function<void()> cb);
+    void setExclusiveMode(bool mode)
+    {
+        exlusiveMode = mode;
+    }
+
+    void queueTask(POpItem &&opItem);
+
+    bool beginIteration(AllocationRegulator::Ticket t, ResStats newRm, uint64_t graphId);
+
+    void endIteration(uint64_t graphId);
 
     /**
      * @brief prepare to remove session from execution engine.
@@ -111,19 +140,10 @@ public:
      */
     void prepareDelete(std::function<void()> cb);
 
-    /**
-     * @brief Allocator should call when there is memory allocation happens
-     * @param ticket
-     */
-    void notifyMemoryAllocation(uint64_t ticket);
+    void notifyAlloc(uint64_t graphId, uint64_t ticket, const ResourceTag &tag, size_t num) override;
+    void notifyDealloc(uint64_t graphId, uint64_t ticket, const ResourceTag &tag, size_t num, bool last) override;
 
     void interrupt();
-
-    /**
-     * @brief Allocator should call when there is no more memory allocation
-     * @param ticket
-     */
-    void removeMemoryAllocationTicket(uint64_t ticket);
 
 private:
     using AtomicResUsages = std::unordered_map<ResourceTag, sstl::MutableAtom>;

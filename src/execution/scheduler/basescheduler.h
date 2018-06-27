@@ -33,7 +33,6 @@
 #include <utility>
 #include <functional>
 
-class ExecutionEngine;
 struct SessionChangeSet
 {
     SessionSet deletedSessions;
@@ -41,6 +40,10 @@ struct SessionChangeSet
     SessionList::iterator addedSessionBegin;
     SessionList::iterator addedSessionEnd;
 };
+
+namespace salus {
+class TaskExecutor;
+} // namespace salus
 
 /**
  * @brief Scheduler interface used in the execution engine.
@@ -53,7 +56,7 @@ struct SessionChangeSet
 class BaseScheduler
 {
 public:
-    explicit BaseScheduler(ExecutionEngine &engine);
+    explicit BaseScheduler(salus::TaskExecutor &engine);
     virtual ~BaseScheduler();
 
     /**
@@ -134,7 +137,7 @@ protected:
     std::mutex m_muRes;
     std::unordered_map<sstl::not_null<OperationItem*>, Resources> m_missingRes GUARDED_BY(m_muRes);
 
-    ExecutionEngine &m_engine;
+    salus::TaskExecutor &m_taskExec;
 };
 
 inline std::ostream& operator<<(std::ostream& out, const BaseScheduler& sch)
@@ -154,13 +157,13 @@ public:
 
     ~SchedulerRegistary();
 
-    using SchedulerFactory = std::function<std::unique_ptr<BaseScheduler>(ExecutionEngine&)>;
+    using SchedulerFactory = std::function<std::unique_ptr<BaseScheduler>(salus::TaskExecutor&)>;
     struct Register
     {
         explicit Register(std::string_view name, SchedulerFactory factory);
     };
 
-    std::unique_ptr<BaseScheduler> create(std::string_view name, ExecutionEngine &engine) const;
+    std::unique_ptr<BaseScheduler> create(std::string_view name, salus::TaskExecutor &engine) const;
 
     static SchedulerRegistary &instance();
 

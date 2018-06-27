@@ -42,7 +42,7 @@ public:
     tensorflow::Status Send(const ParsedKey& parsed,
                             const Args& send_args,
                             const tensorflow::Tensor& val,
-                            const bool is_dead) override;
+                            bool is_dead) override;
 
     void RecvAsync(const ParsedKey& parsed, const Args& recv_args, DoneCallback done) override;
 
