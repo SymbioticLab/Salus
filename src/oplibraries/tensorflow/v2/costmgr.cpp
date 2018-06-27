@@ -4,6 +4,7 @@
 
 #include "oplibraries/tensorflow/v2/costmgr.h"
 #include "utils/threadutils.h"
+#include "config.h"
 
 namespace salus::oplib::tensorflow {
 void IterationCost::build(const tf::Graph &g, const GraphView &gv, const ResStats &rm, const bool is_main_iter)
@@ -33,7 +34,29 @@ std::optional<Resources> IterationCost::getForNode(const NodeItem &item, const D
 ResStats IterationCost::getForIteration() const
 {
     auto g = sstl::with_guard(m_mu);
+    const static constexpr auto DevCapacity = 14ll * 1024ll * 1024ll * 1024ll;
+#if defined(SALUS_ENABLE_EXCLUSIVE_ITER)
+    return {DevCapacity - m_iterationCost.persist, m_iterationCost.count};
+#else
+    if (m_iterationCost.persist + m_iterationCost.temporary > DevCapacity) {
+        LOG(WARNING) << "Iteration resource esitmation exceeded device capacity: " << m_iterationCost.DebugString() << " capacity: " << DevCapacity;
+        if (m_iterationCost.persist < DevCapacity) {
+            return {
+                DevCapacity - m_iterationCost.temporary,
+                m_iterationCost.persist,
+                m_iterationCost.count
+            };
+        } else {
+            LOG(WARNING) << "Iteration resource persistent estimation exceeded device capacity!";
+            return {
+                DevCapacity,
+                0,
+                m_iterationCost.count
+            };
+        }
+    }
     return m_iterationCost;
+#endif
 }
 
 void IterationCost::updateNode(const NodeItem &item, const DeviceType &dt, Resources res)

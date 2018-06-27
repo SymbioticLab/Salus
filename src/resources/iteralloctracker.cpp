@@ -81,8 +81,10 @@ bool IterAllocTracker::update(size_t num)
         return false;
     }
 
+#if defined(SALUS_ENABLE_EXCLUSIVE_ITER)
+    return false;
+#else
     // If we hold memory allocation, estimate when we should release it
-
     m_buf.push_back({system_clock::now().time_since_epoch().count(), num});
 
     if (m_buf.size() < 2) {
@@ -98,6 +100,7 @@ bool IterAllocTracker::update(size_t num)
     }
 
     return false;
+#endif
 }
 
 void IterAllocTracker::releaseAllocationHold()

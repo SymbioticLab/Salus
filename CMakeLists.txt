@@ -37,6 +37,8 @@ option(DISABLE_LOGGING "Disable all logging except INFO level" OFF)
 
 option(WITH_STATIC_STREAM "Use static GPU stream assignment, for debug only" ON)
 
+option(WITH_EXCLUSIVE_ITER "Each iteration runs exclusively" ON)
+
 #---------------------------------------------------------------------------------------
 # Find packages
 #---------------------------------------------------------------------------------------
@@ -90,6 +92,7 @@ add_feature_info(WITH_PARALLEL_SCHED WITH_WITH_PARALLEL_SCHED "enable parallel p
 add_feature_info(WITH_MULTI_DEVICE WITH_MULTI_DEVICE "enable multi-device scheduling support")
 add_feature_info(DISABLE_LOGGING DISABLE_LOGGING "disable all logging except INFO level")
 add_feature_info(WITH_STATIC_STREAM WITH_STATIC_STREAM "use static GPU stream assignment, for debug only")
+add_feature_info(WITH_EXCLUSIVE_ITER WITH_EXCLUSIVE_ITER "Each iteration runs exclusively")
 feature_summary(INCLUDE_QUIET_PACKAGES FATAL_ON_MISSING_REQUIRED_PACKAGES WHAT ALL)
 
 #---------------------------------------------------------------------------------------
@@ -121,6 +124,10 @@ endif(WITH_MULTI_DEVICE)
 if(WITH_STATIC_STREAM)
     set(SALUS_ENABLE_STATIC_STREAM 1)
 endif(WITH_STATIC_STREAM)
+
+if(WITH_EXCLUSIVE_ITER)
+    set(SALUS_ENABLE_EXCLUSIVE_ITER 1)
+endif(WITH_EXCLUSIVE_ITER)
 
 configure_file(src/config.h.in ${CMAKE_CURRENT_BINARY_DIR}/config.h)
 include_directories(${CMAKE_CURRENT_BINARY_DIR})
