@@ -40,6 +40,19 @@ inline void logScheduleFailure(const Resources &usage, const ResourceMonitor &re
 #endif
 }
 
+void reportNoProgress(bool noProgress)
+{
+    static auto lastProgress = system_clock::now();
+    if (noProgress) {
+        auto dur = system_clock::now() - lastProgress;
+        if (dur > 10s) {
+            LOG(ERROR) << "No progress for " << dur << " check the program!!!";
+        }
+    } else {
+        lastProgress = system_clock::now();
+    }
+}
+
 } // namespace
 
 TaskExecutor::TaskExecutor(ThreadPool &pool, ResourceMonitor &resMonitor, SchedulingParam &param)
@@ -245,6 +258,7 @@ void TaskExecutor::scheduleLoop()
 
         // Update conditions and check if we need paging
         bool noProgress = remainingCount > 0 && scheduled == 0 && m_nNoPagingRunningTasks == 0;
+        reportNoProgress(noProgress);
 
         noProgress = false;
         bool didPaging = false;
@@ -389,7 +403,8 @@ void TaskExecutor::taskStopped(OperationItem &opItem, bool failed)
     auto &rctx = opItem.op->resourceContext();
     rctx.releaseStaging();
 
-    LogOpTracing() << "OpItem Event " << opItem.op << " event: done";
+    LogOpTracing() << "OpItem Event " << opItem.op << "failed=" << opItem.op->failedTimes() << " event: done";
+    LOG(INFO) << "OpItem Event " << opItem.op << "failed=" << opItem.op->failedTimes() << " event: done";
     if (!failed) {
         if (VLOG_IS_ON(2)) {
             if (auto item = opItem.sess.lock()) {
