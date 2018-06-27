@@ -61,6 +61,11 @@ tf::Allocator *SalusGPUDevice::GetAllocator(tf::AllocatorAttributes attr)
     return gpu_allocator_;
 }
 
+bool SalusGPUDevice::RequiresRecordingAccessedTensors() const
+{
+    return BaseGPUDevice::RequiresRecordingAccessedTensors();
+}
+
 Status SalusGPUDevice::FillContextMap(const tf::Graph *, std::vector<tf::DeviceContext *> *)
 {
     /*
