@@ -174,11 +174,17 @@ Resources ExecTask::estimatedUsage(const DeviceSpec &dev)
                      << " to finish: " << duration_cast<FpMS>(dur)
                      << " for " << *this;
     });
+    const static constexpr auto DevCapacity = 14ll * 1024ll * 1024ll * 1024ll;
     // First see if we have usage for this node in session
     // but only if we haven't failed before, otherwise,
     // the session cached usage maybe be just a lucky case
     auto usage = m_state->impl_->cachedUsageForNode(item, dev.type);
     if (usage && failureTimes == 0) {
+        if (sstl::optionalGet(usage, resources::GPU0Memory) > DevCapacity) {
+            LOG(WARNING) << "Cap resource usage estimation larger than device capacity: " << *usage << " capacity: " << DevCapacity;
+            usage.value()[resources::GPU0Memory] = DevCapacity;
+        }
+        cachedUsage[dev] = *usage;
         return std::move(*usage);
     }
 
@@ -190,6 +196,10 @@ Resources ExecTask::estimatedUsage(const DeviceSpec &dev)
             // anyway.
             auto usage = cachedUsage[dev];
             resources::merge(usage, failedAlloc);
+            if (sstl::optionalGet(usage, resources::GPU0Memory) > DevCapacity) {
+                LOG(WARNING) << "Cap resource usage estimation larger than device capacity: " << usage << " capacity: " << DevCapacity;
+                usage[resources::GPU0Memory] = DevCapacity;
+            }
             return usage;
         }
     }
@@ -198,6 +208,10 @@ Resources ExecTask::estimatedUsage(const DeviceSpec &dev)
     auto it = cachedUsage.find(dev);
     if (it == cachedUsage.end()) {
         return calcUsageFromShape(dev);
+    }
+    if (sstl::optionalGet(it->second, resources::GPU0Memory) > DevCapacity) {
+        LOG(WARNING) << "Cap resource usage estimation larger than device capacity: " << it->second << " capacity: " << DevCapacity;
+        it->second[resources::GPU0Memory] = DevCapacity;
     }
     return it->second;
 }

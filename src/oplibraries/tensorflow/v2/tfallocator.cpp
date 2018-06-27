@@ -112,15 +112,17 @@ void *PerOpAllocator::AllocateRaw(size_t alignment, size_t num_bytes)
                << " using allocator " << nameOrNull(m_actualAlloc) << "@" << as_hex(m_actualAlloc);
 
     void *ptr = nullptr;
+    bool didRollback = false;
     if (auto scope = m_rctx->alloc(ResourceType::MEMORY, num_bytes)) {
         ptr = m_actualAlloc->AllocateRaw(alignment, num_bytes);
         if (!ptr) {
             scope.rollback();
+            didRollback = true;
         }
     }
 
     checkMemory(ptr, num_bytes);
-    recordSize(ptr, num_bytes);
+    recordSize(ptr, num_bytes, didRollback);
 
     if (!ptr) {
         return ptr;
@@ -147,15 +149,17 @@ void *PerOpAllocator::AllocateRaw(size_t alignment, size_t num_bytes,
                << nameOrNull(m_actualAlloc) << "@" << as_hex(m_actualAlloc);
 
     void *ptr = nullptr;
+    bool didRollback = false;
     if (auto scope = m_rctx->alloc(ResourceType::MEMORY, num_bytes)) {
         ptr = m_actualAlloc->AllocateRaw(alignment, num_bytes, attr);
         if (!ptr) {
             scope.rollback();
+            didRollback = true;
         }
     }
 
     checkMemory(ptr, num_bytes);
-    recordSize(ptr, num_bytes);
+    recordSize(ptr, num_bytes, didRollback);
 
     if (!ptr) {
         return ptr;
@@ -212,10 +216,15 @@ bool PerOpAllocator::ShouldAllocateEmptyTensors()
     return m_actualAlloc->ShouldAllocateEmptyTensors();
 }
 
-void PerOpAllocator::recordSize(void *ptr, size_t size)
+void PerOpAllocator::recordSize(void *ptr, size_t size, bool didRollback)
 {
     auto g = sstl::with_guard(m_mu);
-    m_lastFailedAllocSize = size;
+    if (!ptr && !didRollback) {
+        // Only remember failed alloc size if we didn't rollback, which
+        // means our estimation was enough, but the underlaying allocator failed
+        // due to some other reason.
+        m_lastFailedAllocSize = size;
+    }
     if (!ptr) {
         // No enough memory
         return;

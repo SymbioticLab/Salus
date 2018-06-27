@@ -85,7 +85,7 @@ public:
     }
 
 private:
-    void recordSize(void *ptr, size_t size);
+    void recordSize(void *ptr, size_t size, bool didRollback);
     size_t findSize(void *ptr);
 
     std::shared_ptr<const ResourceContext> m_rctx;
