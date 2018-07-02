@@ -90,13 +90,15 @@ void FairScheduler::notifyPreSchedulingIteration(const SessionList &sessions,
             return aggResUsages.at(lhs->sessHandle) < aggResUsages.at(rhs->sessHandle);
         });
     } else {
+        for (auto it = changeset.addedSessionBegin; it != changeset.addedSessionEnd; ++it) {
+            LOG(DEBUG) << "Adding session " << (*it)->sessHandle;
+        }
         // clear to reset everything to zero.
         aggResUsages.clear();
         aggResUsages.reserve(sessions.size());
         for (auto &sess : sessions) {
             candidates->emplace_back(sess);
             // touch each item once to ensure it's in the map
-            LOG(DEBUG) << "Adding session " << sess->sessHandle;
             aggResUsages[sess->sessHandle] = 0;
         }
     }
