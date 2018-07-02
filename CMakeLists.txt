@@ -39,6 +39,8 @@ option(WITH_STATIC_STREAM "Use static GPU stream assignment, for debug only" ON)
 
 option(WITH_EXCLUSIVE_ITER "Each iteration runs exclusively" ON)
 
+option(WITH_TIMEOUT_WARNING "Enable timeout warning. Note that the logging function should be enabled seperately" OFF)
+
 #---------------------------------------------------------------------------------------
 # Find packages
 #---------------------------------------------------------------------------------------
@@ -93,6 +95,7 @@ add_feature_info(WITH_MULTI_DEVICE WITH_MULTI_DEVICE "enable multi-device schedu
 add_feature_info(DISABLE_LOGGING DISABLE_LOGGING "disable all logging except INFO level")
 add_feature_info(WITH_STATIC_STREAM WITH_STATIC_STREAM "use static GPU stream assignment, for debug only")
 add_feature_info(WITH_EXCLUSIVE_ITER WITH_EXCLUSIVE_ITER "Each iteration runs exclusively")
+add_feature_info(WITH_TIMEOUT_WARNING WITH_TIMEOUT_WARNING "Enable timeout warning")
 feature_summary(INCLUDE_QUIET_PACKAGES FATAL_ON_MISSING_REQUIRED_PACKAGES WHAT ALL)
 
 #---------------------------------------------------------------------------------------
@@ -128,6 +131,10 @@ endif(WITH_STATIC_STREAM)
 if(WITH_EXCLUSIVE_ITER)
     set(SALUS_ENABLE_EXCLUSIVE_ITER 1)
 endif(WITH_EXCLUSIVE_ITER)
+
+if(WITH_TIMEOUT_WARNING)
+    set(SALUS_ENABLE_TIMEOUT_WARNING 1)
+endif(WITH_TIMEOUT_WARNING)
 
 configure_file(src/config.h.in ${CMAKE_CURRENT_BINARY_DIR}/config.h)
 include_directories(${CMAKE_CURRENT_BINARY_DIR})

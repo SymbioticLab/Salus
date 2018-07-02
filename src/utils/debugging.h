@@ -33,6 +33,7 @@ public:
     ~StackSentinel();
 };
 
+#if defined(SALUS_ENABLE_TIMEOUT_WARNING)
 template<typename LogFn, typename Clock = std::chrono::system_clock>
 class TimeoutWarning {
 public:
@@ -59,6 +60,16 @@ private:
     duration_t m_limit;
     std::chrono::time_point<Clock> m_start = Clock::now();
 };
+#else
+template<typename LogFn, typename Clock = std::chrono::system_clock>
+class TimeoutWarning {
+public:
+    using time_point_t = std::chrono::time_point<Clock>;
+    using duration_t = typename Clock::duration;
+
+    explicit TimeoutWarning(duration_t, LogFn&&) { }
+};
+#endif // SALUS_ENABLE_TIMEOUT_WARNING
 
 } // namespace sstl
 
