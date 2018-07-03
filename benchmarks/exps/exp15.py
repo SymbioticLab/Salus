@@ -196,7 +196,8 @@ def main(argv):
 
         # check each workloads and fix workload output_file path
         for w, _, _ in workloads:
-            if not FLAGS.ignore_error and w.proc.returncode != 0:
+            if not FLAGS.ignore_error and w.proc is not None and w.proc.returncode != 0:
                 prompt.pause()
                 raise RuntimeError(f'Workload {w.canonical_name} did not finish cleanly: {w.proc.returncode}')
-            w.output_file = logdir / w.output_file.name
+            if w.output_file is not None:
+                w.output_file = logdir / w.output_file.name

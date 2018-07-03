@@ -7,6 +7,7 @@ Created on Fri Apr 13 23:50:04 2018
 """
 import parse_log as pl
 import parse_nvvp as pn
+import plotutils as pu
 import pandas as pd
 import functools
 import numpy as np
@@ -103,6 +104,11 @@ def load_tfmem(path):
     df = df.reset_index(drop=True)
     return df
 
+def load_iters(path):
+    _, iters = pn.parse_iterations(str(path))
+    sts, eds = zip(*iters)
+    iters = sts[:1] + eds
+    return pd.Series(iters)
 
 # dfa = load_mem('/tmp/workspace/alex.csv')
 # dfv = load_mem('/tmp/workspace/vgg.csv')
@@ -226,13 +232,6 @@ def find_minmax(df, plot=False):
 
 
 #%% Simulation of consequtave deallocation
-
-def load_iters(path):
-    _, iters = pn.parse_iterations(str(path))
-    sts, eds = zip(*iters)
-    iters = sts[:1] + eds
-    return pd.Series(iters)
-
 
 def find_pc1(df, dfpart):
     """Using peak mem and consecutive dealloc"""
@@ -413,3 +412,30 @@ df = load_holds(logs)
 
 axs = plot_df_persess(dfmem)
 axs = plot_df_persess(df, fill=True, sessaxs=axs)
+
+#%% Size CDF
+path = Path('/tmp/workspace/plotrun/resnet50_50')
+mempath = str(path/'alloc.output')
+iterpath = str(next(path.glob('*.salus.*.output')))
+df = load_mem(mempath)
+iters = load_iters(iterpath)
+# add iter info to df
+df['step'] = df.timestamp.apply(lambda ts: iters.searchsorted(ts)[0])
+
+# select only a single step
+df = df[df['step'] == 6]
+
+alloc = df[df.type > 0]
+sizes = alloc['size']
+
+_, axs = plt.subplots(nrows=2)
+
+ax = pu.cdf(sizes, ax=axs[0])
+pu.cleanup_axis_bytes(ax.xaxis)
+ax.set_title('CDF of allocation request sizes')
+ax.set_xlabel('Allcation Request Size')
+
+ax = sizes.sort_values().reset_index(drop=True).cumsum().plot(ax=axs[1])
+ax.set_title('Cumulative sum of request sizes')
+ax.set_xlabel('Allocation Request')
+pu.cleanup_axis_bytes(ax.yaxis)

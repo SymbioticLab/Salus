@@ -2,9 +2,11 @@ from __future__ import division, print_function, absolute_import
 
 import numpy as np
 
+import matplotlib as mpl
+from matplotlib import transforms as mtransforms
 import matplotlib.pyplot as plt
 from matplotlib.dates import SECONDLY, rrulewrapper, RRuleLocator, DateFormatter
-from matplotlib.ticker import MultipleLocator, MaxNLocator, FuncFormatter, AutoMinorLocator
+from matplotlib.ticker import MultipleLocator, MaxNLocator, FuncFormatter, AutoMinorLocator, Locator, Base
 
 from contextlib import contextmanager
 from os.path import getsize, basename
@@ -125,18 +127,94 @@ def human2bytes(s):
     return int(num * prefix[letter])
 
 
+class BytesLocator(Locator):
+    """
+    Set a tick on whole values of B or KB or MB, etc.
+    """
+    def __init__(self, maxn=15, minn=3):
+        self._maxn = maxn
+        self._minn = minn
+    
+    def set_params(self, maxn=None, minn=None):
+        """Set parameters within this locator."""
+        if maxn is not None:
+            self._maxn = maxn
+        if minn is not None:
+            self._minn = minn
+            
+    def __call__(self):
+        'Return the locations of the ticks'
+        vmin, vmax = self.axis.get_view_interval()
+        return self.tick_values(vmin, vmax)
+    
+    def _select_base(self, vdmin, vdmax):
+        interval = abs(vdmax - vdmin)
+        scale = 0
+        while interval > (1024 ** scale):
+            scale += 1
+        scale -= 1
+        base = 1024 ** scale
+        
+        # scale down one level for cases like interval = 1.1TB, and base is 1TB
+        if interval // base < self._minn:
+            scale -= 1
+            base = 1024 ** scale
+        
+        # use a similar logic as MaxNLocator to determin the factor on base
+        good_factors = [1, 2, 4, 8, 16, 32, 64, 128, 256, 512]
+        for factor in good_factors:
+            assert factor < 1024
+            if interval // (factor * base) <= self._maxn:
+                return Base(factor * base)
+        
+        # should not happen
+        return Base(base * 1024)
+
+    def tick_values(self, vmin, vmax):
+        if vmax < vmin:
+            vmin, vmax = vmax, vmin
+        
+        base = self._select_base(vmin, vmax)
+        
+        vmin = base.ge(vmin)
+        base = base.get_base()
+        n = (vmax - vmin + 0.001 * base) // base
+        locs = vmin - base + np.arange(n + 3) * base
+        return self.raise_if_exceeds(locs)
+
+    def view_limits(self, dmin, dmax):
+        """
+        Set the view limits to the nearest multiples of base that
+        contain the data
+        """
+        base = self._select_base(dmin, dmax)
+        if mpl.rcParams['axes.autolimit_mode'] == 'round_numbers':
+            vmin = base.le(dmin)
+            vmax = base.ge(dmax)
+            if vmin == vmax:
+                vmin -= 1
+                vmax += 1
+        else:
+            vmin = dmin
+            vmax = dmax
+
+        return mtransforms.nonsingular(vmin, vmax)
+
+
 def cleanup_axis_bytes(axis):
     # axis.set_major_locator(MaxNLocator(steps=[1, 2, 4, 6, 8, 10]))
-    dmin, dmax = axis.get_data_interval()
-    interval = dmax - dmin
-    scale = 0
-    while interval > (1024 ** scale):
-        scale += 1
-    scale -= 1
-    base = 1024 ** scale
-    while interval // base > 5:
-        base += 1024 ** scale
-    locator = MultipleLocator(base=base)
+    #dmin, dmax = axis.get_data_interval()
+    #interval = dmax - dmin
+    #scale = 0
+    #while interval > (1024 ** scale):
+    #    scale += 1
+    #scale -= 1
+    #base = 1024 ** scale
+    #while interval // base > 5:
+    #    base += 1024 ** scale
+    #locator = MultipleLocator(base=base)
+    
+    locator = BytesLocator(maxn=10)
 
     axis.set_major_locator(locator)
     axis.set_minor_locator(AutoMinorLocator(2))
@@ -226,3 +304,12 @@ def pbopen(filename):
 
     with open(filename) as fd:
         yield wrapped_line_iterator(fd)
+        
+def cdf(X, ax=None, **kws):
+    if ax is None:
+        _, ax = plt.subplots()
+    n = np.arange(1,len(X)+1) / np.float(len(X))
+    Xs = np.sort(X)
+    ax.step(Xs, n, **kws)
+    ax.set_ylim(0, 1)
+    return ax

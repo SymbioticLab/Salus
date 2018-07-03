@@ -125,3 +125,39 @@ def check_part_nodes(path):
                 })
 
     return nodes
+
+def check_mem_alloc(path):
+    allocs = {}
+    # [2018-07-02 01:39:26.643089] [4294] [default] [I] TFAllocator allocated 256 bytes of memory at 0x1021c1ac500 with alignment 0 using allocator GPU_0_bfc@0x11c82000 with AllocationTicket(12259, device=GPU:0, sess=4f03d23010531445)
+    ptn_alloc = re.compile(r'''^.*TFAllocator allocated (?P<size>\d+) bytes of memory at (?P<origin>0x[a-f0-9]+) with.*sess=(?P<sess>\w+)\)$''')
+    # [I] TFAllocator deallocating memory at 0x1021c1a4500 size 37632 using allocator GPU_0_bfc@0x11c82000 with AllocationTicket(3854, device=GPU:0, sess=4f03d23010531445)
+    ptn_dealloc = re.compile(r'''^.*TFAllocator deallocating memory at (?P<origin>\w+) size (?P<size>\d+) using.*sess=(?P<sess>\w+)\)$''')
+    
+    with open(path) as f:
+        for line in f:
+            line = line.rstrip('\n')
+            
+            m = ptn_alloc.search(line)
+            if m:
+                origin = int(m.group('origin'), 16)
+                size = int(m.group('size'))
+                allocs[origin] = {
+                    'origin': origin,
+                    'size': size,
+                    'sess': m.group('sess')
+                }
+            
+            m = ptn_dealloc.search(line)
+            if m:
+                origin = int(m.group('origin'), 16)
+                size = int(m.group('size'))
+                if origin not in allocs:
+                    raise ValueError('Unknown deallocation: ' + line)
+                
+                if allocs[origin]['size'] != size:
+                    raise ValueError('Mismatch size' + line)
+                
+                del allocs[origin]
+            
+    return allocs
+                
