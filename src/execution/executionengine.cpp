@@ -306,8 +306,10 @@ bool ExecutionEngine::maybeWaitForAWhile(size_t scheduled)
         return false;
     }
 
-    VLOG(2) << "No progress for " << duration_cast<milliseconds>(idle).count() << "ms, sleep for "
-            << duration_cast<milliseconds>(sleep).count() << "ms";
+    if (sleep > 1s) {
+        LOG(WARNING) << "No progress for " << duration_cast<milliseconds>(idle).count() << "ms, sleep for "
+                     << duration_cast<milliseconds>(sleep).count() << "ms";
+    }
 
     // no progress for a long time.
     // give out our time slice to avoid using too much cycles
