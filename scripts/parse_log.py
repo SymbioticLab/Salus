@@ -240,7 +240,7 @@ ptn_optracing_evt = re.compile(r"""OpItem\sEvent.*name=(?P<op>[^,]+),.*
                                    type=(?P<kernel>[^,]+),.*
                                    session=(?P<sess>[^,]+).*
                                    step_id=(?P<step>[^,()]+).*?
-                                   failed=(?P<failed>\d+)?\s
+                                   (failed=(?P<failed>\d+))?\s
                                    event:\s(?P<evt>[^,]+)$""",
                                re.VERBOSE)
 
