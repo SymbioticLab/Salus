@@ -412,12 +412,15 @@ void TaskExecutor::taskStopped(OperationItem &opItem, bool failed)
     LogOpTracing() << "OpItem Event " << opItem.op << "failed=" << opItem.op->failedTimes() << " event: done";
     LOG(INFO) << "OpItem Event " << opItem.op << "failed=" << opItem.op->failedTimes() << " event: done";
     if (!failed) {
+        LogOpTracing() << "OpItem Event " << opItem.op << " failed=" << opItem.op->failedTimes() << " event: done";
         if (VLOG_IS_ON(2)) {
             if (auto item = opItem.sess.lock()) {
                 auto g = sstl::with_guard(item->mu);
                 ++item->totalExecutedOp;
             }
         }
+    } else {
+        LogOpTracing() << "OpItem Event " << opItem.op << " event: failed";
     }
 
     m_nRunningTasks -= 1;
