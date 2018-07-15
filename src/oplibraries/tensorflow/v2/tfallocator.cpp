@@ -224,6 +224,10 @@ void PerOpAllocator::recordSize(void *ptr, size_t size, bool didRollback)
             // we did a wrong resource estimation and the actual allocator didn't allocate enough memory for this request
             // probably due to mem fragmentation
             ++m_mismatchedResRequest;
+#if !defined(NDEBUG)
+            auto str = static_cast<tf::GPUDoubleBFCAllocator*>(m_actualAlloc)->GenerateMemoryMap();
+            LOG(WARNING) << "MismatchedResRequest of size " << size << " mem map: " << str;
+#endif
             return;
         }
 

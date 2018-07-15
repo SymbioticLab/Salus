@@ -258,6 +258,10 @@ ptn_tracker_unhold = re.compile(r"""End\ssession\sallocation.+ticket=(?P<ticket>
                                   ,.+res=(?P<res>[\d.]+)$
                               """, re.VERBOSE)
 
+# MismatchedResRequest of size 1234 mem map: 0x1234, 123, 1; 0x567, 456, 0;
+ptn_memmap = re.compile(r"""MismatchedResRequest \s of \s size \s (?P<size>\d+)
+                            \s mem \s map:\s(?P<memmap>.+)""", re.VERBOSE)
+
 def seq_from_entry(entry):
     map_to_use = thread_seq_map
     if entry.entry_type == 'tf':
@@ -504,6 +508,16 @@ def match_exec_content(content, entry):
             'type': 'tracker_unhold',
             'ticket': ticket,
             'size': res
+        }
+    
+    m = ptn_memmap.match(content)
+    if m:
+        size = int(m.group('size'))
+        memmap = m.group('memmap')
+        return {
+            'type': 'memmap',
+            'size': size,
+            'memmap': memmap
         }
 
     return {}
