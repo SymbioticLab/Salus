@@ -409,8 +409,6 @@ void TaskExecutor::taskStopped(OperationItem &opItem, bool failed)
     auto &rctx = opItem.op->resourceContext();
     rctx.releaseStaging();
 
-    LogOpTracing() << "OpItem Event " << opItem.op << "failed=" << opItem.op->failedTimes() << " event: done";
-    LOG(INFO) << "OpItem Event " << opItem.op << "failed=" << opItem.op->failedTimes() << " event: done";
     if (!failed) {
         LogOpTracing() << "OpItem Event " << opItem.op << " failed=" << opItem.op->failedTimes() << " event: done";
         if (VLOG_IS_ON(2)) {

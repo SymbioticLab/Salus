@@ -29,8 +29,8 @@ def load_memmap(path):
     df = df[df.type == 'memmap']
     df = df.drop(['level', 'loc', 'entry_type', 'thread', 'type'], axis=1)
     # make sure size is int
-    df['size'] = df.size.astype(int)
-    
+    df['Size'] = df.Size.astype(int)
+
     return df
 
 
@@ -156,7 +156,7 @@ class MemmapViewer(object):
 
     def _step(self, i):
         """draw step"""
-        mapstr, size, timestamp = self.df.iloc[i]
+        size, mapstr, timestamp = self.df.iloc[i]
         mapdf, _ = draw_on_lc(mapstr, self._lc)
         self._text.set_text('id = {} size = {} timestamp = {}'.format(i, size, timestamp))
         

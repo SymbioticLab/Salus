@@ -3,7 +3,9 @@
 //
 
 #include "oplibraries/tensorflow/tensorflow_headers.h"
+
 #include "oplibraries/tensorflow/device/gpu.h"
+
 #include "execution/engine/resourcecontext.h"
 #include "utils/threadutils.h"
 
@@ -97,9 +99,9 @@ Status SalusGPUDevice::FillContextMap(const tf::Graph *, std::vector<tf::DeviceC
 
 void SalusGPUDevice::flushCacheFor(sstl::not_null<const tf::Graph *>)
 {
-//    VLOG(3) << "SalusGPUDevice::flushCacheFor(" << as_hex(graph) << ") on " << name();
-//    auto g = sstl::with_guard(m_muCache);
-//    m_streamAssignCache.erase(graph);
+    //    VLOG(3) << "SalusGPUDevice::flushCacheFor(" << as_hex(graph) << ") on " << name();
+    //    auto g = sstl::with_guard(m_muCache);
+    //    m_streamAssignCache.erase(graph);
 }
 
 std::shared_ptr<PerTaskDevice> SalusGPUDevice::createPerTaskDevice(sstl::not_null<const tf::Graph *> graph,
@@ -167,7 +169,8 @@ void PerTaskGPUDevice::requestStreams()
     if (auto scope = resourceContext().alloc(ResourceType::GPU_STREAM, numStreams)) {
         m_streams = sdev.allocateStreams(numStreams);
         if (m_streams.size() != numStreams) {
-            LOG(ERROR) << "Can't get enough GPU streams, requested: " << numStreams << " got: " << m_streams.size();
+            LOG(ERROR) << "Can't get enough GPU streams, requested: " << numStreams
+                       << " got: " << m_streams.size();
             sdev.freeStreams(std::move(m_streams));
             scope.rollback();
         }
@@ -220,9 +223,7 @@ void PerTaskGPUDevice::releaseStreams()
 sstl::ScopeGuards PerTaskGPUDevice::useStreams()
 {
     // release stream when finish
-    return sstl::ScopeGuards([this](){
-        releaseStreams();
-    });
+    return sstl::ScopeGuards([this]() { releaseStreams(); });
 }
 
 void PerTaskGPUDevice::Compute(tf::OpKernel *op_kernel, tf::OpKernelContext *context)
@@ -261,12 +262,10 @@ tf::BaseGPUDevice *SalusGPUDeviceFactory::CreateGPUDevice(const tf::SessionOptio
     // TODO: detect maximum streams in GPU
     auto max_streams = 128;
 
-    auto dev = new SalusGPUDevice(options, name, memory_limit, locality, gpu_id, physical_device_desc,
-                                  gpu_allocator, cpu_allocator, max_streams);
-    VLOG(3) << "Creating SalusGPUDevice " << as_hex(dev) << " which is a tf::Device "
-            << as_hex(static_cast<tf::Device *>(dev)) << " and also a ISalusDevice "
-            << as_hex(static_cast<ISalusDevice *>(dev));
-    return dev;
+    auto dev =
+        std::make_unique<SalusGPUDevice>(options, name, memory_limit, locality, gpu_id, physical_device_desc,
+                                         gpu_allocator, cpu_allocator, max_streams);
+    return dev.release();
 }
 
 } // namespace salus::oplib::tensorflow

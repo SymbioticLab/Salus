@@ -547,7 +547,7 @@ void ExecTask::afterRun(const tf::Status &s, const Callbacks &cbs)
 
 bool ExecTask::maybeMemoryFailure(const tf::Status &s, const MemFailCallback &memFailure)
 {
-    if (s.code() == tf::error::RESOURCE_EXHAUSTED) {
+    if (tf::errors::IsResourceExhausted(s)) {
         // we didn't implement rollback. So this can only happen for non ref input ops
         // DCHECK(!has_ref_input);
 
@@ -568,7 +568,7 @@ bool ExecTask::maybeMemoryFailure(const tf::Status &s, const MemFailCallback &me
         }
 
         if (memFailure && memFailure()) {
-            VLOG(1) << "OOM happened and catched by scheduler: " << *this;
+            VLOG(1) << "OOM happened and caught by scheduler: " << *this;
             return true;
         }
         VLOG(1) << "OOM happened and propagated: " << *this;

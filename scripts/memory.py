@@ -110,10 +110,6 @@ def load_iters(path):
     iters = sts[:1] + eds
     return pd.Series(iters)
 
-# dfa = load_mem('/tmp/workspace/alex.csv')
-# dfv = load_mem('/tmp/workspace/vgg.csv')
-#%%
-
 def plot_cs(cs, **kwargs):
     ax = cs.plot(**kwargs)
     return ax
@@ -189,10 +185,6 @@ def plot_df_withop(df, offset, **kwargs):
     return plot_cs(df.act, **kwargs)
 
 
-# plot_df(dfa)
-# plot_df(dfv)
-
-#%%
 def find_minmax(df, plot=False):
     cs = df.set_index('timestamp').act
     # first find max
@@ -231,7 +223,7 @@ def find_minmax(df, plot=False):
     return ma, persist, avg, ax
 
 
-#%% Simulation of consequtave deallocation
+# Simulation of consequtave deallocation
 
 def find_pc1(df, dfpart):
     """Using peak mem and consecutive dealloc"""

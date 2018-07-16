@@ -166,7 +166,7 @@ salus_events = [
     'afterCompute',  # after op->Compute
     'afterClearInput',  # after clear input
     'afterPropOut',  # after prop output
-    'failed',  # failed
+    #'failed',  # failed
     'done',  # finally
 ]
 def load_salus(path, filter_step=True):
