@@ -98,6 +98,7 @@ private:
     size_t m_lastFailedAllocSize = 0 GUARDED_BY(m_mu);
     size_t m_peakAllocSize = 0 GUARDED_BY(m_mu);
     size_t m_currentAlloc = 0 GUARDED_BY(m_mu);
+    size_t m_mismatchedResRequest = 0 GUARDED_BY(m_mu);
 };
 
 } // namespace oplib::tensorflow

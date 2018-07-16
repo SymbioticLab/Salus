@@ -1,6 +1,7 @@
 from collections import defaultdict
 import re
 import pandas
+import plotutils as pu
 
 
 def check_threadpool(path, name='Threadpool'):
@@ -128,12 +129,12 @@ def check_part_nodes(path):
 
 def check_mem_alloc(path):
     allocs = {}
-    # [2018-07-02 01:39:26.643089] [4294] [default] [I] TFAllocator allocated 256 bytes of memory at 0x1021c1ac500 with alignment 0 using allocator GPU_0_bfc@0x11c82000 with AllocationTicket(12259, device=GPU:0, sess=4f03d23010531445)
-    ptn_alloc = re.compile(r'''^.*TFAllocator allocated (?P<size>\d+) bytes of memory at (?P<origin>0x[a-f0-9]+) with.*sess=(?P<sess>\w+)\)$''')
+    # TFAllocator called for attributes tensorflow::AllocationAttributes(allocation_will_be_logged=1, no_retry_on_failure=1) of 4194304 bytes of memory at 0x1023e200000 with alignment 32 using allocator GPU_0_smallopt@0x10d9c1b0 with AllocationTicket(2988, device=GPU:0, sess=1e0e80dcd81c1d05)
+    ptn_alloc = re.compile(r'''^.*TFAllocator called .* of (?P<size>\d+) bytes of memory at (?P<origin>0x[a-f0-9]+) with.*sess=(?P<sess>\w+)\)$''')
     # [I] TFAllocator deallocating memory at 0x1021c1a4500 size 37632 using allocator GPU_0_bfc@0x11c82000 with AllocationTicket(3854, device=GPU:0, sess=4f03d23010531445)
     ptn_dealloc = re.compile(r'''^.*TFAllocator deallocating memory at (?P<origin>\w+) size (?P<size>\d+) using.*sess=(?P<sess>\w+)\)$''')
     
-    with open(path) as f:
+    with pu.pbopen(path) as f:
         for line in f:
             line = line.rstrip('\n')
             

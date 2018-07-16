@@ -33,6 +33,7 @@
 #include <tensorflow/core/common_runtime/function.h>
 #include <tensorflow/core/common_runtime/gpu/gpu_device.h>
 #include <tensorflow/core/common_runtime/gpu/gpu_stream_util.h>
+#include <tensorflow/core/common_runtime/gpu/gpu_double_bfc_allocator.h>
 #include <tensorflow/core/common_runtime/gpu/process_state.h>
 #include <tensorflow/core/common_runtime/graph_optimizer.h>
 #include <tensorflow/core/common_runtime/local_device.h>

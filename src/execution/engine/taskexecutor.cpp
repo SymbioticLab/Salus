@@ -43,13 +43,16 @@ inline void logScheduleFailure(const Resources &usage, const ResourceMonitor &re
 void reportNoProgress(bool noProgress)
 {
     static auto lastProgress = system_clock::now();
+    static auto reported = false;
     if (noProgress) {
         auto dur = system_clock::now() - lastProgress;
-        if (dur > 10s) {
+        if (dur > 10s && !reported) {
+            reported = true;
             LOG(ERROR) << "No progress for " << dur << " check the program!!!";
         }
     } else {
         lastProgress = system_clock::now();
+        reported = false;
     }
 }
 
@@ -260,7 +263,7 @@ void TaskExecutor::scheduleLoop()
         bool noProgress = remainingCount > 0 && scheduled == 0 && m_nNoPagingRunningTasks == 0;
         reportNoProgress(noProgress);
 
-        noProgress = false;
+        /*
         bool didPaging = false;
         // TODO: we currently assume we are paging GPU memory to CPU
         for (const auto &dev : {devices::GPU0}) {
@@ -283,6 +286,7 @@ void TaskExecutor::scheduleLoop()
         if (didPaging) {
             continue;
         }
+        */
 
         maybeWaitForAWhile(scheduled);
 
@@ -319,8 +323,10 @@ bool TaskExecutor::maybeWaitForAWhile(size_t scheduled)
         return false;
     }
 
-    VLOG(2) << "No progress for " << duration_cast<milliseconds>(idle).count() << "ms, sleep for "
-            << duration_cast<milliseconds>(sleep).count() << "ms";
+    if (sleep > 1s) {
+        LOG(WARNING) << "No progress for " << duration_cast<milliseconds>(idle).count() << "ms, sleep for "
+                     << duration_cast<milliseconds>(sleep).count() << "ms";
+    }
 
     // no progress for a long time.
     // give out our time slice to avoid using too much cycles
@@ -403,15 +409,16 @@ void TaskExecutor::taskStopped(OperationItem &opItem, bool failed)
     auto &rctx = opItem.op->resourceContext();
     rctx.releaseStaging();
 
-    LogOpTracing() << "OpItem Event " << opItem.op << "failed=" << opItem.op->failedTimes() << " event: done";
-    LOG(INFO) << "OpItem Event " << opItem.op << "failed=" << opItem.op->failedTimes() << " event: done";
     if (!failed) {
+        LogOpTracing() << "OpItem Event " << opItem.op << " failed=" << opItem.op->failedTimes() << " event: done";
         if (VLOG_IS_ON(2)) {
             if (auto item = opItem.sess.lock()) {
                 auto g = sstl::with_guard(item->mu);
                 ++item->totalExecutedOp;
             }
         }
+    } else {
+        LogOpTracing() << "OpItem Event " << opItem.op << " event: failed";
     }
 
     m_nRunningTasks -= 1;

@@ -30,14 +30,29 @@ def plotrun(scfg):
                 WTL.create(name, bs, bn))
 
 
-def main(argv):
-    scfg = maybe_forced_preset(presets.AllocProf)
-    if argv:
-        return plotrun(scfg)
-
+def single(scfg):
     run_seq(scfg.copy(output_dir=FLAGS.save_dir),
             WTL.create("inception3", 100, 165),
-            Pause.Wait,
+            Pause.Manual,
             WTL.create("resnet50", 50, 798),
-            Pause.Wait,
+            Pause.Manual,
             WTL.create("resnet152", 75, 19))
+
+
+def all3(scfg):
+    run_seq(scfg.copy(output_dir=FLAGS.save_dir/"all3"),
+            WTL.create("inception3", 100, 165),
+            WTL.create("resnet50", 50, 798),
+            WTL.create("resnet152", 75, 19))
+
+
+def main(argv):
+    scfg = maybe_forced_preset(presets.AllocProf)
+    command = argv[0] if argv else "single"
+
+    {
+        "plotrun": plotrun,
+        "single": single,
+        "all3": all3,
+    }[command](scfg)
+

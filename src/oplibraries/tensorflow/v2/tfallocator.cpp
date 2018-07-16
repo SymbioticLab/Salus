@@ -219,10 +219,19 @@ bool PerOpAllocator::ShouldAllocateEmptyTensors()
 void PerOpAllocator::recordSize(void *ptr, size_t size, bool didRollback)
 {
     auto g = sstl::with_guard(m_mu);
-    if (!ptr && !didRollback) {
-        // Only remember failed alloc size if we didn't rollback, which
-        // means our estimation was enough, but the underlaying allocator failed
-        // due to some other reason.
+    if (!ptr) {
+        if (didRollback) {
+            // we did a wrong resource estimation and the actual allocator didn't allocate enough memory for this request
+            // probably due to mem fragmentation
+            ++m_mismatchedResRequest;
+#if !defined(NDEBUG)
+            auto str = static_cast<tf::GPUDoubleBFCAllocator*>(m_actualAlloc)->GenerateMemoryMap();
+            LOG(WARNING) << "MismatchedResRequest of size " << size << " mem map: " << str;
+#endif
+            return;
+        }
+
+        // otherwise remember the failed alloc size so it can be picked by by ExecTask to refine the estimation
         m_lastFailedAllocSize = size;
     }
     if (!ptr) {

@@ -5,6 +5,7 @@ from builtins import super, str
 import os
 import time
 import shutil
+import shlex
 import logging
 import psutil
 from datetime import datetime
@@ -24,6 +25,8 @@ FLAGS = flags.FLAGS
 logger = logging.getLogger(__name__)
 flags.DEFINE_string('server_endpoint', 'zrpc://tcp://127.0.0.1:5501', 'Salus server endpoint to listen on')
 flags.DEFINE_boolean('no_server', False, "Don't start Salus server, just print out the command and wait for the user")
+flags.DEFINE_string('server_args', '', 'Extra arguments to Salus server')
+flags.DEFINE_string('server_save_output', '', 'Capture and save server output to the given path')
 
 
 class SalusServer(object):
@@ -106,6 +109,9 @@ class SalusServer(object):
         ]
         self.args += self.config.extra_args
 
+        # handle extra args from cmd
+        self.args += shlex.split(FLAGS.server_args)
+
         if self.config.use_gperf:
             self.env['SALUS_PROFILE'] = '/tmp/gperf.out'
             self.args += ['--gperf']
@@ -128,8 +134,9 @@ class SalusServer(object):
                                          '/tmp/alloc.output',
                                          '/tmp/gperf.out',
                                          'verbose.log']]
-        stdout = sp.PIPE if self.config.hide_output else None
-        stderr = sp.PIPE if self.config.hide_output else None
+        stdout, stderr = None, None
+        if self.config.hide_output:
+            stdout, stderr = sp.PIPE, sp.PIPE
         # remove any existing output
         for f in outputfiles:
             if f.exists():
@@ -137,6 +144,11 @@ class SalusServer(object):
 
         # assert output_dir exists
         assert(self.config.output_dir.is_dir())
+
+        if FLAGS.server_save_output:
+            captured_stdout_path = self.config.output_dir / Path(FLAGS.server_save_output).with_suffix('.stdout')
+            captured_stderr_path = self.config.output_dir / Path(FLAGS.server_save_output).with_suffix('.stderr')
+            stdout, stderr = captured_stdout_path.open('w'), captured_stderr_path.open('w')
 
         # noinspection PyBroadException
         try:
@@ -161,6 +173,10 @@ class SalusServer(object):
             logger.error(f'Got exception while running the server: {ex!s}')
         finally:
             self.kill()
+
+            if FLAGS.server_save_output:
+                stdout.close()
+                stderr.close()
 
             # move back server log files
             for f in outputfiles:

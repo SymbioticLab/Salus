@@ -527,7 +527,7 @@ void ExecTask::afterRun(const tf::Status &s, const Callbacks &cbs)
 {
     DCHECK(ditem.device);
     if (s.ok()) {
-        // save succeed estimation
+        // save succeed peak resource usage as an estimation
         m_state->impl_->saveSucceedUsageForNode(item, resourceContext().spec().type,
                                                 ditem.device->peakResourceUsage());
     }
@@ -547,7 +547,7 @@ void ExecTask::afterRun(const tf::Status &s, const Callbacks &cbs)
 
 bool ExecTask::maybeMemoryFailure(const tf::Status &s, const MemFailCallback &memFailure)
 {
-    if (s.code() == tf::error::RESOURCE_EXHAUSTED) {
+    if (tf::errors::IsResourceExhausted(s)) {
         // we didn't implement rollback. So this can only happen for non ref input ops
         // DCHECK(!has_ref_input);
 
@@ -558,15 +558,17 @@ bool ExecTask::maybeMemoryFailure(const tf::Status &s, const MemFailCallback &me
 
         DCHECK(ditem.device);
         resources::merge(failedAlloc, ditem.device->failedResourceRequest());
+        resources::removeInvalid(failedAlloc);
 
-        if (failureTimes > 10) {
-            LOG(WARNING) << "Failed more than 10 times: " << failureTimes <<
-                         " current estimation:" << estimatedUsage(devices::GPU0)
+        if (failureTimes == 11) {
+            auto eu = estimatedUsage(devices::GPU0);
+            LOG(WARNING) << "Failed more than 10 times: " << failureTimes
+                         << " current estimation:" << eu
                          << " total failed request: " << failedAlloc << " " << DebugString();
         }
 
         if (memFailure && memFailure()) {
-            VLOG(1) << "OOM happened and catched by scheduler: " << *this;
+            VLOG(1) << "OOM happened and caught by scheduler: " << *this;
             return true;
         }
         VLOG(1) << "OOM happened and propagated: " << *this;

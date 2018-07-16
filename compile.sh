@@ -1,6 +1,6 @@
 #! /bin/bash
 set -e
-BUILD_TYPES=(Debug Release TSan ASan OpTracing)
+BUILD_TYPES=(Debug OpTracing Release TSan ASan)
 
 function configure() {
     local build_type=$1

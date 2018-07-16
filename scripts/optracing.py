@@ -3,7 +3,7 @@ from builtins import input
 import parse_log as pl
 import pandas as pd
 import numpy as np
-#import seaborn as sns
+import seaborn as sns
 import matplotlib.pyplot as plt
 import os
 
@@ -166,9 +166,10 @@ salus_events = [
     'afterCompute',  # after op->Compute
     'afterClearInput',  # after clear input
     'afterPropOut',  # after prop output
+    #'failed',  # failed
     'done',  # finally
 ]
-def load_salus(path, stepid=132):
+def load_salus(path, filter_step=True):
     logs = pl.load_file(path)
     df = pd.DataFrame(l.__dict__ for l in logs)
     df = df[df.type == 'optracing_evt']
@@ -176,8 +177,11 @@ def load_salus(path, stepid=132):
     # make sure step is int
     df['step'] = df.step.astype(int)
     
-    ss = select_steps(df)
-    step25 = df[df.step.isin(ss)]
+    if filter_step:
+        ss = select_steps(df)
+        step25 = df[df.step.isin(ss)]
+    else:
+        step25 = df
     
     # discard some internal or async op: _SOURCE, _Recv, _Send
     ignored = ['_Recv', '_Send']
@@ -190,7 +194,7 @@ def load_salus(path, stepid=132):
     # convert evt values to columns
     step = step25.pivot_table(values='timestamp',
                               index=['step', 'op', 'kernel', 'sess'],
-                              columns='evt', aggfunc='first').reset_index()
+                              columns='evt', aggfunc='last').reset_index()
     # add a name column
     def name(row):
         return '{}[{}]'.format(row['op'], row['kernel'])
@@ -258,10 +262,10 @@ def draw_lines2(ax, step, checkpoints, colors=['g', 'y', 'r'], offset=None,
     return ax, offset
 
 def draw_tf(ax, df, **kwargs):
-    draw_lines(axs[0], df, tf_events, colors=['g', 'r'], **kwargs)
+    draw_lines(ax, df, tf_events, colors=['g', 'r'], **kwargs)
 
 def draw_salus(ax, df, **kwargs):
-    return draw_lines2(ax, df, salus_events,
+    return draw_lines2(ax, df, [e for e in salus_events if e != 'failed'],
            colors=plt.rcParams['axes.prop_cycle'].by_key()['color'],
            labels=['Queuing', 'Prealloc', 'TPWait', 'DevCtx',
                    'PrepInput', 'Compute', 'ClrInput',
@@ -270,15 +274,18 @@ def draw_salus(ax, df, **kwargs):
 
 sns.set_style("dark")
 #plt.ioff()
+
+#%% def main
+def main():
 #%%
 #
 # Set paths
 #
-model = 'alexnet_25'
-logdir = 'logs/optracing/'
-outputdir = '/home/peifeng/desktop/'
-figsize = (40, 70)
-set_y = True
+    model = 'alexnet_25'
+    logdir = 'logs/optracing/'
+    outputdir = '/home/peifeng/desktop/'
+    figsize = (40, 70)
+    set_y = True
 
 #%%
 #logdir = 'logs/optracing/'
@@ -287,131 +294,154 @@ set_y = True
 #set_y = False
 
 #%% Load data
-steptf = load_tf(os.path.join(logdir, 'tf/{}.tf.10iter.0.output'.format(model)))
-stepsalus = load_salus(os.path.join(logdir, 'salus/1/perf.output'))
-twosess = load_salus(os.path.join(logdir, 'salus/2/perf.output'))
-
-steptf = unify_names(steptf)
-stepsalus = unify_names(stepsalus)
-twosess = unify_names(twosess)
+    steptf = load_tf(os.path.join(logdir, 'tf/{}.tf.10iter.0.output'.format(model)))
+    stepsalus = load_salus(os.path.join(logdir, 'salus/1/perf.output'))
+    twosess = load_salus(os.path.join(logdir, 'salus/2/perf.output'))
+    
+    steptf = unify_names(steptf)
+    stepsalus = unify_names(stepsalus)
+    twosess = unify_names(twosess)
 
 #%%
 #
 # Running one
 #
-fig, axs = plt.subplots(nrows=2, ncols=1, sharex=True, figsize=figsize)
-draw_lines(axs[0], steptf, tf_events, colors=['g', 'r'], set_y=set_y)
-axs[0].set_title('alexnet_25 on TF')
-# load a few iters
-draw_lines(axs[1], stepsalus, salus_events,
-           colors=plt.rcParams['axes.prop_cycle'].by_key()['color'],
-           labels=['Queuing', 'Prealloc', 'TPWait', 'DevCtx',
-                   'PrepInput', 'Compute', 'ClrInput',
-                   'PropOut', 'Misc'],
-           set_y=set_y)
-
-axs[1].legend()
-axs[1].set_title('alexnet_25 on Salus')
-axs[1].set_xlabel('Normalized time (us)')
-fig.tight_layout()
-fig.savefig(os.path.join(outputdir, 'tfsalus.pdf'), dpi=300)
-plt.close(fig)
+    fig, axs = plt.subplots(nrows=2, ncols=1, sharex=True, figsize=figsize)
+    draw_lines(axs[0], steptf, tf_events, colors=['g', 'r'], set_y=set_y)
+    axs[0].set_title('alexnet_25 on TF')
+    # load a few iters
+    draw_lines(axs[1], stepsalus, salus_events,
+               colors=plt.rcParams['axes.prop_cycle'].by_key()['color'],
+               labels=['Queuing', 'Prealloc', 'TPWait', 'DevCtx',
+                       'PrepInput', 'Compute', 'ClrInput',
+                       'PropOut', 'Misc'],
+               set_y=set_y)
+    
+    axs[1].legend()
+    axs[1].set_title('alexnet_25 on Salus')
+    axs[1].set_xlabel('Normalized time (us)')
+    fig.tight_layout()
+    fig.savefig(os.path.join(outputdir, 'tfsalus.pdf'), dpi=300)
+    plt.close(fig)
 #%%
 #
 # Running one with matching iter
 #
 #fig, axs = plt.subplots(nrows=2, ncols=1, sharex=True, figsize=figsize)
-fig, axs = plt.subplots(nrows=2, ncols=1, sharex=True)
-draw_lines(axs[0], only_step(steptf, 6), tf_events, colors=['g', 'r'], set_y=set_y)
-axs[0].set_title('alexnet_25 on TensorFlow')
-# use second normal iter
-draw_lines(axs[1], only_step(stepsalus, 10), salus_events,
-           colors=plt.rcParams['axes.prop_cycle'].by_key()['color'],
-           labels=['Queuing', 'Prealloc', 'TPWait', 'DevCtx',
-                   'PrepInput', 'Compute', 'ClrInput',
-                   'PropOut', 'Misc'],
-           set_y=set_y, sort=True)
-
-axs[1].legend(loc='lower right', bbox_to_anchor=(1,1.5), ncol=2)
-axs[1].set_title('alexnet_25 on Salus')
-axs[1].set_xlabel('Normalized time (us)')
-axs[1].set_ylabel('Tasks')
-axs[1].set_xlim(0, 40000)
-fig.tight_layout()
-fig.savefig(os.path.join(outputdir, 'tfsalus-later.pdf'), dpi=300)
-#plt.close(fig)
+    fig, axs = plt.subplots(nrows=2, ncols=1, sharex=True)
+    draw_lines(axs[0], only_step(steptf, 6), tf_events, colors=['g', 'r'], set_y=set_y)
+    axs[0].set_title('alexnet_25 on TensorFlow')
+    # use second normal iter
+    draw_lines(axs[1], only_step(stepsalus, 10), salus_events,
+               colors=plt.rcParams['axes.prop_cycle'].by_key()['color'],
+               labels=['Queuing', 'Prealloc', 'TPWait', 'DevCtx',
+                       'PrepInput', 'Compute', 'ClrInput',
+                       'PropOut', 'Misc'],
+               set_y=set_y, sort=True)
+    
+    axs[1].legend(loc='lower right', bbox_to_anchor=(1,1.5), ncol=2)
+    axs[1].set_title('alexnet_25 on Salus')
+    axs[1].set_xlabel('Normalized time (us)')
+    axs[1].set_ylabel('Tasks')
+    axs[1].set_xlim(0, 40000)
+    fig.tight_layout()
+    fig.savefig(os.path.join(outputdir, 'tfsalus-later.pdf'), dpi=300)
+    #plt.close(fig)
 
 #%%
 #
 # Running two
 #
-def split_sess(twosess):
-    sessA, sessB = twosess.sess.unique()
-    alexA = twosess[twosess.sess == sessA]
-    alexB = twosess[twosess.sess == sessB]
+    def split_sess(twosess):
+        sessA, sessB = twosess.sess.unique()
+        alexA = twosess[twosess.sess == sessA]
+        alexB = twosess[twosess.sess == sessB]
+        
+        return alexA, alexB, sessA, sessB
     
-    return alexA, alexB, sessA, sessB
-
-fig, axs = plt.subplots(nrows=2, ncols=1, sharex=True, figsize=figsize)
-
-alexA, alexB, sessA, sessB = split_sess(twosess)
-offset=None
-_, offset = draw_lines(axs[0], alexA, salus_events,
-           colors=plt.rcParams['axes.prop_cycle'].by_key()['color'],
-           labels=['Queuing', 'Prealloc', 'TPWait', 'DevCtx', 'PrepInput',
-                   'Compute', 'ClrInput', 'PropOut', 'Misc'],
-                   offset=offset, set_y=set_y)
-_, offset = draw_lines(axs[1], alexB, salus_events,
-           colors=plt.rcParams['axes.prop_cycle'].by_key()['color'],
-           labels=['Queuing', 'Prealloc', 'TPWait', 'DevCtx', 'PrepInput',
-                   'Compute', 'ClrInput', 'PropOut', 'Misc'],
-                   offset=offset, set_y=set_y)
-
-axs[0].set_title('alexnet_25 on Salus (Instance A: {})'.format(sessA))
-axs[1].set_title('alexnet_25 on Salus (Instance B: {})'.format(sessB))
-axs[1].set_xlabel('Normalized time (us)')
-fig.tight_layout()
-fig.savefig(os.path.join(outputdir, 'salusab.pdf'), dpi=300)
-plt.close(fig)
+    fig, axs = plt.subplots(nrows=2, ncols=1, sharex=True, figsize=figsize)
+    
+    alexA, alexB, sessA, sessB = split_sess(twosess)
+    offset=None
+    _, offset = draw_lines(axs[0], alexA, salus_events,
+               colors=plt.rcParams['axes.prop_cycle'].by_key()['color'],
+               labels=['Queuing', 'Prealloc', 'TPWait', 'DevCtx', 'PrepInput',
+                       'Compute', 'ClrInput', 'PropOut', 'Misc'],
+                       offset=offset, set_y=set_y)
+    _, offset = draw_lines(axs[1], alexB, salus_events,
+               colors=plt.rcParams['axes.prop_cycle'].by_key()['color'],
+               labels=['Queuing', 'Prealloc', 'TPWait', 'DevCtx', 'PrepInput',
+                       'Compute', 'ClrInput', 'PropOut', 'Misc'],
+                       offset=offset, set_y=set_y)
+    
+    axs[0].set_title('alexnet_25 on Salus (Instance A: {})'.format(sessA))
+    axs[1].set_title('alexnet_25 on Salus (Instance B: {})'.format(sessB))
+    axs[1].set_xlabel('Normalized time (us)')
+    fig.tight_layout()
+    fig.savefig(os.path.join(outputdir, 'salusab.pdf'), dpi=300)
+    plt.close(fig)
 
 #%% CDF of task length
 
-def cdf(X, ax=None, **kws):
-    if ax is None:
-        _, ax = plt.subplots()
-    n = np.arange(1,len(X)+1) / np.float(len(X))
-    Xs = np.sort(X)
-    ax.step(Xs, n, **kws)
-    ax.set_ylim(0, 1)
-    return ax
-
-
-import os
-logdir = 'logs/osdi18/cc/exp18'
-model = 'alexnet_25'
-steptf = load_tf(os.path.join(logdir, 'tf/{}.tf.10iter.0.output'.format(model)))
-stepsalus = load_salus(os.path.join(logdir, 'salus/1/perf.output'))
-
-steptf = unify_names(steptf)
-stepsalus = unify_names(stepsalus)
-
-tflength = steptf[tf_events[-1]] - steptf[tf_events[0]]
-saluslength = stepsalus[salus_events[-1]] - stepsalus[salus_events[0]]
-
-tflength = tflength / pd.Timedelta(microseconds=1)
-saluslength = saluslength / pd.Timedelta(microseconds=1)
-
-plt.style.use(['seaborn-paper', 'mypaper'])
-
-fig, ax = plt.subplots()
-cdf(tflength, ax=ax, label='TensorFlow')
-cdf(saluslength, ax=ax, label='Salus')
-
-ax.set_ylabel('CDF')
-ax.set_xlabel('Tasks')
-ax.legend()
-
-fig.set_size_inches(3.45, 1.75, forward=True)
-fig.tight_layout()
-fig.savefig('/tmp/workspace/exp18.pdf', dpi=300)
-#plt.close()
+    def cdf(X, ax=None, **kws):
+        if ax is None:
+            _, ax = plt.subplots()
+        n = np.arange(1,len(X)+1) / np.float(len(X))
+        Xs = np.sort(X)
+        ax.step(Xs, n, **kws)
+        ax.set_ylim(0, 1)
+        return ax
+    
+    
+    import os
+    logdir = 'logs/osdi18/cc/exp18'
+    model = 'alexnet_25'
+    steptf = load_tf(os.path.join(logdir, 'tf/{}.tf.10iter.0.output'.format(model)))
+    stepsalus = load_salus(os.path.join(logdir, 'salus/1/perf.output'))
+    
+    steptf = unify_names(steptf)
+    stepsalus = unify_names(stepsalus)
+    
+    tflength = steptf[tf_events[-1]] - steptf[tf_events[0]]
+    saluslength = stepsalus[salus_events[-1]] - stepsalus[salus_events[0]]
+    
+    tflength = tflength / pd.Timedelta(microseconds=1)
+    saluslength = saluslength / pd.Timedelta(microseconds=1)
+    
+    plt.style.use(['seaborn-paper', 'mypaper'])
+    
+    fig, ax = plt.subplots()
+    cdf(tflength, ax=ax, label='TensorFlow')
+    cdf(saluslength, ax=ax, label='Salus')
+    
+    ax.set_ylabel('CDF')
+    ax.set_xlabel('Tasks')
+    ax.legend()
+    
+    fig.set_size_inches(3.45, 1.75, forward=True)
+    fig.tight_layout()
+    fig.savefig('/tmp/workspace/exp18.pdf', dpi=300)
+    #plt.close()
+    
+#%% TF compute timeline
+    
+    def tf_compute_timeline(step, ax=None, **kwargs):
+        checkpoints = tf_events
+        step = step.copy()
+        # columns as unix timestamp in us
+        columns = [step[c].astype(np.int64) // 10**3 for c in checkpoints]
+        # with offset subtracted
+        offset = np.min([np.min(col) for col in columns])
+        columns = [col - offset for col in columns]
+        
+        if ax is None:
+            _, ax = plt.subplots()
+        ax.hlines(y=np.zeros_like(columns[1]), xmin=columns[1], xmax=columns[2], linewidths=100)
+        return ax
+    tfop = load_tf('/tmp/workspace/card189/tfop/inception3_100.tf.10iter.0.output')
+    ax = tf_compute_timeline(tfop)
+    ax.set_xlabel('Time (us)')
+            
+#%% main
+if __name__ == '__main__':
+    main()

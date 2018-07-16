@@ -240,7 +240,7 @@ ptn_optracing_evt = re.compile(r"""OpItem\sEvent.*name=(?P<op>[^,]+),.*
                                    type=(?P<kernel>[^,]+),.*
                                    session=(?P<sess>[^,]+).*
                                    step_id=(?P<step>[^,()]+).*?
-                                   failed=(?P<failed>\d+)?\s
+                                   (failed=(?P<failed>\d+))?\s
                                    event:\s(?P<evt>[^,]+)$""",
                                re.VERBOSE)
 
@@ -257,6 +257,10 @@ ptn_tracker_hold = re.compile(r"""Start\ssession\sallocation.+ticket=(?P<ticket>
 ptn_tracker_unhold = re.compile(r"""End\ssession\sallocation.+ticket=(?P<ticket>\d+)
                                   ,.+res=(?P<res>[\d.]+)$
                               """, re.VERBOSE)
+
+# MismatchedResRequest of size 1234 mem map: 0x1234, 123, 1; 0x567, 456, 0;
+ptn_memmap = re.compile(r"""MismatchedResRequest \s of \s size \s (?P<Size>\d+)
+                            \s mem \s map:\s(?P<memmap>.+)""", re.VERBOSE)
 
 def seq_from_entry(entry):
     map_to_use = thread_seq_map
@@ -504,6 +508,16 @@ def match_exec_content(content, entry):
             'type': 'tracker_unhold',
             'ticket': ticket,
             'size': res
+        }
+    
+    m = ptn_memmap.match(content)
+    if m:
+        size = int(m.group('Size'))
+        memmap = m.group('memmap')
+        return {
+            'type': 'memmap',
+            'Size': size,
+            'memmap': memmap
         }
 
     return {}

@@ -110,10 +110,6 @@ def load_iters(path):
     iters = sts[:1] + eds
     return pd.Series(iters)
 
-# dfa = load_mem('/tmp/workspace/alex.csv')
-# dfv = load_mem('/tmp/workspace/vgg.csv')
-#%%
-
 def plot_cs(cs, **kwargs):
     ax = cs.plot(**kwargs)
     return ax
@@ -189,10 +185,6 @@ def plot_df_withop(df, offset, **kwargs):
     return plot_cs(df.act, **kwargs)
 
 
-# plot_df(dfa)
-# plot_df(dfv)
-
-#%%
 def find_minmax(df, plot=False):
     cs = df.set_index('timestamp').act
     # first find max
@@ -231,7 +223,7 @@ def find_minmax(df, plot=False):
     return ma, persist, avg, ax
 
 
-#%% Simulation of consequtave deallocation
+# Simulation of consequtave deallocation
 
 def find_pc1(df, dfpart):
     """Using peak mem and consecutive dealloc"""
@@ -354,88 +346,95 @@ def draw_sim(df, iters, phasechanging):
         ax.vlines(phasechanging.timestamp, *ax.get_ylim(), colors='r', linestyles='dashed')
     return ax
 
+#%% def main
+def main():
+#%% do sim
 
-with mp.Pool() as pool:
-    data = pool.map(sim_dealloc, Path('logs/osdi18/mem/salus').iterdir())
-
-for n, df, iters, pc in data:
-    plt.figure()
-    ax = draw_sim(df, iters, pc)
-    ax.set_title(n)
+    with mp.Pool() as pool:
+        data = pool.map(sim_dealloc, Path('logs/osdi18/mem/salus').iterdir())
+    
+    for n, df, iters, pc in data:
+        plt.figure()
+        ax = draw_sim(df, iters, pc)
+        ax.set_title(n)
 
 
 #%% Produce mem.csv
-def process_mem(item, loader=load_tfmem):
-    print(f"{item.name}: Loading log file")
-    df = loader(str(item / 'alloc.output'))
-    print(f"{item.name}: figure")
-    ma, persist, avg, cspartial = find_minmax(df, plot=False)
-    print(f"{item.name}: found")
-    return item.name, persist, ma, avg, ma - persist, cspartial
-
-
-with mp.Pool() as pool:
-    data = pool.map(process_mem, Path('logs/mem/tf').iterdir())
-
-for n, p, m, a, _, csp in data:
-    plt.figure()
-    plot_cs(csp).set_title(n)
-data = [x[:-1] for x in data]
-
-# data = [process_mem(item) for item in Path('logs/mem/tf').iterdir()]
-data = pd.DataFrame(data, columns=['Network',
-                                   'Persistent Mem (MB)',
-                                   'Peak Mem (MB)',
-                                   'Average',
-                                   'Peak'])
-data.to_csv('/tmp/workspace/mem.csv', index=False)
+    def process_mem(item, loader=load_tfmem):
+        print(f"{item.name}: Loading log file")
+        df = loader(str(item / 'alloc.output'))
+        print(f"{item.name}: figure")
+        ma, persist, avg, cspartial = find_minmax(df, plot=False)
+        print(f"{item.name}: found")
+        return item.name, persist, ma, avg, ma - persist, cspartial
+    
+    
+    with mp.Pool() as pool:
+        data = pool.map(process_mem, Path('logs/mem/tf').iterdir())
+    
+    for n, p, m, a, _, csp in data:
+        plt.figure()
+        plot_cs(csp).set_title(n)
+    data = [x[:-1] for x in data]
+    
+    # data = [process_mem(item) for item in Path('logs/mem/tf').iterdir()]
+    data = pd.DataFrame(data, columns=['Network',
+                                       'Persistent Mem (MB)',
+                                       'Peak Mem (MB)',
+                                       'Average',
+                                       'Peak'])
+    data.to_csv('/tmp/workspace/mem.csv', index=False)
 
 #%% Produce mem-salus.csv
-with mp.Pool() as pool:
-    datasalus = pool.map(functools.partial(process_mem, loader=load_mem),
-                         Path('logs/osdi18/cc/mem/salus').iterdir())
-for n, p, m, a, _, csp in datasalus:
-    plt.figure()
-    plot_cs(csp).set_title(n)
-datasalus = [x[:-1] for x in datasalus]
-datasalus = pd.DataFrame(datasalus, columns=['Network',
-                                             'Persistent Mem (MB)',
-                                             'Peak Mem (MB)',
-                                             'Average',
-                                             'Peak'])
-datasalus.to_csv('/tmp/workspace/mem-salus.csv', index=False)
+    with mp.Pool() as pool:
+        datasalus = pool.map(functools.partial(process_mem, loader=load_mem),
+                             Path('logs/osdi18/cc/mem/salus').iterdir())
+    for n, p, m, a, _, csp in datasalus:
+        plt.figure()
+        plot_cs(csp).set_title(n)
+    datasalus = [x[:-1] for x in datasalus]
+    datasalus = pd.DataFrame(datasalus, columns=['Network',
+                                                 'Persistent Mem (MB)',
+                                                 'Peak Mem (MB)',
+                                                 'Average',
+                                                 'Peak'])
+    datasalus.to_csv('/tmp/workspace/mem-salus.csv', index=False)
 
 #%% Draw session alloc
 
-dfmem, logs = load_mem('logs/osdi18/cc/exp10/alloc.output', return_logs=True, parallel_workers=5)
-df = load_holds(logs)
-
-axs = plot_df_persess(dfmem)
-axs = plot_df_persess(df, fill=True, sessaxs=axs)
+    dfmem, logs = load_mem('logs/osdi18/cc/exp10/alloc.output', return_logs=True, parallel_workers=5)
+    df = load_holds(logs)
+    
+    axs = plot_df_persess(dfmem)
+    axs = plot_df_persess(df, fill=True, sessaxs=axs)
 
 #%% Size CDF
-path = Path('/tmp/workspace/plotrun/resnet50_50')
-mempath = str(path/'alloc.output')
-iterpath = str(next(path.glob('*.salus.*.output')))
-df = load_mem(mempath)
-iters = load_iters(iterpath)
-# add iter info to df
-df['step'] = df.timestamp.apply(lambda ts: iters.searchsorted(ts)[0])
+    path = Path('/tmp/workspace/plotrun/resnet50_50')
+    mempath = str(path/'alloc.output')
+    iterpath = str(next(path.glob('*.salus.*.output')))
+    df = load_mem(mempath)
+    iters = load_iters(iterpath)
+    # add iter info to df
+    df['step'] = df.timestamp.apply(lambda ts: iters.searchsorted(ts)[0])
+    
+    # select only a single step
+    df = df[df['step'] == 6]
+    
+    alloc = df[df.type > 0]
+    sizes = alloc['size']
+    
+    _, axs = plt.subplots(nrows=2)
+    
+    ax = pu.cdf(sizes, ax=axs[0])
+    pu.cleanup_axis_bytes(ax.xaxis)
+    ax.set_title('CDF of allocation request sizes')
+    ax.set_xlabel('Allcation Request Size')
+    
+    ax = sizes.sort_values().reset_index(drop=True).cumsum().plot(ax=axs[1])
+    ax.set_title('Cumulative sum of request sizes')
+    ax.set_xlabel('Allocation Request')
+    pu.cleanup_axis_bytes(ax.yaxis)
 
-# select only a single step
-df = df[df['step'] == 6]
-
-alloc = df[df.type > 0]
-sizes = alloc['size']
-
-_, axs = plt.subplots(nrows=2)
-
-ax = pu.cdf(sizes, ax=axs[0])
-pu.cleanup_axis_bytes(ax.xaxis)
-ax.set_title('CDF of allocation request sizes')
-ax.set_xlabel('Allcation Request Size')
-
-ax = sizes.sort_values().reset_index(drop=True).cumsum().plot(ax=axs[1])
-ax.set_title('Cumulative sum of request sizes')
-ax.set_xlabel('Allocation Request')
-pu.cleanup_axis_bytes(ax.yaxis)
+#%% main
+if __name__ == '__main__':
+    main()
