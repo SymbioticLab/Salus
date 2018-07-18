@@ -1,5 +1,6 @@
 from __future__ import print_function, absolute_import, division
 
+import json
 import re
 from datetime import datetime
 from collections import defaultdict
@@ -243,6 +244,17 @@ ptn_optracing_evt = re.compile(r"""OpItem\sEvent.*name=(?P<op>[^,]+),.*
                                    (failed=(?P<failed>\d+))?\s
                                    event:\s(?P<evt>[^,]+)$""",
                                re.VERBOSE)
+
+# event: end_iter sess=
+ptn_optracing_evt = re.compile(r"""OpItem\sEvent.*name=(?P<op>[^,]+),.*
+                                   type=(?P<kernel>[^,]+),.*
+                                   session=(?P<sess>[^,]+).*
+                                   step_id=(?P<step>[^,()]+).*?
+                                   (failed=(?P<failed>\d+))?\s
+                                   event:\s(?P<evt>[^,]+)$""",
+                               re.VERBOSE)
+# event: type JSON
+ptn_generic_evt = re.compile(r"""event: (?P<evt>[^ ]+) (?P<props>.+)$""")
 
 # Session abcdefg has tracker ticket 123
 ptn_tracker_ticket = re.compile(r"""Session\s(?P<sess>\w+)\shas\s
@@ -519,6 +531,19 @@ def match_exec_content(content, entry):
             'Size': size,
             'memmap': memmap
         }
+        
+    m = ptn_generic_evt.match(content)
+    if m:
+        # make every prop starts with captial word
+        props = {}
+        for k, v in json.loads(m.group('props')).items():
+            props[k[0].upper() + k[1:]] = v
+        ret = {
+        'type': 'generic_evt',
+        'evt': m.group('evt')
+        }
+        ret.update(props)
+        return ret
 
     return {}
 

@@ -81,6 +81,9 @@ if(WITH_TCMALLOC)
     set_package_properties(Gperftools PROPERTIES TYPE REQUIRED PURPOSE "For gperftools cpu profiler and/or tcmalloc")
 endif(WITH_TCMALLOC)
 
+find_package(nlohmann_json)
+set_package_properties(nlohmann_json PROPERTIES TYPE OPTIONAL PURPOSE "For OpTracing logging")
+
 # Bundled third party library
 add_subdirectory(thirdparty)
 #---------------------------------------------------------------------------------------
@@ -110,6 +113,11 @@ include(cmake/CheckCXXFeature.cmake)
 check_cxx_feature(cxx_enum_hash HAS_CXX_ENUM_HASH)
 check_cxx_feature(cxx_aligned_alloc HAS_CXX_ALIGNED_ALLOC)
 check_cxx_feature(cxx_builtin_expect HAS_CXX_BUILTIN_EXPECT)
+
+# Handle optional packages
+if(nlohmann_json_FOUND)
+    set(SALUS_ENABLE_JSON_LOG 1)
+endif()
 
 # Set feature macros
 if(WITH_TF_REFINER)

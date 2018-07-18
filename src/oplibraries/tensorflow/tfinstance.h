@@ -134,6 +134,11 @@ public:
     DECLARE_HANDLER(Reset);
 
 #undef DECLARE_HANDLER
+
+    /**
+     * @brief for debugging, dump memory map for GPU
+     */
+     std::string dumpGPUMemoryMap() const;
 };
 
 } // namespace salus::oplib::tensorflow

@@ -145,7 +145,6 @@ void IterAllocTracker::endIter()
         m_est.temporary = runningAvg(m_est.temporary, newTemporary, m_numIters);
     }
     m_est.count = runningAvg(m_est.count, m_count, m_numIters);
-
 }
 
 } // namespace salus

@@ -34,6 +34,16 @@ def load_memmap(path):
     return df
 
 
+def load_enditermap(path):
+    df = pd.DataFrame(l.__dict__ for l in pl.load_file(path))
+    #df = df[df.type == 'generic_evt']
+    df = df.query('type == "generic_evt" & (evt == "start_iter" | evt == "end_iter")')
+    df = df.drop(['level', 'loc', 'entry_type', 'thread', 'type'], axis=1)
+    df = df.dropna(how='all', axis=1)
+    
+    # get only end_iter events for memmory map
+    return df[df.evt == 'end_iter']
+
 def parse_mapstr(mapstr):
     """Parse mapstr, which is like:
         0x7f2a76000000, 2211840, 1;0x7f2a7621c000, 8200192, 0;
@@ -118,10 +128,14 @@ def draw_memmap(mapstr, lc=None, ax=None, **kwargs):
 
 
 class MemmapViewer(object):
-    def __init__(self, df):
+    def __init__(self, df, label=None):
         self.df = df
+        self.label = label
+        if self.label is None:
+            self.label = 'id = {index} size = {Size} timestamp = {timestamp}'
         
         self.fig = plt.gcf()
+        self.fig.set_size_inches([25, 15], forward=True)
         gs = gridspec.GridSpec(2, 1, height_ratios=[20,1])
         
         
@@ -131,7 +145,7 @@ class MemmapViewer(object):
         # create artists
         self._lc = draw_memmap('0x0, 17179869184, 0;', ax=self._ax)
         self._text = self._ax.text(0.5, 0.8, "",
-                             ha='center', va='baseline',
+                             ha='center', va='baseline', fontsize=25,
                              transform=self._ax.transAxes)
         # lc and texts for allocators
         self._lcalloc = LineCollection([[(0,0.1), (17179869184, 0.1)]], linewidths=10)
@@ -153,12 +167,15 @@ class MemmapViewer(object):
             self._step(int(val))
             self.fig.canvas.draw_idle()
         self._stepSlider.on_changed(update)
+        
+        # listen key press
+        self.fig.canvas.mpl_connect('key_press_event', lambda evt: self._keydown(evt))
 
     def _step(self, i):
         """draw step"""
-        size, mapstr, timestamp = self.df.iloc[i]
-        mapdf, _ = draw_on_lc(mapstr, self._lc)
-        self._text.set_text('id = {} size = {} timestamp = {}'.format(i, size, timestamp))
+        row = self.df.iloc[i]
+        mapdf, _ = draw_on_lc(row.MemMap, self._lc)
+        self._text.set_text(self.label.format(index=i, **dict(row.items())))
         
         # draw some lines showing each allocator
         nAlloc = len(mapdf.Name.unique())
@@ -177,6 +194,15 @@ class MemmapViewer(object):
         self._lcalloc.set_segments(allocSeg)
 
         self._ax.set_xlim([mapdf.NOrigin.min(), mapdf.NEnd.max()])
+    
+    def _keydown(self, evt):
+        if evt.key == 'left':
+            newval = max(self._stepSlider.val - 1, self._stepSlider.valmin)
+            self._stepSlider.set_val(newval)
+        elif evt.key == 'right':
+            newval = min(self._stepSlider.val + 1, self._stepSlider.valmax - 1)
+            self._stepSlider.set_val(newval)
+        self.fig.canvas.draw_idle()
 
 def main():
     df = load_memmap('/tmp/workspace/card189/server.output')
