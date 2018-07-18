@@ -95,14 +95,9 @@ struct ScopedUnref
         return tmp;
     }
 
-    auto get() const
+    constexpr T *get() const
     {
         return obj;
-    }
-
-    constexpr operator T*() const
-    {
-        return get();
     }
 
     constexpr auto operator->() const
@@ -276,7 +271,7 @@ using owner = T;
  * If T is a pointer (i.e. T == U*) then
  * - allow construction from U*
  * - disallow construction from nullptr_t
- * disallow default_construction
+ * - disallow default_construction
  * - ensure construction from null U* fails
  * - allow implicit conversion to U*
  */
@@ -293,12 +288,19 @@ public:
         DCHECK(ptr_ != nullptr);
     }
 
+    template <typename = std::enable_if_t<!std::is_same<std::nullptr_t, T>::value>>
+    constexpr explicit not_null(T u) : ptr_(u)
+    {
+        DCHECK(ptr_ != nullptr);
+    }
+
     template<typename U, typename = std::enable_if_t<std::is_convertible<U, T>::value>>
     constexpr not_null(const not_null<U> &other)
         : not_null(other.get())
     {
     }
 
+    not_null(not_null&& other) = default;
     not_null(const not_null &other) = default;
     not_null &operator=(const not_null &other) = default;
 
