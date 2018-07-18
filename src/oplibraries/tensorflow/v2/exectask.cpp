@@ -513,7 +513,7 @@ void ExecTask::updateRefEntryTickets(const std::vector<Entry *> &entries)
             // and any other entry references the same tensor.
             VLOG(2) << "Update allocation ticket from " << tree->ticket << " to " << ticket;
 
-            EntryVec needUpdate;
+            PEntryVec needUpdate;
             impl->removeFromBufferTree(entry, &needUpdate);
             // and update entries as if it's new
             for (auto e : needUpdate) {

@@ -29,9 +29,6 @@ public:
 
     tf::Allocator *GetAllocator(tf::AllocatorAttributes attr) override;
 
-    Status FillContextMap(const tf::Graph *graph,
-                          std::vector<tf::DeviceContext *> *device_context_map) override;
-
     bool RequiresRecordingAccessedTensors() const override;
 
     void flushCacheFor(sstl::not_null<const tf::Graph *> graph) override;
@@ -80,9 +77,6 @@ private:
 
     std::mutex m_muStream;
     std::vector<bool> m_streamUsed;
-
-    std::mutex m_muCache;
-    std::unordered_map<const tf::Graph *, NodeStreamMap> m_streamAssignCache;
 };
 
 class SalusGPUDeviceFactory : public tf::BaseGPUDeviceFactory

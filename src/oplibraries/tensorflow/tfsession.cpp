@@ -17,10 +17,13 @@
  */
 
 #include "oplibraries/tensorflow/tensorflow_headers.h"
+
 #include "oplibraries/tensorflow/tfsession.h"
+
 #include "execution/executionengine.h"
 #include "oplibraries/tensorflow/tfexception.h"
 #include "oplibraries/tensorflow/tfinstance.h"
+#include "oplibraries/tensorflow/v3/sigraphmgr.h"
 #include "oplibraries/tensorflow/worker/dummysessionmgr.h"
 #include "oplibraries/tensorflow/worker/dummyworkercache.h"
 #include "oplibraries/tensorflow/worker/mdgraphmgr.h"
@@ -124,56 +127,47 @@ TFSession::TFSessionPrivate::TFSessionPrivate(TFInstance &inst, std::shared_ptr<
     , m_sessMgr(nullptr)
     , m_rendezvousMgr(nullptr)
 {
-    // Get resource estimation from client
-    ResStats rm{};
-    const auto rt = "MEMORY:GPU";
-    auto &m = config.salus_options().resource_map();
-    if (auto oval = sstl::optionalGet(m.persistant(), rt)) {
-        rm.persist = static_cast<size_t>(std::round(*oval));
-    }
-    if (auto oval = sstl::optionalGet(m.temporary(), rt)) {
-        rm.temporary = static_cast<size_t>(std::round(*oval));
-    }
-    rm.count = 0;
-
-    // Setup session manager that creates worker session later
-    m_sessMgr = std::make_unique<LocalSessionMgr>([this, ctx, rm](auto sessHandle) {
-        // worker session takes ownership of a deviceMgr, so we create shadow devices for it.
-        return std::make_unique<tf::WorkerSession>(sessHandle, m_inst.namePrefix(),
-                                                   std::make_unique<EmptyWorkerCache>(),
-                                                   // use an empty device mgr for session, because we should use
-                                                   // the device mgr from worker_env to make sure we use ISalusDevice
-                                                   std::make_unique<tf::DeviceMgr>(std::vector<tf::Device*>{}),
-                                                   std::make_unique<MDGraphMgr>(&m_workerEnv, ctx, rm));
-    });
-
-    // Populate worker env, which uses the session manager
+    // Populate worker env first
     m_workerEnv.env = &m_inst.env();
-    m_workerEnv.device_mgr = &m_inst.deviceMgr();
+    m_workerEnv.local_devices = m_inst.devices();
+
+    const bool useSIGraphMgr = true;
+    if (useSIGraphMgr) {
+        // No one is using workerEnv's device_mgr
+        m_workerEnv.device_mgr = nullptr;
+    } else {
+        // MDGraphMgr
+        m_workerEnv.device_mgr = &m_inst.deviceMgr();
+    }
+
     m_workerEnv.compute_pool = computePool(m_inst.env());
-    m_workerEnv.session_mgr = m_sessMgr.get();
     m_rendezvousMgr = std::make_unique<SalusRendezvousMgr>(&m_workerEnv);
     m_workerEnv.rendezvous_mgr = m_rendezvousMgr.get();
 
-    // Create a worker cache, containing the only local worker
-    auto workerCache = std::make_unique<SingleWorkerCache>(std::make_unique<tf::Worker>(&m_workerEnv), m_inst.namePrefix());
+    // create and set session_mgr to worker_env, as the last step
+    // NOTE that session_mgr also needs a worker_env to create session later on,
+    // but not at this point, so it's ok to pass in a partially configured worker_env
+    // Setup session manager that creates worker session later
+    m_sessMgr = std::make_unique<LocalSessionMgr>(GetCreateWorkerSessionFnForSIGraphMgr(m_inst.namePrefix(), &m_workerEnv, ctx, config));
+    m_workerEnv.session_mgr = m_sessMgr.get();
+
+
+    // Create a worker using the worker_env and add it to the cache, containing this only local worker
+    auto workerCache =
+        std::make_unique<SingleWorkerCache>(std::make_unique<tf::Worker>(&m_workerEnv), m_inst.namePrefix());
 
     // Populate master env
     m_masterEnv.env = &m_inst.env();
-    m_masterEnv.local_devices = m_inst.devices();
     m_masterEnv.ops = tf::OpRegistry::Global();
-
+    // MasterSession don't use local_devices when it's given workerCache, making it empty to make sure
+    m_masterEnv.local_devices.clear();
     auto device_set = std::make_unique<tf::DeviceSet>();
-    int num_local_devices = 0;
-    for (auto d : m_masterEnv.local_devices) {
+    for (auto d : m_inst.devices()) {
         device_set->AddDevice(d);
-        if (num_local_devices == 0) {
-            // Uses the first local device as the client device.
-            device_set->set_client_device(d);
-        }
-        num_local_devices++;
     }
-    DCHECK(device_set->client_device()) << "No client device found. Missing CPU:0 device?";
+    // Uses the first local device as the client device.
+    DCHECK(!m_inst.devices().empty()) << "No client device found. Missing CPU:0 device?";
+    device_set->set_client_device(m_inst.devices().front());
 
     tf::SessionOptions options;
     options.config = config;

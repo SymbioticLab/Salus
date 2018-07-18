@@ -47,7 +47,6 @@ SalusGPUDevice::SalusGPUDevice(const tf::SessionOptions &options, const std::str
                     cpu_allocator, false /* sync every op */, max_streams)
     , m_pool(std::make_shared<sstl::ObjectPool<PerTaskGPUDevice>>())
     , m_streamUsed(static_cast<size_t>(max_streams), false)
-    , m_streamAssignCache()
 {
 }
 
@@ -66,35 +65,6 @@ tf::Allocator *SalusGPUDevice::GetAllocator(tf::AllocatorAttributes attr)
 bool SalusGPUDevice::RequiresRecordingAccessedTensors() const
 {
     return BaseGPUDevice::RequiresRecordingAccessedTensors();
-}
-
-Status SalusGPUDevice::FillContextMap(const tf::Graph *, std::vector<tf::DeviceContext *> *)
-{
-    /*
-    VLOG(3) << "SalusGPUDevice::FillContextMap on " << name() << " for " << as_hex(graph);
-    const auto num_streams = device_contexts_.size();
-
-    NodeStreamMap *node_to_stream_id;
-    {
-        auto g = sstl::with_guard(m_muCache);
-        if (m_streamAssignCache.count(graph) > 0) {
-            LOG(WARNING) << "Detected graph address reuse: " << as_hex(graph);
-        }
-        node_to_stream_id = &m_streamAssignCache[graph];
-    }
-
-    // Special case for single stream.
-    if (num_streams == 1) {
-        return Status::OK();
-    }
-
-    tf::gpu_stream_util::AssignStreamsOpts opts;
-    opts.max_streams = static_cast<int>(num_streams);
-    TF_RETURN_IF_ERROR(tf::gpu_stream_util::AssignStreams(graph, opts, node_to_stream_id));
-
-    VLOG(3) << "SalusGPUDevice::FillContextMap done";
-     */
-    return Status::OK();
 }
 
 void SalusGPUDevice::flushCacheFor(sstl::not_null<const tf::Graph *>)

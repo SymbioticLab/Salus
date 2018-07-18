@@ -243,7 +243,7 @@ void ExecutionEngine::scheduleLoop()
                 put_back.dismiss();
                 scheduled += 1;
             }
-        } // for (auto &[wectx, iter] : staging) {
+        } // for (auto &iterItem : staging)
         staging.clear();
 
         maybeWaitForWork(blockingSessions, iters, scheduled);

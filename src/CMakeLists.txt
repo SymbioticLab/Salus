@@ -69,6 +69,11 @@ if(USE_TENSORFLOW)
         "oplibraries/tensorflow/v2/itertask.cpp"
         "oplibraries/tensorflow/v2/costmgr.cpp"
 
+        "oplibraries/tensorflow/v3/sigraphmgr.cpp"
+        "oplibraries/tensorflow/v3/si_executor.cpp"
+        "oplibraries/tensorflow/v3/si_executor_impl.cpp"
+        "oplibraries/tensorflow/v3/si_executortask.cpp"
+
         "oplibraries/tensorflow/device/salusdevices.cpp"
         "oplibraries/tensorflow/device/cpu.cpp"
         "oplibraries/tensorflow/device/gpu.cpp"

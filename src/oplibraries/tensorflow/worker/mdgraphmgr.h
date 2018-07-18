@@ -20,8 +20,11 @@
 #define SALUS_OPLIB_TENSORFLOW_MDGRAPHMGR_H
 
 #include "oplibraries/tensorflow/tensorflow_headers.h"
+
 #include "execution/executionengine.h"
+#include "oplibraries/tensorflow/worker/dummysessionmgr.h"
 #include "utils/macros.h"
+
 #include <memory>
 #include <mutex>
 #include <unordered_map>
@@ -76,6 +79,11 @@ private:
     std::unordered_map<const tf::OpKernel *, std::string> m_kernelToDevice;
     std::mutex m_mu;
 };
+
+CreateWorkerSessionFn GetCreateWorkerSessionFnForMDGraphMgr(const std::string &worker_name,
+                                                            const tf::WorkerEnv *worker_env,
+                                                            std::shared_ptr<ExecutionContext> execCtx,
+                                                            const tf::ConfigProto &config);
 
 } // namespace salus::oplib::tensorflow
 

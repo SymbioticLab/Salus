@@ -656,7 +656,7 @@ tf::Status ExecutorState::PrepareInputs(const NodeItem &item, sstl::not_null<tf:
                 }
             }
             // Update active entries as needed
-            EntryVec needUpdate;
+            PEntryVec needUpdate;
             impl_->removeFromBufferTree(entry, &needUpdate);
             for (auto &e : needUpdate) {
                 e->alloc_ticket = device->resourceContext().ticket();
@@ -1201,7 +1201,7 @@ void ExecutorState::FindOrCreateChildFrame(FrameState *frame, int64_t iter, cons
 {
     // Get the child frame name.
     std::string enter_name;
-    auto s = GetNodeAttr(node->def(), "frame_name", &enter_name);
+    auto s = GetNodeAttr(node->attrs(), "frame_name", &enter_name);
     DCHECK(s.ok()) << s;
     const std::string child_name = MakeFrameName(frame, iter, enter_name);
 

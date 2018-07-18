@@ -38,14 +38,6 @@ class DeviceMgr;
 namespace salus::oplib::tensorflow {
 class PerTaskDevice;
 
-using POpKernel = std::unique_ptr<tf::OpKernel, void (*)(tf::OpKernel *)>;
-
-constexpr void skip_delete_opkernel(tf::OpKernel *) {}
-constexpr void default_delete_opkernel(tf::OpKernel *k)
-{
-    delete k;
-}
-
 struct DeviceItem
 {
     std::shared_ptr<salus::oplib::tensorflow::PerTaskDevice> device = nullptr;
