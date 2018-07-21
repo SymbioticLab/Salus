@@ -80,13 +80,19 @@ void WorkerRendezvous::SameWorkerRecvDone(const ParsedKey &parsed, const Args &s
     auto send_wrapper = sstl::wrap_unref(static_cast<DeviceContextWithDevice *>(send_args.device_context));
     auto recv_wrapper = sstl::wrap_unref(static_cast<DeviceContextWithDevice *>(recv_args.device_context));
 
+#if defined(SALUS_ENABLE_SIEXECUTOR)
+    auto &device_mgr = session()->device_mgr;
+#else
+    auto device_mgr = env_->device_mgr;
+#endif // SALUS_ENABLE_SIEXECUTOR
+
     tf::Device *send_dev = nullptr;
     tf::DeviceContext *send_dctx = nullptr;
     if (send_wrapper) {
         send_dev = send_wrapper->device();
         send_dctx = send_wrapper->wrapped();
     } else {
-        auto s = env_->device_mgr->LookupDevice(parsed.src_device, &send_dev);
+        auto s = device_mgr->LookupDevice(parsed.src_device, &send_dev);
         if (!s.ok()) {
             done(s);
             return;
@@ -99,7 +105,7 @@ void WorkerRendezvous::SameWorkerRecvDone(const ParsedKey &parsed, const Args &s
         recv_dev = recv_wrapper->device();
         recv_dctx = recv_wrapper->wrapped();
     } else {
-        auto s = env_->device_mgr->LookupDevice(parsed.dst_device, &recv_dev);
+        auto s = device_mgr->LookupDevice(parsed.dst_device, &recv_dev);
         if (!s.ok()) {
             done(s);
             return;
