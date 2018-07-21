@@ -229,8 +229,12 @@ tf::BaseGPUDevice *SalusGPUDeviceFactory::CreateGPUDevice(const tf::SessionOptio
                                                           tf::Allocator *gpu_allocator,
                                                           tf::Allocator *cpu_allocator)
 {
+#if defined(SALUS_ENABLE_SIEXECUTOR)
+    auto max_streams = 1;
+#else
     // TODO: detect maximum streams in GPU
     auto max_streams = 128;
+#endif // SALUS_ENABLE_SIEXECUTOR
 
     auto dev =
         std::make_unique<SalusGPUDevice>(options, name, memory_limit, locality, gpu_id, physical_device_desc,

@@ -129,18 +129,16 @@ TFSession::TFSessionPrivate::TFSessionPrivate(TFInstance &inst, std::shared_ptr<
 {
     // Populate worker env first
     m_workerEnv.env = &m_inst.env();
+    m_workerEnv.compute_pool = computePool(m_inst.env());
     m_workerEnv.local_devices = m_inst.devices();
 
-    const bool useSIGraphMgr = true;
-    if (useSIGraphMgr) {
-        // No one is using workerEnv's device_mgr
-        m_workerEnv.device_mgr = nullptr;
-    } else {
-        // MDGraphMgr
-        m_workerEnv.device_mgr = &m_inst.deviceMgr();
-    }
+#if defined(SALUS_ENABLE_SIEXECUTOR)
+    // No one is using workerEnv's device_mgr
+    m_workerEnv.device_mgr = nullptr;
+#else
+    m_workerEnv.device_mgr = &m_inst.deviceMgr();
+#endif // SALUS_ENABLE_SIEXECUTOR
 
-    m_workerEnv.compute_pool = computePool(m_inst.env());
     m_rendezvousMgr = std::make_unique<SalusRendezvousMgr>(&m_workerEnv);
     m_workerEnv.rendezvous_mgr = m_rendezvousMgr.get();
 
@@ -148,9 +146,12 @@ TFSession::TFSessionPrivate::TFSessionPrivate(TFInstance &inst, std::shared_ptr<
     // NOTE that session_mgr also needs a worker_env to create session later on,
     // but not at this point, so it's ok to pass in a partially configured worker_env
     // Setup session manager that creates worker session later
+#if defined(SALUS_ENABLE_SIEXECUTOR)
     m_sessMgr = std::make_unique<LocalSessionMgr>(GetCreateWorkerSessionFnForSIGraphMgr(m_inst.namePrefix(), &m_workerEnv, ctx, config));
+#else
+    m_sessMgr = std::make_unique<LocalSessionMgr>(GetCreateWorkerSessionFnForMDGraphMgr(m_inst.namePrefix(), &m_workerEnv, ctx, config));
+#endif // SALUS_ENABLE_SIEXECUTOR
     m_workerEnv.session_mgr = m_sessMgr.get();
-
 
     // Create a worker using the worker_env and add it to the cache, containing this only local worker
     auto workerCache =
