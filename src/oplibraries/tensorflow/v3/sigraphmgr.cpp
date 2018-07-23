@@ -39,6 +39,7 @@ Status SIGraphMgr::Register(const std::string &session, const tf::GraphDef &gdef
 
     TF_RETURN_IF_ERROR(InitSIItem(session, gdef, graph_options, debug_options, cluster_flr, *item));
 
+    *handle = std::move(tempHandle);
     // Inserts one item into table_
     {
         tf::mutex_lock l(mu_);
@@ -139,7 +140,6 @@ tf::Status SIGraphMgr::InitSIItem(const std::string &session, const tf::GraphDef
         auto &unit = item.units.emplace_back();
 
         // Find the device
-        // FIXME: use shadow device
         auto s = device_mgr_->LookupDevice(key, &unit.device);
         if (!s.ok()) {
             // Remove the empty unit from the item as the item destructor wants all

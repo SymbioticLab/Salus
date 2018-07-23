@@ -279,11 +279,6 @@ bool ExecutionEngine::runIter(IterationItem &iterItem, ExecutionContext &ectx)
         return false;
     }
 
-    LogOpTracing() << "event: start_iter " << nlohmann::json({
-                                                               {"sess", ectx.m_item->sessHandle},
-                                                               {"graphId", iterItem.iter->graphId()},
-                                                           });
-
     auto iCtx = std::make_shared<IterationContext>(m_taskExecutor, ectx.m_item);
     iterItem.iter->runAsync(std::move(iCtx));
     return true;

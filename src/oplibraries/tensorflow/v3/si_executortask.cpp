@@ -101,6 +101,15 @@ void SIExecutorState::runAsync(std::shared_ptr<IterationContext> &&ictx) noexcep
     ictx_ = std::move(ictx);
     ictx_->setGraphId(impl_.graph_id_);
 
+    if (impl_.is_main_iter) {
+        LogOpTracing() << "event: start_iter "
+                       << nlohmann::json({
+                              {"sess", impl_.params_.session},
+                              {"stepId", step_id_},
+                              {"graphId", impl_.graph_id_},
+                          });
+    }
+
     // Ask the device to fill in the device context map.
     auto device = impl_.params_.device;
     auto fill_status = device->FillContextMap(impl_.graph_.get(), &device_context_map_);
@@ -658,6 +667,7 @@ bool SIExecutorState::NodeDone(const Status &s, const tf::Node *node,
     if (s.ok()) {
         ScheduleReady(ready, inline_ready);
     }
+    VLOG(1) << "NodeDone: " << node->id() << " step " << step_id_ << " completed " << completed;
     return completed;
 }
 
@@ -705,10 +715,14 @@ void SIExecutorState::ScheduleReady(const TaggedNodeSeq &ready, TaggedNodeReadyQ
 
 void SIExecutorState::Finish()
 {
+    VLOG(1) << "SIExecutorState::Finish "
+            << nlohmann::json({{"sess", impl_.params_.session},
+                               {"graphId", impl_.graph_id_},
+                               {"stepId", step_id_}});
     auto l = sstl::with_uguard(mu_);
     auto status = status_;
     auto done_cb = std::move(done_cb_);
-    auto runer = std::move(runner_);
+    auto runner = std::move(runner_);
     auto ictx = std::move(ictx_);
     l.unlock();
 
@@ -721,13 +735,23 @@ void SIExecutorState::Finish()
         LogOpTracing() << "event: end_iter "
                        << nlohmann::json({{"sess", impl_.params_.session},
                                           {"graphId", impl_.graph_id_},
+                                          {"stepId", step_id_},
                                           {"memMap", TFInstance::instance().dumpGPUMemoryMap()}});
         ictx->finish();
     }
 
+    auto &impl = impl_;
+    auto step_id = step_id_;
+
     delete this;
     CHECK(done_cb != nullptr);
-    runner_([done = std::move(done_cb), status]() { done(status); });
+    runner([done = std::move(done_cb), status, &impl, step_id]() {
+        VLOG(1) << "SIExecutorState::Finish::done callback "
+                << nlohmann::json({{"sess", impl.params_.session},
+                                   {"graphId", impl.graph_id_},
+                                   {"stepId", step_id}});
+        done(status);
+    });
 }
 
 void SIExecutorState::FindOrCreateChildFrame(FrameState *frame, int64_t iter, const tf::Node *node,
@@ -877,7 +901,7 @@ void SIExecutorState::FrameState::ActivateNodes(const NodeItem &item, bool is_de
     auto iter_state = GetIteration(iter);
     auto num_output_edges = item.num_output_edges;
     auto edges = item.output_edge_list();
-    auto input_tensors = iter_state->input_tensors;
+    auto input_tensors = iter_state->input_tensors.data();
     for (int out_index = 0; out_index < num_output_edges; ++out_index) {
         const auto &e = edges[out_index];
         const auto dst_id = e.dst_id;
