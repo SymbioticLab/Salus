@@ -324,6 +324,10 @@ bool TaskExecutor::maybeWaitForAWhile(size_t scheduled)
     static auto last = system_clock::now();
     static auto sleep = initialSleep;
 
+#if defined(SALUS_ENABLE_SIEXECUTOR)
+    return false;
+#endif
+
     auto now = system_clock::now();
 
     if (scheduled > 0) {
