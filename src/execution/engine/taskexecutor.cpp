@@ -171,10 +171,12 @@ void TaskExecutor::scheduleLoop()
             bool deleted = changeset.deletedSessions.count(sess) > 0;
             if (deleted) {
                 VLOG(2) << "Deleting session " << sess->sessHandle << "@" << as_hex(sess);
-                sess->cleanupCb();
-                // reset cb to release anything that may depend on this
-                // before going out of destructor.
-                sess->cleanupCb = nullptr;
+                if (sess->cleanupCb) {
+                    sess->cleanupCb();
+                    // reset cb to release anything that may depend on this
+                    // before going out of destructor.
+                    sess->cleanupCb = nullptr;
+                }
 
                 // The deletion of session's executor is async to this thread.
                 // So it's legit for tickets to be nonempty
