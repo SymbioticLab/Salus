@@ -59,33 +59,46 @@ auto wrap_unique(T *ptr)
 template<typename T>
 struct ScopedUnref
 {
-    explicit ScopedUnref(T *o = nullptr)
+    constexpr explicit ScopedUnref(T *o = nullptr)
         : obj(o)
     {
     }
+
     ~ScopedUnref()
     {
         reset();
     }
 
-    ScopedUnref(ScopedUnref &&other) noexcept
+    template<typename U, typename = std::enable_if_t<std::is_convertible<U*, T*>::value>>
+    constexpr ScopedUnref(ScopedUnref<U> &&other) noexcept
+        : ScopedUnref(other.release())
+    {
+    }
+
+    constexpr ScopedUnref(ScopedUnref &&other) noexcept
     {
         obj = other.obj;
         other.obj = nullptr;
     }
 
-    ScopedUnref &operator=(ScopedUnref &&other)
+    constexpr ScopedUnref &operator=(ScopedUnref &&other) noexcept
     {
-        obj = other.obj;
-        other.obj = nullptr;
+        reset(other.release());
         return *this;
     }
 
-    void reset()
+    template<typename U, typename = std::enable_if_t<std::is_convertible_v<U*, T*> && !std::is_same_v<U, T>>>
+    constexpr ScopedUnref &operator=(ScopedUnref<U> &&other) noexcept
+    {
+        reset(other.release());
+        return *this;
+    }
+
+    void reset(T *o = nullptr)
     {
         if (obj)
             obj->Unref();
-        obj = nullptr;
+        obj = o;
     }
 
     auto release()
