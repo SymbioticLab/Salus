@@ -4,13 +4,17 @@
 
 #include "oplibraries/tensorflow/v3/sigraphmgr.h"
 
+#include "oplibraries/tensorflow/device/shadowdevices.h"
+#include "oplibraries/tensorflow/device/sessionallocator.h"
 #include "oplibraries/tensorflow/tfutils.h"
 #include "oplibraries/tensorflow/v3/si_executor.h"
+#include "oplibraries/tensorflow/v3/tf_executor.h"
 #include "oplibraries/tensorflow/worker/dummyworkercache.h"
 
 namespace salus::oplib::tensorflow {
 
-SIGraphMgr::SIGraphMgr(const tf::WorkerEnv *env, tf::DeviceMgr *mgr, std::shared_ptr<ExecutionContext> execCtx)
+SIGraphMgr::SIGraphMgr(const tf::WorkerEnv *env, tf::DeviceMgr *mgr,
+                       std::shared_ptr<ExecutionContext> execCtx)
     : GraphMgr(env, mgr)
     , m_execCtx(std::move(execCtx))
 {
@@ -128,7 +132,7 @@ tf::Status SIGraphMgr::InitSIItem(const std::string &session, const tf::GraphDef
         tf::OptimizationPassRegistry::Global()->RunGrouping(tf::OptimizationPassRegistry::POST_PARTITIONING,
                                                             optimization_options));
 
-    SIExecutorParams params;
+    TFExecutorParams params;
     params.session = session;
     params.graphHandle = item.handle;
 
@@ -166,6 +170,7 @@ tf::Status SIGraphMgr::InitSIItem(const std::string &session, const tf::GraphDef
         // Construct the root executor for the subgraph
         params.device = unit.device;
         params.function_library = lib;
+        /*
         params.create_kernel = [session, lib, opseg](const auto &ndef, auto pkernel) {
             tf::OpKernel *kernel;
             Status status;
@@ -189,6 +194,30 @@ tf::Status SIGraphMgr::InitSIItem(const std::string &session, const tf::GraphDef
             *pkernel = {kernel, skip_delete_opkernel};
             return status;
         };
+        */
+        params.create_kernel = [session, lib, opseg](const auto &ndef, tf::OpKernel **kernel) {
+            // We do not share the kernel via the OpSegment if the node is
+            // stateless, or a function.
+            // NOTE(mrry): We must not share function kernels (implemented
+            // using `CallOp`) between subgraphs, because `CallOp::handle_`
+            // is tied to a particular subgraph. Even if the function itself
+            // is stateful, the `CallOp` that invokes it is not.
+            if (!lib->IsStateful(ndef.op())
+                || lib->GetFunctionLibraryDefinition()->Find(ndef.op()) != nullptr) {
+                return lib->CreateKernel(ndef, kernel);
+            }
+            auto create_fn = [lib, &ndef](tf::OpKernel **kernel) { return lib->CreateKernel(ndef, kernel); };
+            // Kernels created for subgraph nodes need to be cached.  On
+            // cache miss, create_fn() is invoked to create a kernel based
+            // on the function library here + global op registry.
+            return opseg->FindOrCreate(session, ndef.name(), kernel, create_fn);
+        };
+        params.delete_kernel = [lib](tf::OpKernel *kernel) {
+            // If the node is stateful, opseg owns it. Otherwise, delete it.
+            if (kernel && !lib->IsStateful(kernel->type_string())) {
+                delete kernel;
+            }
+        };
 
         optimizer.Optimize(lib, worker_env_->env, params.device, &subgraph, /*shape_map=*/nullptr);
 
@@ -206,7 +235,7 @@ tf::Status SIGraphMgr::InitSIItem(const std::string &session, const tf::GraphDef
         }
 
         params.ins = m_execCtx;
-        TF_RETURN_IF_ERROR(NewSIExecutor(params, std::move(subgraph), &unit.root));
+        TF_RETURN_IF_ERROR(NewTFExecutor(params, std::move(subgraph), &unit.root));
     }
     return Status::OK();
 }
@@ -217,22 +246,23 @@ CreateWorkerSessionFn GetCreateWorkerSessionFnForSIGraphMgr(const std::string &w
                                                             const tf::ConfigProto &config)
 {
     UNUSED(config);
+
     return [=, ctx = std::move(execCtx)](const auto &sessHandle) {
         // Create shadow devices for isolated sessions, deviceMgr owns the passed in devices
         std::vector<tf::Device *> renamedDevices;
-        const bool ownsUnderlaying = false;
         const bool isolateSessionState = true;
         for (auto d : worker_env->local_devices) {
             renamedDevices.push_back(
-                tf::RenamedDevice::NewRenamedDevice(worker_name, d, ownsUnderlaying, isolateSessionState));
+                ShadowDevice::NewShadowDevice(worker_name, sstl::not_null{d}, isolateSessionState, [sessHandle](auto alloc, auto) {
+                    return sstl::make_scoped_unref<SessionAllocator>(sessHandle, sstl::not_null{alloc});
+                }).release());
         }
         auto deviceMgr = std::make_unique<tf::DeviceMgr>(renamedDevices);
         auto graphMgr = std::make_unique<SIGraphMgr>(worker_env, deviceMgr.get(), ctx);
         return std::make_unique<tf::WorkerSession>(sessHandle, worker_name,
                                                    // This is never used, but internally WorkerSession creates
                                                    // a wrapper around it. So we have to supply an empty one
-                                                   std::make_unique<EmptyWorkerCache>(),
-                                                   std::move(deviceMgr),
+                                                   std::make_unique<EmptyWorkerCache>(), std::move(deviceMgr),
                                                    std::move(graphMgr));
     };
 }

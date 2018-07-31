@@ -222,4 +222,5 @@ Resources PerTaskDevice::peakResourceUsage() const
     }
     return res;
 }
+
 } // namespace salus::oplib::tensorflow

@@ -101,14 +101,13 @@ void SIExecutorState::runAsync(std::shared_ptr<IterationContext> &&ictx) noexcep
     ictx_ = std::move(ictx);
     ictx_->setGraphId(impl_.graph_id_);
 
-    if (impl_.is_main_iter) {
-        LogOpTracing() << "event: start_iter "
-                       << nlohmann::json({
-                              {"sess", impl_.params_.session},
-                              {"stepId", step_id_},
-                              {"graphId", impl_.graph_id_},
-                          });
-    }
+    LogOpTracing() << "event: start_iter "
+                   << nlohmann::json({
+                          {"sess", impl_.params_.session},
+                          {"stepId", step_id_},
+                          {"mainIter", impl_.is_main_iter},
+                          {"graphId", impl_.graph_id_},
+                      });
 
     // Ask the device to fill in the device context map.
     auto device = impl_.params_.device;
@@ -122,6 +121,14 @@ void SIExecutorState::runAsync(std::shared_ptr<IterationContext> &&ictx) noexcep
     TaggedNodeSeq ready;
     for (const auto *n : impl_.root_nodes_) {
         DCHECK(n->in_edges().empty());
+        LogOpTracing() << "event: queued "
+                       << nlohmann::json({
+                              {"name", n->name()},
+                              {"type", n->type_string()},
+                              {"session", impl_.params_.session},
+                              {"graphHandle", impl_.params_.graphHandle},
+                              {"stepId", step_id_},
+                          });
         ready.push_back(TaggedNode{n, root_frame_, 0, false});
     }
     if (ready.empty()) {
@@ -242,6 +249,14 @@ void SIExecutorState::Process(SIExecutorState::TaggedNode tagged_node)
             VLOG(1) << "Process node: " << id << " step " << params.step_id << " " << SummarizeNode(*node)
                     << " is dead: " << tagged_node.is_dead;
         }
+        LogOpTracing() << "event: running "
+                       << nlohmann::json({
+                              {"name", tagged_node.node->name()},
+                              {"type", tagged_node.node->type_string()},
+                              {"session", impl_.params_.session},
+                              {"graphHandle", impl_.params_.graphHandle},
+                              {"stepId", step_id_},
+                          });
 
         auto input_tensors = GetInputTensors(input_frame, input_iter);
         auto first_input = input_tensors + item.input_start;
@@ -611,6 +626,17 @@ void SIExecutorState::PropagateOutputs(const SIExecutorState::TaggedNode &tagged
         is_frame_done = input_frame->DecrementOutstandingOpsLocked(impl_.gview_, input_iter, ready);
     }
 
+    for (const auto &n : *ready) {
+        LogOpTracing() << "event: queued "
+                       << nlohmann::json({
+                              {"name", n.node->name()},
+                              {"type", n.node->type_string()},
+                              {"session", impl_.params_.session},
+                              {"graphHandle", impl_.params_.graphHandle},
+                              {"stepId", step_id_},
+                          });
+    }
+
     // At this point, this node is completely done. We also know if the
     // completion of this node makes its frame completed.
     if (is_frame_done) {
@@ -663,11 +689,19 @@ bool SIExecutorState::NodeDone(const Status &s, const tf::Node *node,
         num_outstanding_ops_.fetch_add(ready_size - 1, std::memory_order_relaxed);
     }
 
+    LogOpTracing() << "event: done "
+                   << nlohmann::json({
+                          {"name", node->name()},
+                          {"type", node->type_string()},
+                          {"session", impl_.params_.session},
+                          {"graphHandle", impl_.params_.graphHandle},
+                          {"stepId", step_id_},
+                      });
+
     // Schedule the ready nodes in 'ready'.
     if (s.ok()) {
         ScheduleReady(ready, inline_ready);
     }
-    VLOG(1) << "NodeDone: " << node->id() << " step " << step_id_ << " completed " << completed;
     return completed;
 }
 
@@ -716,9 +750,8 @@ void SIExecutorState::ScheduleReady(const TaggedNodeSeq &ready, TaggedNodeReadyQ
 void SIExecutorState::Finish()
 {
     VLOG(1) << "SIExecutorState::Finish "
-            << nlohmann::json({{"sess", impl_.params_.session},
-                               {"graphId", impl_.graph_id_},
-                               {"stepId", step_id_}});
+            << nlohmann::json(
+                   {{"sess", impl_.params_.session}, {"graphId", impl_.graph_id_}, {"stepId", step_id_}});
     auto l = sstl::with_uguard(mu_);
     auto status = status_;
     auto done_cb = std::move(done_cb_);
@@ -730,13 +763,14 @@ void SIExecutorState::Finish()
         status = impl_.params_.device->Sync();
     }
 
+    LogOpTracing() << "event: end_iter "
+                   << nlohmann::json({{"sess", impl_.params_.session},
+                                      {"graphId", impl_.graph_id_},
+                                      {"stepId", step_id_},
+                                      {"mainIter", impl_.is_main_iter},
+                                      {"memMap", TFInstance::instance().dumpGPUMemoryMap()}});
     if (impl_.is_main_iter) {
         impl_.params_.ins->dropExlusiveMode();
-        LogOpTracing() << "event: end_iter "
-                       << nlohmann::json({{"sess", impl_.params_.session},
-                                          {"graphId", impl_.graph_id_},
-                                          {"stepId", step_id_},
-                                          {"memMap", TFInstance::instance().dumpGPUMemoryMap()}});
         ictx->finish();
     }
 
@@ -747,9 +781,8 @@ void SIExecutorState::Finish()
     CHECK(done_cb != nullptr);
     runner([done = std::move(done_cb), status, &impl, step_id]() {
         VLOG(1) << "SIExecutorState::Finish::done callback "
-                << nlohmann::json({{"sess", impl.params_.session},
-                                   {"graphId", impl.graph_id_},
-                                   {"stepId", step_id}});
+                << nlohmann::json(
+                       {{"sess", impl.params_.session}, {"graphId", impl.graph_id_}, {"stepId", step_id}});
         done(status);
     });
 }
@@ -971,6 +1004,10 @@ void SIExecutorState::FrameState::ActivateNodes(const NodeItem &item, bool is_de
         if (dst_need_input) {
             const int dst_slot = e.input_slot;
             const int dst_loc = dst_item.input_start + dst_slot;
+
+            //            VLOG(1) << "ActivateNode: from " << item.node->id() << " to " << dst_item.node->id()
+            //            << " using input_tensors@" << as_hex(input_tensors) << " dst_loc " << dst_loc;
+
             if (e.is_last) {
                 input_tensors[dst_loc] = std::move(outputs[src_slot]);
             } else {

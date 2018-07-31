@@ -116,7 +116,7 @@ public:
     void ReinitializeGpuDevice(tf::OpKernelContext *context, tf::PerOpGpuDevice *device,
                                tf::DeviceContext *dc, tf::Allocator *allocator) override;
     tf::Status MakeTensorFromProto(const tf::TensorProto &tensor_proto,
-                                   const tf::AllocatorAttributes alloc_attrs, tf::Tensor *tensor) override;
+                                   tf::AllocatorAttributes alloc_attrs, tf::Tensor *tensor) override;
 
     // Forwarding of Device methods
     void Compute(tf::OpKernel *op_kernel, tf::OpKernelContext *context) override;

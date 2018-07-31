@@ -229,6 +229,7 @@ void TFSession::deferClose(HandlerCallback &&cb)
     // cb is move-only, can't be captured and pass to std::function.
     // so we extract and reconstruct inside the lambda
     auto raw_tfresp = cb.tfresp.release();
+    LOG(INFO) << "Defer closing session " << d->handle();
 
     d->m_execCtx->finish([self = shared_from_this(), cb = std::move(cb.cb), raw_tfresp]() mutable {
         HandlerCallback hcb;

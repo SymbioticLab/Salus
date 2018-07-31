@@ -73,10 +73,13 @@ if(USE_TENSORFLOW)
         "oplibraries/tensorflow/v3/si_executor.cpp"
         "oplibraries/tensorflow/v3/si_executor_impl.cpp"
         "oplibraries/tensorflow/v3/si_executortask.cpp"
+        "oplibraries/tensorflow/v3/tf_executor.cpp"
 
+        "oplibraries/tensorflow/device/shadowdevices.cpp"
         "oplibraries/tensorflow/device/salusdevices.cpp"
         "oplibraries/tensorflow/device/cpu.cpp"
         "oplibraries/tensorflow/device/gpu.cpp"
+        "oplibraries/tensorflow/device/sessionallocator.cpp"
 #         "oplibraries/tensorflow/tfoplibrary.cpp"
 #         "oplibraries/tensorflow/tfmocks/tfdevice.cpp"
 #         "oplibraries/tensorflow/tfmocks/tfsession.cpp"
