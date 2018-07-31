@@ -51,7 +51,7 @@ void SessionAllocator::postAllocation(void *ptr, size_t alignment, size_t num_by
                   });
 }
 
-void SessionAllocator::postDeallocation(void *ptr)
+void SessionAllocator::preDeallocation(void *ptr)
 {
     LogAlloc() << "event: dealloc "
                << nlohmann::json({

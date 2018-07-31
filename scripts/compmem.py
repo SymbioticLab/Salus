@@ -33,6 +33,9 @@ def _process_line_paral(line, event_set_filter):
     channel = line[thr_end + 3:channel_end]
     lvl = line[channel_end + 3:lvl_end]
     
+    if not line[lvl_end + 1:].startswith(' event: '):
+        return None
+    
     event_end = line.find(' ', lvl_end + len(' event: ') + 1)
     event = line[lvl_end + len(' event: ') + 1:event_end]
     
@@ -79,9 +82,9 @@ def load_generic(path, event_filters=None):
                     for log in
                     p.imap_unordered(partial(_process_line_paral,
                                              event_set_filter=event_filters),
-                                     f, chunksize=chunkSize)]
+                                     f, chunksize=chunkSize) if log is not None]
     
-    df = pd.DataFrame(logs)
+    df = pd.DataFrame.from_records(logs)
     df.sort_values(by=['timestamp'], inplace=True)
     return df
 
@@ -91,18 +94,23 @@ def load_mem(path):
     
     df = df.drop(['level', 'loc', 'thread'], axis=1)
 
+    # make sure index is consequtive
+    df = df.reset_index(drop=True)
+    
     mapping = {
         'alloc': 1,
         'dealloc': -1
     }
-
-    df.evt.replace(mapping, inplace=True)
-    df['Cumsum'] = df.evt * df.Size
-    df['Cumsum'] = df.act.cumsum() / 1024 / 1024
-    # make sure index is consequtive
-    df = df.reset_index(drop=True)
+    
+    df['Sign'] = df.evt.replace(mapping)
 
     return df
+
+
+def calc_cumsum(df):
+    cs = df.Size * df.Sign
+    cs = cs.cumsum() / 1024 / 1024
+    return cs
 
     
 def plot_cs(cs, **kwargs):
@@ -111,18 +119,19 @@ def plot_cs(cs, **kwargs):
 
 
 def plot_mem(df, marker=False, offset=None, **kwargs):
-    cs = df.set_index('timestamp')
+    df = df.set_index('timestamp')
     if marker:
         if offset is None:
-            offset = cs.index[0]
-        cs.index = (cs.index - offset) / pd.Timedelta(microseconds=1)
+            offset = df.index[0]
+        df.index = (df.index - offset) / pd.Timedelta(microseconds=1)
     elif offset is not None:
-        cs.index = (cs.index - offset) / pd.Timedelta(microseconds=1)
-
-    ax = plot_cs(cs.act, **kwargs)
+        df.index = (df.index - offset) / pd.Timedelta(microseconds=1)
+    
+    cumsum = calc_cumsum(df)
+    ax = plot_cs(cumsum, **kwargs)
     if marker:
-        css = cs.reset_index()
-        ax = css.plot(kind='scatter', x='timestamp', y='Cumsum', c='evt',
+        css = df.reset_index()
+        ax = css.plot(kind='scatter', x='timestamp', y=cumsum, c='evt',
                       cmap=plt.cm.get_cmap('bwr'), ax=ax)
     return ax
 
@@ -137,7 +146,7 @@ def plot_mem_persess(df, marker=False, offset=None, fill=False, sessaxs=None, **
         cs.index = (cs.index - offset) / pd.Timedelta(microseconds=1)
 
     if sessaxs is None:
-        _, axs = plt.subplots(nrows=len(cs.sess.unique()), sharex=True,
+        _, axs = plt.subplots(nrows=len(cs.Sess.unique()), sharex=True,
                               squeeze=False)
         axs = axs.flatten()
         sessaxs = {}

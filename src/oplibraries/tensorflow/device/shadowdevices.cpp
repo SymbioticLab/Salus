@@ -69,6 +69,7 @@ void *ForwardingAllocator::AllocateRaw(size_t alignment, size_t num_bytes,
     }
 
     auto ptr = m_base->AllocateRaw(alignment, num_bytes);
+    recordSize(ptr, num_bytes);
     postAllocation(ptr, alignment, num_bytes, allocation_attr);
     return ptr;
 }
@@ -89,16 +90,22 @@ void ForwardingAllocator::preDeallocation(void *ptr)
 {
     LogAlloc() << "event: dealloc "
                << nlohmann::json({
-                      {"ptr", reinterpret_cast<uint64_t>(ptr)},
-                      {"size", RequestedSize(ptr)},
-                      {"allocator", Name()},
-                  });
+                                     {"ptr", reinterpret_cast<uint64_t>(ptr)},
+                                     {"size", RequestedSize(ptr)},
+                                     {"allocator", Name()},
+                                 });
 }
 
 void ForwardingAllocator::DeallocateRaw(void *ptr)
 {
     preDeallocation(ptr);
     m_base->DeallocateRaw(ptr);
+
+    std::unordered_map<void *, size_t>::node_type nh;
+    {
+        auto g = sstl::with_guard(m_mu);
+        nh = m_allocated.extract(ptr);
+    }
     postDeallocation(ptr);
 }
 
@@ -109,7 +116,7 @@ void ForwardingAllocator::postDeallocation(void *ptr)
 
 bool ForwardingAllocator::TracksAllocationSizes()
 {
-    return m_base->TracksAllocationSizes();
+    return true;
 }
 
 bool ForwardingAllocator::ShouldAllocateEmptyTensors()
@@ -119,7 +126,12 @@ bool ForwardingAllocator::ShouldAllocateEmptyTensors()
 
 size_t ForwardingAllocator::RequestedSize(void *ptr)
 {
-    return m_base->RequestedSize(ptr);
+    auto g = sstl::with_guard(m_mu);
+    auto it = m_allocated.find(ptr);
+    if (it == m_allocated.end()) {
+        return 0;
+    }
+    return it->second;
 }
 
 size_t ForwardingAllocator::AllocatedSize(void *ptr)
@@ -140,6 +152,16 @@ size_t ForwardingAllocator::AllocatedSizeSlow(void *ptr)
 void ForwardingAllocator::GetStats(tf::AllocatorStats *stats)
 {
     m_base->GetStats(stats);
+}
+
+void ForwardingAllocator::recordSize(void *ptr, size_t size)
+{
+    auto g = sstl::with_guard(m_mu);
+    if (!ptr) {
+        // No enough memory
+        return;
+    }
+    CHECK(m_allocated.emplace(ptr, size).second);
 }
 
 /*static*/ std::unique_ptr<ShadowDevice> ShadowDevice::NewShadowDevice(const std::string &new_base,
@@ -183,7 +205,13 @@ void ShadowDevice::initialize()
 #endif
 }
 
-ShadowDevice::~ShadowDevice() = default;
+ShadowDevice::~ShadowDevice()
+{
+    // First clear resource, which may still using allocators
+    resource_manager()->Clear();
+    // Then clear allocator wrappers
+    clearWrapperCache();
+}
 
 tf::Allocator *ShadowDevice::GetAllocator(tf::AllocatorAttributes attr)
 {

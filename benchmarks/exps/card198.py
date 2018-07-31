@@ -65,8 +65,6 @@ def test():
 
 
 def main(argv):
-    scfg = maybe_forced_preset(presets.Debugging)
-
     command = argv[0] if argv else "test"
 
     {

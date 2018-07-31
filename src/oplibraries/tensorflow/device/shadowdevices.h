@@ -45,6 +45,9 @@ class ForwardingAllocator : public tf::Allocator, public tf::core::RefCounted
 
     const std::string m_prefix;
 
+    mutable std::mutex m_mu;
+    std::unordered_map<void *, size_t> m_allocated GUARDED_BY(m_mu);
+
 public:
     explicit ForwardingAllocator(sstl::not_null<tf::Allocator *> actual, const std::string &namePrefix = "");
 
@@ -80,6 +83,8 @@ protected:
                                 const tf::AllocationAttributes &allocation_attr);
     virtual void preDeallocation(void *ptr);
     virtual void postDeallocation(void *ptr);
+
+    void recordSize(void *ptr, size_t size);
 };
 
 inline sstl::ScopedUnref<ForwardingAllocator> NewForwardingAllocator(tf::Allocator *alloc, const tf::AllocatorAttributes &)

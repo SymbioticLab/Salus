@@ -44,7 +44,7 @@ public:
 protected:
     void postAllocation(void *ptr, size_t alignment, size_t num_bytes,
                         const tf::AllocationAttributes &allocation_attr) override;
-    void postDeallocation(void *ptr) override;
+    void preDeallocation(void *ptr) override;
 
 private:
     std::string m_sessHandle;
