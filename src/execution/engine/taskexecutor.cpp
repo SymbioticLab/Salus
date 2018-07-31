@@ -183,7 +183,7 @@ void TaskExecutor::scheduleLoop()
                 // DCHECK(item->tickets.empty());
 
                 // Fix the addedSessionBegin iterator if we are to delete it
-                if (*changeset.addedSessionBegin == sess) {
+                if (changeset.addedSessionBegin != changeset.addedSessionEnd && *changeset.addedSessionBegin == sess) {
                     ++changeset.addedSessionBegin;
                 }
             }
