@@ -19,6 +19,8 @@ from functools import partial
 import os
 import numpy as np
 import matplotlib.pyplot as plt
+import plotutils as pu
+import itertools
 
 def _process_line_paral(line, event_set_filter):
     line = line.rstrip('\n')
@@ -109,8 +111,17 @@ def load_mem(path):
 
 def calc_cumsum(df):
     cs = df.Size * df.Sign
-    cs = cs.cumsum() / 1024 / 1024
+    cs = cs.cumsum()
     return cs
+
+def normalize_time(df, offset=None):
+    df = df.set_index('timestamp')
+
+    if offset is None:
+        offset = df.index[0]
+    df.index = (df.index - offset) / pd.Timedelta(microseconds=1)
+    
+    return df, offset
 
     
 def plot_cs(cs, **kwargs):
@@ -118,65 +129,53 @@ def plot_cs(cs, **kwargs):
     return ax
 
 
-def plot_mem(df, marker=False, offset=None, **kwargs):
-    df = df.set_index('timestamp')
-    if marker:
-        if offset is None:
-            offset = df.index[0]
-        df.index = (df.index - offset) / pd.Timedelta(microseconds=1)
-    elif offset is not None:
-        df.index = (df.index - offset) / pd.Timedelta(microseconds=1)
+def plot_marker(df, cs, **kwargs):
+    css = df.reset_index()
+    ax = css.plot(kind='scatter', x='timestamp', y=cs, c='Sign',
+                  cmap=plt.cm.get_cmap('bwr'), **kwargs)
+    return ax
+
+
+def plot_mem(df, marker=False, offset=None, return_offset=False, **kwargs):        
+    df, offset = normalize_time(df, offset)
     
     cumsum = calc_cumsum(df)
     ax = plot_cs(cumsum, **kwargs)
     if marker:
-        css = df.reset_index()
-        ax = css.plot(kind='scatter', x='timestamp', y=cumsum, c='evt',
-                      cmap=plt.cm.get_cmap('bwr'), ax=ax)
+        ax = plot_marker(df, cumsum, ax=ax)
+    pu.cleanup_axis_bytes(ax.yaxis)
+    
+    if return_offset:
+        return ax, offset
     return ax
 
 
-def plot_mem_persess(df, marker=False, offset=None, fill=False, sessaxs=None, **kwargs):
-    cs = df.set_index('timestamp')
-    if marker:
-        if offset is None:
-            offset = cs.index[0]
-        cs.index = (cs.index - offset) / pd.Timedelta(microseconds=1)
-    elif offset is not None:
-        cs.index = (cs.index - offset) / pd.Timedelta(microseconds=1)
+def plot_mem_persess(df, marker=False, offset=None, sessaxs=None, merge=True, **kwargs):
+    
 
+    sesses = df.Sess.unique()
+    
     if sessaxs is None:
-        _, axs = plt.subplots(nrows=len(cs.Sess.unique()), sharex=True,
-                              squeeze=False)
-        axs = axs.flatten()
         sessaxs = {}
-    for idx, (sess, dfsess) in enumerate(cs.groupby('Sess')):
-        if sess not in sessaxs:
-            ax = axs[idx]
+        numAx = 1 if merge else len(sesses)
+        _, axs = plt.subplots(nrows=numAx, sharex=True, squeeze=False)
+        axs = axs.flatten()
+        for sess, ax in zip(sesses, itertools.cycle(axs)):
             sessaxs[sess] = ax
-        else:
-            ax = sessaxs[sess]
+
+    # check each sess must have an entry in sessaxs
+    for sess in sesses:
+        assert sess in sessaxs
             
-        act = dfsess.evt * dfsess.Size
-        act = act.cumsum() / 1024 / 1024
-        
-        if fill:
-            # fill nans
-            act = pd.DataFrame(act).reset_index()
-            nans = np.where(np.empty_like(act.values), np.nan, np.nan)
-            data = np.hstack([nans, act.values]).reshape(-1, act.shape[1])
-            act = pd.DataFrame(data, columns=act.columns)
-            act[0] = act[0].ffill()
-            act['timestamp'] = act['timestamp'].bfill()
-            act = act.set_index('timestamp').dropna()
-        
-        plot_cs(act, ax=ax, **kwargs)
-        if marker:
-            css = dfsess.reset_index()
-            ax = css.plot(kind='scatter',
-                          x=dfsess.timestamp, y=act, c=dfsess.evt,
-                          cmap=plt.cm.get_cmap('bwr'), ax=ax)
+    offset = None
+    for sess, dfsess in df.groupby('Sess'):
+        ax = sessaxs[sess]
+
+        _, offset = plot_mem(dfsess, marker, offset=offset, return_offset=True,
+                             ax=ax, label=sess)
+        ax.legend()
     return sessaxs
+
 
 def plot_compute_timeline(step, ax=None, **kwargs):
         checkpoints = tf_events
