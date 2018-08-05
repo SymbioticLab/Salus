@@ -7,6 +7,7 @@ from matplotlib import transforms as mtransforms
 import matplotlib.pyplot as plt
 from matplotlib.dates import SECONDLY, rrulewrapper, RRuleLocator, DateFormatter
 from matplotlib.ticker import MultipleLocator, MaxNLocator, FuncFormatter, AutoMinorLocator, Locator, Base
+from matplotlib.collections import LineCollection
 
 from contextlib import contextmanager
 from os.path import getsize, basename
@@ -134,19 +135,19 @@ class BytesLocator(Locator):
     def __init__(self, maxn=15, minn=3):
         self._maxn = maxn
         self._minn = minn
-    
+
     def set_params(self, maxn=None, minn=None):
         """Set parameters within this locator."""
         if maxn is not None:
             self._maxn = maxn
         if minn is not None:
             self._minn = minn
-            
+
     def __call__(self):
         'Return the locations of the ticks'
         vmin, vmax = self.axis.get_view_interval()
         return self.tick_values(vmin, vmax)
-    
+
     def _select_base(self, vdmin, vdmax):
         interval = abs(vdmax - vdmin)
         scale = 0
@@ -154,28 +155,28 @@ class BytesLocator(Locator):
             scale += 1
         scale -= 1
         base = 1024 ** scale
-        
+
         # scale down one level for cases like interval = 1.1TB, and base is 1TB
         if interval // base < self._minn:
             scale -= 1
             base = 1024 ** scale
-        
+
         # use a similar logic as MaxNLocator to determin the factor on base
         good_factors = [1, 2, 4, 8, 16, 32, 64, 128, 256, 512]
         for factor in good_factors:
             assert factor < 1024
             if interval // (factor * base) <= self._maxn:
                 return Base(factor * base)
-        
+
         # should not happen
         return Base(base * 1024)
 
     def tick_values(self, vmin, vmax):
         if vmax < vmin:
             vmin, vmax = vmax, vmin
-        
+
         base = self._select_base(vmin, vmax)
-        
+
         vmin = base.ge(vmin)
         base = base.get_base()
         n = (vmax - vmin + 0.001 * base) // base
@@ -213,7 +214,7 @@ def cleanup_axis_bytes(axis):
     #while interval // base > 5:
     #    base += 1024 ** scale
     #locator = MultipleLocator(base=base)
-    
+
     locator = BytesLocator(maxn=10)
 
     axis.set_major_locator(locator)
@@ -240,44 +241,118 @@ def cleanup_axis_datetime(axis):
     return axis
 
 
-def axhlines(ys, **plot_kwargs):
+def axhlines(ys, xmin=0, xmax=1, **kwargs):
     """
     Draw horizontal lines across plot
-    :param ys: A scalar, list, or 1D array of vertical offsets
-    :param plot_kwargs: Keyword arguments to be passed to plot
-    :return: The plot object corresponding to the lines.
+    :param ys: A scalar, list, or 1D array of y position in data coordinates
+        of the horizontal line.
+    :param xmin: A scalar, list, or 1D array. Should be between 0 and 1,
+        0 being the far left of the plot, 1 the far right of the plot.
+    :param xmax: A scalar, list, or 1D array. Should be between 0 and 1,
+        0 being the far left of the plot, 1 the far right of the plot.
+    :param kwargs: Valid kwargs are
+        :class:`~matplotlib.collections.LineCollection` properties, with the
+        exception of 'transform'.
+    :return: The LineCollection object corresponding to the lines.
     """
-    if 'ax' in plot_kwargs:
-        ax = plot_kwargs['ax']
-        del plot_kwargs['ax']
-    else:
-        ax = plt.gca()
+    if "transform" in kwargs:
+        raise ValueError("'transform' is not allowed as a kwarg;"
+                         + "axhlines generates its own transform.")
+
+    # prepare data
     ys = np.array((ys, ) if np.isscalar(ys) else ys, copy=False)
-    lims = ax.get_xlim()
-    y_points = np.repeat(ys[:, None], repeats=3, axis=1).flatten()
-    x_points = np.repeat(np.array(lims + (np.nan, ))[None, :], repeats=len(ys), axis=0).flatten()
-    plot = ax.plot(x_points, y_points, scalex=False, **plot_kwargs)
-    return plot
+    xmins = np.array((xmin, ) if np.isscalar(xmin) else xmin, copy=False)
+    xmaxs = np.array((xmax, ) if np.isscalar(xmax) else xmax, copy=False)
 
+    if len(ys) > 1:
+        if len(xmins) == 1:
+            xmins = np.repeat(xmins, len(ys))
+        if len(xmaxs) == 1:
+            xmaxs = np.repeat(xmaxs, len(ys))
 
-def axvlines(xs, **plot_kwargs):
-    """
-    Draw vertical lines on plot
-    :param xs: A scalar, list, or 1D array of horizontal offsets
-    :param plot_kwargs: Keyword arguments to be passed to plot
-    :return: The plot object corresponding to the lines.
-    """
-    if 'ax' in plot_kwargs:
-        ax = plot_kwargs['ax']
-        del plot_kwargs['ax']
-    else:
+    if len(xmins) != len(xmaxs) or len(xmins) != len(ys):
+        raise ValueError("Incompatible data")
+
+    # prepare the ax
+    ax = kwargs.pop('ax', None)
+    if ax is None:
         ax = plt.gca()
+
+    # prepare colors
+    colors = kwargs.pop('colors', None)
+    if colors is None:
+        cycle_props = next(ax._get_lines.prop_cycler)
+        colors = cycle_props.pop('color', None)
+
+    # prepare trans
+    trans = ax.get_yaxis_transform(which='grid')
+    # prepare lines
+    lines = [
+        ([xmin, y], [xmax, y])
+        for xmin, xmax, y in zip(xmins, xmaxs, ys)
+    ]
+    lc = LineCollection(lines, transform=trans, colors=colors, **kwargs)
+    ax.add_collection(lc)
+    ax.autoscale_view(scalex=False, scaley=True)
+
+    return lc
+
+
+def axvlines(xs, ymin=0, ymax=1, **kwargs):
+    """
+    Draw vertical lines across plot
+    :param xs: A scalar, list, or 1D array of x position in data coordinates
+        of the horizontal line.
+    :param ymin: A scalar, list, or 1D array. Should be between 0 and 1,
+        0 being the bottom of the plot, 1 the top of the plot.
+    :param ymax: A scalar, list, or 1D array. Should be between 0 and 1,
+        0 being the bottom of the plot, 1 the top of the plot.
+    :param kwargs: Valid kwargs are
+        :class:`~matplotlib.collections.LineCollection` properties, with the
+        exception of 'transform'.
+    :return: The LineCollection object corresponding to the lines.
+    """
+    if "transform" in kwargs:
+        raise ValueError("'transform' is not allowed as a kwarg;"
+                         + "axvlines generates its own transform.")
+
+    # prepare data
     xs = np.array((xs, ) if np.isscalar(xs) else xs, copy=False)
-    lims = ax.get_ylim()
-    x_points = np.repeat(xs[:, None], repeats=3, axis=1).flatten()
-    y_points = np.repeat(np.array(lims + (np.nan, ))[None, :], repeats=len(xs), axis=0).flatten()
-    plot = ax.plot(x_points, y_points, scaley=False, **plot_kwargs)
-    return plot
+    ymins = np.array((ymin, ) if np.isscalar(ymin) else ymin, copy=False)
+    ymaxs = np.array((ymax, ) if np.isscalar(ymax) else ymax, copy=False)
+
+    if len(xs) > 1:
+        if len(ymins) == 1:
+            ymins = np.repeat(ymins, len(xs))
+        if len(ymaxs) == 1:
+            ymaxs = np.repeat(ymaxs, len(xs))
+
+    if len(ymins) != len(ymaxs) or len(ymins) != len(xs):
+        raise ValueError("Incompatible data")
+
+    # prepare the ax
+    ax = kwargs.pop('ax', None)
+    if ax is None:
+        ax = plt.gca()
+
+    # prepare colors
+    colors = kwargs.pop('colors', None)
+    if colors is None:
+        cycle_props = next(ax._get_lines.prop_cycler)
+        colors = cycle_props.pop('color', None)
+
+    # prepare trans
+    trans = ax.get_xaxis_transform(which='grid')
+    # prepare lines
+    lines = [
+        ([x, ymin], [x, ymax])
+        for x, ymin, ymax in zip(xs, ymins, ymaxs)
+    ]
+    lc = LineCollection(lines, transform=trans, colors=colors, **kwargs)
+    ax.add_collection(lc)
+    ax.autoscale_view(scalex=True, scaley=False)
+
+    return lc
 
 
 @contextmanager
@@ -304,7 +379,7 @@ def pbopen(filename):
 
     with open(filename) as fd:
         yield wrapped_line_iterator(fd)
-        
+
 def cdf(X, ax=None, **kws):
     if ax is None:
         _, ax = plt.subplots()
@@ -321,16 +396,16 @@ class DraggableLine:
         self.c = ax.get_figure().canvas
         self.o = orientation
         self.XorY = XorY
-        
+
         lineArgs = {
             'picker': 5
         }
         lineArgs.update(kwargs)
 
         if orientation == "h":
-            self.line = plt.axhline(self.ax, self.XorY, **lineArgs)
+            self.line = self.ax.axhline(self.XorY, **lineArgs)
         elif orientation == "v":
-            self.line = plt.axvline(self.ax, self.XorY, **lineArgs)
+            self.line = self.ax.axvline(self.XorY, **lineArgs)
         else:
             assert False
 
@@ -367,6 +442,6 @@ class DraggableLine:
 def draggable_line(data, orientation='h', ax=None, **kwargs):
     if ax is None:
         ax = plt.gca()
-    
+
     dline = DraggableLine(ax, orientation, data)
     return dline
