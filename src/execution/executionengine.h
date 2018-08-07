@@ -102,6 +102,7 @@ private:
     using BlockingQueues =
         boost::circular_buffer<std::pair<PSessionItem, boost::circular_buffer<IterationItem>>>;
     IterQueue m_iterQueue GUARDED_BY(m_mu);
+    std::atomic_int_fast64_t m_numExpensiveIterRunning {0};
     void scheduleIteration(IterationItem &&item);
 
     std::unique_ptr<std::thread> m_schedThread;
@@ -109,6 +110,7 @@ private:
     sstl::notification m_note_has_work;
 
     void scheduleLoop();
+    bool checkIter(IterationItem &iterItem, ExecutionContext &ectx);
     bool runIter(IterationItem &iterItem, ExecutionContext &ectx);
     bool maybeWaitForAWhile(size_t scheduled);
     void maybeWaitForWork(const BlockingQueues &blockingSessions, const IterQueue &iters, size_t scheduled);

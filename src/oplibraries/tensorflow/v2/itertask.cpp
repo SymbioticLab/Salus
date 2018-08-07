@@ -62,4 +62,8 @@ void IterTask::cancel()
     m_cm.StartCancel();
 }
 
+bool IterTask::isExpensive() const
+{
+    return m_impl.is_main_iter;
+}
 } // namespace salus::oplib::tensorflow

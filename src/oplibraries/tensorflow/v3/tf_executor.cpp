@@ -1956,6 +1956,7 @@ bool ExecutorState::NodeDone(const Status &s, const tf::Node *node, const Tagged
                                          {"graphId", impl_->graph_id_},
                                          {"mainIter", impl_->is_main_iter},
                                          {"stepId", step_id_},
+                                         {"status", s.ToString()},
                                      });
 
     // Schedule the ready nodes in 'ready'.
@@ -2418,6 +2419,11 @@ public:
     bool isCanceled() const override
     {
         return m_cm.IsCancelled();
+    }
+
+    bool isExpensive() const override
+    {
+        return m_impl.is_main_iter;
     }
 };
 

@@ -128,6 +128,20 @@ def load_iters(path, **kwargs):
     return df
 
 
+def load_comp(path, **kwargs):
+    events = ['queued', 'running', 'done']
+    df = load_generic(path, event_filters=events, **kwargs)
+
+    df = df.drop(['level', 'loc', 'entry_type', 'thread', 'type'],
+                 axis=1, errors='ignore')
+    df = df.dropna(how='all', axis=1)
+    
+    # fix column names
+    df = df.rename(columns={'Session': 'Sess'})
+
+    return df
+
+
 def calc_cumsum(df):
     cs = df.Size * df.Sign
     cs = cs.cumsum()
@@ -200,38 +214,15 @@ def plot_mem_persess(df, marker=False, offset=None,
         color = sesscolors[sess]
 
         _, offset = plot_mem(dfsess, marker, offset=offset, return_offset=True,
-                             ax=ax, label=sess, **kwargs)
+                             ax=ax, label=sess, color=color, **kwargs)
         ax.legend()
     return sessaxs
 
 
-def plot_iters(df, mainOnly=True, offset=None, return_offset=False, **kwargs):
-    if mainOnly:
-        df = df[df.MainIter]
+def plot_iters(df, y=0.8, mainOnly=True, offset=None, return_offset=False, **kwargs):
+    if 'transform' in kwargs:
+        raise ValueError("'transform' not allowed as we provide our own transform")
 
-    ax = kwargs.pop('ax', None)
-    if ax is None:
-        ax = plt.gca()
-
-    df, offset = normalize_time(df, offset)
-
-    # get all timestamp as xs
-    xs = df.index
-    # linestyles are set based on it's start or end
-    mapping = {
-        'start_iter': 'dashed',
-        'end_iter': 'solid'
-    }
-    linestyles = [mlines._get_dash_pattern(ls)
-                  for ls in df.evt.replace(mapping)]
-
-    lc = pu.axvlines(xs, linestyles=linestyles, ax=ax, **kwargs)
-    if return_offset:
-        return lc, offset
-    return lc
-
-
-def plot_iters2(df, y=0.8, mainOnly=True, offset=None, return_offset=False, **kwargs):
     if mainOnly:
         df = df[df.MainIter]
 
@@ -260,36 +251,42 @@ def plot_iters2(df, y=0.8, mainOnly=True, offset=None, return_offset=False, **kw
     sm = ax.scatter(xmin, y, marker='>', transform=trans, color=color)
     # end markers
     em = ax.scatter(xmax, y, marker='o', transform=trans, color=color)
+    return lc, sm, em
+
+
+def plot_comp(df, y=0.2, mainOnly=True, offset=None, return_offset=False, **kwargs):
+    if 'transform' in kwargs:
+        raise ValueError("'transform' not allowed as we provide our own transform")
+
+    # prepare data
+    if mainOnly:
+        df = df[df.MainIter]
+
+    df, offset = normalize_time(df, offset)
+    df = df.reset_index()
+    df = df.pivot_table(values='timestamp',
+                        index=['StepId', 'GraphId', 'Name', 'Type'],
+                        columns='evt', aggfunc='first').reset_index()
+    
+    # prepare args
+    ax = kwargs.pop('ax', None)
+    if ax is None:
+        ax = plt.gca()
+    linewidths = kwargs.pop('linewidths', 10)
+    
+    # set y as in axes coordinate
+    y = np.zeros_like(df.index) + y
+    trans = ax.get_xaxis_transform(which='grid')
+
+    lc = ax.hlines(y=y, xmin=df.running, xmax=df.done,
+                   transform=trans, linewidths=linewidths, **kwargs)
+
+    if return_offset:
+        return lc, offset
     return lc
 
 
-def plot_iters_persess(df, offset=None, sessaxs=None, merge=True,
-                       mainOnly=True, **kwargs):
-    sesses = df.Sess.unique()
-
-    if sessaxs is None:
-        sessaxs = {}
-        numAx = 1 if merge else len(sesses)
-        _, axs = plt.subplots(nrows=numAx, sharex=True, squeeze=False)
-        axs = axs.flatten()
-        for sess, ax in zip(sesses, itertools.cycle(axs)):
-            sessaxs[sess] = ax
-
-    # check each sess must have an entry in sessaxs
-    for sess in sesses:
-        assert sess in sessaxs
-
-    # seperate data for each session
-    for sess, dfsess in df.groupby('Sess'):
-        ax = sessaxs[sess]
-
-        lc, offset = plot_iters(dfsess, mainOnly, offset, ax=ax,
-                                return_offset=True, **kwargs)
-
-    return sessaxs
-
-
-def plot_mem_iters(alloc, iters, offset=None):
+def plot_all(alloc, iters, comp, offset=None):
     def groupby(df, col):
         return {
             g: df.loc[v].reset_index(drop=True)
@@ -298,8 +295,13 @@ def plot_mem_iters(alloc, iters, offset=None):
 
     galloc = groupby(alloc, 'Sess')
     giters = groupby(iters, 'Sess')
+    gcomp = groupby(comp, 'Sess')
 
-    if set(galloc.keys()) != set(giters.keys()):
+    def all_same_keys(*args):
+        L = [set(d.keys()) for d in args]
+        return all(x == L[0] for x in L)
+
+    if not all_same_keys(galloc, giters, gcomp):
         raise ValueError('Not the same set of sessions')
 
     sesses = galloc.keys()
@@ -308,22 +310,10 @@ def plot_mem_iters(alloc, iters, offset=None):
     for sess, color in zip(sesses, itertools.cycle(cycle)):
         salloc, offset = normalize_time(galloc[sess], offset)
         siters, offset = normalize_time(giters[sess], offset)
+        scomp, offset = normalize_time(gcomp[sess], offset)
 
         plot_mem(salloc, offset=offset, color=color)
-        plot_iters2(siters, y=iters_y, offset=offset, color=color)
+        plot_iters(siters, y=iters_y, offset=offset, color=color)
+        plot_comp(scomp, offset=offset, color=color)
         iters_y += 0.05
 
-
-def plot_compute_timeline(step, ax=None, **kwargs):
-        checkpoints = tf_events
-        step = step.copy()
-        # columns as unix timestamp in us
-        columns = [step[c].astype(np.int64) // 10**3 for c in checkpoints]
-        # with offset subtracted
-        offset = np.min([np.min(col) for col in columns])
-        columns = [col - offset for col in columns]
-
-        if ax is None:
-            _, ax = plt.subplots()
-        ax.hlines(y=np.zeros_like(columns[1]), xmin=columns[1], xmax=columns[2], linewidths=100)
-        return ax

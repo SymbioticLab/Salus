@@ -27,7 +27,9 @@ IterAllocTracker::IterAllocTracker(const ResourceTag &tag, size_t window, double
 
 bool IterAllocTracker::beginIter(AllocationRegulator::Ticket ticket, ResStats estimation, uint64_t currentUsage)
 {
-    CHECK(!m_holding);
+    if (m_holding) {
+        return false;
+    }
 
     m_ticket = ticket;
     if (m_numIters == 0) {

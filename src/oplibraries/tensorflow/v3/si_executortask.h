@@ -54,6 +54,11 @@ public:
     {
         return m_cm.IsCancelled();
     }
+
+    bool isExpensive() const override
+    {
+        return m_impl.is_main_iter;
+    }
 };
 
 class SIExecutorState

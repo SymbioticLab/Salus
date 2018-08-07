@@ -7,6 +7,8 @@
 
 #include "execution/scheduler/sessionitem.h"
 
+#include <functional>
+
 namespace salus {
 class OperationTask;
 class IterationContext
@@ -15,10 +17,14 @@ class IterationContext
     PSessionItem m_item;
     uint64_t m_graphId;
 
+    using DoneCallback = std::function<void ()>;
+    DoneCallback m_done;
+
 public:
-    IterationContext(TaskExecutor &engine, PSessionItem item)
-        : m_taskExec(engine)
+    IterationContext(TaskExecutor &taskExec, PSessionItem item, DoneCallback done)
+        : m_taskExec(taskExec)
         , m_item(std::move(item))
+        , m_done(std::move(done))
     {
     }
 

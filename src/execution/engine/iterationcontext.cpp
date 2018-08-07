@@ -23,6 +23,9 @@ void IterationContext::scheduleTask(std::unique_ptr<OperationTask> &&task)
 
 void IterationContext::finish()
 {
+    if (m_done) {
+        m_done();
+    }
     m_item->endIteration(m_graphId);
 }
 

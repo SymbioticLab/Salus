@@ -40,6 +40,8 @@ public:
     void cancel() override;
 
     bool isCanceled() const override;
+
+    bool isExpensive() const override;
 };
 
 } // namespace salus::oplib::tensorflow
