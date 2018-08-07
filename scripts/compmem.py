@@ -152,12 +152,12 @@ def normalize_time(df, offset=None):
     if 'timestamp' not in df:
         return df, offset
 
-    df = df.set_index('timestamp')
-
     if offset is None:
-        offset = df.index[0]
-    df.index = (df.index - offset) / pd.Timedelta(microseconds=1)
+        offset = df.timestamp[0]
+    df['timestamp'] = (df.timestamp - offset).dt.total_seconds()
 
+    df = df.set_index('timestamp')
+    
     return df, offset
 
 

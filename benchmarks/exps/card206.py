@@ -1,8 +1,8 @@
 # -*- coding: future_fstrings -*-
 """
-The iteration allocation peaks are overlapped with each other, see card#203
+The iteration finishing too late, see card#206
 
-Plot allocation and compute timeline
+Plot allocation and compute timeline, with iteration data
 
 Scheduler: fair
 Work conservation: True
