@@ -142,6 +142,13 @@ def load_comp(path, **kwargs):
     return df
 
 
+def load_all(path):
+    alloc = load_mem(path/'alloc.output')
+    iters = load_iters(path/'perf.output')
+    comp = load_comp(path/'perf.output')
+    return alloc, iters, comp
+
+    
 def calc_cumsum(df):
     cs = df.Size * df.Sign
     cs = cs.cumsum()
@@ -254,18 +261,16 @@ def plot_iters(df, y=0.8, mainOnly=True, offset=None, return_offset=False, **kwa
     return lc, sm, em
 
 
-def plot_comp(df, y=0.2, mainOnly=True, offset=None, return_offset=False, **kwargs):
+def plot_comp(df, y=0.2, separateY=False, offset=None, return_offset=False, **kwargs):
     if 'transform' in kwargs:
         raise ValueError("'transform' not allowed as we provide our own transform")
 
     # prepare data
-    if mainOnly:
-        df = df[df.MainIter]
-
     df, offset = normalize_time(df, offset)
     df = df.reset_index()
     df = df.pivot_table(values='timestamp',
-                        index=['StepId', 'GraphId', 'Name', 'Type'],
+                        index=['StepId', 'GraphId', 'Name',
+                               'Type', 'Device', 'MainIter'],
                         columns='evt', aggfunc='first').reset_index()
     
     # prepare args
@@ -275,7 +280,16 @@ def plot_comp(df, y=0.2, mainOnly=True, offset=None, return_offset=False, **kwar
     linewidths = kwargs.pop('linewidths', 10)
     
     # set y as in axes coordinate
-    y = np.zeros_like(df.index) + y
+    def calc_y(row):
+        if not separateY:
+            return y
+        base_y = y
+        if row['Device'] == '/job:salus/replica:0/task:0/device:GPU:0':
+            base_y += 0.3
+        if not row['MainIter']:
+            base_y -= 0.15
+        return base_y
+    y = df.apply(calc_y, axis=1)
     trans = ax.get_xaxis_transform(which='grid')
 
     lc = ax.hlines(y=y, xmin=df.running, xmax=df.done,
@@ -286,8 +300,10 @@ def plot_comp(df, y=0.2, mainOnly=True, offset=None, return_offset=False, **kwar
     return lc
 
 
-def plot_all(alloc, iters, comp, offset=None):
+def plot_all(alloc, iters=None, comp=None, offset=None):
     def groupby(df, col):
+        if df is None:
+            return None
         return {
             g: df.loc[v].reset_index(drop=True)
             for g, v in df.groupby('Sess').groups.items()
@@ -298,7 +314,7 @@ def plot_all(alloc, iters, comp, offset=None):
     gcomp = groupby(comp, 'Sess')
 
     def all_same_keys(*args):
-        L = [set(d.keys()) for d in args]
+        L = [set(d.keys()) for d in args if d is not None]
         return all(x == L[0] for x in L)
 
     if not all_same_keys(galloc, giters, gcomp):
@@ -307,13 +323,23 @@ def plot_all(alloc, iters, comp, offset=None):
     sesses = galloc.keys()
     cycle = plt.rcParams['axes.prop_cycle'].by_key()['color']
     iters_y = 0.5
+    comp_y = 0.4
     for sess, color in zip(sesses, itertools.cycle(cycle)):
         salloc, offset = normalize_time(galloc[sess], offset)
-        siters, offset = normalize_time(giters[sess], offset)
-        scomp, offset = normalize_time(gcomp[sess], offset)
-
-        plot_mem(salloc, offset=offset, color=color)
-        plot_iters(siters, y=iters_y, offset=offset, color=color)
-        plot_comp(scomp, offset=offset, color=color)
+        plot_mem(salloc, offset=offset, color=color, label=sess)
+        
+        if giters is not None:
+            siters, offset = normalize_time(giters[sess], offset)
+            plot_iters(siters, y=iters_y, offset=offset, color=color)
+        
+        if gcomp is not None:
+            scomp, offset = normalize_time(gcomp[sess], offset)
+            plot_comp(scomp, y=comp_y, offset=offset, color=color)
+        
         iters_y += 0.05
-
+        comp_y += 0.02
+    
+    ax = plt.gca()
+    pu.cleanup_axis_timedelta(ax.xaxis)
+    ax.xaxis.set_major_locator(pu.MaxNLocator(nbins=30))
+    ax.legend()

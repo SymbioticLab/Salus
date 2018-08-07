@@ -1354,6 +1354,7 @@ void ExecutorState::runAsync(std::shared_ptr<IterationContext> &&ictx) noexcept
                                              {"graphId", impl_->graph_id_},
                                              {"mainIter", impl_->is_main_iter},
                                              {"stepId", step_id_},
+                                             {"device", impl_->params_.device->name()},
                                          });
         ready.push_back(TaggedNode{n, root_frame_, 0, false});
     }
@@ -1486,6 +1487,7 @@ void ExecutorState::Process(TaggedNode tagged_node, tf::int64)
                                              {"graphId", impl_->graph_id_},
                                              {"mainIter", impl_->is_main_iter},
                                              {"stepId", step_id_},
+                                             {"device", device->name()},
                                          });
 
         Entry *input_tensors = GetInputTensors(input_frame, input_iter);
@@ -1893,6 +1895,7 @@ void ExecutorState::PropagateOutputs(const TaggedNode &tagged_node, const NodeIt
                                              {"graphId", impl_->graph_id_},
                                              {"mainIter", impl_->is_main_iter},
                                              {"stepId", step_id_},
+                                             {"device", impl_->params_.device->name()},
                                          });
     }
 
@@ -1957,6 +1960,7 @@ bool ExecutorState::NodeDone(const Status &s, const tf::Node *node, const Tagged
                                          {"mainIter", impl_->is_main_iter},
                                          {"stepId", step_id_},
                                          {"status", s.ToString()},
+                                         {"device", impl_->params_.device->name()},
                                      });
 
     // Schedule the ready nodes in 'ready'.
@@ -2020,19 +2024,6 @@ inline void ExecutorState::MaybeMarkCompleted(FrameState *frame, tf::int64 iter,
 
 void ExecutorState::Finish()
 {
-    mu_.lock();
-    auto status = status_;
-    auto done_cb = std::move(done_cb_);
-    auto runner = std::move(runner_);
-    auto ictx = std::move(ictx_);
-    mu_.unlock();
-    if (sync_on_finish_ && status.ok()) {
-        // Block until the device has finished all queued operations. For
-        // devices like GPUs that continue to execute Ops after their Compute
-        // methods have completed, this ensures that control is not returned to
-        // the user until the step (and its side-effects) has actually completed.
-        status = impl_->params_.device->Sync();
-    }
     LogOpTracing() << "event: end_iter "
                    << nlohmann::json({{"sess", impl_->params_.session},
                                       {"graphId", impl_->graph_id_},
@@ -2041,7 +2032,20 @@ void ExecutorState::Finish()
                                       {"memMap", TFInstance::instance().dumpGPUMemoryMap()}});
     if (impl_->is_main_iter) {
         impl_->params_.ins->dropExlusiveMode();
-        ictx->finish();
+        ictx_->finish();
+    }
+
+    mu_.lock();
+    auto status = status_;
+    auto done_cb = std::move(done_cb_);
+    auto runner = std::move(runner_);
+    mu_.unlock();
+    if (sync_on_finish_ && status.ok()) {
+        // Block until the device has finished all queued operations. For
+        // devices like GPUs that continue to execute Ops after their Compute
+        // methods have completed, this ensures that control is not returned to
+        // the user until the step (and its side-effects) has actually completed.
+        status = impl_->params_.device->Sync();
     }
     delete this;
     CHECK(done_cb != nullptr);
