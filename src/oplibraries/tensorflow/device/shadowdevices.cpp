@@ -110,6 +110,9 @@ void ForwardingAllocator::DeallocateRaw(void *ptr)
         nh = m_allocated.extract(ptr);
     }
     postDeallocation(ptr);
+    if (nh) {
+        Unref();
+    }
 }
 
 void ForwardingAllocator::postDeallocation(void *ptr)
@@ -164,6 +167,9 @@ void ForwardingAllocator::recordSize(void *ptr, size_t size)
         // No enough memory
         return;
     }
+    // Reference self for later deallocation
+    Ref();
+
     CHECK(m_allocated.emplace(ptr, size).second);
 }
 
