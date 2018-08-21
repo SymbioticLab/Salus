@@ -57,6 +57,7 @@ void *ForwardingAllocator::AllocateRaw(size_t alignment, size_t num_bytes)
     }
 
     auto ptr = m_base->AllocateRaw(alignment, num_bytes);
+    recordSize(ptr, num_bytes);
     postAllocation(ptr, alignment, num_bytes, {});
     return ptr;
 }
@@ -68,7 +69,7 @@ void *ForwardingAllocator::AllocateRaw(size_t alignment, size_t num_bytes,
         return nullptr;
     }
 
-    auto ptr = m_base->AllocateRaw(alignment, num_bytes);
+    auto ptr = m_base->AllocateRaw(alignment, num_bytes, allocation_attr);
     recordSize(ptr, num_bytes);
     postAllocation(ptr, alignment, num_bytes, allocation_attr);
     return ptr;
@@ -77,13 +78,15 @@ void *ForwardingAllocator::AllocateRaw(size_t alignment, size_t num_bytes,
 void ForwardingAllocator::postAllocation(void *ptr, size_t alignment, size_t num_bytes,
                                          const tf::AllocationAttributes &)
 {
-    LogAlloc() << "event: alloc "
-               << nlohmann::json({
-                      {"ptr", reinterpret_cast<uint64_t>(ptr)},
-                      {"size", num_bytes},
-                      {"alignment", alignment},
-                      {"allocator", Name()},
-                  });
+    if (ptr) {
+        LogAlloc() << "event: alloc "
+                   << nlohmann::json({
+                          {"ptr", reinterpret_cast<uint64_t>(ptr)},
+                          {"size", num_bytes},
+                          {"alignment", alignment},
+                          {"allocator", Name()},
+                      });
+    }
 }
 
 void ForwardingAllocator::preDeallocation(void *ptr)

@@ -102,11 +102,14 @@ public:
         std::function<sstl::ScopedUnref<ForwardingAllocator>(tf::Allocator *,
                                                              const tf::AllocatorAttributes &)>;
 
+    static tf::DeviceAttributes NewNameBase(const std::string &new_base, sstl::not_null<tf::Device *> base);
+
     static std::unique_ptr<ShadowDevice> NewShadowDevice(const std::string &new_base, sstl::not_null<tf::Device *> base,
-                                                         bool isolateSessionState = true, CreateWrapperAllocatorFn fn = NewForwardingAllocator);
+                                                         bool isolateSessionState = true, bool ownsBase = false,
+                                                         CreateWrapperAllocatorFn fn = NewForwardingAllocator);
 
     explicit ShadowDevice(sstl::not_null<tf::Device *> base, const tf::DeviceAttributes &attr,
-                          bool isolateSessionState, CreateWrapperAllocatorFn fn);
+                          bool isolateSessionState, bool ownsBase, CreateWrapperAllocatorFn fn);
 
     ~ShadowDevice() override;
 
@@ -157,6 +160,7 @@ protected:
 private:
     const sstl::not_null<tf::Device *> m_base;
     const bool m_isolate;
+    const bool m_ownsBase;
     const CreateWrapperAllocatorFn m_createWrapperAllocator;
 
     mutable std::mutex m_mu;
