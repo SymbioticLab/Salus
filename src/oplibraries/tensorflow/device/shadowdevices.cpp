@@ -26,7 +26,6 @@
 
 #include "oplibraries/tensorflow/device/shadowdevices.h"
 
-#include "shadowdevices.h"
 #include "utils/threadutils.h"
 
 namespace salus::oplib::tensorflow {

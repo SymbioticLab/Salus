@@ -26,8 +26,6 @@
 
 #include "oplibraries/tensorflow/device/sessionallocator.h"
 
-#include "sessionallocator.h"
-
 namespace salus::oplib::tensorflow {
 
 SessionAllocator::SessionAllocator(const std::string &sess, sstl::not_null<tf::Allocator *> base)
