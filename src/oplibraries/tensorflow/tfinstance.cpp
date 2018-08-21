@@ -20,7 +20,7 @@
 #include "tfinstance.h"
 #include "execution/executionengine.h"
 #include "oplibraries/tensorflow/device/salusdevices.h"
-#include "oplibraries/tensorflow/device/gpu.h"
+#include "oplibraries/tensorflow/device/gpu/gpu.h"
 #include "oplibraries/tensorflow/tfexception.h"
 #include "oplibraries/tensorflow/tfsession.h"
 #include "utils/macros.h"

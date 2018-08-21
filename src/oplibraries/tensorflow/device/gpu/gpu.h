@@ -29,12 +29,18 @@ public:
 
     tf::Allocator *GetAllocator(tf::AllocatorAttributes attr) override;
 
+    Status Sync() override;
+
     bool RequiresRecordingAccessedTensors() const override;
+
+    Status FillContextMap(const tf::Graph *graph, std::vector<tf::DeviceContext *> *device_context_map) override;
 
     void flushCacheFor(sstl::not_null<const tf::Graph *> graph) override;
 
     std::shared_ptr<PerTaskDevice> createPerTaskDevice(sstl::not_null<const tf::Graph *> graph,
                                                        std::unique_ptr<ResourceContext> &&rctx) override;
+
+    std::unique_ptr<ShadowDevice> createSessionDevice(std::string newBaseName, std::string sessHandle) override;
 
     tf::Device &as_tfdevice() override
     {

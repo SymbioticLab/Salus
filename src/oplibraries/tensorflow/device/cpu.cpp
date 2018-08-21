@@ -3,10 +3,14 @@
 //
 
 #include "oplibraries/tensorflow/tensorflow_headers.h"
+
 #include "oplibraries/tensorflow/device/cpu.h"
+
 #include "execution/executionengine.h"
-#include "utils/threadutils.h"
+#include "oplibraries/tensorflow/device/shadowdevices.h"
+#include "oplibraries/tensorflow/device/sessionallocator.h"
 #include "utils/objectpool.h"
+#include "utils/threadutils.h"
 
 namespace salus::oplib::tensorflow {
 
@@ -24,9 +28,8 @@ public:
     }
 };
 
-SalusCPUDevice::SalusCPUDevice(const tf::SessionOptions &options, const std::string &name,
-                               tf::Bytes memory_limit, const tf::DeviceLocality &locality,
-                               tf::Allocator *allocator)
+SalusCPUDevice::SalusCPUDevice(const tf::SessionOptions &options, const std::string &name, tf::Bytes memory_limit,
+                               const tf::DeviceLocality &locality, tf::Allocator *allocator)
     : LocalDevice(options, tf::Device::BuildDeviceAttributes(name, tf::DEVICE_CPU, memory_limit, locality))
     , m_allocator(allocator)
     , m_pool(std::make_shared<sstl::ObjectPool<PerTaskCPUDevice>>())
@@ -52,8 +55,7 @@ Status SalusCPUDevice::MakeTensorFromProto(const tf::TensorProto &tensor_proto,
             return Status::OK();
         }
     }
-    return tf::errors::InvalidArgument("Cannot parse tensor from proto: ",
-                                       tf::ProtoDebugString(tensor_proto));
+    return tf::errors::InvalidArgument("Cannot parse tensor from proto: ", tf::ProtoDebugString(tensor_proto));
 }
 
 std::shared_ptr<PerTaskDevice> SalusCPUDevice::createPerTaskDevice(sstl::not_null<const tf::Graph *> graph,
@@ -61,6 +63,13 @@ std::shared_ptr<PerTaskDevice> SalusCPUDevice::createPerTaskDevice(sstl::not_nul
 {
     UNUSED(graph);
     return m_pool->acquire(this, std::move(rctx));
+}
+
+std::unique_ptr<ShadowDevice> SalusCPUDevice::createSessionDevice(std::string newBaseName, std::string sessHandle)
+{
+    return ShadowDevice::NewShadowDevice(newBaseName, this, true, false, [sessHandle = std::move(sessHandle)](auto alloc, auto){
+        return sstl::make_scoped_unref<SessionAllocator>(sessHandle, alloc);
+    });
 }
 
 Status SalusCPUDeviceFactory::CreateDevices(const tf::SessionOptions &options, const std::string &name_prefix,

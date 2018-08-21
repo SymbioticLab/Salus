@@ -31,11 +31,10 @@ namespace tensorflow {
 class Device;
 } // namespace tensorflow
 
-class ResourceContext;
-
 namespace salus::oplib::tensorflow {
 
 class PerTaskDevice;
+class ShadowDevice;
 /**
  * @brief We use an extension to tensorflow devices.
  *
@@ -50,6 +49,8 @@ public:
 
     virtual std::shared_ptr<PerTaskDevice> createPerTaskDevice(sstl::not_null<const tf::Graph *> g,
                                                                std::unique_ptr<ResourceContext> &&rctx) = 0;
+
+    virtual std::unique_ptr<ShadowDevice> createSessionDevice(std::string newBaseName, std::string sessHandle) = 0;
 
     /**
      * @brief Get the tf::Device instance

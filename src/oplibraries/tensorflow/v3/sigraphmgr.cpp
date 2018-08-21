@@ -4,8 +4,9 @@
 
 #include "oplibraries/tensorflow/v3/sigraphmgr.h"
 
+#include "oplibraries/tensorflow/device/salusdevices.h"
 #include "oplibraries/tensorflow/device/shadowdevices.h"
-#include "oplibraries/tensorflow/device/sessionallocator.h"
+#include "oplibraries/tensorflow/tfexception.h"
 #include "oplibraries/tensorflow/tfutils.h"
 #include "oplibraries/tensorflow/v3/si_executor.h"
 #include "oplibraries/tensorflow/v3/tf_executor.h"
@@ -13,8 +14,7 @@
 
 namespace salus::oplib::tensorflow {
 
-SIGraphMgr::SIGraphMgr(const tf::WorkerEnv *env, tf::DeviceMgr *mgr,
-                       std::shared_ptr<ExecutionContext> execCtx)
+SIGraphMgr::SIGraphMgr(const tf::WorkerEnv *env, tf::DeviceMgr *mgr, std::shared_ptr<ExecutionContext> execCtx)
     : GraphMgr(env, mgr)
     , m_execCtx(std::move(execCtx))
 {
@@ -29,9 +29,9 @@ SIGraphMgr::~SIGraphMgr()
     table_.clear();
 }
 
-Status SIGraphMgr::Register(const std::string &session, const tf::GraphDef &gdef,
-                            const tf::GraphOptions &graph_options, const tf::DebugOptions &debug_options,
-                            tf::DistributedFunctionLibraryRuntime *cluster_flr, std::string *handle)
+Status SIGraphMgr::Register(const std::string &session, const tf::GraphDef &gdef, const tf::GraphOptions &graph_options,
+                            const tf::DebugOptions &debug_options, tf::DistributedFunctionLibraryRuntime *cluster_flr,
+                            std::string *handle)
 {
     auto item = sstl::make_scoped_unref<Item>();
     std::string tempHandle;
@@ -54,8 +54,7 @@ Status SIGraphMgr::Register(const std::string &session, const tf::GraphDef &gdef
 }
 
 tf::Status SIGraphMgr::InitSIItem(const std::string &session, const tf::GraphDef &gdef,
-                                  const tf::GraphOptions &graph_options,
-                                  const tf::DebugOptions &debug_options,
+                                  const tf::GraphOptions &graph_options, const tf::DebugOptions &debug_options,
                                   tf::DistributedFunctionLibraryRuntime *cluster_flr, Item &item)
 {
     item.session = session;
@@ -67,10 +66,9 @@ tf::Status SIGraphMgr::InitSIItem(const std::string &session, const tf::GraphDef
         TF_RETURN_IF_ERROR(tf::graph::ValidateGraphDef(gdef, *item.lib_def));
     }
 
-    item.proc_flr =
-        std::make_unique<tf::ProcessFunctionLibraryRuntime>(device_mgr_, worker_env_->env,
-                                                            gdef.versions().producer(), item.lib_def.get(),
-                                                            graph_options.optimizer_options(), cluster_flr);
+    item.proc_flr = std::make_unique<tf::ProcessFunctionLibraryRuntime>(device_mgr_, worker_env_->env,
+                                                                        gdef.versions().producer(), item.lib_def.get(),
+                                                                        graph_options.optimizer_options(), cluster_flr);
 
     // Constructs the graph out of "gdef"
     tf::Graph graph(tf::OpRegistry::Global());
@@ -202,8 +200,7 @@ tf::Status SIGraphMgr::InitSIItem(const std::string &session, const tf::GraphDef
             // using `CallOp`) between subgraphs, because `CallOp::handle_`
             // is tied to a particular subgraph. Even if the function itself
             // is stateful, the `CallOp` that invokes it is not.
-            if (!lib->IsStateful(ndef.op())
-                || lib->GetFunctionLibraryDefinition()->Find(ndef.op()) != nullptr) {
+            if (!lib->IsStateful(ndef.op()) || lib->GetFunctionLibraryDefinition()->Find(ndef.op()) != nullptr) {
                 return lib->CreateKernel(ndef, kernel);
             }
             auto create_fn = [lib, &ndef](tf::OpKernel **kernel) { return lib->CreateKernel(ndef, kernel); };
@@ -226,8 +223,8 @@ tf::Status SIGraphMgr::InitSIItem(const std::string &session, const tf::GraphDef
             TF_RETURN_IF_ERROR(DecorateAndPublishGraphForDebug(debug_options, subgraph.get(), params.device));
         }
 
-        TF_RETURN_IF_ERROR(tf::EnsureMemoryTypes(tf::DeviceType(unit.device->device_type()),
-                                                 unit.device->name(), subgraph.get()));
+        TF_RETURN_IF_ERROR(
+            tf::EnsureMemoryTypes(tf::DeviceType(unit.device->device_type()), unit.device->name(), subgraph.get()));
         unit.graph = subgraph.get();
         unit.build_cost_model = graph_options.build_cost_model();
         if (unit.build_cost_model > 0) {
@@ -243,19 +240,14 @@ tf::Status SIGraphMgr::InitSIItem(const std::string &session, const tf::GraphDef
 CreateWorkerSessionFn GetCreateWorkerSessionFnForSIGraphMgr(const std::string &worker_name,
                                                             const tf::WorkerEnv *worker_env,
                                                             std::shared_ptr<ExecutionContext> execCtx,
-                                                            const tf::ConfigProto &config)
+                                                            const tf::ConfigProto &)
 {
-    UNUSED(config);
-
     return [=, ctx = std::move(execCtx)](const auto &sessHandle) {
         // Create shadow devices for isolated sessions, deviceMgr owns the passed in devices
         std::vector<tf::Device *> renamedDevices;
-        const bool isolateSessionState = true;
         for (auto d : worker_env->local_devices) {
-            renamedDevices.push_back(
-                ShadowDevice::NewShadowDevice(worker_name, sstl::not_null{d}, isolateSessionState, [sessHandle](auto alloc, auto) {
-                    return sstl::make_scoped_unref<SessionAllocator>(sessHandle, sstl::not_null{alloc});
-                }).release());
+            auto sd = ISalusDevice::safe_cast(d);
+            renamedDevices.push_back(sd->createSessionDevice(worker_name, sessHandle).release());
         }
         auto deviceMgr = std::make_unique<tf::DeviceMgr>(renamedDevices);
         auto graphMgr = std::make_unique<SIGraphMgr>(worker_env, deviceMgr.get(), ctx);

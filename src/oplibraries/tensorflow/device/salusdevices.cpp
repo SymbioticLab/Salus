@@ -21,7 +21,7 @@
 #include "oplibraries/tensorflow/device/salusdevices.h"
 #include "execution/engine/resourcecontext.h"
 #include "oplibraries/tensorflow/device/cpu.h"
-#include "oplibraries/tensorflow/device/gpu.h"
+#include "oplibraries/tensorflow/device/gpu/gpu.h"
 #include "oplibraries/tensorflow/tfexception.h"
 #include "utils/threadutils.h"
 
