@@ -41,6 +41,9 @@ SessionAllocator::~SessionAllocator() = default;
 void SessionAllocator::postAllocation(void *ptr, size_t alignment, size_t num_bytes,
                                       const tf::AllocationAttributes &)
 {
+    if (!ptr) {
+        return;
+    }
     LogAlloc() << "event: alloc "
                << nlohmann::json({
                       {"ptr", reinterpret_cast<uint64_t>(ptr)},
