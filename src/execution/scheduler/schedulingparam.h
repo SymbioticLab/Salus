@@ -5,6 +5,7 @@
 #ifndef SALUS_EXEC_SCHED_SCHEDULINGPARAM_H
 #define SALUS_EXEC_SCHED_SCHEDULINGPARAM_H
 
+#include <cstdint>
 #include <string>
 
 namespace salus {

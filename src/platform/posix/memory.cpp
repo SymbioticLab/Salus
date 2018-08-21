@@ -19,7 +19,7 @@
 
 #include "platform/memory.h"
 
-#include "config.h"
+#include "config.h" // IWYU: keep
 
 #include <cstdlib>
 

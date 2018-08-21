@@ -19,8 +19,10 @@
 #ifndef SALUS_SSTL_CPP17_H
 #define SALUS_SSTL_CPP17_H
 
+#include <stdexcept>
 #include <string>
 #include <system_error>
+#include <type_traits>
 #include <utility>
 
 namespace sstl {

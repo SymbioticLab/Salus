@@ -5,11 +5,13 @@
 #ifndef SALUS_PLATFORM_PROFILER_H
 #define SALUS_PLATFORM_PROFILER_H
 
-#include "config.h"
-#include <utils/envutils.h>
-#include "platform/logging.h"
+#include "config.h" // IWYU: keep
 
 #if defined(WITH_GPERFTOOLS)
+
+#include "utils/envutils.h"
+#include "platform/logging.h"
+
 #include <gperftools/profiler.h>
 
 class ScopedProfiling

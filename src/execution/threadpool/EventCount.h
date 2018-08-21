@@ -52,7 +52,7 @@
 class EventCount
 {
 public:
-    class Waiter;
+    struct Waiter;
 
     explicit EventCount(std::vector<Waiter> &waiters)
         : waiters_(waiters)
