@@ -1330,6 +1330,7 @@ void ExecutorState::runAsync(std::shared_ptr<IterationContext> &&ictx) noexcept
                           {"stepId", step_id_},
                           {"mainIter", impl_->is_main_iter},
                           {"graphId", impl_->graph_id_},
+                          {"device", impl_->params_.device->name()},
                       });
 
     const tf::Graph *graph = impl_->graph_.get();
@@ -1722,12 +1723,6 @@ Status ExecutorState::ProcessOutputs(const NodeItem &item, tf::OpKernelContext *
         return s;
     }
 
-    // Get the device_context for this node id, if it exists.
-    tf::DeviceContext *device_context = nullptr;
-    if (static_cast<size_t>(node->id()) < device_context_map_.size()) {
-        device_context = device_context_map_[node->id()];
-    }
-
     // Experimental: debugger (tfdb) access to intermediate node completion.
     if (item.num_outputs == 0 && impl_->params_.node_outputs_cb != nullptr) {
         // If the node has no output, invoke the callback with output slot set to
@@ -1747,7 +1742,7 @@ Status ExecutorState::ProcessOutputs(const NodeItem &item, tf::OpKernelContext *
             Entry *out = &((*outputs)[i]);
 
             // Set the device context of the output entry.
-            out->device_context = device_context;
+            out->device_context = ctx->op_device_context();
 
             // Set the allocator attributes of the output entry.
             out->alloc_attr = ctx->output_alloc_attr(i);
@@ -2024,17 +2019,6 @@ inline void ExecutorState::MaybeMarkCompleted(FrameState *frame, tf::int64 iter,
 
 void ExecutorState::Finish()
 {
-    LogOpTracing() << "event: end_iter "
-                   << nlohmann::json({{"sess", impl_->params_.session},
-                                      {"graphId", impl_->graph_id_},
-                                      {"stepId", step_id_},
-                                      {"mainIter", impl_->is_main_iter},
-                                      {"memMap", TFInstance::instance().dumpGPUMemoryMap()}});
-    if (impl_->is_main_iter) {
-        impl_->params_.ins->dropExlusiveMode();
-        ictx_->finish();
-    }
-
     mu_.lock();
     auto status = status_;
     auto done_cb = std::move(done_cb_);
@@ -2047,6 +2031,19 @@ void ExecutorState::Finish()
         // the user until the step (and its side-effects) has actually completed.
         status = impl_->params_.device->Sync();
     }
+
+    LogOpTracing() << "event: end_iter "
+                   << nlohmann::json({{"sess", impl_->params_.session},
+                                      {"graphId", impl_->graph_id_},
+                                      {"stepId", step_id_},
+                                      {"mainIter", impl_->is_main_iter},
+                                      {"device", impl_->params_.device->name()},
+                                      {"memMap", TFInstance::instance().dumpGPUMemoryMap()}});
+    if (impl_->is_main_iter) {
+        impl_->params_.ins->dropExlusiveMode();
+        ictx_->finish();
+    }
+
     delete this;
     CHECK(done_cb != nullptr);
     runner([=]() {
