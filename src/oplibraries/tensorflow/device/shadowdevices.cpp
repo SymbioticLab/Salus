@@ -164,10 +164,7 @@ void ForwardingAllocator::recordSize(void *ptr, size_t size)
     CHECK(m_allocated.emplace(ptr, size).second);
 }
 
-/*static*/ std::unique_ptr<ShadowDevice> ShadowDevice::NewShadowDevice(const std::string &new_base,
-                                                                       sstl::not_null<tf::Device *> base,
-                                                                       bool isolateSessionState,
-                                                                       CreateWrapperAllocatorFn fn)
+/*static*/ tf::DeviceAttributes ShadowDevice::NewNameBase(const std::string &new_base, sstl::not_null<tf::Device *> base)
 {
     tf::DeviceNameUtils::ParsedName parsed_name;
     CHECK(tf::DeviceNameUtils::ParseFullName(new_base, &parsed_name));
@@ -180,14 +177,25 @@ void ForwardingAllocator::recordSize(void *ptr, size_t size)
                                               parsed_name.type, parsed_name.id);
     auto attributes = base->attributes();
     attributes.set_name(name);
-    return std::make_unique<ShadowDevice>(base, attributes, isolateSessionState, std::move(fn));
+
+    return attributes;
+}
+
+/*static*/ std::unique_ptr<ShadowDevice> ShadowDevice::NewShadowDevice(const std::string &new_base,
+                                                                       sstl::not_null<tf::Device *> base,
+                                                                       bool isolateSessionState,
+                                                                       bool ownsBase,
+                                                                       CreateWrapperAllocatorFn fn)
+{
+    return std::make_unique<ShadowDevice>(base, NewNameBase(new_base, base), isolateSessionState, ownsBase, std::move(fn));
 }
 
 ShadowDevice::ShadowDevice(sstl::not_null<tf::Device *> base, const tf::DeviceAttributes &attr,
-                           bool isolateSessionState, CreateWrapperAllocatorFn fn)
+                           bool isolateSessionState, bool ownsBase, CreateWrapperAllocatorFn fn)
     : Device(base->env(), attr)
     , m_base(base)
     , m_isolate(isolateSessionState)
+    , m_ownsBase(ownsBase)
     , m_createWrapperAllocator(std::move(fn))
 {
     CHECK(m_createWrapperAllocator != nullptr);
@@ -211,6 +219,10 @@ ShadowDevice::~ShadowDevice()
     resource_manager()->Clear();
     // Then clear allocator wrappers
     clearWrapperCache();
+
+    if (m_ownsBase) {
+        delete m_base.get();
+    }
 }
 
 tf::Allocator *ShadowDevice::GetAllocator(tf::AllocatorAttributes attr)
