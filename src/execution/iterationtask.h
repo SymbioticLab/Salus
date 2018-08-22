@@ -29,6 +29,8 @@ public:
     virtual void cancel() {};
 
     virtual bool isCanceled() const = 0;
+
+    virtual bool isExpensive() const = 0;
 };
 
 } // namespace salus

@@ -19,8 +19,8 @@
 #ifndef SALUS_EXEC_OPERATIONITEM_H
 #define SALUS_EXEC_OPERATIONITEM_H
 
+#include <cstddef>
 #include <memory>
-#include <chrono>
 
 namespace salus {
 class OperationTask;

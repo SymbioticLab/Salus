@@ -4,6 +4,7 @@
 
 #include "oplibraries/tensorflow/v2/costmgr.h"
 #include "utils/threadutils.h"
+#include "utils/containerutils.h"
 #include "config.h"
 
 namespace salus::oplib::tensorflow {

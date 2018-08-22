@@ -17,9 +17,11 @@
  */
 
 #include "oplibraries/tensorflow/worker/mdgraphmgr.h"
-#include "oplibraries/tensorflow/v2/md_executor.h"
+
 #include "oplibraries/tensorflow/device/salusdevices.h"
 #include "oplibraries/tensorflow/tfexception.h"
+#include "oplibraries/tensorflow/v2/md_executor.h"
+#include "oplibraries/tensorflow/worker/dummyworkercache.h"
 #include "utils/pointerutils.h"
 
 namespace salus::oplib::tensorflow {
@@ -34,7 +36,8 @@ MDGraphMgr::MDGraphMgr(const tf::WorkerEnv *env, std::shared_ptr<ExecutionContex
 MDGraphMgr::~MDGraphMgr()
 {
     // We have to do this before m_resourceMgr goes out of scope
-    for (auto p : table_) p.second->Unref();
+    for (auto p : table_)
+        p.second->Unref();
     table_.clear();
 }
 
@@ -43,7 +46,7 @@ MDGraphMgr::MDItem::~MDItem()
     // Manually clear units
     // because ExecutorImpl holds some ditem, which in turn holds some flr, which
     // should be deleted before this goes out of scope.
-    for (const auto& unit : units) {
+    for (const auto &unit : units) {
         CHECK_NOTNULL(unit.device);
         delete unit.root;
     }
@@ -55,9 +58,9 @@ MDGraphMgr::MDItem::~MDItem()
     }
 }
 
-Status MDGraphMgr::Register(const std::string& session, const tf::GraphDef& gdef,
-                            const tf::GraphOptions& graph_options, const tf::DebugOptions& debug_options,
-                            tf::DistributedFunctionLibraryRuntime* cluster_flr, std::string* handle)
+Status MDGraphMgr::Register(const std::string &session, const tf::GraphDef &gdef,
+                            const tf::GraphOptions &graph_options, const tf::DebugOptions &debug_options,
+                            tf::DistributedFunctionLibraryRuntime *cluster_flr, std::string *handle)
 {
     auto item = sstl::make_scoped_unref<MDItem>();
     std::string tempHandle;
@@ -67,7 +70,7 @@ Status MDGraphMgr::Register(const std::string& session, const tf::GraphDef& gdef
         item->handle = tempHandle;
     }
 
-    auto s = InitMDItem(session, gdef, graph_options, debug_options, cluster_flr, item);
+    auto s = InitMDItem(session, gdef, graph_options, debug_options, cluster_flr, item.get());
     if (!s.ok()) {
         return s;
     }
@@ -125,8 +128,7 @@ Status MDGraphMgr::InitMDItem(const std::string &session, const tf::GraphDef &gd
         tf::mutex_lock l(mu_);
         return tf::strings::StrCat(prefix, "_G", next_id_++);
     };
-    popts.get_incarnation = [deviceMgr = device_mgr_](const auto &name)->uint64_t
-    {
+    popts.get_incarnation = [deviceMgr = device_mgr_](const auto &name) -> uint64_t {
         tf::Device *device = nullptr;
         auto s = deviceMgr->LookupDevice(name, &device);
         if (s.ok()) {
@@ -144,7 +146,7 @@ Status MDGraphMgr::InitMDItem(const std::string &session, const tf::GraphDef &gd
     }
 
     std::unordered_map<std::string, std::unique_ptr<tf::Graph>> partition_graphs;
-    for (const auto & [key, partdef] : partitions) {
+    for (const auto &[key, partdef] : partitions) {
         auto device_graph = std::make_unique<tf::Graph>(tf::OpRegistry::Global());
         tf::GraphConstructorOptions device_opts;
         // There are internal operations (e.g., send/recv) that we now allow.
@@ -170,7 +172,7 @@ Status MDGraphMgr::InitMDItem(const std::string &session, const tf::GraphDef &gd
     item->graph_mgr = this;
     const auto &optimizer_opts = graph_options.optimizer_options();
     tf::GraphOptimizer optimizer(optimizer_opts);
-    for (auto & [key, subgraph] : partition_graphs) {
+    for (auto &[key, subgraph] : partition_graphs) {
         auto &unit = item->units.emplace_back();
 
         // Find the device.
@@ -196,8 +198,7 @@ Status MDGraphMgr::InitMDItem(const std::string &session, const tf::GraphDef &gd
         }
 
         auto producer = subgraph->versions().producer();
-        params.create_fruntime = [worker_env = worker_env_, producer, item, optimizer_opts](auto dev)
-        {
+        params.create_fruntime = [worker_env = worker_env_, producer, item, optimizer_opts](auto dev) {
             auto flib =
                 tf::NewFunctionLibraryRuntime(worker_env->device_mgr, worker_env->env, dev, producer,
                                               item->lib_def.get(), optimizer_opts, item->proc_flr.get());
@@ -215,8 +216,8 @@ Status MDGraphMgr::InitMDItem(const std::string &session, const tf::GraphDef &gd
             if (!lib->IsStateful(ndef.op())
                 || lib->GetFunctionLibraryDefinition()->Find(ndef.op()) != nullptr) {
                 SALUS_THROW_IF_ERROR(lib->CreateKernel(ndef, &kernel));
-                VLOG(2) << "Using noncached kernel " << ndef.name() << "@" << as_hex(kernel)
-                        << " on device " << lib->device()->name();
+                VLOG(2) << "Using noncached kernel " << ndef.name() << "@" << as_hex(kernel) << " on device "
+                        << lib->device()->name();
                 return {kernel, default_delete_opkernel};
             }
 
@@ -225,18 +226,19 @@ Status MDGraphMgr::InitMDItem(const std::string &session, const tf::GraphDef &gd
             // for kernel
             auto create_fn = [item, lib, &ndef](auto **pkernel) {
                 auto ok = lib->CreateKernel(ndef, pkernel);
-                VLOG(2) << "Creating cached kernel " << ndef << "@" << as_hex(*pkernel)
-                        << " on device " << lib->device()->name() << " for graphHandle=" << item->handle;
+                VLOG(2) << "Creating cached kernel " << ndef << "@" << as_hex(*pkernel) << " on device "
+                        << lib->device()->name() << " for graphHandle=" << item->handle;
                 return ok;
             };
 
             // Cache the kernel in underlaying device's op segment, which has separate storage per session
-            auto &tfdev = static_cast<PerTaskDevice*>(lib->device())->underlayingDevice();
+            auto &tfdev = static_cast<PerTaskDevice *>(lib->device())->underlayingDevice();
             // On cache miss, create_fn() is invoked to create a kernel based
             // on the function library here + global op registry.
-            SALUS_THROW_IF_ERROR(tfdev.op_segment()->FindOrCreate(item->session, ndef.name(), &kernel, create_fn));
-            VLOG(2) << "Using cached kernel " << ndef << "@" << as_hex(kernel)
-                    << " on device " << tfdev.name() << " for graphHandle=" << item->handle;
+            SALUS_THROW_IF_ERROR(
+                tfdev.op_segment()->FindOrCreate(item->session, ndef.name(), &kernel, create_fn));
+            VLOG(2) << "Using cached kernel " << ndef << "@" << as_hex(kernel) << " on device "
+                    << tfdev.name() << " for graphHandle=" << item->handle;
             return {kernel, skip_delete_opkernel};
         };
 
@@ -263,6 +265,37 @@ Status MDGraphMgr::InitMDItem(const std::string &session, const tf::GraphDef &gd
         TF_RETURN_IF_ERROR(NewMultiDeviceExecutor(params, std::move(subgraph), &unit.root));
     }
     return tf::Status::OK();
+}
+
+CreateWorkerSessionFn GetCreateWorkerSessionFnForMDGraphMgr(const std::string &worker_name,
+                                                            const tf::WorkerEnv *worker_env,
+                                                            std::shared_ptr<ExecutionContext> execCtx,
+                                                            const tf::ConfigProto &config)
+{
+    // Get resource estimation from client
+    ResStats rm{};
+    const auto rt = "MEMORY:GPU";
+    auto &m = config.salus_options().resource_map();
+    if (auto oval = sstl::optionalGet(m.persistant(), rt)) {
+        rm.persist = static_cast<size_t>(std::round(*oval));
+    }
+    if (auto oval = sstl::optionalGet(m.temporary(), rt)) {
+        rm.temporary = static_cast<size_t>(std::round(*oval));
+    }
+    rm.count = 0;
+
+    return [=, ctx = std::move(execCtx)](const auto &sessHandle) {
+        // worker session takes ownership of a deviceMgr, so we create shadow devices for it.
+        return std::make_unique<tf::WorkerSession>(
+            sessHandle, worker_name,
+            // This is never used, but internally WorkerSession creates a wrapper
+            // around it. So we have to supply an empty one
+            std::make_unique<EmptyWorkerCache>(),
+            // use an empty device mgr for session, because we should use
+            // the device mgr from worker_env to make sure we use ISalusDevice
+            std::make_unique<tf::DeviceMgr>(std::vector<tf::Device *>{}),
+            std::make_unique<MDGraphMgr>(worker_env, ctx, rm));
+    };
 }
 
 } // namespace salus::oplib::tensorflow

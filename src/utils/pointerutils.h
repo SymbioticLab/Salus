@@ -59,33 +59,46 @@ auto wrap_unique(T *ptr)
 template<typename T>
 struct ScopedUnref
 {
-    explicit ScopedUnref(T *o = nullptr)
+    constexpr explicit ScopedUnref(T *o = nullptr)
         : obj(o)
     {
     }
+
     ~ScopedUnref()
     {
         reset();
     }
 
-    ScopedUnref(ScopedUnref &&other) noexcept
+    template<typename U, typename = std::enable_if_t<std::is_convertible<U*, T*>::value>>
+    constexpr ScopedUnref(ScopedUnref<U> &&other) noexcept
+        : ScopedUnref(other.release())
+    {
+    }
+
+    constexpr ScopedUnref(ScopedUnref &&other) noexcept
     {
         obj = other.obj;
         other.obj = nullptr;
     }
 
-    ScopedUnref &operator=(ScopedUnref &&other)
+    constexpr ScopedUnref &operator=(ScopedUnref &&other) noexcept
     {
-        obj = other.obj;
-        other.obj = nullptr;
+        reset(other.release());
         return *this;
     }
 
-    void reset()
+    template<typename U, typename = std::enable_if_t<std::is_convertible_v<U*, T*> && !std::is_same_v<U, T>>>
+    constexpr ScopedUnref &operator=(ScopedUnref<U> &&other) noexcept
+    {
+        reset(other.release());
+        return *this;
+    }
+
+    void reset(T *o = nullptr)
     {
         if (obj)
             obj->Unref();
-        obj = nullptr;
+        obj = o;
     }
 
     auto release()
@@ -95,14 +108,9 @@ struct ScopedUnref
         return tmp;
     }
 
-    auto get() const
+    constexpr T *get() const
     {
         return obj;
-    }
-
-    constexpr operator T*() const
-    {
-        return get();
     }
 
     constexpr auto operator->() const
@@ -276,7 +284,7 @@ using owner = T;
  * If T is a pointer (i.e. T == U*) then
  * - allow construction from U*
  * - disallow construction from nullptr_t
- * disallow default_construction
+ * - disallow default_construction
  * - ensure construction from null U* fails
  * - allow implicit conversion to U*
  */
@@ -293,12 +301,19 @@ public:
         DCHECK(ptr_ != nullptr);
     }
 
+    template <typename = std::enable_if_t<!std::is_same<std::nullptr_t, T>::value>>
+    constexpr explicit not_null(T u) : ptr_(u)
+    {
+        DCHECK(ptr_ != nullptr);
+    }
+
     template<typename U, typename = std::enable_if_t<std::is_convertible<U, T>::value>>
     constexpr not_null(const not_null<U> &other)
         : not_null(other.get())
     {
     }
 
+    not_null(not_null&& other) = default;
     not_null(const not_null &other) = default;
     not_null &operator=(const not_null &other) = default;
 

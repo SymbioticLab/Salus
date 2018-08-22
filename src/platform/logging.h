@@ -20,7 +20,13 @@
 #ifndef SALUS_PLATFORM_LOGGING_H
 #define SALUS_PLATFORM_LOGGING_H
 
+#include "config.h"
+
 #include "easylogging++.h"
+
+#if defined(SALUS_ENABLE_JSON_LOG)
+#include <nlohmann/json.hpp>
+#endif
 
 #include <type_traits>
 #include <optional>
@@ -189,5 +195,19 @@ constexpr PtrPrintHelper as_hex(const std::shared_ptr<T> &p)
 }
 
 MAKE_LOGGABLE(PtrPrintHelper, helper, os);
+
+#if defined(SALUS_ENABLE_JSON_LOG)
+template<typename T>
+constexpr auto as_json(T &&obj)
+{
+    return nlohmann::json(std::forward<T>(obj));
+}
+#else
+template<typename T>
+constexpr const char *as_json(T &&)
+{
+    return "";
+}
+#endif
 
 #endif // SALUS_PLATFORM_LOGGING_H

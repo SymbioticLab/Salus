@@ -229,10 +229,44 @@ Status InferAllocAttr(const tf::Node *n, const tf::Node *dst,
     return s;
 }
 
+Status GraphView::SetAllocAttrs(const tf::Graph &g, const tf::Device *device)
+{
+    const auto &local_dev_name = device->parsed_name();
+
+    for (const auto n : g.nodes()) {
+        auto item = node(n->id());
+        auto attrs = item->output_attr_base();
+
+        // Examine the out edges of each node looking for special use
+        // cases taht may affect memory allocation attributes.
+        for (auto e : n->out_edges()) {
+            if (!e->IsControlEdge()) {
+                tf::AllocatorAttributes attr;
+                TF_RETURN_IF_ERROR(InferAllocAttr(n, e->dst(), local_dev_name, &attr));
+                if (attr.value != 0) {
+                    attrs[e->src_output()].Merge(attr);
+                }
+            }
+        }
+
+        for (int out = 0; out < n->num_outputs(); ++out) {
+            const auto op_kernel = item->kernel.get();
+            bool on_host = op_kernel->output_memory_types()[out] == tf::HOST_MEMORY;
+            if (on_host) {
+                tf::AllocatorAttributes h;
+                h.set_on_host(on_host);
+                attrs[out].Merge(h);
+            }
+        }
+    }
+
+    return Status::OK();
+}
+
 Status GraphView::SetAllocAttrForNode(const tf::Node *n, const tf::Device *device, const tf::OpKernel *op_kernel) const
 {
     Status s;
-    auto local_dev_name = device->parsed_name();
+    const auto &local_dev_name = device->parsed_name();
 
     auto *item = node(n->id());
     auto *attrs = item->output_attr_base();

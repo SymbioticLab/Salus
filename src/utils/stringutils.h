@@ -20,6 +20,8 @@
 #ifndef SALUS_SSTL_STRINGUTILS_H
 #define SALUS_SSTL_STRINGUTILS_H
 
+#include <cstddef>
+#include <cstdint>
 #include <string>
 
 namespace sstl {

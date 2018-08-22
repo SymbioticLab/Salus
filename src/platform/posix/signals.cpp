@@ -24,6 +24,7 @@
 #include <csignal>
 #include <cstring>
 #include <cstdio>
+#include <cerrno>
 
 namespace signals {
 

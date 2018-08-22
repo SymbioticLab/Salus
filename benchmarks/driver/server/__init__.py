@@ -37,10 +37,14 @@ class SalusServer(object):
 
         self.config = cfg
         self.env = os.environ.copy()
+        self.env.update(cfg.env)
         if 'CUDA_VISIBLE_DEVICES' not in self.env:
             self.env['CUDA_VISIBLE_DEVICES'] = '1'
         if 'TF_CPP_MIN_LOG_LEVEL' not in self.env:
             self.env['TF_CPP_MIN_LOG_LEVEL'] = '2'
+
+        if cfg.save_outerr:
+            FLAGS.server_save_output = 'server'
 
         self.endpoint = FLAGS.server_endpoint  # type: str
 

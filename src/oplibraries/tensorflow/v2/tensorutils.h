@@ -25,8 +25,10 @@
  * with ours.
  */
 #include "oplibraries/tensorflow/tensorflow_headers.h"
+
 #include <boost/intrusive/list_hook.hpp>
 #include <boost/thread/shared_mutex.hpp>
+
 #include <memory>
 #include <unordered_map>
 
@@ -103,7 +105,7 @@ struct Entry
         return *this;
     }
 
-    Entry &operator=(Entry &&other)
+    Entry &operator=(Entry &&other) noexcept
     {
         if (val_field_is_set) {
             val.Destroy();
@@ -151,8 +153,14 @@ struct Entry
 
     void Dereference()
     {
-        VLOG(2) << "Dereferencing entry " << as_hex(this) << " ref " << as_hex(ref) << " buffer "
-                << as_hex(tf::remote::PagingHelper::bufferOf(*ref)) << " of ticket " << alloc_tree->ticket;
+        if (alloc_tree) {
+            VLOG(3) << "Dereferencing entry " << as_hex(this) << " ref " << as_hex(ref) << " buffer "
+                    << as_hex(tf::remote::PagingHelper::bufferOf(*ref)) << " of ticket " << alloc_tree->ticket;
+        } else {
+            VLOG(3) << "Dereferencing entry " << as_hex(this) << " ref " << as_hex(ref) << " buffer "
+                    << as_hex(tf::remote::PagingHelper::bufferOf(*ref)) << " of ticket null";
+        }
+
         {
             tf::mutex_lock l(*ref_mu);
             DCHECK(!val_field_is_set);

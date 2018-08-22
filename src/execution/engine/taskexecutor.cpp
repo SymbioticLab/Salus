@@ -91,7 +91,7 @@ void TaskExecutor::insertSession(PSessionItem sess)
 
     {
         auto g = sstl::with_guard(m_newMu);
-        m_newSessions.emplace_back(sess);
+        m_newSessions.emplace_back(std::move(sess));
     }
     m_note_has_work.notify();
 }
@@ -133,7 +133,30 @@ void TaskExecutor::scheduleLoop()
 
     while (!m_shouldExit) {
         SessionChangeSet changeset;
-        // Fisrt check if there's any pending deletions
+        // First accept and append any new sessions
+        {
+            auto g = sstl::with_guard(m_newMu);
+
+            changeset.numAddedSessions = m_newSessions.size();
+
+            if (changeset.numAddedSessions) {
+                // list::splice doesn't invalidate iterators, so use
+                // m_newSessions.begin() here is ok, and a must.
+                changeset.addedSessionBegin = m_newSessions.begin();
+                changeset.addedSessionEnd = m_sessions.end();
+
+                m_sessions.splice(m_sessions.end(), m_newSessions);
+            } else {
+                changeset.addedSessionBegin = m_sessions.end();
+                changeset.addedSessionEnd = m_sessions.end();
+            }
+            DCHECK(m_newSessions.empty());
+        }
+
+        // then check if there's any pending deletions.
+        // NOTE: this must happen after adding new sessions.
+        // because newly added sessions may be deleted immediately
+        // and the remove_if code below can't find it
         {
             auto g = sstl::with_guard(m_delMu);
 
@@ -142,38 +165,39 @@ void TaskExecutor::scheduleLoop()
             DCHECK(m_deletedSessions.empty());
         }
 
+        if (VLOG_IS_ON(2)) {
+            for (auto sit = changeset.addedSessionBegin; sit != changeset.addedSessionEnd; ++sit) {
+                VLOG(2) << "TaskExecutor accepting session " << (*sit)->sessHandle;
+            }
+            for (const auto &sess : changeset.deletedSessions) {
+                VLOG(2) << "TaskExecutor deleting session " << sess->sessHandle;
+            }
+        }
+
         // Delete sessions as requested
         // NOTE: don't clear del yet, we need that in changeset for scheduling
         m_sessions.remove_if([&changeset](auto sess) {
             bool deleted = changeset.deletedSessions.count(sess) > 0;
             if (deleted) {
-                VLOG(2) << "Deleting session " << sess->sessHandle << "@" << as_hex(sess);
-                sess->cleanupCb();
-                // reset cb to release anything that may depend on this
-                // before going out of destructor.
-                sess->cleanupCb = nullptr;
+                LOG(INFO) << "Deleting session " << sess->sessHandle << "@" << as_hex(sess);
+                if (sess->cleanupCb) {
+                    sess->cleanupCb();
+                    // reset cb to release anything that may depend on this
+                    // before going out of destructor.
+                    sess->cleanupCb = nullptr;
+                }
 
                 // The deletion of session's executor is async to this thread.
                 // So it's legit for tickets to be nonempty
                 // DCHECK(item->tickets.empty());
+
+                // Fix the addedSessionBegin iterator if we are to delete it
+                if (changeset.addedSessionBegin != changeset.addedSessionEnd && *changeset.addedSessionBegin == sess) {
+                    ++changeset.addedSessionBegin;
+                }
             }
             return deleted;
         });
-
-        // Append any new sessions
-        {
-            auto g = sstl::with_guard(m_newMu);
-
-            changeset.numAddedSessions = m_newSessions.size();
-
-            // list::splice doesn't invalidate iterators, so use
-            // m_newSessions.begin() here is ok, and a must.
-            changeset.addedSessionBegin = m_newSessions.begin();
-            changeset.addedSessionEnd = m_sessions.end();
-
-            m_sessions.splice(m_sessions.end(), m_newSessions);
-            DCHECK(m_newSessions.empty());
-        }
 
         if (m_interrupting && !interrupted) {
             interrupted = true;
@@ -311,6 +335,10 @@ bool TaskExecutor::maybeWaitForAWhile(size_t scheduled)
     static auto last = system_clock::now();
     static auto sleep = initialSleep;
 
+#if defined(SALUS_ENABLE_SIEXECUTOR)
+    return false;
+#endif
+
     auto now = system_clock::now();
 
     if (scheduled > 0) {
@@ -392,7 +420,7 @@ POpItem TaskExecutor::runTask(POpItem &&opItem)
         // successfully sent to thread pool, we can reset opItem
         opItem.reset();
     }
-    return opItem;
+    return std::move(opItem);
 }
 
 void TaskExecutor::taskRunning(OperationItem &opItem)

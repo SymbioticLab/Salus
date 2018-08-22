@@ -22,7 +22,8 @@
 
 #include "oplibraries/tensorflow/tensorflow_headers.h"
 #include "execution/devices.h"
-#include "oplibraries/tensorflow/v2/md_executor.h"
+#include "resources/resources.h"
+#include "oplibraries/tensorflow/tfutils.h"
 
 #include <memory>
 #include <unordered_map>
@@ -160,7 +161,7 @@ public:
     ~GraphView();
 
     void Initialize(const tf::Graph *g);
-    //     Status SetAllocAttrs(const Graph* g, const Device* device);
+    Status SetAllocAttrs(const tf::Graph &g, const tf::Device* device);
     Status SetAllocAttrForNode(const tf::Node *n, const tf::Device *device, const tf::OpKernel *op_kernel) const;
 
     NodeItem *node(int id) const

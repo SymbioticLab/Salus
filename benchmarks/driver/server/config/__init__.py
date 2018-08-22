@@ -38,6 +38,8 @@ class SalusConfig(object):
         self.disable_adc = False
         self.disable_wc = False
         self.extra_args = []
+        self.env = {}
+        self.save_outerr = False
         self.output_dir = Path('templogs')
         self.kill_timeout = 3
         self.update(kwargs)

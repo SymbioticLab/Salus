@@ -526,7 +526,7 @@ void ExecutorImpl::updateBufferTree(Entry *entry, uint64_t ticket)
     }
 }
 
-void ExecutorImpl::removeFromBufferTree(const Entry *entry, EntryVec *needUpdate)
+void ExecutorImpl::removeFromBufferTree(const Entry *entry, PEntryVec *needUpdate)
 {
     DCHECK(entry);
 

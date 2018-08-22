@@ -64,6 +64,13 @@ inline tf::StringPiece svToStringPiece(std::string_view sv)
     return {sv.data(), sv.size()};
 }
 
+using POpKernel = std::unique_ptr<tf::OpKernel, void (*)(tf::OpKernel *)>;
+
+constexpr void skip_delete_opkernel(tf::OpKernel *) {}
+constexpr void default_delete_opkernel(tf::OpKernel *k)
+{
+    delete k;
+}
 } // namespace salus::oplib::tensorflow
 
 #endif // SALUS_OPLIB_TENSORFLOW_TFUTILS_H

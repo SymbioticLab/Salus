@@ -28,6 +28,7 @@ limitations under the License.
 #include "md_executor_impl.h"
 #include "oplibraries/tensorflow/device/salusdevices.h"
 #include "oplibraries/tensorflow/tfexception.h"
+#include "oplibraries/tensorflow/tfinstance.h"
 #include "oplibraries/tensorflow/v2/exectask.h"
 #include "oplibraries/tensorflow/v2/itertask.h"
 #include "oplibraries/tensorflow/v2/tfallocator.h"
@@ -86,8 +87,8 @@ ExecutorImpl::ExecutorImpl(MultiDeviceExecutorParams &&p, std::unique_ptr<const 
     DCHECK(params_.get_kernel != nullptr);
 
     using namespace std::placeholders;
-    params_.ins->registerPagingCallbacks({
-        std::bind(&ExecutorImpl::handlePagingRequest, this, _1, _2),
+    params_.ins->registerPagingCallbacks(PagingCallbacks{
+        [this](auto oldTicket, auto &&rctx) { return handlePagingRequest(oldTicket, std::forward<decltype(rctx)>(rctx));}
     });
 }
 
@@ -170,8 +171,7 @@ tf::Status ExecutorImpl::Initialize()
     }
 
     VLOG(2) << "Created graph@" << as_hex(graph_) << " of graphHandle=" << params_.graphHandle
-            << ", graphId=" << graph_id_
-            << " for session " << params_.session;
+            << ", graphId=" << graph_id_ << " for session " << params_.session;
     // Preprocess every node in the graph to create an instance of op
     // kernel for each node.
     for (const auto *n : graph_->nodes()) {
@@ -180,7 +180,8 @@ tf::Status ExecutorImpl::Initialize()
         auto frame_info = EnsureFrameInfo(frame_name);
 
         if (VLOG_IS_ON(3)) {
-            VLOG(3) << "Node " << id << " in graphHandle=" << params_.graphHandle << ", graphId=" << graph_id_ << ": " << n->def();
+            VLOG(3) << "Node " << id << " in graphHandle=" << params_.graphHandle << ", graphId=" << graph_id_
+                    << ": " << n->def();
         }
 
         if (n->name() == "salus_main_iter") {
@@ -655,7 +656,7 @@ tf::Status ExecutorState::PrepareInputs(const NodeItem &item, sstl::not_null<tf:
                 }
             }
             // Update active entries as needed
-            EntryVec needUpdate;
+            PEntryVec needUpdate;
             impl_->removeFromBufferTree(entry, &needUpdate);
             for (auto &e : needUpdate) {
                 e->alloc_ticket = device->resourceContext().ticket();
@@ -1178,18 +1179,21 @@ void ExecutorState::Finish()
     }
 
     if (impl_->is_main_iter) {
-        VLOG(2) << impl_->params_.session << ":" << impl_->params_.graphHandle
-                << ":" << impl_->graph_id_ << " drops exclusive mode";
+        VLOG(2) << impl_->params_.session << ":" << impl_->params_.graphHandle << ":" << impl_->graph_id_
+                << " drops exclusive mode";
         impl_->params_.ins->dropExlusiveMode();
+        LogOpTracing() << "event: end_iter "
+                       << nlohmann::json({{"sess", impl_->params_.session},
+                                          {"graphId", impl_->graph_id_},
+                                          {"memMap", TFInstance::instance().dumpGPUMemoryMap()}});
         ictx->finish();
     }
 
-    VLOG(2) << impl_->params_.session << ":" << impl_->params_.graphHandle << ":" << impl_->graph_id_ << " finish iteration";
+    VLOG(2) << impl_->params_.session << ":" << impl_->params_.graphHandle << ":" << impl_->graph_id_
+            << " finish iteration";
     delete this;
     DCHECK(done_cb != nullptr);
-    runner([done = std::move(done_cb), status]() {
-        done(status);
-    });
+    runner([done = std::move(done_cb), status]() { done(status); });
 }
 
 void ExecutorState::FindOrCreateChildFrame(FrameState *frame, int64_t iter, const tf::Node *node,
@@ -1197,7 +1201,7 @@ void ExecutorState::FindOrCreateChildFrame(FrameState *frame, int64_t iter, cons
 {
     // Get the child frame name.
     std::string enter_name;
-    auto s = GetNodeAttr(node->def(), "frame_name", &enter_name);
+    auto s = GetNodeAttr(node->attrs(), "frame_name", &enter_name);
     DCHECK(s.ok()) << s;
     const std::string child_name = MakeFrameName(frame, iter, enter_name);
 

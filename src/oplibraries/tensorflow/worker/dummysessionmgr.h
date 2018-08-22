@@ -10,10 +10,10 @@
 
 namespace salus::oplib::tensorflow {
 
+using CreateWorkerSessionFn = std::function<std::unique_ptr<tf::WorkerSession>(const std::string&)>;
 class LocalSessionMgr : public tf::SessionMgrInterface
 {
 public:
-    using CreateWorkerSessionFn = std::function<std::unique_ptr<tf::WorkerSession>(const std::string&)>;
     explicit LocalSessionMgr(CreateWorkerSessionFn fn);
 
     Status CreateSession(const std::string &session, const tf::ServerDef &server_def, bool isolate_session_state) override;

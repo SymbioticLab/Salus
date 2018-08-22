@@ -26,6 +26,8 @@
 
 #include <zmq.hpp>
 
+#include <ostream>
+
 namespace {
 
 uint64_t maxBytesDumpLen()

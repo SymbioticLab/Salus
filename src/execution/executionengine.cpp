@@ -30,11 +30,13 @@
 #include "utils/macros.h"
 #include "utils/pointerutils.h"
 #include "utils/threadutils.h"
+#include "executionengine.h"
+
+#include <boost/container/flat_map.hpp>
 
 #include <algorithm>
 #include <functional>
 #include <iomanip>
-#include <boost/container/flat_map.hpp>
 
 using std::chrono::duration_cast;
 using std::chrono::microseconds;
@@ -111,7 +113,7 @@ void ExecutionEngine::scheduleIteration(IterationItem &&item)
     m_note_has_work.notify();
 }
 
-void ExecutionEngine::maybeWaitForWork(const BlockingQueues & blockingSessions, const IterQueue&iters, size_t scheduled)
+void ExecutionEngine::maybeWaitForWork(const BlockingQueues &blockingSessions, const IterQueue &iters, size_t scheduled)
 {
     maybeWaitForAWhile(scheduled);
 
@@ -139,8 +141,7 @@ void ExecutionEngine::scheduleLoop()
     // a thread local queue
     IterQueue iters;
     // a higher priority queue. Only one session's iter in this queue can run, and will block iters queue
-    boost::circular_buffer<std::pair<PSessionItem, boost::circular_buffer<IterationItem>>>
-        blockingSessions(128);
+    boost::circular_buffer<std::pair<PSessionItem, boost::circular_buffer<IterationItem>>> blockingSessions(128);
 
     // staging queue
     IterQueue staging;
@@ -243,7 +244,7 @@ void ExecutionEngine::scheduleLoop()
                 put_back.dismiss();
                 scheduled += 1;
             }
-        } // for (auto &[wectx, iter] : staging) {
+        } // for (auto &iterItem : staging)
         staging.clear();
 
         maybeWaitForWork(blockingSessions, iters, scheduled);
@@ -268,20 +269,44 @@ void ExecutionEngine::scheduleLoop()
     LOG(INFO) << "ExecutionEngine stopped";
 }
 
+bool ExecutionEngine::checkIter(IterationItem &iterItem, ExecutionContext &)
+{
+    if (!iterItem.iter->isExpensive()) {
+        return true;
+    }
+    // only allow one expensive iteration to run
+    int64_t zero = 0;
+    return m_numExpensiveIterRunning.compare_exchange_weak(zero, 1);
+}
+
 bool ExecutionEngine::runIter(IterationItem &iterItem, ExecutionContext &ectx)
 {
     DCHECK(ectx.m_item);
 
     VLOG(2) << "Try iteration " << ectx.m_item->sessHandle << ":" << iterItem.iter->graphId();
-    // FUTURE: support other devices
-    if (!iterItem.iter->prepare()) {
-        VLOG(2) << "Skipped iteration " << ectx.m_item->sessHandle << ":" << iterItem.iter->graphId();
+    if (!checkIter(iterItem, ectx)) {
+        VLOG(2) << "event: skip_iter "
+                << nlohmann::json({{"sess", ectx.m_item->sessHandle},
+                                   {"graphId", iterItem.iter->graphId()},
+                                   {"reason", "unavailable resources"}});
         return false;
     }
 
-    VLOG(2) << "Running iteration " << ectx.m_item->sessHandle << ":" << iterItem.iter->graphId();
+    // FUTURE: support other devices
+    if (!iterItem.iter->prepare()) {
+        VLOG(2) << "event: skip_iter "
+                << nlohmann::json({{"sess", ectx.m_item->sessHandle},
+                                   {"graphId", iterItem.iter->graphId()},
+                                   {"reason", "failed prepare"}});
+        return false;
+    }
 
-    auto iCtx = std::make_shared<IterationContext>(m_taskExecutor, ectx.m_item);
+    bool expensive = iterItem.iter->isExpensive();
+    auto iCtx = std::make_shared<IterationContext>(m_taskExecutor, ectx.m_item, [this, expensive](){
+        if (expensive) {
+            m_numExpensiveIterRunning--;
+        }
+    });
     iterItem.iter->runAsync(std::move(iCtx));
     return true;
 }
@@ -338,10 +363,8 @@ void ExecutionContext::setInterruptCallback(std::function<void()> cb)
     m_item->setInterruptCallback(std::move(cb));
 }
 
-std::unique_ptr<ResourceContext> ExecutionContext::makeResourceContext(uint64_t graphId,
-                                                                       const DeviceSpec &spec,
-                                                                       const Resources &res,
-                                                                       Resources *missing)
+std::unique_ptr<ResourceContext> ExecutionContext::makeResourceContext(uint64_t graphId, const DeviceSpec &spec,
+                                                                       const Resources &res, Resources *missing)
 {
     DCHECK(m_item);
     return m_engine.m_taskExecutor.makeResourceContext(m_item, graphId, spec, res, missing);

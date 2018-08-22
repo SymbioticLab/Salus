@@ -32,8 +32,9 @@
 #include <tensorflow/core/common_runtime/executor.h>
 #include <tensorflow/core/common_runtime/function.h>
 #include <tensorflow/core/common_runtime/gpu/gpu_device.h>
-#include <tensorflow/core/common_runtime/gpu/gpu_stream_util.h>
 #include <tensorflow/core/common_runtime/gpu/gpu_double_bfc_allocator.h>
+#include <tensorflow/core/common_runtime/gpu/gpu_stream_util.h>
+#include <tensorflow/core/common_runtime/gpu/gpu_util.h>
 #include <tensorflow/core/common_runtime/gpu/process_state.h>
 #include <tensorflow/core/common_runtime/graph_optimizer.h>
 #include <tensorflow/core/common_runtime/local_device.h>
@@ -49,8 +50,8 @@
 #include <tensorflow/core/distributed_runtime/session_mgr_interface.h>
 #include <tensorflow/core/distributed_runtime/worker.h>
 #include <tensorflow/core/distributed_runtime/worker_cache.h>
-#include <tensorflow/core/distributed_runtime/zrpc/exechelper/paginghelper.h>
 #include <tensorflow/core/distributed_runtime/zrpc/exechelper/memorytypes.h>
+#include <tensorflow/core/distributed_runtime/zrpc/exechelper/paginghelper.h>
 #include <tensorflow/core/framework/allocator.h>
 #include <tensorflow/core/framework/function.h>
 #include <tensorflow/core/framework/function.pb.h>
@@ -111,8 +112,7 @@ inline std::ostream &operator<<(std::ostream &os, const tensorflow::TensorValue 
 {
     os << "TensorValue(";
     if (c.tensor) {
-        os << "shape: " << c->shape().DebugString() << ", datatype: " << c->dtype()
-           << ", is ref: " << c.is_ref();
+        os << "shape: " << c->shape().DebugString() << ", datatype: " << c->dtype() << ", is ref: " << c.is_ref();
         if (c.is_ref()) {
             os << " (mutex: " << as_hex(c.mutex_if_ref) << ")";
         }

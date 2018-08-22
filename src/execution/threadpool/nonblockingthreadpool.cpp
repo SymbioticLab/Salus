@@ -20,8 +20,9 @@
 
 #include "threadpool.h"
 
-#include "RunQueue.h"
 #include "EventCount.h"
+#include "fixed_function.hpp"
+#include "RunQueue.h"
 
 #include <atomic>
 #include <memory>

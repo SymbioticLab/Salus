@@ -20,6 +20,7 @@
 #include "tfinstance.h"
 #include "execution/executionengine.h"
 #include "oplibraries/tensorflow/device/salusdevices.h"
+#include "oplibraries/tensorflow/device/gpu/gpu.h"
 #include "oplibraries/tensorflow/tfexception.h"
 #include "oplibraries/tensorflow/tfsession.h"
 #include "utils/macros.h"
@@ -184,4 +185,9 @@ void TFInstance::handleReset(const tf::ResetRequest &req, tf::ResetResponse &res
     cb(s);
 }
 
+std::string TFInstance::dumpGPUMemoryMap() const
+{
+    auto alloc = static_cast<SalusGPUDevice*>(tfdevice(devices::GPU0))->GetAllocator({});
+    return static_cast<tf::GPUDoubleBFCAllocator*>(alloc)->GenerateMemoryMap();
+}
 } // namespace salus::oplib::tensorflow
