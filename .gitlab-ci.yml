@@ -7,13 +7,14 @@ cache:
 # have a script to setup spack and install dependecies and cache
 
 build_tensorflow:
-  before_script:
-    # setup spack
+  tags:
+    - gpu-p100
   script:
+    - echo
 
 
 unittest:
-  before_script:
-    - echo
+  tags:
+    - gpu-p100
   script:
     - echo
