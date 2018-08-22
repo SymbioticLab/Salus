@@ -1,0 +1,19 @@
+image: registry.gitlab.com/aetf/salus/builder:ubuntu16.04-cuda91-cudnn7
+
+cache:
+  paths:
+    - spack-packages/
+
+# have a script to setup spack and install dependecies and cache
+
+build_tensorflow:
+  before_script:
+    # setup spack
+  script:
+
+
+unittest:
+  before_script:
+    - echo
+  script:
+    - echo
