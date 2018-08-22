@@ -102,6 +102,11 @@ def load_generic(path, event_filters=None, task_per_cpu=20):
 
 def load_mem(path, **kwargs):
     df = load_generic(path, event_filters=['alloc', 'dealloc'], **kwargs)
+    
+    # sanity check for nullptr in log
+    if len(df.query('Ptr == 0')):
+        print("There are nullptrs in log, check allocator logging.")
+        df = df.query('Ptr != 0')
 
     df = df.drop(['level', 'loc', 'thread'], axis=1)
 
@@ -143,6 +148,7 @@ def load_comp(path, **kwargs):
 
 
 def load_all(path):
+    path = Path(path)
     alloc = load_mem(path/'alloc.output')
     iters = load_iters(path/'perf.output')
     comp = load_comp(path/'perf.output')
@@ -248,7 +254,14 @@ def plot_iters(df, y=0.8, mainOnly=True, offset=None, return_offset=False, **kwa
         raise ValueError('Some iteration not stopped')
 
     # set y as in axes coordinate
-    y = [y] * len(xmin)
+    def calc_y(row):
+        if mainOnly:
+            return y
+        base_y = y
+        if not row['MainIter']:
+            base_y -= 0.2
+        return base_y
+    y = df.query("evt == 'start_iter'").apply(calc_y, axis=1)
     trans = ax.get_xaxis_transform(which='grid')
 
     # line
@@ -261,7 +274,66 @@ def plot_iters(df, y=0.8, mainOnly=True, offset=None, return_offset=False, **kwa
     return lc, sm, em
 
 
-def plot_comp(df, y=0.2, separateY=False, offset=None, return_offset=False, **kwargs):
+def plot_comp(df, y=0.2, separateY=True, offset=None, return_offset=False, **kwargs):
+    if 'transform' in kwargs:
+        raise ValueError("'transform' not allowed as we provide our own transform")
+
+    # prepare data
+    df, offset = normalize_time(df, offset)
+    df = df.reset_index()
+    df = df.pivot_table(values='timestamp',
+                        index=['StepId', 'GraphId', 'Name',
+                               'Type', 'Device', 'MainIter'],
+                        columns='evt', aggfunc='first').reset_index()
+    
+    # find start of GPU compute for each iter, using the first GPU compute in main iter
+    # done by sort values and drop duplicates
+    xmindf = df.query('MainIter and Device.str.contains("GPU")')
+    xmin = xmindf.sort_values('running', ascending=True).drop_duplicates(['StepId'])
+    xmin = xmin.sort_values('StepId')
+    
+    # find end of GPU compute for each iter,
+    # using the last _Recv in the same step on CPU
+    mainIterSteps = df.query('MainIter').StepId.unique()
+    xmaxdf = df.query('not MainIter and Type == "_Recv"'
+                      ' and Device.str.contains("CPU")'
+                      ' and StepId.isin(@mainIterSteps)')
+    xmax = xmaxdf.sort_values('done', ascending=False).drop_duplicates(['StepId'])
+    xmax = xmax.sort_values('StepId')
+
+    assert len(xmin) == len(xmax)
+    
+    # prepare args
+    ax = kwargs.pop('ax', None)
+    if ax is None:
+        ax = plt.gca()
+    linewidths = kwargs.pop('linewidths', 10)
+    
+    # set y as in axes coordinate
+    def calc_y(row):
+        if not separateY:
+            return y
+        base_y = y
+        if 'GPU' in row['Device']:
+            base_y += 0.3
+        if not row['MainIter']:
+            base_y -= 0.15
+        return base_y
+    y = xmin.apply(calc_y, axis=1)
+    trans = ax.get_xaxis_transform(which='grid')
+    
+    print(f'{y}, {xmin.running}, {xmax.done}')
+
+    lc = ax.hlines(y=y, xmin=xmin.running, xmax=xmax.done,
+                   transform=trans, linewidths=linewidths, **kwargs)
+
+    if return_offset:
+        return lc, offset
+    return lc
+
+
+def plot_comp_old(df, y=0.2, separateY=True, offset=None, return_offset=False, **kwargs):
+    """This is deprecated, as Compute method doesn't reflect actual computation."""
     if 'transform' in kwargs:
         raise ValueError("'transform' not allowed as we provide our own transform")
 
@@ -338,6 +410,8 @@ def plot_all(alloc, iters=None, comp=None, offset=None):
         
         iters_y += 0.05
         comp_y += 0.02
+    
+    print(f"Used offset value: {offset}")
     
     ax = plt.gca()
     pu.cleanup_axis_timedelta(ax.xaxis)

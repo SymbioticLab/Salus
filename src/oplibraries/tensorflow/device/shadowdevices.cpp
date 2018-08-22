@@ -109,6 +109,7 @@ void ForwardingAllocator::DeallocateRaw(void *ptr)
         nh = m_allocated.extract(ptr);
     }
     postDeallocation(ptr);
+
     if (nh) {
         Unref();
     }
@@ -169,7 +170,7 @@ void ForwardingAllocator::recordSize(void *ptr, size_t size)
     // Reference self for later deallocation
     Ref();
 
-    CHECK(m_allocated.emplace(ptr, size).second);
+    CHECK(m_allocated.emplace(ptr, size).second) << "address already taken: " << as_hex(ptr);
 }
 
 /*static*/ tf::DeviceAttributes ShadowDevice::NewNameBase(const std::string &new_base, sstl::not_null<tf::Device *> base)

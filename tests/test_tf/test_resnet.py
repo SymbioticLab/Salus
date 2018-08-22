@@ -73,13 +73,13 @@ class ResNetCaseBase(unittest.TestCase):
         config.allow_soft_placement = True
         run_on_devices(self._get_func(batch_size), '/device:GPU:0', config=config)
 
-    @parameterized.expand([(25,), (50,), (75,)])
+    @parameterized.expand([(25,), (50,)])
     @unittest.skip("No need to run on CPU")
     def test_cpu(self, batch_size):
         run_on_devices(self._get_func(batch_size), '/device:CPU:0',
                        config=self._config(batch_size=batch_size))
 
-    @parameterized.expand([(25,), (50,), (75,)])
+    @parameterized.expand([(25,), (50,)])
     def test_rpc(self, batch_size):
         run_on_sessions(self._get_func(batch_size),
                         'zrpc://tcp://127.0.0.1:5501', dev='/device:GPU:0',

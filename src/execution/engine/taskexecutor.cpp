@@ -143,7 +143,7 @@ void TaskExecutor::scheduleLoop()
                 // list::splice doesn't invalidate iterators, so use
                 // m_newSessions.begin() here is ok, and a must.
                 changeset.addedSessionBegin = m_newSessions.begin();
-                changeset.addedSessionEnd = {};
+                changeset.addedSessionEnd = m_sessions.end();
 
                 m_sessions.splice(m_sessions.end(), m_newSessions);
             } else {
@@ -165,12 +165,21 @@ void TaskExecutor::scheduleLoop()
             DCHECK(m_deletedSessions.empty());
         }
 
+        if (VLOG_IS_ON(2)) {
+            for (auto sit = changeset.addedSessionBegin; sit != changeset.addedSessionEnd; ++sit) {
+                VLOG(2) << "TaskExecutor accepting session " << (*sit)->sessHandle;
+            }
+            for (const auto &sess : changeset.deletedSessions) {
+                VLOG(2) << "TaskExecutor deleting session " << sess->sessHandle;
+            }
+        }
+
         // Delete sessions as requested
         // NOTE: don't clear del yet, we need that in changeset for scheduling
         m_sessions.remove_if([&changeset](auto sess) {
             bool deleted = changeset.deletedSessions.count(sess) > 0;
             if (deleted) {
-                VLOG(2) << "Deleting session " << sess->sessHandle << "@" << as_hex(sess);
+                LOG(INFO) << "Deleting session " << sess->sessHandle << "@" << as_hex(sess);
                 if (sess->cleanupCb) {
                     sess->cleanupCb();
                     // reset cb to release anything that may depend on this
@@ -411,7 +420,7 @@ POpItem TaskExecutor::runTask(POpItem &&opItem)
         // successfully sent to thread pool, we can reset opItem
         opItem.reset();
     }
-    return opItem;
+    return std::move(opItem);
 }
 
 void TaskExecutor::taskRunning(OperationItem &opItem)

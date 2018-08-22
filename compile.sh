@@ -4,8 +4,9 @@ BUILD_TYPES=(Debug OpTracing Release TSan ASan)
 
 function configure() {
     local build_type=$1
-    export CC=gcc-7
-    export CXX=g++-7
+    which gcc-7 >/dev/null 2>&1 && export CC=gcc-7
+    which g++-7 >/dev/null 2>&1 && export CXX=g++-7
+    which ld.gold >/dev/null 2>&1 && export CXXFLAGS=-fuse-ld=gold
     echo "Configure using build type $build_type"
     binary_tree=build/$build_type
     [[ -d $binary_tree ]] || cmake -H. -B$binary_tree -DCMAKE_BUILD_TYPE=$build_type \
