@@ -166,7 +166,10 @@ std::unique_ptr<ShadowDevice> SalusGPUDevice::createSessionDevice(std::string ne
     newInfo.default_context = device_contexts_[streamBase];
     newInfo.stream = streams_[streamBase]->compute;
 
-    auto d = std::make_unique<SessionDevice>(this, std::move(newBaseName), std::move(sessHandle), newInfo);
+    std::vector<SessionDevice::StreamAndContext> scs{ {streams_[streamBase], device_contexts_[streamBase]} };
+
+    auto d = std::make_unique<SessionDevice>(this, std::move(newBaseName), std::move(sessHandle),
+                                             newInfo, std::move(scs));
     return d;
 }
 
@@ -320,8 +323,12 @@ tf::BaseGPUDevice *SalusGPUDeviceFactory::CreateGPUDevice(const tf::SessionOptio
                                                           int gpu_id, const std::string &physical_device_desc,
                                                           tf::Allocator *gpu_allocator, tf::Allocator *cpu_allocator)
 {
+#if defined(SALUS_ENABLE_SIEXECUTOR)
+    auto max_streams = 1;
+#else
     // TODO: detect maximum streams in GPU
     auto max_streams = 128;
+#endif
 
     auto dev = std::make_unique<SalusGPUDevice>(options, name, memory_limit, locality, gpu_id, physical_device_desc,
                                                 gpu_allocator, cpu_allocator, max_streams);

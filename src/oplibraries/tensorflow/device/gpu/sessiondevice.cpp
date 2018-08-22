@@ -36,7 +36,7 @@
 namespace salus::oplib::tensorflow {
 
 SessionDevice::SessionDevice(sstl::not_null<tf::Device *> base, const std::string &newBaseName, std::string sessHandle,
-                             GpuDeviceInfo newInfo)
+                             GpuDeviceInfo newInfo, std::vector<StreamAndContext> streams)
     : ShadowDevice(base, NewNameBase(newBaseName, base),
                    /*isolateSessionState = */ true, /*ownsBase = */ false,
                    [this](auto alloc, auto &&attrs) {
@@ -44,7 +44,10 @@ SessionDevice::SessionDevice(sstl::not_null<tf::Device *> base, const std::strin
                    })
     , m_sessHandle(std::move(sessHandle))
     , m_gpuDeviceInfo(newInfo)
+    , m_streams(std::move(streams))
 {
+    DCHECK(!m_streams.empty());
+
     set_tensorflow_gpu_device_info(&m_gpuDeviceInfo);
 }
 
@@ -63,7 +66,27 @@ tf::Status SessionDevice::FillContextMap(const tf::Graph *, tf::DeviceContextMap
 tf::Status SessionDevice::Sync()
 {
     // Only sync the main default stream
-    return tf::GPUUtil::Sync(this);
+
+    sstl::semaphore sa;
+    for (auto &[sg, ctx] : m_streams) {
+        UNUSED(ctx);
+        tensorflow_gpu_device_info()->event_mgr->ThenExecute(sg->compute, [&sa](){
+            sa.notify();
+        });
+        tensorflow_gpu_device_info()->event_mgr->ThenExecute(sg->host_to_device, [&sa](){
+            sa.notify();
+        });
+        tensorflow_gpu_device_info()->event_mgr->ThenExecute(sg->device_to_host, [&sa](){
+            sa.notify();
+        });
+        tensorflow_gpu_device_info()->event_mgr->ThenExecute(sg->device_to_device, [&sa](){
+            sa.notify();
+        });
+    }
+
+    const constexpr int PerGroupStreams = 4;
+    sa.wait(static_cast<uint32_t>(m_streams.size() * PerGroupStreams));
+    return Status::OK();
 }
 
 } // namespace salus::oplib::tensorflow

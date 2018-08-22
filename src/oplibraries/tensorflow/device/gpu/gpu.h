@@ -79,6 +79,7 @@ private:
     }
 
     friend class PerTaskGPUDevice;
+    friend class SessionDevice;
     std::shared_ptr<sstl::ObjectPool<PerTaskGPUDevice>> m_pool;
 
     std::mutex m_muStream;

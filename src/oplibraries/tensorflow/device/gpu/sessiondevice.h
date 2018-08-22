@@ -30,6 +30,10 @@
 #include "oplibraries/tensorflow/tensorflow_headers.h"
 
 #include "oplibraries/tensorflow/device/shadowdevices.h"
+#include "oplibraries/tensorflow/device/gpu/gpu.h"
+
+#include <vector>
+#include <utility>
 
 namespace salus::oplib::tensorflow {
 
@@ -39,8 +43,10 @@ namespace salus::oplib::tensorflow {
 class SessionDevice : public ShadowDevice
 {
 public:
+    using StreamAndContext = std::pair<sstl::not_null<SalusGPUDevice::StreamGroup*>,
+        sstl::not_null<tf::GPUDeviceContext*>>;
     explicit SessionDevice(sstl::not_null<tf::Device *> base, const std::string &newBaseName, std::string sessHandle,
-                           GpuDeviceInfo newInfo);
+                           GpuDeviceInfo newInfo, std::vector<StreamAndContext> streams);
 
     tf::Status Sync() override;
     tf::Status FillContextMap(const tf::Graph *graph, tf::DeviceContextMap *device_context_map) override;
@@ -51,6 +57,7 @@ private:
 
     const std::string m_sessHandle;
     GpuDeviceInfo m_gpuDeviceInfo;
+    std::vector<StreamAndContext> m_streams;
 };
 
 } // namespace salus::oplib::tensorflow
