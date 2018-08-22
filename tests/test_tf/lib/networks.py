@@ -19,3 +19,6 @@ from .resnet import ResNet, ResNetHParams  # NOQA: F401
 
 # noinspection PyUnresolvedReferences
 from .vae import vae  # NOQA: F401
+
+# noinspection PyUnresolvedReferences
+from .subpixel.model import DCGAN as SuperRes  # NOQA: F401

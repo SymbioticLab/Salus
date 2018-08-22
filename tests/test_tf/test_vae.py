@@ -7,7 +7,6 @@ from datetime import datetime
 from timeit import default_timer
 
 from parameterized import parameterized
-from typing import Callable
 
 from . import run_on_rpc_and_gpu, run_on_sessions, run_on_devices, assertAllClose
 from . import networks
