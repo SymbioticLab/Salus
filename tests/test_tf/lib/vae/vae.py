@@ -1,7 +1,24 @@
+from __future__ import print_function, absolute_import, division
+
+from collections import namedtuple
+
 import tensorflow as tf
 
-# Gaussian MLP as encoder
+
+def get_args(**kwargs):
+    VaeArgs = namedtuple('VaeArgs', 'dim_z n_hidden learn_rate batch_size')
+    args = {
+        'dim_z': 20,
+        'n_hidden': 500,
+        'learn_rate': 1e-3,
+        'batch_size': 128
+    }
+    args.update(kwargs)
+    return VaeArgs(**args)
+
+
 def gaussian_MLP_encoder(x, n_hidden, n_output, keep_prob):
+    """Gaussian MLP as encoder"""
     with tf.variable_scope("gaussian_MLP_encoder"):
         # initializers
         w_init = tf.contrib.layers.variance_scaling_initializer()
@@ -35,8 +52,9 @@ def gaussian_MLP_encoder(x, n_hidden, n_output, keep_prob):
 
     return mean, stddev
 
-# Bernoulli MLP as decoder
+
 def bernoulli_MLP_decoder(z, n_hidden, n_output, keep_prob, reuse=False):
+    """Bernoulli MLP as decoder"""
 
     with tf.variable_scope("bernoulli_MLP_decoder", reuse=reuse):
         # initializers
@@ -64,8 +82,9 @@ def bernoulli_MLP_decoder(z, n_hidden, n_output, keep_prob, reuse=False):
 
     return y
 
-# Gateway
+
 def autoencoder(x_hat, x, dim_img, dim_z, n_hidden, keep_prob):
+    """Gateway"""
 
     # encoding
     mu, sigma = gaussian_MLP_encoder(x_hat, n_hidden, dim_z, keep_prob)
@@ -90,8 +109,7 @@ def autoencoder(x_hat, x, dim_img, dim_z, n_hidden, keep_prob):
 
     return y, z, loss, -marginal_likelihood, KL_divergence
 
+
 def decoder(z, dim_img, n_hidden):
-
     y = bernoulli_MLP_decoder(z, n_hidden, dim_img, 1.0, reuse=True)
-
     return y

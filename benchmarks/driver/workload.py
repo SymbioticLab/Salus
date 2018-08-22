@@ -414,6 +414,7 @@ WorkloadTemplate.define('seq2seq', ['small', 'medium', 'large'], UnittestRunner)
 WorkloadTemplate.define('mnistsf', [25, 50, 100], UnittestRunner)
 WorkloadTemplate.define('mnistcv', [25, 50, 100], UnittestRunner)
 WorkloadTemplate.define('mnistlg', [25, 50, 100], UnittestRunner)
+WorkloadTemplate.define('vae', [64, 128, 256], UnittestRunner)
 
 
 # noinspection PyUnusedLocal

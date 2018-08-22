@@ -157,8 +157,17 @@ class UnittestRunner(Runner):
         else:
             raise ValueError(f'Unknown executor: {executor}')
 
-        pkg, cls, names = supported_model[self.wl.name]
-        method = '{}.{}{}'.format(cls, prefix, names[self.wl.batch_size])
+        if self.wl.name in supported_model:
+            pkg, cls, names = supported_model[self.wl.name]
+        else:
+            # fallback to guessing, issue a warning
+            pkg = f'test_tf.test_{self.wl.name}'
+            cls = f'Test{self.wl.name.capitalize()}'
+            names = {
+                s: str(idx)
+                for idx, s in enumerate(self.wl.wtl.available_batch_sizes())
+            }
+        method = f'{cls}.{prefix}{names[self.wl.batch_size]}'
         return pkg, method
 
 
