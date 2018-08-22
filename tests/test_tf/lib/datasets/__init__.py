@@ -7,7 +7,24 @@ import tensorflow as tf
 from . import flowers, ptb_reader, cifar_input
 from .. import tfhelper
 
+try:
+    from pathlib import Path
+except ImportError:
+    from pathlib2 import Path
+
+
 slim = tf.contrib.slim
+
+
+def find_data_dir(dataset_name, *args):
+    # find data dir
+    for p in Path(".").absolute().parents:
+        candidate = p/'data'
+        if candidate.exists():
+            candidate = candidate/dataset_name
+            candidate = candidate.joinpath(*args)
+            return str(candidate)
+    raise ValueError("Can not find data for {}".format(dataset_name))
 
 
 def fake_data(batch_size, batch_num, is_train=True, height=256, width=256, num_classes=1000, depth=3):
@@ -38,7 +55,7 @@ def flowers_data(batch_size, batch_num, height=256, width=256, is_train=True, nu
         num_readers = num_threads // 2
 
     with tf.name_scope('flowers_data'):
-        data_dir = os.path.join(os.path.expanduser('~'), 'data', 'flowers')
+        data_dir = find_data_dir('flowers')
         if is_train:
             dataset = flowers.get_split('train', data_dir)
         else:
@@ -68,7 +85,7 @@ def flowers_data(batch_size, batch_num, height=256, width=256, is_train=True, nu
 
 
 def ptb_data(config, eval_config):
-    data_dir = os.path.join(os.path.expanduser('~'), 'data', 'ptb', 'data')
+    data_dir = find_data_dir('ptb', 'data')
     raw_data = ptb_reader.ptb_raw_data(data_dir)
     train_data, valid_data, test_data, _ = raw_data
     return (
@@ -79,14 +96,14 @@ def ptb_data(config, eval_config):
 
 
 def cifar10_data(batch_size, is_train=True):
-    data_path = os.path.join(os.path.expanduser('~'), 'data', 'cifar-10-batches-bin', 'data_batch_*')
+    data_path = find_data_dir('cifar-10-batches-bin', 'data_batch_*')
     images, labels = cifar_input.build_input('cifar10', data_path, batch_size,
                                              "train" if is_train else "eval")
     return images, labels, 10
 
 
 def cifar100_data(batch_size, is_train=True):
-    data_path = os.path.join(os.path.expanduser('~'), 'data', 'cifar-100-binary', 'train.bin')
+    data_path = find_data_dir('cifar-100', 'train.bin')
     images, labels = cifar_input.build_input('cifar100', data_path, batch_size,
                                              "train" if is_train else "eval")
     return images, labels, 100

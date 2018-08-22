@@ -9,7 +9,7 @@ import tensorflow as tf
 
 from parameterized import parameterized
 
-from . import run_on_rpc_and_gpu, run_on_rpc_and_gpu, run_on_sessions, run_on_devices
+from . import run_on_rpc_and_gpu, run_on_sessions, run_on_devices, assertAllClose
 from . import networks, datasets
 from .lib import tfhelper
 
@@ -113,7 +113,7 @@ class VGGCaseBase(unittest.TestCase):
             return run_vgg(self._vgg(), sess, input_data)
 
         actual, expected = run_on_rpc_and_gpu(func, config=tf.ConfigProto(allow_soft_placement=True))
-        self.assertEquals(actual, expected)
+        assertAllClose(actual, expected, rtol=1e-3)
 
     @unittest.skip("Not yet implemented")
     def test_fake_data_gpu(self):
@@ -134,7 +134,7 @@ class VGGCaseBase(unittest.TestCase):
             return run_vgg(self._vgg(), sess, input_data)
 
         actual, expected = run_on_rpc_and_gpu(func)
-        self.assertEquals(actual, expected)
+        assertAllClose(actual, expected, rtol=1e-3)
 
     @unittest.skip("Skip distributed runtime")
     def test_dist(self):

@@ -9,7 +9,7 @@ import tensorflow as tf
 
 from parameterized import parameterized
 
-from . import run_on_rpc_and_gpu, run_on_sessions, run_on_devices
+from . import run_on_rpc_and_gpu, run_on_sessions, run_on_devices, assertAllClose
 from . import networks, datasets
 from .lib import tfhelper
 
@@ -90,7 +90,7 @@ class ResNetCaseBase(unittest.TestCase):
         config = self._config(batch_size=batch_size)
         config.allow_soft_placement = True
         actual, expected = run_on_rpc_and_gpu(self._get_func(batch_size), config=config)
-        self.assertEquals(actual, expected)
+        assertAllClose(actual, expected)
 
 
 @unittest.skip("Fake data is used as common dataset instead")
