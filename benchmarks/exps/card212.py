@@ -10,6 +10,7 @@ from __future__ import absolute_import, print_function, division, unicode_litera
 
 from absl import flags
 
+from benchmarks.driver.runner import Executor
 from benchmarks.driver.server.config import presets
 from benchmarks.driver.workload import WTL
 from benchmarks.exps import run_seq, maybe_forced_preset, Pause
@@ -23,7 +24,17 @@ def case1():
 
     # BUG: seems we must run a single job first otherwise it will hang
     run_seq(scfg.copy(output_dir=FLAGS.save_dir/'case1'),
+            WTL.create("vae", 128, 20, executor=Executor.TF),
             WTL.create("vae", 128, 20))
+
+
+def case2():
+    scfg = maybe_forced_preset(presets.MostEfficient)
+
+    # BUG: seems we must run a single job first otherwise it will hang
+    run_seq(scfg.copy(output_dir=FLAGS.save_dir/'case2'),
+            WTL.create("super_res", 128, 20, executor=Executor.TF),
+            WTL.create("super_res", 128, 20))
 
 
 def main(argv):
@@ -31,4 +42,5 @@ def main(argv):
 
     {
         "case1": case1,
+        "case2": case2,
     }[command]()

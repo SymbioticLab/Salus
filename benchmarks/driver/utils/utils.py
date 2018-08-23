@@ -187,7 +187,7 @@ def merge_directory(src, dst, delete_src=False):
 
 @contextmanager
 def atomic_directory(final_dest):
-    # type: (Union[str, 'Path'], bool) -> 'Path'
+    # type: (Union[str, 'Path']) -> 'Path'
     """Create a temporary directory, when finishing, move it to final dest.
     When raises exception, final dest not affected.
 
@@ -249,7 +249,7 @@ def stable_unique(array):
 
 
 def unique(array, stable=False):
-    # type: (Iterable[T]) -> Iterable[T]
+    # type: (Iterable[T], bool) -> Iterable[T]
     if stable:
         return stable_unique(array)
     return list(set(array))
@@ -263,6 +263,11 @@ def format_timespan(num_seconds, threhold=1):
             return f'{num_seconds:.2f}{unit}'
         num_seconds *= 1000
     return f'{num_seconds / 1000:.2f}{unit}'
+
+
+def snake_to_pascal(snake_str):
+    parts = snake_str.split('_')
+    return ''.join(map(str.capitalize, parts))
 
 
 __all__ = [
@@ -285,4 +290,5 @@ __all__ = [
     'maybe_path',
     'unique',
     'format_timespan',
+    'snake_to_pascal',
 ]

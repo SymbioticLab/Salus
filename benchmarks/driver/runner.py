@@ -3,7 +3,6 @@ from __future__ import absolute_import, print_function, division, unicode_litera
 from builtins import super, str
 from future.utils import with_metaclass
 
-import os
 import logging
 from absl import flags
 from abc import ABCMeta, abstractmethod
@@ -12,7 +11,7 @@ from enum import Enum
 from typing import Iterable, Tuple, Union, Any, Dict
 
 from .server import SalusServer
-from .utils import Popen, execute
+from .utils import Popen, execute, snake_to_pascal
 from .utils.compatiblity import pathlib, subprocess as sp
 
 Path = pathlib.Path
@@ -160,9 +159,9 @@ class UnittestRunner(Runner):
         if self.wl.name in supported_model:
             pkg, cls, names = supported_model[self.wl.name]
         else:
-            # fallback to guessing, issue a warning
+            # fallback to guessing
             pkg = f'test_tf.test_{self.wl.name}'
-            cls = f'Test{self.wl.name.capitalize()}'
+            cls = f'Test{snake_to_pascal(self.wl.name)}'
             names = {
                 s: str(idx)
                 for idx, s in enumerate(self.wl.wtl.available_batch_sizes())

@@ -27,6 +27,24 @@ def find_data_dir(dataset_name, *args):
     raise ValueError("Can not find data for {}".format(dataset_name))
 
 
+def fake_data_ex(batch_size, variable_specs=None):
+    if variable_specs is None:
+        variable_specs = [
+            ((256, 256, 3), {'dtype': tf.float32}, 'images'),
+            ((1,), {'minval': 0, 'maxval': 1000}, 'truths'),
+        ]
+
+    inputs = []
+    for shape, kwargs, name in variable_specs:
+        var = tf.Variable(tf.random_normal(shape, **kwargs), name=name+'/sample', trainable=False)
+
+        input_queue = tf.train.input_producer(tf.expand_dims(var, 0))
+
+        inp = input_queue.dequeue_many(batch_size, name=name)
+        inputs.append(inp)
+    return inputs
+
+
 def fake_data(batch_size, batch_num, is_train=True, height=256, width=256, num_classes=1000, depth=3):
     """Generate a fake dataset that matches the dimensions of ImageNet."""
     if not is_train:
