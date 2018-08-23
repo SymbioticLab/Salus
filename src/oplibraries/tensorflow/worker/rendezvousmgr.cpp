@@ -133,7 +133,7 @@ void WorkerRendezvous::SameWorkerRecvDone(const ParsedKey &parsed, const Args &s
 
     // The following function takes care of cpu->gpu, gpu->cpu, gpu->gpu copies,
     // etc.
-    VLOG(1) << "WorkerRendezvous::SameWorkerRecvDone copy from " << send_dev->name() << " to "
+    VLOG(2) << "WorkerRendezvous::SameWorkerRecvDone copy from " << send_dev->name() << " to "
             << recv_dev->name() << "    send_on_host " << send_args.alloc_attrs.on_host() << " recv_on_host "
             << recv_args.alloc_attrs.on_host() << " src_data: " << reinterpret_cast<uint64_t>(in.tensor_data().data())
             << " dst_data: " << reinterpret_cast<uint64_t >(out->tensor_data().data());

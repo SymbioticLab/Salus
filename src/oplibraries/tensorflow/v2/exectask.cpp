@@ -568,10 +568,10 @@ bool ExecTask::maybeMemoryFailure(const tf::Status &s, const MemFailCallback &me
         }
 
         if (memFailure && memFailure()) {
-            VLOG(1) << "OOM happened and caught by scheduler: " << *this;
+            VLOG(2) << "OOM happened and caught by scheduler: " << *this;
             return true;
         }
-        VLOG(1) << "OOM happened and propagated: " << *this;
+        VLOG(2) << "OOM happened and propagated: " << *this;
     }
     // This is either not a OOM error, or the scheduler is not willing to handle it,
     // just go through normal handling

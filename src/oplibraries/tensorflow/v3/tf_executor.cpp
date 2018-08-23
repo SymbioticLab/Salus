@@ -1324,14 +1324,16 @@ void ExecutorState::runAsync(std::shared_ptr<IterationContext> &&ictx) noexcept
     ictx_ = std::move(ictx);
     ictx_->setGraphId(impl_->graph_id_);
 
-    LogOpTracing() << "event: start_iter "
-                   << nlohmann::json({
-                          {"sess", impl_->params_.session},
-                          {"stepId", step_id_},
-                          {"mainIter", impl_->is_main_iter},
-                          {"graphId", impl_->graph_id_},
-                          {"device", impl_->params_.device->name()},
-                      });
+    if (vlog_) {
+        LogOpTracing() << "event: start_iter "
+                       << nlohmann::json({
+                              {"sess", impl_->params_.session},
+                              {"stepId", step_id_},
+                              {"mainIter", impl_->is_main_iter},
+                              {"graphId", impl_->graph_id_},
+                              {"device", impl_->params_.device->name()},
+                          });
+    }
 
     const tf::Graph *graph = impl_->graph_.get();
     TaggedNodeSeq ready;
@@ -1346,17 +1348,20 @@ void ExecutorState::runAsync(std::shared_ptr<IterationContext> &&ictx) noexcept
 
     // Initialize the ready queue.
     for (const auto *n : impl_->root_nodes_) {
-        DCHECK_EQ(n->in_edges().size(), 0);
-        LogOpTracing() << "event: queued "
-                       << nlohmann::json({
-                                             {"name", n->name()},
-                                             {"type", n->type_string()},
-                                             {"session", impl_->params_.session},
-                                             {"graphId", impl_->graph_id_},
-                                             {"mainIter", impl_->is_main_iter},
-                                             {"stepId", step_id_},
-                                             {"device", impl_->params_.device->name()},
-                                         });
+        DCHECK(n->in_edges().empty());
+        if (vlog_) {
+            LogOpTracing() << "event: queued "
+                           << nlohmann::json({
+                                                 {"name", n->name()},
+                                                 {"type", n->type_string()},
+                                                 {"session", impl_->params_.session},
+                                                 {"graphId", impl_->graph_id_},
+                                                 {"mainIter", impl_->is_main_iter},
+                                                 {"stepId", step_id_},
+                                                 {"device", impl_->params_.device->name()},
+                                             });
+
+        }
         ready.push_back(TaggedNode{n, root_frame_, 0, false});
     }
     if (ready.empty()) {
@@ -1477,19 +1482,19 @@ void ExecutorState::Process(TaggedNode tagged_node, tf::int64)
         params.track_allocations = false;
 
         if (vlog_) {
-            VLOG(1) << "Process node: " << id << " step " << params.step_id << " " << SummarizeNode(*node)
+            VLOG(2) << "Process node: " << id << " step " << params.step_id << " " << SummarizeNode(*node)
                     << " is dead: " << tagged_node.is_dead;
+            LogOpTracing() << "event: running "
+                           << nlohmann::json({
+                                                 {"name", tagged_node.node->name()},
+                                                 {"type", tagged_node.node->type_string()},
+                                                 {"session", impl_->params_.session},
+                                                 {"graphId", impl_->graph_id_},
+                                                 {"mainIter", impl_->is_main_iter},
+                                                 {"stepId", step_id_},
+                                                 {"device", device->name()},
+                                             });
         }
-        LogOpTracing() << "event: running "
-                       << nlohmann::json({
-                                             {"name", tagged_node.node->name()},
-                                             {"type", tagged_node.node->type_string()},
-                                             {"session", impl_->params_.session},
-                                             {"graphId", impl_->graph_id_},
-                                             {"mainIter", impl_->is_main_iter},
-                                             {"stepId", step_id_},
-                                             {"device", device->name()},
-                                         });
 
         Entry *input_tensors = GetInputTensors(input_frame, input_iter);
         Entry *first_input = input_tensors + item.input_start;
@@ -1881,17 +1886,19 @@ void ExecutorState::PropagateOutputs(const TaggedNode &tagged_node, const NodeIt
         is_frame_done = input_frame->DecrementOutstandingOpsLocked(&impl_->gview_, input_iter, ready);
     }
 
-    for (const auto &n : *ready) {
-        LogOpTracing() << "event: queued "
-                       << nlohmann::json({
-                                             {"name", n.node->name()},
-                                             {"type", n.node->type_string()},
-                                             {"session", impl_->params_.session},
-                                             {"graphId", impl_->graph_id_},
-                                             {"mainIter", impl_->is_main_iter},
-                                             {"stepId", step_id_},
-                                             {"device", impl_->params_.device->name()},
-                                         });
+    if (vlog_) {
+        for (const auto &n : *ready) {
+            LogOpTracing() << "event: queued "
+                           << nlohmann::json({
+                                                 {"name", n.node->name()},
+                                                 {"type", n.node->type_string()},
+                                                 {"session", impl_->params_.session},
+                                                 {"graphId", impl_->graph_id_},
+                                                 {"mainIter", impl_->is_main_iter},
+                                                 {"stepId", step_id_},
+                                                 {"device", impl_->params_.device->name()},
+                                             });
+        }
     }
 
 
@@ -1912,10 +1919,10 @@ void ExecutorState::PropagateOutputs(const TaggedNode &tagged_node, const NodeIt
 bool ExecutorState::NodeDone(const Status &s, const tf::Node *node, const TaggedNodeSeq &ready,
                              tf::NodeExecStatsWrapper *, TaggedNodeReadyQueue *inline_ready)
 {
-    VLOG(1) << "NodeDone: " << node->id() << " step " << step_id_ << " " << SummarizeNode(*node);
+    VLOG(2) << "NodeDone: " << node->id() << " step " << step_id_ << " " << SummarizeNode(*node);
     if (VLOG_IS_ON(1)) {
         for (auto &tn : ready) {
-            VLOG(1) << "NodeReady: " << tn.node->id() << " step " << step_id_ << " "
+            VLOG(2) << "NodeReady: " << tn.node->id() << " step " << step_id_ << " "
                     << SummarizeNode(*tn.node);
         }
     }
@@ -1946,17 +1953,19 @@ bool ExecutorState::NodeDone(const Status &s, const tf::Node *node, const Tagged
         num_outstanding_ops_.fetch_add(ready_size - 1, std::memory_order_relaxed);
     }
 
-    LogOpTracing() << "event: done "
-                   << nlohmann::json({
-                                         {"name", node->name()},
-                                         {"type", node->type_string()},
-                                         {"session", impl_->params_.session},
-                                         {"graphId", impl_->graph_id_},
-                                         {"mainIter", impl_->is_main_iter},
-                                         {"stepId", step_id_},
-                                         {"status", s.ToString()},
-                                         {"device", impl_->params_.device->name()},
-                                     });
+    if (vlog_) {
+        LogOpTracing() << "event: done "
+                       << nlohmann::json({
+                                             {"name", node->name()},
+                                             {"type", node->type_string()},
+                                             {"session", impl_->params_.session},
+                                             {"graphId", impl_->graph_id_},
+                                             {"mainIter", impl_->is_main_iter},
+                                             {"stepId", step_id_},
+                                             {"status", s.ToString()},
+                                             {"device", impl_->params_.device->name()},
+                                         });
+    }
 
     // Schedule the ready nodes in 'ready'.
     if (s.ok()) {
@@ -2032,13 +2041,16 @@ void ExecutorState::Finish()
         status = impl_->params_.device->Sync();
     }
 
-    LogOpTracing() << "event: end_iter "
-                   << nlohmann::json({{"sess", impl_->params_.session},
-                                      {"graphId", impl_->graph_id_},
-                                      {"stepId", step_id_},
-                                      {"mainIter", impl_->is_main_iter},
-                                      {"device", impl_->params_.device->name()},
-                                      {"memMap", TFInstance::instance().dumpGPUMemoryMap()}});
+    if (vlog_) {
+        LogOpTracing() << "event: end_iter "
+                       << nlohmann::json({{"sess", impl_->params_.session},
+                                          {"graphId", impl_->graph_id_},
+                                          {"stepId", step_id_},
+                                          {"mainIter", impl_->is_main_iter},
+                                          {"device", impl_->params_.device->name()},
+                                          {"memMap", TFInstance::instance().dumpGPUMemoryMap()},
+                       });
+    }
     if (impl_->is_main_iter) {
         impl_->params_.ins->dropExlusiveMode();
         ictx_->finish();

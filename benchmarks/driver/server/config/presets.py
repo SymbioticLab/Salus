@@ -30,6 +30,7 @@ def OpTracing(**kwargs):
     return SalusConfig(
         build_type='OpTracing',
         logconf='optracing',
+        extra_args=['-v1'],
         hide_output=False,
     ).update(**kwargs)
 

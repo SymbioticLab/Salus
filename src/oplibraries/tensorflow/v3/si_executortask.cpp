@@ -246,7 +246,7 @@ void SIExecutorState::Process(SIExecutorState::TaggedNode tagged_node)
         params.track_allocations = false;
 
         if (vlog_) {
-            VLOG(1) << "Process node: " << id << " step " << params.step_id << " " << SummarizeNode(*node)
+            VLOG(2) << "Process node: " << id << " step " << params.step_id << " " << SummarizeNode(*node)
                     << " is dead: " << tagged_node.is_dead;
         }
         LogOpTracing() << "event: running "
@@ -655,10 +655,10 @@ bool SIExecutorState::NodeDone(const Status &s, const tf::Node *node,
                                const SIExecutorState::TaggedNodeSeq &ready,
                                SIExecutorState::TaggedNodeReadyQueue *inline_ready)
 {
-    VLOG(1) << "NodeDone: " << node->id() << " step " << step_id_ << " " << SummarizeNode(*node);
+    VLOG(2) << "NodeDone: " << node->id() << " step " << step_id_ << " " << SummarizeNode(*node);
     if (VLOG_IS_ON(1)) {
         for (auto &tn : ready) {
-            VLOG(1) << "NodeReady: " << tn.node->id() << " step " << step_id_ << " "
+            VLOG(2) << "NodeReady: " << tn.node->id() << " step " << step_id_ << " "
                     << SummarizeNode(*tn.node);
         }
     }
@@ -749,7 +749,7 @@ void SIExecutorState::ScheduleReady(const TaggedNodeSeq &ready, TaggedNodeReadyQ
 
 void SIExecutorState::Finish()
 {
-    VLOG(1) << "SIExecutorState::Finish "
+    VLOG(2) << "SIExecutorState::Finish "
             << nlohmann::json(
                    {{"sess", impl_.params_.session}, {"graphId", impl_.graph_id_}, {"stepId", step_id_}});
     auto l = sstl::with_uguard(mu_);
@@ -780,7 +780,7 @@ void SIExecutorState::Finish()
     delete this;
     CHECK(done_cb != nullptr);
     runner([done = std::move(done_cb), status, &impl, step_id]() {
-        VLOG(1) << "SIExecutorState::Finish::done callback "
+        VLOG(2) << "SIExecutorState::Finish::done callback "
                 << nlohmann::json(
                        {{"sess", impl.params_.session}, {"graphId", impl.graph_id_}, {"stepId", step_id}});
         done(status);
@@ -1005,7 +1005,7 @@ void SIExecutorState::FrameState::ActivateNodes(const NodeItem &item, bool is_de
             const int dst_slot = e.input_slot;
             const int dst_loc = dst_item.input_start + dst_slot;
 
-            //            VLOG(1) << "ActivateNode: from " << item.node->id() << " to " << dst_item.node->id()
+            //            VLOG(2) << "ActivateNode: from " << item.node->id() << " to " << dst_item.node->id()
             //            << " using input_tensors@" << as_hex(input_tensors) << " dst_loc " << dst_loc;
 
             if (e.is_last) {
