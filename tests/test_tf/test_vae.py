@@ -2,6 +2,7 @@ from __future__ import print_function, absolute_import, division
 
 import unittest
 
+import numpy as np
 import tensorflow as tf
 from datetime import datetime
 from timeit import default_timer
@@ -43,11 +44,12 @@ def run_vae(sess, args=None):
 
     """ training """
     salus_marker = tf.no_op(name="salus_main_iter")
-    speeds = []
     inbetween = []
     last_end_time = 0
     losses = []
     with tfhelper.initialized_scope(sess) as coord:
+        speeds = []
+        JCT = default_timer()
         # Loop over all batches
         for i in range(tfhelper.iteration_num_from_env()):
             if coord.should_stop():
@@ -71,6 +73,13 @@ def run_vae(sess, args=None):
             fmt_str = '{}: step {}, loss = {:.2f} ({:.1f} examples/sec; {:.3f} sec/batch)'
             print(fmt_str.format(datetime.now(), i,
                                  loss_value, examples_per_sec, sec_per_batch))
+
+        JCT = default_timer() - JCT
+        print('Training time is %.3f sec' % JCT)
+        print('Average: %.3f sec/batch' % np.average(speeds))
+        if len(speeds) > 1:
+            print('First iteration: %.3f sec/batch' % speeds[0])
+            print('Average excluding first iteration: %.3f sec/batch' % np.average(speeds[1:]))
 
     return losses
 
