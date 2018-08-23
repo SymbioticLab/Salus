@@ -25,6 +25,7 @@ def case1():
     # BUG: seems we must run a single job first otherwise it will hang
     run_seq(scfg.copy(output_dir=FLAGS.save_dir/'case1'),
             WTL.create("vae", 128, 20, executor=Executor.TF),
+            Pause.Wait,
             WTL.create("vae", 128, 20))
 
 
@@ -34,7 +35,18 @@ def case2():
     # BUG: seems we must run a single job first otherwise it will hang
     run_seq(scfg.copy(output_dir=FLAGS.save_dir/'case2'),
             WTL.create("super_res", 128, 20, executor=Executor.TF),
+            Pause.Wait,
             WTL.create("super_res", 128, 20))
+
+
+def test():
+    scfg = maybe_forced_preset(presets.MostEfficient)
+
+    # BUG: seems we must run a single job first otherwise it will hang
+    run_seq(scfg.copy(output_dir=FLAGS.save_dir/'test'),
+            WTL.create("alexnet", 25, 20, executor=Executor.TF),
+            Pause.Wait,
+            WTL.create("alexnet", 25, 20))
 
 
 def main(argv):
@@ -43,4 +55,5 @@ def main(argv):
     {
         "case1": case1,
         "case2": case2,
+        "test": test,
     }[command]()
