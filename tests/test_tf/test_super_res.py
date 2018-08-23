@@ -83,7 +83,7 @@ class TestSuperRes(unittest.TestCase):
             return run_superres(sess, input_data, batch_size=batch_size)
         return func
 
-    @parameterized.expand([(64,)])
+    @parameterized.expand([(32,), (64,), (128,)])
     def test_gpu(self, batch_size):
         config = self._config(batch_size=batch_size)
         config.allow_soft_placement = True

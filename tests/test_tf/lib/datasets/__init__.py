@@ -35,13 +35,13 @@ def fake_data_ex(batch_size, variable_specs=None):
         ]
 
     inputs = []
-    for args, kwargs, name in variable_specs:
-        var = tf.Variable(tf.random_normal(*args, **kwargs), name=name+'/sample', trainable=False)
+    for shape, kwargs, name in variable_specs:
+        var = tf.Variable(tf.random_normal(shape, **kwargs), name=name+'/sample', trainable=False)
 
         input_queue = tf.train.input_producer(tf.expand_dims(var, 0))
 
-        input = input_queue.dequeue_many(batch_size, name=name)
-        inputs.append(input)
+        inp = input_queue.dequeue_many(batch_size, name=name)
+        inputs.append(inp)
     return inputs
 
 

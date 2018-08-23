@@ -1,18 +1,9 @@
 from __future__ import division, absolute_import, print_function
 
-from scipy.misc import imresize
-
 import tensorflow as tf
-import numpy as np
 
 from .subpixel import PS
 from . import ops
-
-
-def doresize(x, shape):
-    x = np.copy((x+1.)*127.5).astype("uint8")
-    y = imresize(x, shape)
-    return y
 
 
 class DCGAN(object):
