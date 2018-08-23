@@ -140,7 +140,7 @@ class SalusServer(object):
                                          'verbose.log']]
         stdout, stderr = None, None
         if self.config.hide_output:
-            stdout, stderr = sp.PIPE, sp.PIPE
+            stdout, stderr = sp.DEVNULL, sp.DEVNULL
         # remove any existing output
         for f in outputfiles:
             if f.exists():
