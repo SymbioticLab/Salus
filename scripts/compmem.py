@@ -33,6 +33,9 @@ def _process_line_paral(line, event_filters, updater=None):
 
         line = line.rstrip('\n')
 
+        if line[0] != '[':
+            return None
+
         dt_end = line.find(']')
         thr_end = line.find(']', dt_end + 1)
         channel_end = line.find(']', thr_end + 1)
