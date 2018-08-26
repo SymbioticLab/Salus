@@ -77,7 +77,7 @@ public:
 
         m_alloc_ptr = [](void *storage_ptr, void *object_ptr) {
             if (object_ptr) {
-                unref_type *x_object = static_cast<unref_type *>(object_ptr);
+                auto *x_object = static_cast<unref_type *>(object_ptr);
                 new (storage_ptr) unref_type(std::move(*x_object));
             } else {
                 static_cast<unref_type *>(storage_ptr)->~unref_type();
@@ -126,7 +126,7 @@ public:
     {
         if (!m_method_ptr)
             throw std::runtime_error("call of empty functor");
-        return m_method_ptr(&m_storage, m_function_ptr, args...);
+        return m_method_ptr(&m_storage, m_function_ptr, std::forward<decltype(args)>(args)...);
     }
 
     /**
