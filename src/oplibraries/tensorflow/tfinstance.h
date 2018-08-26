@@ -109,10 +109,6 @@ public:
     {
         return *m_env;
     }
-    auto &devices() const
-    {
-        return m_devCon.devices;
-    }
 
 #if !defined(SALUS_ENABLE_SIEXECUTOR)
     tf::Device *tfdevice(const DeviceSpec &spec) const;
