@@ -16,7 +16,7 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include "oplibraries/tensorflow/worker/mdgraphmgr.h"
+#include "oplibraries/tensorflow/v2/mdgraphmgr.h"
 
 #include "oplibraries/tensorflow/device/salusdevices.h"
 #include "oplibraries/tensorflow/tfexception.h"

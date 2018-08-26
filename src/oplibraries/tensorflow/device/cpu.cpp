@@ -14,6 +14,7 @@
 
 namespace salus::oplib::tensorflow {
 
+#if !defined(SALUS_ENABLE_SIEXECUTOR)
 class PerTaskCPUDevice : public PerTaskDevice
 {
 public:
@@ -27,12 +28,15 @@ public:
         return nullptr;
     }
 };
+#endif // !SALUS_ENABLE_SIEXECUTOR
 
 SalusCPUDevice::SalusCPUDevice(const tf::SessionOptions &options, const std::string &name, tf::Bytes memory_limit,
                                const tf::DeviceLocality &locality, tf::Allocator *allocator)
     : LocalDevice(options, tf::Device::BuildDeviceAttributes(name, tf::DEVICE_CPU, memory_limit, locality))
     , m_allocator(allocator)
+#if !defined(SALUS_ENABLE_SIEXECUTOR)
     , m_pool(std::make_shared<sstl::ObjectPool<PerTaskCPUDevice>>())
+#endif
 {
 }
 
@@ -61,8 +65,14 @@ Status SalusCPUDevice::MakeTensorFromProto(const tf::TensorProto &tensor_proto,
 std::shared_ptr<PerTaskDevice> SalusCPUDevice::createPerTaskDevice(sstl::not_null<const tf::Graph *> graph,
                                                                    std::unique_ptr<ResourceContext> &&rctx)
 {
+#if defined(SALUS_ENABLE_SIEXECUTOR)
+    UNUSED(graph);
+    UNUSED(rctx);
+    return nullptr;
+#else
     UNUSED(graph);
     return m_pool->acquire(this, std::move(rctx));
+#endif
 }
 
 std::unique_ptr<ShadowDevice> SalusCPUDevice::createSessionDevice(std::string newBaseName, std::string sessHandle)

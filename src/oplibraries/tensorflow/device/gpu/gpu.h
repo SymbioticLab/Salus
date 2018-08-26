@@ -80,7 +80,10 @@ private:
 
     friend class PerTaskGPUDevice;
     friend class SessionDevice;
+
+#if !defined(SALUS_ENABLE_SIEXECUTOR)
     std::shared_ptr<sstl::ObjectPool<PerTaskGPUDevice>> m_pool;
+#endif
 
     std::mutex m_muStream;
     std::vector<bool> m_streamUsed;

@@ -63,6 +63,7 @@ TFInstance::DeviceContainer::DeviceContainer()
 
 TFInstance::~TFInstance() = default;
 
+#if !defined(SALUS_ENABLE_SIEXECUTOR)
 tf::Device *TFInstance::tfdevice(const DeviceSpec &spec) const
 {
     auto dt = sstl::to_underlying(spec.type);
@@ -81,6 +82,7 @@ tf::Device *TFInstance::tfdevice(const DeviceSpec &spec) const
     LOG(ERROR) << "Cannot find device for " << spec << ": " << ok;
     return nullptr;
 }
+#endif // !SALUS_ENABLE_SIEXECUTOR
 
 void TFInstance::handleCreateSession(std::unique_ptr<tf::CreateSessionRequest> &&req, tf::CreateSessionResponse &resp,
                                      HandlerCallback &&cb)
@@ -185,9 +187,12 @@ void TFInstance::handleReset(std::unique_ptr<tf::ResetRequest> &&req, tf::ResetR
     cb(s);
 }
 
-std::string TFInstance::dumpGPUMemoryMap() const
+std::string TFInstance::maybeDumpGPUMemoryMap(tf::Device *dev) const
 {
-    auto alloc = static_cast<SalusGPUDevice *>(tfdevice(devices::GPU0))->GetAllocator({});
-    return static_cast<tf::GPUDoubleBFCAllocator *>(alloc)->GenerateMemoryMap();
+    if (dev->parsed_name().has_type && dev->parsed_name().type == tf::DEVICE_GPU) {
+        auto alloc = static_cast<SalusGPUDevice *>(dev)->GetAllocator({});
+        return static_cast<tf::GPUDoubleBFCAllocator *>(alloc)->GenerateMemoryMap();
+    }
+    return {};
 }
 } // namespace salus::oplib::tensorflow

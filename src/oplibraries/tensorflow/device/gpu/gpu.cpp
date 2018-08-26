@@ -15,6 +15,7 @@
 
 namespace salus::oplib::tensorflow {
 
+#if !defined(SALUS_ENABLE_SIEXECUTOR)
 class PerTaskGPUDevice : public PerTaskDevice
 {
 public:
@@ -40,13 +41,16 @@ private:
 
     std::vector<int> m_streams;
 };
+#endif // !SALUS_ENABLE_SIEXECUTOR
 
 SalusGPUDevice::SalusGPUDevice(const tf::SessionOptions &options, const std::string &name, tf::Bytes memory_limit,
                                const tf::DeviceLocality &locality, int gpu_id, const std::string &physical_device_desc,
                                tf::Allocator *gpu_allocator, tf::Allocator *cpu_allocator, int max_streams)
     : BaseGPUDevice(options, name, memory_limit, locality, gpu_id, physical_device_desc, gpu_allocator, cpu_allocator,
                     false /* sync every op */, max_streams)
+#if !defined(SALUS_ENABLE_SIEXECUTOR)
     , m_pool(std::make_shared<sstl::ObjectPool<PerTaskGPUDevice>>())
+#endif
     , m_streamUsed(static_cast<size_t>(max_streams), false)
 {
 }
@@ -151,8 +155,14 @@ void SalusGPUDevice::flushCacheFor(sstl::not_null<const tf::Graph *>)
 std::shared_ptr<PerTaskDevice> SalusGPUDevice::createPerTaskDevice(sstl::not_null<const tf::Graph *> graph,
                                                                    std::unique_ptr<ResourceContext> &&rctx)
 {
+#if defined(SALUS_ENABLE_SIEXECUTOR)
+    UNUSED(graph);
+    UNUSED(rctx);
+    return nullptr;
+#else
     VLOG(3) << "SalusGPUDevice::createPerTaskDevice on " << name() << " for " << as_hex(graph.get());
     return m_pool->acquire(this, std::move(rctx));
+#endif // SALUS_ENABLE_SIEXECUTOR
 }
 
 std::unique_ptr<ShadowDevice> SalusGPUDevice::createSessionDevice(std::string newBaseName, std::string sessHandle)
@@ -212,6 +222,7 @@ Status SalusGPUDevice::FillContextMap(const tf::Graph *graph, std::vector<tf::De
     return BaseGPUDevice::FillContextMap(graph, device_context_map);
 }
 
+#if !defined(SALUS_ENABLE_SIEXECUTOR)
 PerTaskGPUDevice::PerTaskGPUDevice(sstl::not_null<tf::Device *> base, std::unique_ptr<ResourceContext> &&rctx)
     : PerTaskDevice(base, std::move(rctx))
 {
@@ -317,6 +328,7 @@ PerTaskGPUDevice::~PerTaskGPUDevice()
     releaseStreams();
 #endif
 }
+#endif // !SALUS_ENABLE_SIEXECUTOR
 
 tf::BaseGPUDevice *SalusGPUDeviceFactory::CreateGPUDevice(const tf::SessionOptions &options, const std::string &name,
                                                           tf::Bytes memory_limit, const tf::DeviceLocality &locality,

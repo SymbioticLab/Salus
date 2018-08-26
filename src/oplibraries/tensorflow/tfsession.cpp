@@ -27,7 +27,7 @@
 #include "oplibraries/tensorflow/v3/sigraphmgr.h"
 #include "oplibraries/tensorflow/worker/dummysessionmgr.h"
 #include "oplibraries/tensorflow/worker/dummyworkercache.h"
-#include "oplibraries/tensorflow/worker/mdgraphmgr.h"
+#include "oplibraries/tensorflow/v2/mdgraphmgr.h"
 #include "oplibraries/tensorflow/worker/rendezvousmgr.h"
 
 #include <cmath>
@@ -177,6 +177,7 @@ TFSession::TFSessionPrivate::TFSessionPrivate(TFInstance &inst, std::shared_ptr<
     options.config.set_isolate_session_state(true);
     m_masterSess =
         sstl::make_scoped_unref<tf::MasterSession>(options, &m_masterEnv,
+                                                   // MasterSession don't use remote_devices when given workerCache
                                                    std::make_unique<std::vector<std::unique_ptr<tf::Device>>>(),
                                                    std::move(workerCache), std::move(device_set),
                                                    tf::CreateNoOpStatsPublisher);

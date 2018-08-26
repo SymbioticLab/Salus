@@ -8,7 +8,6 @@
 #include "oplibraries/tensorflow/device/shadowdevices.h"
 #include "oplibraries/tensorflow/tfexception.h"
 #include "oplibraries/tensorflow/tfutils.h"
-#include "oplibraries/tensorflow/v3/si_executor.h"
 #include "oplibraries/tensorflow/v3/tf_executor.h"
 #include "oplibraries/tensorflow/worker/dummyworkercache.h"
 

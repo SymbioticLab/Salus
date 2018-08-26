@@ -114,7 +114,9 @@ public:
         return m_devCon.devices;
     }
 
+#if !defined(SALUS_ENABLE_SIEXECUTOR)
     tf::Device *tfdevice(const DeviceSpec &spec) const;
+#endif
 
     /**
      * @brief find session
@@ -139,7 +141,7 @@ public:
     /**
      * @brief for debugging, dump memory map for GPU
      */
-     std::string dumpGPUMemoryMap() const;
+     std::string maybeDumpGPUMemoryMap(tf::Device *dev) const;
 };
 
 } // namespace salus::oplib::tensorflow

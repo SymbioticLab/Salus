@@ -2048,7 +2048,7 @@ void ExecutorState::Finish()
                                           {"stepId", step_id_},
                                           {"mainIter", impl_->is_main_iter},
                                           {"device", impl_->params_.device->name()},
-                                          {"memMap", TFInstance::instance().dumpGPUMemoryMap()},
+                                          {"memMap", TFInstance::instance().maybeDumpGPUMemoryMap(impl_->params_.device)},
                        });
     }
     if (impl_->is_main_iter) {

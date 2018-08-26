@@ -58,7 +58,9 @@ public:
 private:
     sstl::not_null<tf::Allocator *> m_allocator; // not owned
 
+#if !defined(SALUS_ENABLE_SIEXECUTOR)
     std::shared_ptr<sstl::ObjectPool<PerTaskCPUDevice>> m_pool;
+#endif
 };
 
 class SalusCPUDeviceFactory : public tf::DeviceFactory
