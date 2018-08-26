@@ -21,6 +21,7 @@
 #include "oplibraries/tensorflow/tfsession.h"
 
 #include "execution/executionengine.h"
+#include "oplibraries/tensorflow/handlercallback.h"
 #include "oplibraries/tensorflow/tfexception.h"
 #include "oplibraries/tensorflow/tfinstance.h"
 #include "oplibraries/tensorflow/v3/sigraphmgr.h"
@@ -51,7 +52,7 @@ public:
 
     ~TFSessionPrivate();
 
-#define DECLARE_HANDLER_PRIV(name)                                                                           \
+#define DECLARE_HANDLER_PRIV(name)                                                                                     \
     void handle##name(const tf::name##Request &req, tf::name##Response &resp, HandlerCallback &&cb)
 
     DECLARE_HANDLER_PRIV(ExtendSession);
@@ -100,11 +101,10 @@ void TFSession::safeClose()
     return d->safeClose(shared_from_this());
 }
 
-#define IMPL_HANDLER(name)                                                                                   \
-    void TFSession::handle##name(const tf::name##Request &req, tf::name##Response &resp,                     \
-                                 HandlerCallback &&cb)                                                       \
-    {                                                                                                        \
-        d->handle##name(req, resp, std::move(cb));                                                           \
+#define IMPL_HANDLER(name)                                                                                             \
+    void TFSession::handle##name(const tf::name##Request &req, tf::name##Response &resp, HandlerCallback &&cb)         \
+    {                                                                                                                  \
+        d->handle##name(req, resp, std::move(cb));                                                                     \
     }
 
 IMPL_HANDLER(ExtendSession)
@@ -147,9 +147,11 @@ TFSession::TFSessionPrivate::TFSessionPrivate(TFInstance &inst, std::shared_ptr<
     // but not at this point, so it's ok to pass in a partially configured worker_env
     // Setup session manager that creates worker session later
 #if defined(SALUS_ENABLE_SIEXECUTOR)
-    m_sessMgr = std::make_unique<LocalSessionMgr>(GetCreateWorkerSessionFnForSIGraphMgr(m_inst.namePrefix(), &m_workerEnv, ctx, config));
+    m_sessMgr = std::make_unique<LocalSessionMgr>(
+        GetCreateWorkerSessionFnForSIGraphMgr(m_inst.namePrefix(), &m_workerEnv, ctx, config));
 #else
-    m_sessMgr = std::make_unique<LocalSessionMgr>(GetCreateWorkerSessionFnForMDGraphMgr(m_inst.namePrefix(), &m_workerEnv, ctx, config));
+    m_sessMgr = std::make_unique<LocalSessionMgr>(
+        GetCreateWorkerSessionFnForMDGraphMgr(m_inst.namePrefix(), &m_workerEnv, ctx, config));
 #endif // SALUS_ENABLE_SIEXECUTOR
     m_workerEnv.session_mgr = m_sessMgr.get();
 
@@ -173,9 +175,11 @@ TFSession::TFSessionPrivate::TFSessionPrivate(TFInstance &inst, std::shared_ptr<
     tf::SessionOptions options;
     options.config = config;
     options.config.set_isolate_session_state(true);
-    m_masterSess = sstl::make_scoped_unref<tf::MasterSession>(
-        options, &m_masterEnv, std::make_unique<std::vector<std::unique_ptr<tf::Device>>>(),
-        std::move(workerCache), std::move(device_set), tf::CreateNoOpStatsPublisher);
+    m_masterSess =
+        sstl::make_scoped_unref<tf::MasterSession>(options, &m_masterEnv,
+                                                   std::make_unique<std::vector<std::unique_ptr<tf::Device>>>(),
+                                                   std::move(workerCache), std::move(device_set),
+                                                   tf::CreateNoOpStatsPublisher);
 
     // Call create on master session to finalize
     auto status = m_masterSess->Create(gdef, {});
@@ -207,8 +211,7 @@ void TFSession::TFSessionPrivate::handleExtendSession(const tf::ExtendSessionReq
 }
 
 void TFSession::TFSessionPrivate::handlePartialRunSetup(const tf::PartialRunSetupRequest &req,
-                                                        tf::PartialRunSetupResponse &resp,
-                                                        HandlerCallback &&cb)
+                                                        tf::PartialRunSetupResponse &resp, HandlerCallback &&cb)
 {
     SALUS_THROW_IF_ERROR(m_masterSess->PartialRunSetup(&req, &resp));
     cb(Status::OK());

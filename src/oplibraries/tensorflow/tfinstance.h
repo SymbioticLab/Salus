@@ -41,6 +41,7 @@ class Env;
 namespace salus::oplib::tensorflow {
 
 class TFSession;
+struct HandlerCallback;
 
 /**
  * @brief Represents the tensorflow instance used in Salus.
@@ -126,7 +127,7 @@ public:
     std::shared_ptr<TFSession> popSession(const std::string &sessHandle);
 
 #define DECLARE_HANDLER(name)                                                                                \
-    void handle##name(const tf::name##Request &req, tf::name##Response &resp, HandlerCallback &&cb)
+    void handle##name(std::unique_ptr<tf::name##Request> &&req, tf::name##Response &resp, HandlerCallback &&cb)
 
     DECLARE_HANDLER(CreateSession);
     DECLARE_HANDLER(CloseSession);

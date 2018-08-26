@@ -30,6 +30,7 @@ namespace salus {
 class ExecutionContext;
 namespace oplib::tensorflow {
 class TFInstance;
+struct HandlerCallback;
 
 /**
  * @brief One session of job

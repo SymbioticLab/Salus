@@ -50,13 +50,6 @@ public:
                DoneCallback cb) override;
 };
 
-struct HandlerCallback
-{
-    IOpLibrary::DoneCallback cb;
-    ProtoPtr tfresp;
-    void operator()(const Status &s);
-};
-
 } // namespace salus::oplib::tensorflow
 
 #endif // TFOPLIBRARYV2_H

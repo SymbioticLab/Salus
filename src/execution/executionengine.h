@@ -29,12 +29,14 @@
 #include "utils/containerutils.h"
 #include "utils/pointerutils.h"
 #include "utils/threadutils.h"
+#include "utils/fixed_function.hpp"
 
 #include <concurrentqueue.h>
 
 #include <boost/circular_buffer.hpp>
 
 #include <atomic>
+#include <any>
 #include <chrono>
 #include <future>
 #include <list>
@@ -72,7 +74,8 @@ public:
         return m_schedParam;
     }
 
-    std::shared_ptr<ExecutionContext> makeContext();
+    using RequestContextCb = sstl::FixedFunction<void(std::shared_ptr<ExecutionContext>)>;
+    void requestContext(RequestContextCb &&done);
 
 private:
     friend class ExecutionContext;
@@ -122,9 +125,9 @@ private:
 class ExecutionContext : public std::enable_shared_from_this<ExecutionContext>
 {
     ExecutionEngine &m_engine;
+    std::any m_userData;
 
     friend class ExecutionEngine;
-
     /**
      * @brief remove from engine and give up our reference of session item
      */
@@ -147,6 +150,16 @@ public:
     void setInterruptCallback(std::function<void()> cb);
 
     void setSessionHandle(const std::string &h);
+
+    const std::any &userData() const
+    {
+        return m_userData;
+    }
+
+    void setUserData(std::any &&data)
+    {
+        m_userData = std::move(data);
+    }
 
     void dropExlusiveMode();
 

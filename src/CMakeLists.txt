@@ -53,6 +53,7 @@ if(USE_TENSORFLOW)
         "oplibraries/tensorflow/tfinstance.cpp"
         "oplibraries/tensorflow/tfsession.cpp"
         "oplibraries/tensorflow/tfutils.cpp"
+        "oplibraries/tensorflow/handlercallback.cpp"
         "oplibraries/tensorflow/worker/rendezvousmgr.cpp"
         "oplibraries/tensorflow/worker/rendezvouswithhook.cpp"
         "oplibraries/tensorflow/worker/devicecontextwithdevice.cpp"

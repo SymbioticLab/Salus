@@ -22,7 +22,10 @@
  * with ours.
  */
 #include "oplibraries/tensorflow/tensorflow_headers.h"
-#include "tfoplibraryv2.h"
+
+#include "oplibraries/tensorflow/tfoplibraryv2.h"
+
+#include "oplibraries/tensorflow/handlercallback.h"
 #include "oplibraries/tensorflow/tfexception.h"
 #include "oplibraries/tensorflow/tfinstance.h"
 #include "oplibraries/tensorflow/tfsession.h"
@@ -36,18 +39,18 @@ namespace {
 template<typename REQUEST>
 auto prepareTFCall(const zrpc::CustomRequest &creq);
 
-#define IMPL_PARSE(name)                                                                                     \
-    template<>                                                                                               \
-    auto prepareTFCall<tf::name##Request>(const zrpc::CustomRequest &creq)                                   \
-    {                                                                                                        \
-        auto tfreq = sstl::createMessage<tf::name##Request>("tensorflow." #name "Request",                   \
-                                                            creq.extra().data(), creq.extra().size());       \
-        if (!tfreq) {                                                                                        \
-            throw TFException(                                                                               \
-                tf::errors::InvalidArgument("Failed to parse message as", "tensorflow." #name "Request"));   \
-        }                                                                                                    \
-                                                                                                             \
-        return std::make_pair(std::move(tfreq), std::make_unique<tf::name##Response>());                     \
+#define IMPL_PARSE(name)                                                                                               \
+    template<>                                                                                                         \
+    auto prepareTFCall<tf::name##Request>(const zrpc::CustomRequest &creq)                                             \
+    {                                                                                                                  \
+        auto tfreq = sstl::createMessage<tf::name##Request>("tensorflow." #name "Request", creq.extra().data(),        \
+                                                            creq.extra().size());                                      \
+        if (!tfreq) {                                                                                                  \
+            throw TFException(                                                                                         \
+                tf::errors::InvalidArgument("Failed to parse message as", "tensorflow." #name "Request"));             \
+        }                                                                                                              \
+                                                                                                                       \
+        return std::make_pair(std::move(tfreq), std::make_unique<tf::name##Response>());                               \
     }
 
 CallWithMasterMethodName(IMPL_PARSE)
@@ -57,17 +60,6 @@ CallWithMasterMethodName(IMPL_PARSE)
     OpLibraryRegistary::Register tfoplibraryv2(executor::TENSORFLOW, std::make_unique<TFOpLibraryV2>(), 200);
 
 } // namespace
-
-void HandlerCallback::operator()(const Status &s)
-{
-    auto cresp = std::make_unique<zrpc::CustomResponse>();
-    cresp->mutable_result()->set_code(s.code());
-    cresp->mutable_result()->set_message(s.error_message());
-    if (tfresp && s.ok()) {
-        tfresp->SerializeToString(cresp->mutable_extra());
-    }
-    cb(std::move(cresp));
-}
 
 bool TFOpLibraryV2::initialize()
 {
@@ -94,8 +86,8 @@ void TFOpLibraryV2::onRunGraph(ZmqServer::Sender sender, const zrpc::EvenlopDef 
     cb(nullptr);
 }
 
-void TFOpLibraryV2::onRun(ZmqServer::Sender sender, const zrpc::EvenlopDef &evenlop,
-                          const zrpc::RunRequest &request, DoneCallback cb)
+void TFOpLibraryV2::onRun(ZmqServer::Sender sender, const zrpc::EvenlopDef &evenlop, const zrpc::RunRequest &request,
+                          DoneCallback cb)
 {
     UNUSED(sender);
     UNUSED(evenlop);
@@ -104,21 +96,21 @@ void TFOpLibraryV2::onRun(ZmqServer::Sender sender, const zrpc::EvenlopDef &even
     cb(nullptr);
 }
 
-void TFOpLibraryV2::onCustom(ZmqServer::Sender sender, const zrpc::EvenlopDef &evenlop,
-                             const zrpc::CustomRequest &creq, DoneCallback cb)
+void TFOpLibraryV2::onCustom(ZmqServer::Sender sender, const zrpc::EvenlopDef &evenlop, const zrpc::CustomRequest &creq,
+                             DoneCallback cb)
 {
     UNUSED(sender);
 
     using Method = std::function<void(const zrpc::CustomRequest &, HandlerCallback &&)>;
     static std::unordered_map<std::string, Method> funcs{
-#define INSTANCE_HANDLER(name)                                                                               \
-    {                                                                                                        \
-        "tensorflow." #name "Request", [](auto creq, auto &&hcb) {                                           \
-            auto[tfreq, tfresp] = prepareTFCall<tf::name##Request>(creq);                                    \
-            auto &resp = *tfresp;                                                                            \
-            hcb.tfresp = std::move(tfresp);                                                                  \
-            TFInstance::instance().handle##name(*tfreq, resp, std::move(hcb));                               \
-        }                                                                                                    \
+#define INSTANCE_HANDLER(name)                                                                                         \
+    {                                                                                                                  \
+        "tensorflow." #name "Request", [](auto creq, auto &&hcb) {                                                     \
+            auto [tfreq, tfresp] = prepareTFCall<tf::name##Request>(creq);                                             \
+            auto &resp = *tfresp;                                                                                      \
+            hcb.tfresp = std::move(tfresp);                                                                            \
+            TFInstance::instance().handle##name(std::move(tfreq), resp, std::forward<decltype(hcb)>(hcb));             \
+        }                                                                                                              \
     }
 
         INSTANCE_HANDLER(CreateSession), INSTANCE_HANDLER(CloseSession),   INSTANCE_HANDLER(ListDevices),
@@ -126,15 +118,15 @@ void TFOpLibraryV2::onCustom(ZmqServer::Sender sender, const zrpc::EvenlopDef &e
 
 #undef INSTANCE_HANDLER
 
-#define SESSION_HANDLER(name)                                                                                \
-    {                                                                                                        \
-        "tensorflow." #name "Request", [](auto creq, auto &&hcb) -> void {                                   \
-            auto[tfreq, tfresp] = prepareTFCall<tf::name##Request>(creq);                                    \
-            auto &resp = *tfresp;                                                                            \
-            hcb.tfresp = std::move(tfresp);                                                                  \
-            auto sess = TFInstance::instance().findSession(tfreq->session_handle());                         \
-            sess->handle##name(*tfreq, resp, std::move(hcb));                                                \
-        }                                                                                                    \
+#define SESSION_HANDLER(name)                                                                                          \
+    {                                                                                                                  \
+        "tensorflow." #name "Request", [](auto creq, auto &&hcb) -> void {                                             \
+            auto [tfreq, tfresp] = prepareTFCall<tf::name##Request>(creq);                                             \
+            auto &resp = *tfresp;                                                                                      \
+            hcb.tfresp = std::move(tfresp);                                                                            \
+            auto sess = TFInstance::instance().findSession(tfreq->session_handle());                                   \
+            sess->handle##name(*tfreq, resp, std::forward<decltype(hcb)>(hcb));                                        \
+        }                                                                                                              \
     }
 
         SESSION_HANDLER(ExtendSession),  SESSION_HANDLER(PartialRunSetup), SESSION_HANDLER(RunStep),
@@ -145,15 +137,14 @@ void TFOpLibraryV2::onCustom(ZmqServer::Sender sender, const zrpc::EvenlopDef &e
     try {
         auto it = funcs.find(creq.type());
         if (it == funcs.end()) {
-            throw TFException(
-                tf::errors::InvalidArgument(creq.type(), " not found in registered custom tasks"));
+            throw TFException(tf::errors::InvalidArgument(creq.type(), " not found in registered custom tasks"));
         }
 
         VLOG(2) << "Dispatching custom task " << it->first << " of seq " << evenlop.seq();
         it->second(creq, std::move(hcb));
     } catch (const TFException &ex) {
-        LOG(ERROR) << "Error when executing custom task " << creq.type() << " of seq " << evenlop.seq()
-                   << ": " << ex.what();
+        LOG(ERROR) << "Error when executing custom task " << creq.type() << " of seq " << evenlop.seq() << ": "
+                   << ex.what();
         hcb(ex.code());
     }
 }

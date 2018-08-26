@@ -17,10 +17,13 @@
  */
 
 #include "oplibraries/tensorflow/tensorflow_headers.h"
+
 #include "tfinstance.h"
+
 #include "execution/executionengine.h"
-#include "oplibraries/tensorflow/device/salusdevices.h"
 #include "oplibraries/tensorflow/device/gpu/gpu.h"
+#include "oplibraries/tensorflow/device/salusdevices.h"
+#include "oplibraries/tensorflow/handlercallback.h"
 #include "oplibraries/tensorflow/tfexception.h"
 #include "oplibraries/tensorflow/tfsession.h"
 #include "utils/macros.h"
@@ -79,40 +82,37 @@ tf::Device *TFInstance::tfdevice(const DeviceSpec &spec) const
     return nullptr;
 }
 
-
-void TFInstance::handleCreateSession(const tf::CreateSessionRequest &req, tf::CreateSessionResponse &resp,
+void TFInstance::handleCreateSession(std::unique_ptr<tf::CreateSessionRequest> &&req, tf::CreateSessionResponse &resp,
                                      HandlerCallback &&cb)
 {
-    SALUS_THROW_IF_ERROR(ValidateExternalGraphDefSyntax(req.graph_def()));
+    SALUS_THROW_IF_ERROR(ValidateExternalGraphDefSyntax(req->graph_def()));
 
-    auto inserter = ExecutionEngine::instance().makeContext();
-
-    if (!inserter) {
-        cb(tf::errors::Aborted("Backend end engine interrupted"));
-        return;
-    }
-
-    auto *gdef = const_cast<tf::CreateSessionRequest &>(req).mutable_graph_def();
-    auto session = std::make_shared<TFSession>(*this, inserter, req.config(), gdef);
-    auto handle = session->handle();
-
-    // Register force interrupt handler
-    inserter->setInterruptCallback([this, handle]() {
-        popSession(handle)->safeClose();
-    });
-
-    // Insert into the session map, which takes ownership of the session.
-    {
-        auto l = sstl::with_guard(m_mu);
-        if (!m_sessions.try_emplace(handle, std::move(session)).second) {
-            throw TFException(tf::errors::Internal("Error when inserting session ", handle));
+    // NOTE: it's safe to capture resp by reference, because it is actually backed by cb
+    ExecutionEngine::instance().requestContext([&resp, cb = std::move(cb), req = std::move(req), this](auto inserter) mutable {
+        if (!inserter) {
+            cb(tf::errors::Aborted("Backend engine interrupted"));
+            return;
         }
-    }
-    LOG(INFO) << "Accepting and created session " << handle;
 
-    // reply
-    resp.set_session_handle(handle);
-    cb(Status::OK());
+        auto session = std::make_shared<TFSession>(*this, inserter, req->config(), req->mutable_graph_def());
+        auto handle = session->handle();
+
+        // Register force interrupt handler
+        inserter->setInterruptCallback([this, handle]() { popSession(handle)->safeClose(); });
+
+        // Insert into the session map, which takes ownership of the session.
+        {
+            auto l = sstl::with_guard(m_mu);
+            if (!m_sessions.try_emplace(handle, std::move(session)).second) {
+                throw TFException(tf::errors::Internal("Error when inserting session ", handle));
+            }
+        }
+        LOG(INFO) << "Accepting and created session " << handle;
+
+        // reply
+        resp.set_session_handle(handle);
+        cb(Status::OK());
+    });
 }
 
 std::shared_ptr<TFSession> TFInstance::findSession(const std::string &sessHandle)
@@ -124,8 +124,8 @@ std::shared_ptr<TFSession> TFInstance::findSession(const std::string &sessHandle
         for (auto &[h, ptr] : m_sessions) {
             LOG(ERROR) << " Session " << h << "@" << as_hex(ptr);
         }
-        throw TFException(tf::errors::InvalidArgument("Session ", sessHandle,
-                                                      " is not found. Possibly, this master has restarted."));
+        throw TFException(
+            tf::errors::InvalidArgument("Session ", sessHandle, " is not found. Possibly, this master has restarted."));
     }
     return it->second;
 }
@@ -135,20 +135,20 @@ std::shared_ptr<TFSession> TFInstance::popSession(const std::string &sessHandle)
     auto g = sstl::with_guard(m_mu);
     auto nh = m_sessions.extract(sessHandle);
     if (!nh) {
-        throw TFException(tf::errors::InvalidArgument("Session ", sessHandle,
-                                                      " is not found. Possibly, this master has restarted."));
+        throw TFException(
+            tf::errors::InvalidArgument("Session ", sessHandle, " is not found. Possibly, this master has restarted."));
     }
     return std::move(nh.mapped());
 }
 
-void TFInstance::handleCloseSession(const tf::CloseSessionRequest &req, tf::CloseSessionResponse &resp,
+void TFInstance::handleCloseSession(std::unique_ptr<tf::CloseSessionRequest> &&req, tf::CloseSessionResponse &resp,
                                     HandlerCallback &&cb)
 {
     UNUSED(resp);
-    popSession(req.session_handle())->deferClose(std::move(cb));
+    popSession(req->session_handle())->deferClose(std::move(cb));
 }
 
-void TFInstance::handleListDevices(const tf::ListDevicesRequest &req, tf::ListDevicesResponse &resp,
+void TFInstance::handleListDevices(std::unique_ptr<tf::ListDevicesRequest> &&req, tf::ListDevicesResponse &resp,
                                    HandlerCallback &&cb)
 {
     UNUSED(req);
@@ -158,7 +158,7 @@ void TFInstance::handleListDevices(const tf::ListDevicesRequest &req, tf::ListDe
     cb(Status::OK());
 }
 
-void TFInstance::handleReset(const tf::ResetRequest &req, tf::ResetResponse &resp, HandlerCallback &&cb)
+void TFInstance::handleReset(std::unique_ptr<tf::ResetRequest> &&req, tf::ResetResponse &resp, HandlerCallback &&cb)
 {
     UNUSED(req);
     UNUSED(resp);
@@ -187,7 +187,7 @@ void TFInstance::handleReset(const tf::ResetRequest &req, tf::ResetResponse &res
 
 std::string TFInstance::dumpGPUMemoryMap() const
 {
-    auto alloc = static_cast<SalusGPUDevice*>(tfdevice(devices::GPU0))->GetAllocator({});
-    return static_cast<tf::GPUDoubleBFCAllocator*>(alloc)->GenerateMemoryMap();
+    auto alloc = static_cast<SalusGPUDevice *>(tfdevice(devices::GPU0))->GetAllocator({});
+    return static_cast<tf::GPUDoubleBFCAllocator *>(alloc)->GenerateMemoryMap();
 }
 } // namespace salus::oplib::tensorflow
