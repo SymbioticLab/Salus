@@ -18,10 +18,11 @@
 
 #include "oplibraries/tensorflow/tensorflow_headers.h"
 
-#include "tfinstance.h"
+#include "oplibraries/tensorflow/tfinstance.h"
 
 #include "execution/executionengine.h"
 #include "oplibraries/tensorflow/device/gpu/gpu.h"
+#include "oplibraries/tensorflow/device/gpu/lane/lanemgr.h"
 #include "oplibraries/tensorflow/device/salusdevices.h"
 #include "oplibraries/tensorflow/handlercallback.h"
 #include "oplibraries/tensorflow/tfexception.h"
@@ -39,6 +40,7 @@ namespace salus::oplib::tensorflow {
 TFInstance::TFInstance()
     : m_env(tf::Env::Default())
     , m_devCon()
+    , m_laneMgr(std::make_unique<LaneMgr>())
 {
 }
 
@@ -47,6 +49,8 @@ TFInstance::DeviceContainer::DeviceContainer()
     tf::SessionOptions sess_opts;
     // Disable old style RPCDevice creation if any.
     (*sess_opts.config.mutable_device_count())["RPC"] = 0;
+    // We don't create GPU device through DeviceFactory
+    (*sess_opts.config.mutable_device_count())["GPU"] = 0;
 
     // Load devices
     maybeRegisterSalusDeviceFactories();
@@ -90,31 +94,48 @@ void TFInstance::handleCreateSession(std::unique_ptr<tf::CreateSessionRequest> &
     SALUS_THROW_IF_ERROR(ValidateExternalGraphDefSyntax(req->graph_def()));
 
     // NOTE: it's safe to capture resp by reference, because it is actually backed by cb
-    ExecutionEngine::instance().requestContext([&resp, cb = std::move(cb), req = std::move(req), this](auto inserter) mutable {
-        if (!inserter) {
-            cb(tf::errors::Aborted("Backend engine interrupted"));
-            return;
-        }
+    auto inserter = ExecutionEngine::instance().makeContext();
+    if (!inserter) {
+        cb(tf::errors::Aborted("Backend engine interrupted"));
+        return;
+    }
 
-        auto session = std::make_shared<TFSession>(*this, inserter, req->config(), req->mutable_graph_def());
-        auto handle = session->handle();
+    m_laneMgr->requestLanes(
+        [&resp, cb = std::move(cb), req = std::move(req), ectx = std::move(inserter), this](auto &&lanes) mutable {
+            std::vector<tf::Device *> devices;
 
-        // Register force interrupt handler
-        inserter->setInterruptCallback([this, handle]() { popSession(handle)->safeClose(); });
+            // add CPU device
+            devices.emplace_back(m_devCon.devices.front());
 
-        // Insert into the session map, which takes ownership of the session.
-        {
-            auto l = sstl::with_guard(m_mu);
-            if (!m_sessions.try_emplace(handle, std::move(session)).second) {
-                throw TFException(tf::errors::Internal("Error when inserting session ", handle));
+            // prepare devices from lane
+            for (auto &lane : lanes) {
+                devices.emplace_back(lane->as_tfdevice());
             }
-        }
-        LOG(INFO) << "Accepting and created session " << handle;
 
-        // reply
-        resp.set_session_handle(handle);
-        cb(Status::OK());
-    });
+            // Keep a reference for lanes on ectx's user data
+            // which should outlive the TFSession.
+            ectx->setUserData(std::forward<decltype(lanes)>(lanes));
+
+            auto session =
+                std::make_shared<TFSession>(*this, ectx, std::move(devices), req->config(), req->mutable_graph_def());
+            auto handle = session->handle();
+
+            // Register force interrupt handler
+            ectx->setInterruptCallback([this, handle]() { popSession(handle)->safeClose(); });
+
+            // Insert into the session map, which takes ownership of the session.
+            {
+                auto l = sstl::with_guard(m_mu);
+                if (!m_sessions.try_emplace(handle, std::move(session)).second) {
+                    throw TFException(tf::errors::Internal("Error when inserting session ", handle));
+                }
+            }
+            LOG(INFO) << "Accepting and created session " << handle;
+
+            // reply
+            resp.set_session_handle(handle);
+            cb(Status::OK());
+        });
 }
 
 std::shared_ptr<TFSession> TFInstance::findSession(const std::string &sessHandle)
@@ -154,9 +175,13 @@ void TFInstance::handleListDevices(std::unique_ptr<tf::ListDevicesRequest> &&req
                                    HandlerCallback &&cb)
 {
     UNUSED(req);
+    // This is never called
+    UNUSED(resp);
+    /*
     for (auto dev : devices()) {
         *(resp.add_local_device()) = dev->attributes();
     }
+    */
     cb(Status::OK());
 }
 

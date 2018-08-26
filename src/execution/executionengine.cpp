@@ -88,14 +88,14 @@ ExecutionEngine::~ExecutionEngine()
     stopScheduler();
 }
 
-void ExecutionEngine::requestContext(RequestContextCb &&done)
+std::shared_ptr<ExecutionContext> ExecutionEngine::makeContext()
 {
     if (m_interrupting) {
-        done(nullptr);
+        return nullptr;
     }
 
     auto ticket = m_allocReg.registerJob();
-    done(std::make_shared<ExecutionContext>(*this, ticket));
+    return std::make_shared<ExecutionContext>(*this, ticket);
 }
 
 void ExecutionEngine::scheduleIteration(IterationItem &&item)

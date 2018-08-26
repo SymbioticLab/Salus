@@ -67,6 +67,7 @@ if(USE_TENSORFLOW)
         "oplibraries/tensorflow/device/salusdevices.cpp"
         "oplibraries/tensorflow/device/cpu.cpp"
         "oplibraries/tensorflow/device/gpu/gpu.cpp"
+        "oplibraries/tensorflow/device/gpu/lane/lanemgr.cpp"
         "oplibraries/tensorflow/device/gpu/sessiondevice.cpp"
         "oplibraries/tensorflow/device/sessionallocator.cpp"
 #         "oplibraries/tensorflow/tfoplibrary.cpp"

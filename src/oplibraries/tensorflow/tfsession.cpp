@@ -47,8 +47,8 @@ auto computePool(tf::Env &env)
 class TFSession::TFSessionPrivate
 {
 public:
-    TFSessionPrivate(TFInstance &inst, std::shared_ptr<ExecutionContext> &&ctx, const tf::ConfigProto &config,
-                     tf::GraphDef *gdef);
+    TFSessionPrivate(TFInstance &inst, std::shared_ptr<ExecutionContext> &&ctx, std::vector<tf::Device *> devices,
+                     const tf::ConfigProto &config, tf::GraphDef *gdef);
 
     ~TFSessionPrivate();
 
@@ -83,9 +83,10 @@ public:
     std::unique_ptr<SalusRendezvousMgr> m_rendezvousMgr;
 };
 
-TFSession::TFSession(TFInstance &inst, std::shared_ptr<ExecutionContext> ctx, const tf::ConfigProto &config,
+TFSession::TFSession(TFInstance &inst, std::shared_ptr<ExecutionContext> ctx, std::vector<tf::Device *> devices,
+                     const tf::ConfigProto &config,
                      tf::GraphDef *gdef)
-    : d(std::make_unique<TFSessionPrivate>(inst, std::move(ctx), config, gdef))
+    : d(std::make_unique<TFSessionPrivate>(inst, std::move(ctx), std::move(devices), config, gdef))
 {
 }
 
@@ -122,7 +123,7 @@ std::string TFSession::TFSessionPrivate::handle() const
 }
 
 TFSession::TFSessionPrivate::TFSessionPrivate(TFInstance &inst, std::shared_ptr<ExecutionContext> &&ctx,
-                                              const tf::ConfigProto &config, tf::GraphDef *gdef)
+                                              std::vector<tf::Device *> devices, const tf::ConfigProto &config, tf::GraphDef *gdef)
     : m_inst(inst)
     , m_sessMgr(nullptr)
     , m_rendezvousMgr(nullptr)
@@ -130,7 +131,7 @@ TFSession::TFSessionPrivate::TFSessionPrivate(TFInstance &inst, std::shared_ptr<
     // Populate worker env first
     m_workerEnv.env = &m_inst.env();
     m_workerEnv.compute_pool = computePool(m_inst.env());
-    m_workerEnv.local_devices = m_inst.devices();
+    m_workerEnv.local_devices = std::move(devices);
 
 #if defined(SALUS_ENABLE_SIEXECUTOR)
     // No one is using workerEnv's device_mgr
@@ -165,12 +166,12 @@ TFSession::TFSessionPrivate::TFSessionPrivate(TFInstance &inst, std::shared_ptr<
     // MasterSession don't use local_devices when it's given workerCache, making it empty to make sure
     m_masterEnv.local_devices.clear();
     auto device_set = std::make_unique<tf::DeviceSet>();
-    for (auto d : m_inst.devices()) {
+    for (auto d : m_workerEnv.local_devices) {
         device_set->AddDevice(d);
     }
     // Uses the first local device as the client device.
-    DCHECK(!m_inst.devices().empty()) << "No client device found. Missing CPU:0 device?";
-    device_set->set_client_device(m_inst.devices().front());
+    DCHECK(!m_workerEnv.local_devices.empty()) << "No client device found. Missing CPU:0 device?";
+    device_set->set_client_device(m_workerEnv.local_devices.front());
 
     tf::SessionOptions options;
     options.config = config;

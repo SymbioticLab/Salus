@@ -26,6 +26,10 @@
 
 #include <memory>
 
+namespace tensorflow {
+class Device;
+} // namespace tensorflow
+
 namespace salus {
 class ExecutionContext;
 namespace oplib::tensorflow {
@@ -40,7 +44,8 @@ class TFSession : public std::enable_shared_from_this<TFSession>
 public:
     SALUS_DISALLOW_COPY_AND_ASSIGN(TFSession);
 
-    TFSession(TFInstance &inst, std::shared_ptr<ExecutionContext> ctx, const tf::ConfigProto &config,
+    TFSession(TFInstance &inst, std::shared_ptr<ExecutionContext> ctx, std::vector<tf::Device *> devices,
+              const tf::ConfigProto &config,
               tf::GraphDef *gdef);
 
     ~TFSession();

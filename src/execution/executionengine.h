@@ -29,7 +29,6 @@
 #include "utils/containerutils.h"
 #include "utils/pointerutils.h"
 #include "utils/threadutils.h"
-#include "utils/fixed_function.hpp"
 
 #include <concurrentqueue.h>
 
@@ -74,8 +73,7 @@ public:
         return m_schedParam;
     }
 
-    using RequestContextCb = sstl::FixedFunction<void(std::shared_ptr<ExecutionContext>)>;
-    void requestContext(RequestContextCb &&done);
+    std::shared_ptr<ExecutionContext> makeContext();
 
 private:
     friend class ExecutionContext;
