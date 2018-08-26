@@ -19,7 +19,7 @@
 #ifndef EXECUTION_THREADPOOL_H
 #define EXECUTION_THREADPOOL_H
 
-#include "fixed_function.hpp"
+#include "utils/fixed_function.hpp"
 
 #include <future>
 #include <memory>
@@ -65,7 +65,7 @@ public:
     ThreadPool(ThreadPool &&other) = default;
     ThreadPool &operator=(ThreadPool &&other) = default;
 
-    using Closure = tp::FixedFunction<void()>;
+    using Closure = sstl::FixedFunction<void()>;
 
     /**
      * @brief Try run a closure c in thread pool.
