@@ -65,11 +65,12 @@ inline const char *fromEnvVarStr(const char *env, const char *def)
  * error or missing value. The value is only read once from the environment variable. Later call
  * to this function simply returns the cached value.
  *
+ * @tparam tag a cache tag that should be different for different callsite
  * @param env the name of the environment variable
  * @param def default value in case of error
  * @return the read value or default value
  */
-template<typename T>
+template<typename tag, typename T>
 T fromEnvVarCached(const char *env, const T &def)
 {
     static T res = fromEnvVar(env, def);
