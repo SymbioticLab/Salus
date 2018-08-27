@@ -100,7 +100,21 @@ void TFInstance::handleCreateSession(std::unique_ptr<tf::CreateSessionRequest> &
         return;
     }
 
-    m_laneMgr->requestLanes(
+    LaneMgr::Layout layout;
+    // Get resource estimation from client
+    constexpr const auto rt = "MEMORY:GPU";
+    size_t limit = 0;
+    auto &m = req->config().salus_options().resource_map();
+    limit += static_cast<size_t>(std::round(sstl::getOrDefault(m.persistant(), rt, 0.0)));
+    limit += static_cast<size_t>(std::round(sstl::getOrDefault(m.temporary(), rt, 0.0)));
+
+    if (limit == 0) {
+        limit = 14_sz * 1024_sz * 1024_sz * 1024_sz;
+        LOG(WARNING) << "No resource info for current session, assuming whole GPU allocation: " << limit;
+    }
+    layout.memoryLimits.push_back(limit);
+
+    m_laneMgr->requestLanes(std::move(layout),
         [&resp, cb = std::move(cb), req = std::move(req), ectx = std::move(inserter), this](auto &&lanes) mutable {
             std::vector<tf::Device *> devices;
 

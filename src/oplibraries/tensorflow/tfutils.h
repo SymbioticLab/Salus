@@ -42,6 +42,7 @@ CallWithMasterMethodName(FWD_DECLARE)
 namespace salus::oplib::tensorflow {
 
 namespace tf = ::tensorflow;
+namespace tfgpu = ::perftools::gputools;
 
 using Status = tf::Status;
 using StatusCallback = std::function<void(Status)>;

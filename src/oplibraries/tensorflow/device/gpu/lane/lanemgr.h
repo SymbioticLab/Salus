@@ -29,31 +29,117 @@
 
 #include "oplibraries/tensorflow/tensorflow_headers.h"
 
+#include "oplibraries/tensorflow/tfutils.h"
 #include "utils/fixed_function.hpp"
+#include "utils/threadutils.h"
 
 #include <memory>
-#include <vector>
+#include <list>
+#include <queue>
 
 namespace salus::oplib::tensorflow {
+
+class GpuLane;
+class LaneMgr
+{
+public:
+    LaneMgr();
+
+    using RequestLaneCallback = sstl::FixedFunction<void(std::vector<std::shared_ptr<GpuLane>> &&)>;
+    struct Layout
+    {
+        std::vector<size_t> memoryLimits;
+    };
+    void requestLanes(Layout layout, RequestLaneCallback &&cb);
+
+private:
+    std::vector<int> getValidGpuIds();
+
+    struct LaneRequest
+    {
+        Layout layout;
+        RequestLaneCallback cb;
+
+        LaneRequest() = default;
+        LaneRequest(Layout &&layout, RequestLaneCallback &&cb)
+            : layout(std::move(layout))
+            , cb(std::move(cb))
+        {}
+    };
+    std::mutex m_mu;
+    std::queue<LaneRequest> m_pending GUARDED_BY(m_mu);
+    void processRequests();
+    void processRequests(sstl::detail::Guard &&g);
+
+    friend class GpuLane;
+    class GpuControlBlock
+    {
+        LaneMgr &mgr;
+    public:
+        explicit GpuControlBlock(LaneMgr &mgr, int index, int gpuId, tfgpu::StreamExecutor &se, size_t totalMemory)
+            : mgr(mgr)
+              , index(index)
+              , id(gpuId)
+              , se(se)
+              , totalMemory(totalMemory)
+        {
+        }
+
+        const int index;
+        const int id;
+        tfgpu::StreamExecutor &se;
+        const size_t totalMemory;
+
+        size_t availableMemory {0};
+
+        // Has to by dynamic allocated otherwise GCB can't be placed in vector
+        std::unique_ptr<std::mutex> mu {std::make_unique<std::mutex>()};
+        int nextStream GUARDED_BY(*mu) {0};
+
+        // lanes are sorted in asc order
+        std::list<std::weak_ptr<GpuLane>> lanes GUARDED_BY(*mu);
+
+        std::shared_ptr<GpuLane> bestFitFor(size_t memory);
+        std::shared_ptr<GpuLane> newLane(size_t memory, sstl::detail::Guard &&g);
+        void laneRemoved(size_t freedMemory);
+    };
+    std::vector<GpuControlBlock> m_gpus;
+};
 
 class GpuLane
 {
 public:
     tf::Device *as_tfdevice() const
     {
-        return m_dev;
+        return m_dev.get();
     }
 
+    size_t availableMemory() const
+    {
+        return m_availableMemory;
+    }
+
+    int baseStreamIndex() const
+    {
+        return m_baseStreamIndex;
+    }
+
+    GpuLane(LaneMgr::GpuControlBlock &gcb, size_t memoryLimit, int baseStreamIndex);
+    ~GpuLane();
 private:
-    tf::Device *m_dev;
+
+    void initializeDevice();
+    tf::Allocator *getGPUAllocator();
+
+    LaneMgr::GpuControlBlock &m_gcb;
+
+    const size_t m_availableMemory;
+    const int m_baseStreamIndex;
+
+    std::unique_ptr<tf::Allocator> m_alloc;
+    std::unique_ptr<tf::Device> m_dev;
 };
 
-class LaneMgr
-{
-public:
-    using RequestLaneCallback = sstl::FixedFunction<void(std::vector<std::shared_ptr<GpuLane>> &&)>;
-    void requestLanes(RequestLaneCallback &&cb);
-};
 
 } // namespace salus::oplib::tensorflow
 #endif // SALUS_OPLIB_TENSORFLOW_LANEMGR_H
