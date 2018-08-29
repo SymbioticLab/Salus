@@ -10,11 +10,13 @@ WORKDIR /salus
 # gcc/g++ 5 need to be hold otherwise will be upgraded to 5.5.0 in ubuntu-toolchain-r/test
 RUN apt-get update \
     && (echo 'debconf debconf/frontend select Noninteractive' | debconf-set-selections) \
-    && apt-get install -y software-properties-common \
+    && apt-get install -y --no-install-recommends software-properties-common gnupg-curl ca-certificates apt-transport-https \
     && apt-mark hold g++-5 \
     && apt-mark hold gcc-5 \
     && add-apt-repository -y ppa:ubuntu-toolchain-r/test \
     && add-apt-repository -y ppa:webupd8team/java \
+    && apt-key adv --fetch-keys https://download.docker.com/linux/ubuntu/gpg \
+    && add-apt-repository -y "deb [arch=amd64] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable" \
     && apt-get update
 
 # Install base system packages
@@ -23,7 +25,9 @@ RUN apt-get install -y g++-7 gcc-7 \
     && apt-get install -y oracle-java8-installer oracle-java8-set-default \
     && apt-get install -y python python-dev python-pip python-wheel \
     && apt-get install -y git curl openssl libssl-dev \
+    && apt-get install -y docker-ce \
     && pip install -U pip
+
 
 # Re-enable interactive debconf
 RUN (echo 'debconf debconf/frontend select Dialog' | debconf-set-selections)
