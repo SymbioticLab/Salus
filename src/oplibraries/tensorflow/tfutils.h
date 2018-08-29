@@ -20,24 +20,31 @@
 #define SALUS_OPLIB_TENSORFLOW_TFUTILS_H
 
 #include "execution/devices.h"
+
 #include <functional>
 #include <memory>
 #include <string_view>
 
-#define CallWithMasterMethodName(m)                                                                          \
+#define CallWithMasterMethodName(m)                                                                                    \
     m(CreateSession) m(ExtendSession) m(PartialRunSetup) m(CloseSession) m(ListDevices) m(Reset) m(RunStep)
 
 namespace tensorflow {
-#define FWD_DECLARE(name)                                                                                    \
-    class name##Request;                                                                                     \
+#define FWD_DECLARE(name)                                                                                              \
+    class name##Request;                                                                                               \
     class name##Response;
 
 CallWithMasterMethodName(FWD_DECLARE)
 
 #undef FWD_DECLARE
 
-    class Status;
+class Status;
+class DeviceType;
+class OpKernel;
+class Graph;
 } // namespace tensorflow
+
+namespace perftools::gputools {
+} // namespace perftools::gputools
 
 namespace salus::oplib::tensorflow {
 
@@ -47,9 +54,9 @@ namespace tfgpu = ::perftools::gputools;
 using Status = tf::Status;
 using StatusCallback = std::function<void(Status)>;
 
-#define DECLARE_USING(name)                                                                                  \
-    using P##name##Request = std::unique_ptr<tf::name##Request>;                                             \
-    using P##name##Response = std::unique_ptr<tf::name##Response>;                                           \
+#define DECLARE_USING(name)                                                                                            \
+    using P##name##Request = std::unique_ptr<tf::name##Request>;                                                       \
+    using P##name##Response = std::unique_ptr<tf::name##Response>;                                                     \
     using name##Callback = std::function<void(P##name##Response &&, Status)>;
 
 CallWithMasterMethodName(DECLARE_USING)
@@ -60,18 +67,10 @@ DeviceSpec tfDeviceNameToSpec(const std::string &name);
 DeviceType tfDeviceTypeToType(const tf::DeviceType &type);
 DeviceType tfDeviceTypeToType(const std::string &type);
 
-inline tf::StringPiece svToStringPiece(std::string_view sv)
-{
-    return {sv.data(), sv.size()};
-}
-
 using POpKernel = std::unique_ptr<tf::OpKernel, void (*)(tf::OpKernel *)>;
 
-constexpr void skip_delete_opkernel(tf::OpKernel *) {}
-constexpr void default_delete_opkernel(tf::OpKernel *k)
-{
-    delete k;
-}
+std::string tfGraphToGraphviz(const tf::Graph &g, const std::string &name);
+
 } // namespace salus::oplib::tensorflow
 
 #endif // SALUS_OPLIB_TENSORFLOW_TFUTILS_H
