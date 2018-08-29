@@ -37,6 +37,7 @@
 #include <tensorflow/core/common_runtime/gpu/gpu_stream_util.h>
 #include <tensorflow/core/common_runtime/gpu/gpu_util.h>
 #include <tensorflow/core/common_runtime/gpu/process_state.h>
+#include <tensorflow/core/common_runtime/gpu/pool_allocator.h>
 #include <tensorflow/core/common_runtime/graph_optimizer.h>
 #include <tensorflow/core/common_runtime/local_device.h>
 #include <tensorflow/core/common_runtime/memory_types.h>

@@ -31,6 +31,11 @@
 
 namespace salus::oplib::tensorflow {
 
+inline tf::StringPiece svToStringPiece(std::string_view sv)
+{
+    return {sv.data(), sv.size()};
+}
+
 /* static */ TFInstance &TFInstance::instance()
 {
     static TFInstance inst;
@@ -94,8 +99,8 @@ void TFInstance::handleCreateSession(std::unique_ptr<tf::CreateSessionRequest> &
     SALUS_THROW_IF_ERROR(ValidateExternalGraphDefSyntax(req->graph_def()));
 
     // NOTE: it's safe to capture resp by reference, because it is actually backed by cb
-    auto inserter = ExecutionEngine::instance().makeContext();
-    if (!inserter) {
+    auto ectx = ExecutionEngine::instance().makeContext();
+    if (!ectx) {
         cb(tf::errors::Aborted("Backend engine interrupted"));
         return;
     }
@@ -115,11 +120,11 @@ void TFInstance::handleCreateSession(std::unique_ptr<tf::CreateSessionRequest> &
     layout.memoryLimits.push_back(limit);
 
     m_laneMgr->requestLanes(std::move(layout),
-        [&resp, cb = std::move(cb), req = std::move(req), ectx = std::move(inserter), this](auto &&lanes) mutable {
+        [&resp, cb = std::move(cb), req = std::move(req), ectx = std::move(ectx), this](auto &&lanes) mutable {
             std::vector<tf::Device *> devices;
 
             // add CPU device
-            devices.emplace_back(m_devCon.devices.front());
+            devices.emplace_back(m_laneMgr->compatibleCPUDevice());
 
             // prepare devices from lane
             for (auto &lane : lanes) {

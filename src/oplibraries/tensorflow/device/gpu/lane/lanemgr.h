@@ -39,11 +39,13 @@
 
 namespace salus::oplib::tensorflow {
 
+class SalusCPUDevice;
 class GpuLane;
 class LaneMgr
 {
 public:
     LaneMgr();
+    ~LaneMgr();
 
     using RequestLaneCallback = sstl::FixedFunction<void(std::vector<std::shared_ptr<GpuLane>> &&)>;
     struct Layout
@@ -52,8 +54,11 @@ public:
     };
     void requestLanes(Layout layout, RequestLaneCallback &&cb);
 
+    tf::Device *compatibleCPUDevice() const;
+
 private:
     std::vector<int> getValidGpuIds();
+    void createCudaHostAllocator(tfgpu::StreamExecutor *se);
 
     struct LaneRequest
     {
@@ -85,6 +90,10 @@ private:
         {
         }
 
+        tf::Allocator *cudaHostAlloc() const {
+            return mgr.m_cpuCudaHostAlloc.get();
+        }
+
         const int index;
         const int id;
         tfgpu::StreamExecutor &se;
@@ -104,6 +113,8 @@ private:
         void laneRemoved(size_t freedMemory);
     };
     std::vector<GpuControlBlock> m_gpus;
+    std::unique_ptr<tf::Allocator> m_cpuCudaHostAlloc;
+    std::unique_ptr<SalusCPUDevice> m_cpu;
 };
 
 class GpuLane
@@ -137,9 +148,8 @@ private:
     const int m_baseStreamIndex;
 
     std::unique_ptr<tf::Allocator> m_alloc;
-    std::unique_ptr<tf::Device> m_dev;
+    std::unique_ptr<tf::BaseGPUDevice> m_dev;
 };
-
 
 } // namespace salus::oplib::tensorflow
 #endif // SALUS_OPLIB_TENSORFLOW_LANEMGR_H

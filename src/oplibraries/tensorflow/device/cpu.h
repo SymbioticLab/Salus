@@ -17,7 +17,7 @@ class SalusCPUDevice : public ISalusDevice, public tf::LocalDevice
 {
 public:
     SalusCPUDevice(const tf::SessionOptions &options, const std::string &name, tf::Bytes memory_limit,
-                   const tf::DeviceLocality &locality, tf::Allocator *allocator);
+                   const tf::DeviceLocality &locality, tf::Allocator *allocator, tf::Allocator *cudaAlloc = nullptr);
 
     ~SalusCPUDevice() override = default;
 
@@ -57,6 +57,7 @@ public:
 
 private:
     sstl::not_null<tf::Allocator *> m_allocator; // not owned
+    tf::Allocator * m_cudaAlloc; // not owned
 
 #if !defined(SALUS_ENABLE_SIEXECUTOR)
     std::shared_ptr<sstl::ObjectPool<PerTaskCPUDevice>> m_pool;

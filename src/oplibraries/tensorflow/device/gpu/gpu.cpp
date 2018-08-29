@@ -45,13 +45,14 @@ private:
 
 SalusGPUDevice::SalusGPUDevice(const tf::SessionOptions &options, const std::string &name, tf::Bytes memory_limit,
                                const tf::DeviceLocality &locality, int gpu_id, const std::string &physical_device_desc,
-                               tf::Allocator *gpu_allocator, tf::Allocator *cpu_allocator, int max_streams)
+                               tf::Allocator *gpu_allocator, tf::Allocator *cpu_allocator, tf::Allocator *cuda_host_alloc, int max_streams)
     : BaseGPUDevice(options, name, memory_limit, locality, gpu_id, physical_device_desc, gpu_allocator, cpu_allocator,
                     false /* sync every op */, max_streams)
 #if !defined(SALUS_ENABLE_SIEXECUTOR)
     , m_pool(std::make_shared<sstl::ObjectPool<PerTaskGPUDevice>>())
 #endif
     , m_streamUsed(static_cast<size_t>(max_streams), false)
+    , m_cudaHostAlloc(cuda_host_alloc)
 {
 }
 
@@ -59,6 +60,9 @@ tf::Allocator *SalusGPUDevice::GetAllocator(tf::AllocatorAttributes attr)
 {
     if (attr.on_host()) {
         if (attr.gpu_compatible()) {
+            if (m_cudaHostAlloc) {
+                return m_cudaHostAlloc;
+            }
             return tf::ProcessState::singleton()->GetCUDAHostAllocator(0);
         } else {
             return cpu_allocator_;
@@ -343,7 +347,7 @@ tf::BaseGPUDevice *SalusGPUDeviceFactory::CreateGPUDevice(const tf::SessionOptio
 #endif
 
     auto dev = std::make_unique<SalusGPUDevice>(options, name, memory_limit, locality, gpu_id, physical_device_desc,
-                                                gpu_allocator, cpu_allocator, max_streams);
+                                                gpu_allocator, cpu_allocator, nullptr, max_streams);
     return dev.release();
 }
 

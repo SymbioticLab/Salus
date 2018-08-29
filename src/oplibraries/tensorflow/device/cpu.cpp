@@ -31,9 +31,10 @@ public:
 #endif // !SALUS_ENABLE_SIEXECUTOR
 
 SalusCPUDevice::SalusCPUDevice(const tf::SessionOptions &options, const std::string &name, tf::Bytes memory_limit,
-                               const tf::DeviceLocality &locality, tf::Allocator *allocator)
+                               const tf::DeviceLocality &locality, tf::Allocator *allocator, tf::Allocator *cudaAlloc)
     : LocalDevice(options, tf::Device::BuildDeviceAttributes(name, tf::DEVICE_CPU, memory_limit, locality))
     , m_allocator(allocator)
+    , m_cudaAlloc(cudaAlloc)
 #if !defined(SALUS_ENABLE_SIEXECUTOR)
     , m_pool(std::make_shared<sstl::ObjectPool<PerTaskCPUDevice>>())
 #endif
@@ -43,6 +44,9 @@ SalusCPUDevice::SalusCPUDevice(const tf::SessionOptions &options, const std::str
 tf::Allocator *SalusCPUDevice::GetAllocator(tf::AllocatorAttributes attr)
 {
     if (attr.gpu_compatible()) {
+        if (m_cudaAlloc) {
+            return m_cudaAlloc;
+        }
         return tf::ProcessState::singleton()->GetCUDAHostAllocator(0);
     }
     return m_allocator;

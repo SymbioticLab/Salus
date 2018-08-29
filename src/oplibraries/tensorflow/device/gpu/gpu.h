@@ -23,7 +23,7 @@ class SalusGPUDevice : public ISalusDevice, public tf::BaseGPUDevice
 public:
     SalusGPUDevice(const tf::SessionOptions &options, const std::string &name, tf::Bytes memory_limit,
                    const tf::DeviceLocality &locality, int gpu_id, const std::string &physical_device_desc,
-                   tf::Allocator *gpu_allocator, tf::Allocator *cpu_allocator, int max_streams = 128);
+                   tf::Allocator *gpu_allocator, tf::Allocator *cpu_allocator, tf::Allocator *cuda_host_alloc, int max_streams = 128);
 
     ~SalusGPUDevice() override = default;
 
@@ -87,6 +87,7 @@ private:
 
     std::mutex m_muStream;
     std::vector<bool> m_streamUsed;
+    tf::Allocator *m_cudaHostAlloc;
 };
 
 class SalusGPUDeviceFactory : public tf::BaseGPUDeviceFactory

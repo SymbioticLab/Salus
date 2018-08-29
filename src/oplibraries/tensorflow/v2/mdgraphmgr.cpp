@@ -26,6 +26,12 @@
 
 namespace salus::oplib::tensorflow {
 
+constexpr void skip_delete_opkernel(tf::OpKernel *) {}
+constexpr void default_delete_opkernel(tf::OpKernel *k)
+{
+    delete k;
+}
+
 MDGraphMgr::MDGraphMgr(const tf::WorkerEnv *env, std::shared_ptr<ExecutionContext> execCtx, ResStats rm)
     : GraphMgr(env, env->device_mgr)
     , m_execCtx(std::move(execCtx))

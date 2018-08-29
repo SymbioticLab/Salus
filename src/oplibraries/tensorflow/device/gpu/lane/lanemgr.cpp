@@ -26,11 +26,12 @@
 
 #include "oplibraries/tensorflow/device/gpu/lane/lanemgr.h"
 
+#include "oplibraries/tensorflow/device/cpu.h"
 #include "oplibraries/tensorflow/device/gpu/gpu.h"
 #include "oplibraries/tensorflow/tfexception.h"
 #include "oplibraries/tensorflow/tfinstance.h"
-#include "utils/threadutils.h"
 #include "utils/envutils.h"
+#include "utils/threadutils.h"
 
 namespace tfgpu = perftools::gputools;
 
@@ -49,6 +50,12 @@ LaneMgr::LaneMgr()
     for (auto gpuId : validIds) {
         auto se = gpu_manager->ExecutorForDevice(gpuId).ValueOrDie();
 
+        if (!m_cpuCudaHostAlloc) {
+            // Find the first valid StreamExecutor to request CUDA host memory
+            // through, since any will work.
+            createCudaHostAllocator(se);
+        }
+
         tf::int64 availableMemory, totalMemory;
         if (!se->DeviceMemoryUsage(&availableMemory, &totalMemory)) {
             throw TFException(tf::errors::Unknown("Failed to query available memory for GPU ", gpuId));
@@ -57,11 +64,37 @@ LaneMgr::LaneMgr()
         auto &gcb = m_gpus.emplace_back(*this, m_gpus.size(), gpuId, *se, totalMemory);
         gcb.availableMemory = static_cast<size_t>(availableMemory);
     }
+
+    // Initialize CPU device
+    auto name = tf::strings::StrCat(TFInstance::namePrefix(), "/device:CPU:0");
+    // use tf::cpu_allocator to select from cpu allocatory registary
+    tf::SessionOptions opt;
+    tf::DeviceLocality locality;
+    m_cpu = std::make_unique<SalusCPUDevice>(opt, name, tf::Bytes(256 << 20), locality, tf::cpu_allocator(),
+                                             m_cpuCudaHostAlloc.get());
 }
+
+LaneMgr::~LaneMgr() = default;
 
 std::vector<int> LaneMgr::getValidGpuIds()
 {
     return {0};
+}
+
+tf::Device *LaneMgr::compatibleCPUDevice() const
+{
+    return m_cpu.get();
+}
+
+void LaneMgr::createCudaHostAllocator(tfgpu::StreamExecutor *se)
+{
+    struct CudaHostAllocTag;
+    // 64 GB max by default
+    size_t cuda_host_mem_limit_in_mb =
+        sstl::fromEnvVarCached<CudaHostAllocTag>("TF_CUDA_HOST_MEM_LIMIT_IN_MB", 1_sz << 16);
+    size_t cuda_host_mem_limit = cuda_host_mem_limit_in_mb * (1LL << 20);
+    m_cpuCudaHostAlloc = std::make_unique<tf::BFCAllocator>(new tf::CUDAHostAllocator(se), cuda_host_mem_limit,
+                                                            true /*allow_growth*/, "cuda_host_bfc" /*name*/);
 }
 
 void LaneMgr::requestLanes(Layout layout, RequestLaneCallback &&cb)
@@ -117,6 +150,8 @@ std::shared_ptr<GpuLane> LaneMgr::GpuControlBlock::bestFitFor(size_t memory)
             }
         }
     }
+
+    // TODO: extend an existing lane if all above failed
     return {};
 }
 
@@ -234,7 +269,9 @@ void GpuLane::initializeDevice()
     tf::SessionOptions opt;
     m_dev = std::make_unique<SalusGPUDevice>(opt, name, allocated_bytes, dev_locality, m_gcb.id,
                                              GetShortDeviceDescription(m_gcb.id, desc), getGPUAllocator(),
-                                             process_state->GetCPUAllocator(numa_node), max_streams);
+                                             process_state->GetCPUAllocator(numa_node), m_gcb.cudaHostAlloc(),
+                                             max_streams);
+    SALUS_THROW_IF_ERROR(m_dev->Init(opt));
 }
 
 tf::Allocator *GpuLane::getGPUAllocator()

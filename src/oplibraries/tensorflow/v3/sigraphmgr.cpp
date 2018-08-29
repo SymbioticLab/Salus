@@ -167,31 +167,6 @@ tf::Status SIGraphMgr::InitSIItem(const std::string &session, const tf::GraphDef
         // Construct the root executor for the subgraph
         params.device = unit.device;
         params.function_library = lib;
-        /*
-        params.create_kernel = [session, lib, opseg](const auto &ndef, auto pkernel) {
-            tf::OpKernel *kernel;
-            Status status;
-            // We do not share the kernel via the OpSegment if the node is
-            // stateless, or a function.
-            // NOTE(mrry): We must not share function kernels (implemented
-            // using `CallOp`) between subgraphs, because `CallOp::handle_`
-            // is tied to a particular subgraph. Even if the function itself
-            // is stateful, the `CallOp` that invokes it is not.
-            if (!lib->IsStateful(ndef.op())
-                || lib->GetFunctionLibraryDefinition()->Find(ndef.op()) != nullptr) {
-                status = lib->CreateKernel(ndef, &kernel);
-                *pkernel = {kernel, default_delete_opkernel};
-                return status;
-            }
-            auto create_fn = [lib, &ndef](auto kernel) { return lib->CreateKernel(ndef, kernel); };
-            // Kernels created for subgraph nodes need to be cached.  On
-            // cache miss, create_fn() is invoked to create a kernel based
-            // on the function library here + global op registry.
-            status = opseg->FindOrCreate(session, ndef.name(), &kernel, create_fn);
-            *pkernel = {kernel, skip_delete_opkernel};
-            return status;
-        };
-        */
         params.create_kernel = [session, lib, opseg](const auto &ndef, tf::OpKernel **kernel) {
             // We do not share the kernel via the OpSegment if the node is
             // stateless, or a function.
