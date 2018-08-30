@@ -1,7 +1,0 @@
-packages:
-  openssl:
-    paths:
-      openssl@1.0.2g: /usr
-    buildable: False
-  all:
-    compiler: [gcc@5.4.0]
