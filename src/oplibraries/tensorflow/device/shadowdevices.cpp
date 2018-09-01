@@ -101,11 +101,19 @@ void ForwardingAllocator::preDeallocation(void *ptr)
 void ForwardingAllocator::DeallocateRaw(void *ptr)
 {
     preDeallocation(ptr);
-    m_base->DeallocateRaw(ptr);
 
     std::unordered_map<void *, size_t>::node_type nh;
     {
         auto g = sstl::with_guard(m_mu);
+
+        // NOTE: This must be called under the lock, otherwise there is a data race on m_allocated
+        // Consider the following order:
+        // A: m_base->DeallocateRaw(12345)
+        // B: ptr = m_base->AllocateRaw() = 12345
+        // B: m_allocated[12345] = size         // Check failed!
+        // A: m_allocated.extract(12345)
+        m_base->DeallocateRaw(ptr);
+
         nh = m_allocated.extract(ptr);
     }
     postDeallocation(ptr);
