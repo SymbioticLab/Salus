@@ -54,3 +54,4 @@ build_type_add_compile_option_with_check(Release -O3)
 build_type_add_compile_option_with_check(Release -march=native)
 # See bug: https://gcc.gnu.org/bugzilla/show_bug.cgi?id=51333
 # build_type_add_compile_options_with_check(Debug -fkeep-inline-functions)
+build_type_add_compile_option_with_check(RelWithDebInfo -fno-omit-frame-pointer)
