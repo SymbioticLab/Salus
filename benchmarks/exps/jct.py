@@ -23,6 +23,7 @@ flags.DEFINE_boolean('basic_only', False, 'Only run basic 20 iterations JCT only
 flags.DEFINE_float('threshold', 0.1, 'What ratio is actual time allowed to have within target time')
 flags.DEFINE_integer('max_chance', 10, 'How many times to try')
 flags.DEFINE_boolean('resume', False, 'Check and skip existing configurations')
+flags.DEFINE_multi_integer('extra_mins', [1, 5, 10], 'Extra lengths')
 
 
 def select_workloads(argv):
@@ -138,5 +139,6 @@ def main(argv):
         # Get per iter time
         per_iter = parse_output_float(outputdir / 'gpu.output', r'^Average excluding[^0-9.]+([0-9.]+).*')
 
-        for m in [1, 5, 10]:
+        # for m in [1, 5, 10]:
+        for m in FLAGS.extra_mins:
             per_iter = do_jct_hint(FLAGS.save_dir, network, batch_size, per_iter, 60 * m, f'{m}min')
