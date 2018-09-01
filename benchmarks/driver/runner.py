@@ -134,9 +134,9 @@ class UnittestRunner(Runner):
         """Construct test class and name from RunConfig"""
         supported_model = {
             'seq2seq': ('test_tf.test_seq', 'TestSeqPtb', {
-                'small': '1_small',
-                'medium': '2_medium',
-                'large': '3_large',
+                'small': '0_small',
+                'medium': '1_medium',
+                'large': '2_large',
             }),
             'mnistsf': ('test_tf.test_mnist_tf', 'TestMnistSoftmax', {
                 25: '0', 50: '1', 100: '2'
