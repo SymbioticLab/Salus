@@ -32,6 +32,7 @@
 #include "oplibraries/tensorflow/tfinstance.h"
 #include "utils/envutils.h"
 #include "utils/threadutils.h"
+#include "lanemgr.h"
 
 namespace tfgpu = perftools::gputools;
 
@@ -100,6 +101,12 @@ void LaneMgr::createCudaHostAllocator(tfgpu::StreamExecutor *se)
 
 void LaneMgr::requestLanes(Layout layout, RequestLaneCallback &&cb)
 {
+    CHECK_EQ(layout.persistentOccupation.size(), layout.memoryLimits.size());
+
+    for (size_t i = 0; i != layout.memoryLimits.size(); ++i) {
+        CHECK_LE(layout.persistentOccupation.at(i), layout.memoryLimits.at(i));
+    }
+
     auto g = sstl::with_guard(m_mu);
     m_pending.emplace(std::move(layout), std::move(cb));
     processRequests(std::move(g));
@@ -119,11 +126,12 @@ void LaneMgr::processRequests(sstl::detail::Guard &&g)
         // TODO: the algorithm below assumes single GPU, to scale to multiple ones, a global lock is needed
         CHECK_EQ(req.layout.memoryLimits.size(), 1_sz) << "Only single lane layout is supported";
 
-        std::vector<std::shared_ptr<GpuLane>> lanes;
+        std::vector<std::shared_ptr<LaneHolder>> lanes;
         auto &gcb = m_gpus.at(0);
 
         // using a best fit policy
-        auto lane = gcb.bestFitFor(req.layout.memoryLimits.at(0));
+        const auto firstIdx = 0;
+        auto lane = gcb.bestFitFor(req.layout.memoryLimits.at(firstIdx), req.layout.persistentOccupation.at(firstIdx));
         if (!lane) {
             // can't find a suitable allocation.
             continue;
@@ -135,20 +143,18 @@ void LaneMgr::processRequests(sstl::detail::Guard &&g)
     }
 }
 
-std::shared_ptr<GpuLane> LaneMgr::GpuControlBlock::bestFitFor(size_t memory)
+std::unique_ptr<LaneHolder> LaneMgr::GpuControlBlock::bestFitFor(size_t memory, size_t persistentSize)
 {
     auto g = sstl::with_guard(*mu);
     // first see if open a new lane is possible
     if (availableMemory >= memory) {
-        return newLane(memory, std::move(g));
+        return std::make_unique<LaneHolder>(newLane(memory, std::move(g)), persistentSize);
     }
 
     // use linear search because we at most will have handful of lanes
-    for (auto &wlane : lanes) {
-        if (auto lane = wlane.lock()) {
-            if (lane->availableMemory() >= memory) {
-                return lane;
-            }
+    for (auto &lane : lanes) {
+        if (lane->totalMemory() >= memory && lane->availableMemory() >= persistentSize) {
+            return std::make_unique<LaneHolder>(sstl::add_ref(lane.get()), persistentSize);
         }
     }
 
@@ -156,60 +162,70 @@ std::shared_ptr<GpuLane> LaneMgr::GpuControlBlock::bestFitFor(size_t memory)
     return {};
 }
 
-std::shared_ptr<GpuLane> LaneMgr::GpuControlBlock::newLane(size_t memory, sstl::detail::Guard &&g)
+sstl::ScopedUnref<GpuLane> LaneMgr::GpuControlBlock::newLane(size_t memory, sstl::detail::Guard &&g)
 {
     UNUSED(g);
 
     if (availableMemory < memory) {
-        return {};
+        return sstl::ScopedUnref<GpuLane>{};
     }
 
     availableMemory -= memory;
 
-    auto lane = std::make_shared<GpuLane>(*this, memory, nextStream++);
+    auto lane = sstl::make_scoped_unref<GpuLane>(*this, memory, nextStream++);
 
     // Insert into lanes, which is from small to large
     auto it = lanes.begin();
     while (it != lanes.end()) {
-        auto l = it->lock();
-        if (!l) {
-            continue;
-        }
-        if (l->availableMemory() > lane->availableMemory()) {
+        if ((*it)->availableMemory() > lane->availableMemory()) {
             break;
         }
         ++it;
     }
-    lanes.insert(it, lane);
+    lanes.insert(it, sstl::add_ref(lane.get()));
     return lane;
 }
 
-void LaneMgr::GpuControlBlock::laneRemoved(size_t freedMemory)
+void LaneMgr::GpuControlBlock::removingLane(sstl::ScopedUnref<GpuLane> &&lane)
 {
-    {
-        auto g = sstl::with_guard(*mu);
-        lanes.remove_if([](auto &wl) {
-            if (auto l = wl.lock()) {
-                return false;
-            }
-            return true;
-        });
+    auto theLane = lane.release();
+    // This shouldn't be the last ref, because lanes holds another one
+    CHECK(!theLane->Unref());
 
-        // NOTE: it's possible that the above remove_tf removes more than
-        // one deleted lane, so the availableMemory here will not
-        // correctly represent the actual amount.
-        // But it's ok. Because eventually another call of laneRemoved
-        // will correct that and serve queued requests.
-        availableMemory += freedMemory;
-        CHECK_LE(availableMemory, totalMemory);
+    // This is the only ref, so remove it from the list.
+    if (theLane->RefCountIsOne()) {
+        maybeRemoveLane(theLane);
     }
 
     // NOTE: may block or take long time
     mgr.processRequests();
 }
 
+void LaneMgr::GpuControlBlock::maybeRemoveLane(sstl::not_null<GpuLane *> lane)
+{
+    auto g = sstl::with_guard(*mu);
+
+    // lanes contains ScopedUnref, so removing from
+    // list calls Unref
+    size_t avail = 0;
+    lanes.remove_if([&](auto &wl) {
+        if (wl.get() == lane) {
+            avail = lane->availableMemory();
+            return true;
+        }
+        return false;
+    });
+
+    if (avail == 0) {
+        return;
+    }
+    availableMemory += avail;
+    CHECK_LE(availableMemory, totalMemory);
+}
+
 GpuLane::GpuLane(LaneMgr::GpuControlBlock &gcb, size_t memoryLimit, int baseStreamIndex)
     : m_gcb(gcb)
+    , m_totalMemory(memoryLimit)
     , m_availableMemory(memoryLimit)
     , m_baseStreamIndex(baseStreamIndex)
 {
@@ -289,13 +305,25 @@ tf::Allocator *GpuLane::getGPUAllocator()
     return m_alloc.get();
 }
 
+LaneHolder::~LaneHolder()
+{
+    m_lane->removeHold(m_hold);
+    // Notify LaneMgr to unref lane
+    auto l = m_lane.get();
+    l->notifyGCB(std::move(m_lane));
+
+    CHECK_EQ(m_lane.get(), nullptr);
+}
+
+void GpuLane::notifyGCB(sstl::ScopedUnref<GpuLane> &&self)
+{
+    m_gcb.removingLane(std::move(self));
+}
+
 GpuLane::~GpuLane()
 {
     // first release all resources in the lane
     m_dev.reset();
-
-    // notify the control block about the removal
-    m_gcb.laneRemoved(availableMemory());
 }
 
 } // namespace salus::oplib::tensorflow

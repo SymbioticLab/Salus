@@ -32,25 +32,29 @@
 #include "oplibraries/tensorflow/tfutils.h"
 #include "utils/fixed_function.hpp"
 #include "utils/threadutils.h"
+#include "utils/pointerutils.h"
 
 #include <memory>
 #include <list>
 #include <queue>
+#include <atomic>
 
 namespace salus::oplib::tensorflow {
 
 class SalusCPUDevice;
 class GpuLane;
+class LaneHolder;
 class LaneMgr
 {
 public:
     LaneMgr();
     ~LaneMgr();
 
-    using RequestLaneCallback = sstl::FixedFunction<void(std::vector<std::shared_ptr<GpuLane>> &&)>;
+    using RequestLaneCallback = sstl::FixedFunction<void(std::vector<std::shared_ptr<LaneHolder>> &&)>;
     struct Layout
     {
         std::vector<size_t> memoryLimits;
+        std::vector<size_t> persistentOccupation;
     };
     void requestLanes(Layout layout, RequestLaneCallback &&cb);
 
@@ -106,18 +110,21 @@ private:
         int nextStream GUARDED_BY(*mu) {0};
 
         // lanes are sorted in asc order
-        std::list<std::weak_ptr<GpuLane>> lanes GUARDED_BY(*mu);
+        std::list<sstl::ScopedUnref<GpuLane>> lanes GUARDED_BY(*mu);
 
-        std::shared_ptr<GpuLane> bestFitFor(size_t memory);
-        std::shared_ptr<GpuLane> newLane(size_t memory, sstl::detail::Guard &&g);
-        void laneRemoved(size_t freedMemory);
+        std::unique_ptr<LaneHolder> bestFitFor(size_t memory, size_t persistentSize);
+
+        sstl::ScopedUnref<GpuLane> newLane(size_t memory, sstl::detail::Guard &&g);
+
+        void removingLane(sstl::ScopedUnref<GpuLane> &&lane);
+        void maybeRemoveLane(sstl::not_null<GpuLane *> lane);
     };
     std::vector<GpuControlBlock> m_gpus;
     std::unique_ptr<tf::Allocator> m_cpuCudaHostAlloc;
     std::unique_ptr<SalusCPUDevice> m_cpu;
 };
 
-class GpuLane
+class GpuLane : public tf::core::RefCounted
 {
 public:
     tf::Device *as_tfdevice() const
@@ -127,13 +134,34 @@ public:
 
     size_t availableMemory() const
     {
-        return m_availableMemory;
+        return m_availableMemory.load(std::memory_order_acquire);
+    }
+
+    size_t totalMemory() const
+    {
+        return m_totalMemory;
     }
 
     int baseStreamIndex() const
     {
         return m_baseStreamIndex;
     }
+
+    /**
+     * @brief Add new session here
+     * @param size
+     */
+    void addHold(size_t size)
+    {
+        m_availableMemory -= size;
+    }
+
+    void removeHold(size_t size)
+    {
+        m_availableMemory += size;
+    }
+
+    void notifyGCB(sstl::ScopedUnref<GpuLane> &&self);
 
     GpuLane(LaneMgr::GpuControlBlock &gcb, size_t memoryLimit, int baseStreamIndex);
     ~GpuLane();
@@ -144,11 +172,32 @@ private:
 
     LaneMgr::GpuControlBlock &m_gcb;
 
-    const size_t m_availableMemory;
+    const size_t m_totalMemory;
+    std::atomic_uint_fast64_t m_availableMemory;
     const int m_baseStreamIndex;
 
     std::unique_ptr<tf::Allocator> m_alloc;
     std::unique_ptr<tf::BaseGPUDevice> m_dev;
+};
+
+class LaneHolder
+{
+    sstl::ScopedUnref<GpuLane> m_lane;
+    size_t m_hold;
+public:
+    explicit LaneHolder(sstl::ScopedUnref<GpuLane> &&lane, size_t hold)
+        : m_lane(std::move(lane))
+        , m_hold(hold)
+    {
+        m_lane->addHold(m_hold);
+    }
+
+    ~LaneHolder();
+
+    tf::Device *as_tfdevice() const
+    {
+        return m_lane->as_tfdevice();
+    }
 };
 
 } // namespace salus::oplib::tensorflow
