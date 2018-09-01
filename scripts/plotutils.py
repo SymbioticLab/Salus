@@ -232,8 +232,9 @@ def cleanup_axis_timedelta(axis, formatter=None):
     return axis
 
 
-def cleanup_axis_datetime(axis):
-    rule = rrulewrapper(SECONDLY, interval=1)
+def cleanup_axis_datetime(axis, rule=None):
+    if rule is None:
+        rule = rrulewrapper(SECONDLY, interval=1)
     loc = RRuleLocator(rule)
     fmt = DateFormatter('%M:%S')
     axis.set_major_locator(loc)

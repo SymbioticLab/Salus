@@ -89,6 +89,13 @@ class TestSuperRes(unittest.TestCase):
         config.allow_soft_placement = True
         run_on_devices(self._get_func(batch_size), '/device:GPU:0', config=config)
 
+    @parameterized.expand([(32,), (64,), (128,)])
+    def test_distributed(self, batch_size):
+        run_on_sessions(self._get_func(batch_size),
+                        'grpc://localhost:2345',
+                        dev='/job:tfworker/device:GPU:0',
+                        config=self._config(batch_size=batch_size))
+
     @parameterized.expand([(64,)])
     @unittest.skip("No need to run on CPU")
     def test_cpu(self, batch_size):

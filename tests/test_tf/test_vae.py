@@ -107,7 +107,6 @@ class TestVae(unittest.TestCase):
                        config=self._config(args))
 
     @parameterized.expand([(64,), (128,), (256,)])
-    @unittest.skip('No distributed')
     def test_distributed(self, batch_size):
         args = networks.vae.get_args(batch_size=batch_size)
         run_on_sessions(lambda: run_vae(tf.get_default_session(), args),

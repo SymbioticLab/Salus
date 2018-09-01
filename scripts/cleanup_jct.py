@@ -19,7 +19,7 @@ ptn_iter = re.compile(r"""(?P<timestamp>.+): \s [sS]tep \s (\d+),\s
                           (?P<duration>[\d.]+) \s sec/batch\)?""", re.VERBOSE)
 ptn_first = re.compile(r'First iteration: (?P<duration>[\d.]+) sec/batch')
 ptn_avg = re.compile(r'Average excluding first iteration: (?P<duration>[\d.]+) sec/batch')
-ptn_jct = re.compile(r'JCT: (?P<duration>[\d.]+) s')
+ptn_jct = re.compile(r'JCT: (?P<duration>[\d.]+)\s*s')
 
 
 def read_iterfile(filepath):
