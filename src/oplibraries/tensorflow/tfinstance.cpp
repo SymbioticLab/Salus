@@ -234,8 +234,11 @@ void TFInstance::handleReset(std::unique_ptr<tf::ResetRequest> &&req, tf::ResetR
 std::string TFInstance::maybeDumpGPUMemoryMap(tf::Device *dev) const
 {
     if (dev->parsed_name().has_type && dev->parsed_name().type == tf::DEVICE_GPU) {
-        auto alloc = static_cast<SalusGPUDevice *>(dev)->GetAllocator({});
-        return static_cast<tf::GPUDoubleBFCAllocator *>(alloc)->GenerateMemoryMap();
+        auto alloc = dev->GetAllocator({});
+        auto s = alloc->Name();
+        if (alloc->Name().find("dbfc") != std::string::npos) {
+            return dynamic_cast<tf::GPUDoubleBFCAllocator *>(alloc)->GenerateMemoryMap();
+        }
     }
     return {};
 }
