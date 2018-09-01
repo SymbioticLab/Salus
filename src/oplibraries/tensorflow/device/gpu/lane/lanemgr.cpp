@@ -63,6 +63,7 @@ LaneMgr::LaneMgr()
 
         auto &gcb = m_gpus.emplace_back(*this, m_gpus.size(), gpuId, *se, totalMemory);
         gcb.availableMemory = static_cast<size_t>(availableMemory);
+        CHECK_LE(gcb.availableMemory, gcb.totalMemory);
     }
 
     // Initialize CPU device
@@ -163,6 +164,8 @@ std::shared_ptr<GpuLane> LaneMgr::GpuControlBlock::newLane(size_t memory, sstl::
         return {};
     }
 
+    availableMemory -= memory;
+
     auto lane = std::make_shared<GpuLane>(*this, memory, nextStream++);
 
     // Insert into lanes, which is from small to large
@@ -198,6 +201,7 @@ void LaneMgr::GpuControlBlock::laneRemoved(size_t freedMemory)
         // But it's ok. Because eventually another call of laneRemoved
         // will correct that and serve queued requests.
         availableMemory += freedMemory;
+        CHECK_LE(availableMemory, totalMemory);
     }
 
     // NOTE: may block or take long time
