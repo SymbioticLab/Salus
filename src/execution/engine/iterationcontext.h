@@ -17,7 +17,7 @@ class IterationContext
     PSessionItem m_item;
     uint64_t m_graphId;
 
-    using DoneCallback = std::function<void ()>;
+    using DoneCallback = std::function<void (SessionItem &)>;
     DoneCallback m_done;
 
 public:

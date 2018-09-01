@@ -105,6 +105,9 @@ void TFInstance::handleCreateSession(std::unique_ptr<tf::CreateSessionRequest> &
         return;
     }
 
+    // We don't need exclusive mode anymore.
+    ectx->dropExlusiveMode();
+
     LaneMgr::Layout layout;
     // Get resource estimation from client
     constexpr const auto rt = "MEMORY:GPU";
@@ -122,6 +125,9 @@ void TFInstance::handleCreateSession(std::unique_ptr<tf::CreateSessionRequest> &
     }
     layout.memoryLimits.push_back(limit);
     layout.persistentOccupation.push_back(persistant);
+
+    auto totalRunningTime = static_cast<uint64_t>(std::round(sstl::getOrDefault(m.persistant(), "TIME:TOTAL", 0.0))) * 1000;
+    ectx->setExpectedRunningTime(totalRunningTime);
 
     m_laneMgr->requestLanes(std::move(layout),
         [&resp, cb = std::move(cb), req = std::move(req), ectx = std::move(ectx), this](auto &&lanes) mutable {

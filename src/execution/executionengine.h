@@ -161,6 +161,8 @@ public:
 
     void dropExlusiveMode();
 
+    void setExpectedRunningTime(uint64_t time);
+
     /**
      * @brief Make a resource context that first allocate from session's resources
      * @param spec

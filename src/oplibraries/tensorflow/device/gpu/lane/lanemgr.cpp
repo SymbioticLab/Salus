@@ -61,6 +61,7 @@ LaneMgr::LaneMgr()
         if (!se->DeviceMemoryUsage(&availableMemory, &totalMemory)) {
             throw TFException(tf::errors::Unknown("Failed to query available memory for GPU ", gpuId));
         }
+        availableMemory = availableMemory - 300 * 1024 * 1024;
 
         auto &gcb = m_gpus.emplace_back(*this, m_gpus.size(), gpuId, *se, totalMemory);
         gcb.availableMemory = static_cast<size_t>(availableMemory);
@@ -74,6 +75,10 @@ LaneMgr::LaneMgr()
     tf::DeviceLocality locality;
     m_cpu = std::make_unique<SalusCPUDevice>(opt, name, tf::Bytes(256 << 20), locality, tf::cpu_allocator(),
                                              m_cpuCudaHostAlloc.get());
+
+
+    // Check env
+    setDisabled(sstl::fromEnvVar("SALUS_DISABLE_LANEMGR", false));
 }
 
 LaneMgr::~LaneMgr() = default;
@@ -102,6 +107,23 @@ void LaneMgr::createCudaHostAllocator(tfgpu::StreamExecutor *se)
 void LaneMgr::requestLanes(Layout layout, RequestLaneCallback &&cb)
 {
     CHECK_EQ(layout.persistentOccupation.size(), layout.memoryLimits.size());
+
+    if (m_disabled) {
+        auto g = sstl::with_guard(m_mu);
+
+        std::vector<std::shared_ptr<LaneHolder>> lanes;
+
+        auto &gcb = m_gpus.at(0);
+        static auto initialAvailable = gcb.availableMemory;
+
+        auto holder = gcb.bestFitFor(initialAvailable, layout.persistentOccupation.at(0));
+        CHECK_NE(holder, nullptr);
+
+        lanes.emplace_back(std::move(holder));
+
+        cb(std::move(lanes));
+        return;
+    }
 
     for (size_t i = 0; i != layout.memoryLimits.size(); ++i) {
         CHECK_LE(layout.persistentOccupation.at(i), layout.memoryLimits.at(i));
@@ -145,6 +167,8 @@ void LaneMgr::processRequests(sstl::detail::Guard &&g)
 
 std::unique_ptr<LaneHolder> LaneMgr::GpuControlBlock::bestFitFor(size_t memory, size_t persistentSize)
 {
+    CHECK_GE(memory, persistentSize);
+
     auto g = sstl::with_guard(*mu);
     // first see if open a new lane is possible
     if (availableMemory >= memory) {
@@ -164,6 +188,8 @@ std::unique_ptr<LaneHolder> LaneMgr::GpuControlBlock::bestFitFor(size_t memory, 
 
 sstl::ScopedUnref<GpuLane> LaneMgr::GpuControlBlock::newLane(size_t memory, sstl::detail::Guard &&g)
 {
+    CHECK_GT(memory, 0);
+
     UNUSED(g);
 
     if (availableMemory < memory) {
@@ -194,7 +220,10 @@ void LaneMgr::GpuControlBlock::removingLane(sstl::ScopedUnref<GpuLane> &&lane)
 
     // This is the only ref, so remove it from the list.
     if (theLane->RefCountIsOne()) {
-        maybeRemoveLane(theLane);
+        if (!mgr.m_disabled) {
+            // Hold the single lane forever
+            maybeRemoveLane(theLane);
+        }
     }
 
     // NOTE: may block or take long time

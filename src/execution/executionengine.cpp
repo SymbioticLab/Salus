@@ -30,7 +30,6 @@
 #include "utils/macros.h"
 #include "utils/pointerutils.h"
 #include "utils/threadutils.h"
-#include "executionengine.h"
 
 #include <boost/container/flat_map.hpp>
 
@@ -226,6 +225,71 @@ void ExecutionEngine::scheduleLoop()
         }
 
         iters.swap(staging);
+        CHECK(iters.empty());
+
+        // First let go every mainIter=false
+        for (auto &iterItem : staging) {
+            if (iterItem.iter->isCanceled()) {
+                continue;
+            }
+            auto ectx = iterItem.wectx.lock();
+            if (!ectx) {
+                continue;
+            }
+
+            if (!iterItem.iter->isExpensive()) {
+                if (runIter(iterItem, *ectx)) {
+                    scheduled += 1;
+                    continue;
+                }
+            }
+            iters.emplace_back(std::move(iterItem));
+        }
+        staging.clear();
+
+        // For all main iters
+        iters.swap(staging);
+
+
+        auto fairSorter = [](const auto &iterItemA, const auto &iterItemB) {
+            std::shared_ptr<ExecutionContext> ectxA = iterItemA.wectx.lock();
+            std::shared_ptr<ExecutionContext> ectxB = iterItemB.wectx.lock();
+            if (!ectxB) {
+                return true; // A goes first
+            }
+            if (!ectxA) {
+                return false; // B goes first
+            }
+
+            // fairness (equalize time)
+            auto reA = ectxA->m_item->usedRunningTime.load();
+            auto reB = ectxB->m_item->usedRunningTime.load();
+            return reA < reB;
+        };
+
+        auto preemptSorter = [](const auto &iterItemA, const auto &iterItemB) {
+            std::shared_ptr<ExecutionContext> ectxA = iterItemA.wectx.lock();
+            std::shared_ptr<ExecutionContext> ectxB = iterItemB.wectx.lock();
+            if (!ectxB) {
+                return true; // A goes first
+            }
+            if (!ectxA) {
+                return false; // B goes first
+            }
+
+            // shortest first
+            auto reA = static_cast<int64_t>(ectxA->m_item->totalRunningTime) - static_cast<int64_t>(ectxA->m_item->usedRunningTime);
+            auto reB = static_cast<int64_t>(ectxB->m_item->totalRunningTime) - static_cast<int64_t>(ectxB->m_item->usedRunningTime);
+            return reA < reB;
+        };
+        if (m_schedParam.scheduler == "fair") {
+            staging.sort(fairSorter);
+        } else if (m_schedParam.scheduler == "preempt") {
+            staging.sort(preemptSorter);
+        } else {
+            CHECK_EQ(m_schedParam.scheduler, "pack") << "Unknown scheduler selected: " << m_schedParam.scheduler;
+        }
+
         for (auto &iterItem : staging) {
             if (iterItem.iter->isCanceled()) {
                 continue;
@@ -301,11 +365,23 @@ bool ExecutionEngine::runIter(IterationItem &iterItem, ExecutionContext &ectx)
     }
 
     bool expensive = iterItem.iter->isExpensive();
-    auto iCtx = std::make_shared<IterationContext>(m_taskExecutor, ectx.m_item, [this, expensive](){
-        if (expensive) {
-            m_numExpensiveIterRunning--;
-        }
-    });
+
+    auto iCtx = std::make_shared<IterationContext>(m_taskExecutor, ectx.m_item,
+                                                   [this, expensive, start = system_clock::now()](auto &sessItem) {
+                                                       if (expensive) {
+                                                           auto usedTime =
+                                                               duration_cast<milliseconds>(system_clock::now() - start).count();
+                                                           sessItem.usedRunningTime += usedTime;
+                                                           if (VLOG_IS_ON(1)) {
+                                                               LogOpTracing() << "event: sess_add_time " << nlohmann::json({
+                                                                   {"sess", sessItem.sessHandle},
+                                                                   {"usedRunningTime", sessItem.usedRunningTime.load()},
+                                                                   {"totalRunningTime", sessItem.totalRunningTime},
+                                                               });
+                                                           }
+                                                           m_numExpensiveIterRunning--;
+                                                       }
+                                                   });
     iterItem.iter->runAsync(std::move(iCtx));
     return true;
 }
@@ -408,5 +484,11 @@ void ExecutionContext::dropExlusiveMode()
     DCHECK(m_item);
     m_item->setExclusiveMode(false);
     m_engine.m_note_has_work.notify();
+}
+
+void ExecutionContext::setExpectedRunningTime(uint64_t time)
+{
+    DCHECK(m_item);
+    m_item->totalRunningTime = time;
 }
 } // namespace salus

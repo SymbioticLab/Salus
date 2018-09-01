@@ -60,9 +60,17 @@ public:
 
     tf::Device *compatibleCPUDevice() const;
 
+    void setDisabled(bool value)
+    {
+        CHECK(value);
+        m_disabled = value;
+    }
+
 private:
     std::vector<int> getValidGpuIds();
     void createCudaHostAllocator(tfgpu::StreamExecutor *se);
+
+    bool m_disabled = false;
 
     struct LaneRequest
     {
@@ -103,7 +111,7 @@ private:
         tfgpu::StreamExecutor &se;
         const size_t totalMemory;
 
-        size_t availableMemory {0};
+        size_t availableMemory GUARDED_BY(*mu) {0};
 
         // Has to by dynamic allocated otherwise GCB can't be placed in vector
         std::unique_ptr<std::mutex> mu {std::make_unique<std::mutex>()};
