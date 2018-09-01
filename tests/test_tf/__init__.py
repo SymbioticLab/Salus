@@ -102,10 +102,10 @@ def run_on_rpc_and_gpu(func, **kwargs):
 
 
 def assertAllClose(actual, expected, **kwargs):
-    def _assertAllClose(actual, expected, path):
+    def _assertAllClose(actual, expected, path, **kwargs):
         if isinstance(actual, (list, tuple)):
             for i, (a, e) in enumerate(zip(actual, expected)):
-                _assertAllClose(a, e, path + [i])
+                _assertAllClose(a, e, path + [i], **kwargs)
         else:
             rtol = kwargs.pop('rtol', 1e-5)
             msg = "At element actual"
@@ -113,4 +113,4 @@ def assertAllClose(actual, expected, **kwargs):
                 msg += '[{}]'.format(']['.join(str(i) for i in path))
             npt.assert_allclose(actual, expected, err_msg=msg, rtol=rtol, **kwargs)
 
-    return _assertAllClose(actual, expected, [])
+    return _assertAllClose(actual, expected, [], **kwargs)
