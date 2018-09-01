@@ -90,7 +90,7 @@ class ResNetCaseBase(unittest.TestCase):
         config = self._config(batch_size=batch_size)
         config.allow_soft_placement = True
         actual, expected = run_on_rpc_and_gpu(self._get_func(batch_size), config=config)
-        assertAllClose(actual, expected)
+        assertAllClose(actual, expected, rtol=1e-3)
 
 
 @unittest.skip("Fake data is used as common dataset instead")

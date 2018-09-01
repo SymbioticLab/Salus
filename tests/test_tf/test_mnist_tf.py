@@ -240,7 +240,7 @@ class MnistConvBase(unittest.TestCase):
 
     def _config(self, **kwargs):
         c = tf.ConfigProto()
-        #c.graph_options.optimizer_options.opt_level = tf.OptimizerOptions.L0
+        # c.graph_options.optimizer_options.opt_level = tf.OptimizerOptions.L0
         c.allow_soft_placement = True
         return c
 
@@ -291,9 +291,9 @@ class TestMnistConv(MnistConvBase):
     def _config(self, **kwargs):
         MB = 1024 * 1024
         memusages = {
-            25: (51.7 * MB - 38 * MB, 38 * MB),
-            50: (64.8 * MB - 38 * MB, 38 * MB),
-            100: (89 * MB - 38 * MB, 38 * MB),
+            25: (100 * MB - 38 * MB, 38 * MB),
+            50: (128 * MB - 58 * MB, 58 * MB),
+            100: (182 * MB - 112 * MB, 112 * MB),
         }
         batch_size = kwargs.get('batch_size', 50)
 
@@ -311,9 +311,9 @@ class TestMnistLarge(MnistConvBase):
     def _config(self, **kwargs):
         MB = 1024 * 1024
         memusages = {
-            25: (39 * MB - 23.5 * MB, 23.5 * MB),
-            50: (54 * MB - 23.5 * MB, 23.5 * MB),
-            100: (72 * MB - 23.5 * MB, 26 * MB),
+            25: (110 * MB - 61 * MB, 61 * MB),
+            50: (136 * MB - 86 * MB, 86 * MB),
+            100: (197 * MB - 137 * MB, 137 * MB),
         }
         batch_size = kwargs.get('batch_size', 50)
 

@@ -60,7 +60,7 @@ def run_seq_ptb(sess, config_name):
                 print('Average excluding first iteration: %.3f sec/batch' % np.average(speeds[1:]))
 
 
-model_sizes = ['tiny', 'small', 'medium', 'large']
+model_sizes = ['small', 'medium', 'large']
 
 
 class SeqCaseBase(unittest.TestCase):
@@ -106,7 +106,6 @@ class TestSeqPtb(SeqCaseBase):
         MB = 1024 * KB
         GB = 1024 * MB
         memusages = {
-            'tiny': (1.9 * MB, 200 * KB),
             'small': (79.2 * MB, 18 * MB),
             'medium': (1.01 * GB, 80 * MB),
             'large': (5.05 * GB, 343.3 * MB),

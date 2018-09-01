@@ -56,11 +56,11 @@ class TestSuperRes(unittest.TestCase):
     def _config(self, **kwargs):
         KB = 1024
         MB = 1024 * KB
-        GB = 1024 * MB
         memusages = {
-            32: (1.01 * GB, 80 * MB),
-            64: (1.9 * MB, 200 * KB),
-            128: (79.2 * MB, 18 * MB),
+            32: (252.79296875 * MB, 17.503280639648438 * MB),
+            # 64: (496.98071670532227 * MB, 31.690780639648438 * MB),
+            64: (500 * MB, 31.690780639648438 * MB),
+            128: (992.9807167053223 * MB, 60.44078063964844 * MB),
         }
         batch_size = kwargs.get('batch_size', 100)
 

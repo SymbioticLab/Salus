@@ -126,6 +126,7 @@ class VGGCaseBase(unittest.TestCase):
         actual, expected = run_on_rpc_and_gpu(func)
         self.assertEquals(actual, expected)
 
+    @unittest.skip("Hang. See card#238")
     def test_flowers(self):
         def func():
             def input_data(*a, **kw):
