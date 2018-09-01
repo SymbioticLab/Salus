@@ -147,6 +147,9 @@ class UnittestRunner(Runner):
             'mnistlg': ('test_tf.test_mnist_tf', 'TestMnistLarge', {
                 25: '0', 50: '1', 100: '2'
             }),
+            'superres': ('test_tf.test_super_res', 'TestSuperRes', {
+                32: '0', 64: '1', 128: '2'
+            })
         }
 
         if executor == Executor.Salus:
