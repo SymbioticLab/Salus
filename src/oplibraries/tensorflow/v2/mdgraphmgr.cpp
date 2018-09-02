@@ -16,7 +16,7 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include "oplibraries/tensorflow/worker/mdgraphmgr.h"
+#include "oplibraries/tensorflow/v2/mdgraphmgr.h"
 
 #include "oplibraries/tensorflow/device/salusdevices.h"
 #include "oplibraries/tensorflow/tfexception.h"
@@ -25,6 +25,12 @@
 #include "utils/pointerutils.h"
 
 namespace salus::oplib::tensorflow {
+
+constexpr void skip_delete_opkernel(tf::OpKernel *) {}
+constexpr void default_delete_opkernel(tf::OpKernel *k)
+{
+    delete k;
+}
 
 MDGraphMgr::MDGraphMgr(const tf::WorkerEnv *env, std::shared_ptr<ExecutionContext> execCtx, ResStats rm)
     : GraphMgr(env, env->device_mgr)

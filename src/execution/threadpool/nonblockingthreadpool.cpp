@@ -21,7 +21,7 @@
 #include "threadpool.h"
 
 #include "EventCount.h"
-#include "fixed_function.hpp"
+#include "utils/fixed_function.hpp"
 #include "RunQueue.h"
 
 #include <atomic>

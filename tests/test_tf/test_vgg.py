@@ -9,7 +9,7 @@ import tensorflow as tf
 
 from parameterized import parameterized
 
-from . import run_on_rpc_and_gpu, run_on_sessions, run_on_devices, assertAllClose
+from . import run_on_rpc_and_gpu, run_on_sessions, run_on_devices, assertAllClose, tfDistributedEndpointOrSkip
 from . import networks, datasets
 from .lib import tfhelper
 
@@ -126,6 +126,7 @@ class VGGCaseBase(unittest.TestCase):
         actual, expected = run_on_rpc_and_gpu(func)
         self.assertEquals(actual, expected)
 
+    @unittest.skip("Hang. See card#238")
     def test_flowers(self):
         def func():
             def input_data(*a, **kw):
@@ -136,25 +137,16 @@ class VGGCaseBase(unittest.TestCase):
         actual, expected = run_on_rpc_and_gpu(func)
         assertAllClose(actual, expected, rtol=1e-3)
 
-    @unittest.skip("Skip distributed runtime")
-    def test_dist(self):
+    def test_distributed(self):
         def func():
             def input_data(*a, **kw):
                 return datasets.fake_data(*a, height=224, width=224, num_classes=1000, **kw)
             sess = tf.get_default_session()
             return run_vgg(self._vgg(), sess, input_data)
 
-        run_on_sessions(func, 'grpc://localhost:2222')
-
-    @unittest.skip("Skip distributed runtime")
-    def test_dist_gpu(self):
-        def func():
-            def input_data(*a, **kw):
-                return datasets.fake_data(*a, height=224, width=224, num_classes=1000, **kw)
-            sess = tf.get_default_session()
-            return run_vgg(self._vgg(), sess, input_data)
-        run_on_devices(func, '/job:local/task:0/device:GPU:0', target='grpc://localhost:2222',
-                       config=tf.ConfigProto(allow_soft_placement=True))
+        run_on_sessions(func, tfDistributedEndpointOrSkip(),
+                        dev='/job:tfworker/device:GPU:0',
+                        config=tf.ConfigProto(allow_soft_placement=True))
 
 
 class TestVgg11(VGGCaseBase):

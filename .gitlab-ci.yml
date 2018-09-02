@@ -1,4 +1,4 @@
-image: registry.gitlab.com/aetf/salus/builder:ubuntu16.04-cuda91-cudnn7
+image: registry.gitlab.com/salus/builder
 
 cache:
   paths:

@@ -415,7 +415,7 @@ WorkloadTemplate.define('mnistsf', [25, 50, 100], UnittestRunner)
 WorkloadTemplate.define('mnistcv', [25, 50, 100], UnittestRunner)
 WorkloadTemplate.define('mnistlg', [25, 50, 100], UnittestRunner)
 WorkloadTemplate.define('vae', [64, 128, 256], UnittestRunner)
-WorkloadTemplate.define('super_res', [64, 128, 256], UnittestRunner)
+WorkloadTemplate.define('superres', [32, 64, 128], UnittestRunner)
 
 
 # noinspection PyUnusedLocal

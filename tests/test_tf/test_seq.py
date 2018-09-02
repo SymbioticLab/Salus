@@ -8,7 +8,7 @@ import tensorflow as tf
 
 from parameterized import parameterized
 
-from . import run_on_rpc_and_gpu, run_on_sessions, run_on_devices
+from . import run_on_rpc_and_gpu, run_on_sessions, run_on_devices, tfDistributedEndpointOrSkip
 from . import networks, datasets
 from .lib import tfhelper
 from .lib.seq2seq.ptb.ptb_word_lm import get_config
@@ -60,7 +60,7 @@ def run_seq_ptb(sess, config_name):
                 print('Average excluding first iteration: %.3f sec/batch' % np.average(speeds[1:]))
 
 
-model_sizes = ['tiny', 'small', 'medium', 'large']
+model_sizes = ['small', 'medium', 'large']
 
 
 class SeqCaseBase(unittest.TestCase):
@@ -85,6 +85,13 @@ class SeqCaseBase(unittest.TestCase):
         run_on_devices(self.get_func_to_run(model_size), '/device:CPU:0')
 
     @parameterized.expand(model_sizes)
+    def test_distributed(self, model_size):
+        run_on_sessions(self.get_func_to_run(model_size),
+                        tfDistributedEndpointOrSkip(),
+                        dev='/job:tfworker/device:GPU:0',
+                        config=self._config(model_size))
+
+    @parameterized.expand(model_sizes)
     def test_rpc(self, model_size):
         run_on_sessions(self.get_func_to_run(model_size), 'zrpc://tcp://127.0.0.1:5501', dev='/device:GPU:0',
                         config=self._config(model_size))
@@ -106,7 +113,6 @@ class TestSeqPtb(SeqCaseBase):
         MB = 1024 * KB
         GB = 1024 * MB
         memusages = {
-            'tiny': (1.9 * MB, 200 * KB),
             'small': (79.2 * MB, 18 * MB),
             'medium': (1.01 * GB, 80 * MB),
             'large': (5.05 * GB, 343.3 * MB),

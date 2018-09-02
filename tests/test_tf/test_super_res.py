@@ -9,7 +9,7 @@ from timeit import default_timer
 
 from parameterized import parameterized
 
-from . import run_on_rpc_and_gpu, run_on_sessions, run_on_devices, assertAllClose
+from . import run_on_rpc_and_gpu, run_on_sessions, run_on_devices, assertAllClose, tfDistributedEndpointOrSkip
 from . import networks
 from .lib import tfhelper
 from .lib.datasets import fake_data_ex
@@ -56,11 +56,11 @@ class TestSuperRes(unittest.TestCase):
     def _config(self, **kwargs):
         KB = 1024
         MB = 1024 * KB
-        GB = 1024 * MB
         memusages = {
-            32: (1.01 * GB, 80 * MB),
-            64: (1.9 * MB, 200 * KB),
-            128: (79.2 * MB, 18 * MB),
+            32: (252.79296875 * MB, 17.503280639648438 * MB),
+            # 64: (496.98071670532227 * MB, 31.690780639648438 * MB),
+            64: (500 * MB, 31.690780639648438 * MB),
+            128: (992.9807167053223 * MB, 60.44078063964844 * MB),
         }
         batch_size = kwargs.get('batch_size', 100)
 
@@ -88,6 +88,13 @@ class TestSuperRes(unittest.TestCase):
         config = self._config(batch_size=batch_size)
         config.allow_soft_placement = True
         run_on_devices(self._get_func(batch_size), '/device:GPU:0', config=config)
+
+    @parameterized.expand([(32,), (64,), (128,)])
+    def test_distributed(self, batch_size):
+        run_on_sessions(self._get_func(batch_size),
+                        tfDistributedEndpointOrSkip(),
+                        dev='/job:tfworker/device:GPU:0',
+                        config=self._config(batch_size=batch_size))
 
     @parameterized.expand([(64,)])
     @unittest.skip("No need to run on CPU")

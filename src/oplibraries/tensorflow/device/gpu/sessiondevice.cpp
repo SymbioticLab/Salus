@@ -66,7 +66,27 @@ tf::Status SessionDevice::FillContextMap(const tf::Graph *, tf::DeviceContextMap
 tf::Status SessionDevice::Sync()
 {
     // Only sync the main default stream
+    tf::Notification n[4];
+    tensorflow_gpu_device_info()->event_mgr->ThenExecute(m_streams[0].first->compute, [&n](){
+        n[0].Notify();
+    });
+    tensorflow_gpu_device_info()->event_mgr->ThenExecute(m_streams[0].first->host_to_device, [&n](){
+        n[1].Notify();
+    });
+    tensorflow_gpu_device_info()->event_mgr->ThenExecute(m_streams[0].first->device_to_host, [&n](){
+        n[2].Notify();
+    });
+    tensorflow_gpu_device_info()->event_mgr->ThenExecute(m_streams[0].first->device_to_device, [&n](){
+        n[3].Notify();
+    });
 
+    n[0].WaitForNotification();
+    n[1].WaitForNotification();
+    n[2].WaitForNotification();
+    n[3].WaitForNotification();
+    return Status::OK();
+
+    /*
     sstl::semaphore sa;
     for (auto &[sg, ctx] : m_streams) {
         UNUSED(ctx);
@@ -87,6 +107,7 @@ tf::Status SessionDevice::Sync()
     const constexpr int PerGroupStreams = 4;
     sa.wait(static_cast<uint32_t>(m_streams.size() * PerGroupStreams));
     return Status::OK();
+     */
 }
 
 } // namespace salus::oplib::tensorflow

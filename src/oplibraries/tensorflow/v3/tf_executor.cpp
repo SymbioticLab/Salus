@@ -7,6 +7,7 @@
 #include "execution/engine/iterationcontext.h"
 #include "execution/iterationtask.h"
 #include "oplibraries/tensorflow/tfinstance.h"
+#include "utils/envutils.h"
 
 namespace salus::oplib::tensorflow {
 
@@ -468,6 +469,19 @@ void GetMaxPendingCounts(const tf::Node *n, size_t *max_pending, size_t *max_dea
 Status ExecutorImpl::Initialize()
 {
     gview_.Initialize(graph_.get());
+
+    struct ExecutorImplTag;
+    if (sstl::fromEnvVarCached<ExecutorImplTag>("DumpGraph", false)) {
+        LogOpTracing() << "event: new_graph "
+                       << nlohmann::json({
+                                             {"sess", params_.session},
+                                             {"mainIter", is_main_iter},
+                                             {"graphId", graph_id_},
+                                             {"device", params_.device->name()},
+                                             {"graph", tfGraphToGraphviz(*graph_, "")},
+                                         });
+    }
+
 
     // Build the information about frames in this subgraph.
     ControlFlowInfo cf_info;
@@ -2048,7 +2062,7 @@ void ExecutorState::Finish()
                                           {"stepId", step_id_},
                                           {"mainIter", impl_->is_main_iter},
                                           {"device", impl_->params_.device->name()},
-                                          {"memMap", TFInstance::instance().dumpGPUMemoryMap()},
+                                          {"memMap", TFInstance::instance().maybeDumpGPUMemoryMap(impl_->params_.device)},
                        });
     }
     if (impl_->is_main_iter) {

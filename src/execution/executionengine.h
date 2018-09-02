@@ -35,6 +35,7 @@
 #include <boost/circular_buffer.hpp>
 
 #include <atomic>
+#include <any>
 #include <chrono>
 #include <future>
 #include <list>
@@ -98,11 +99,20 @@ private:
         std::weak_ptr<ExecutionContext> wectx;
         std::unique_ptr<IterationTask> iter;
     };
+
+
     using IterQueue = std::list<IterationItem>;
     using BlockingQueues =
         boost::circular_buffer<std::pair<PSessionItem, boost::circular_buffer<IterationItem>>>;
+
+    struct LaneQueue
+    {
+        IterQueue queue;
+        std::chrono::system_clock::time_point lastSeen;
+        std::atomic_int_fast64_t numExpensiveIterRunning {0};
+    };
+
     IterQueue m_iterQueue GUARDED_BY(m_mu);
-    std::atomic_int_fast64_t m_numExpensiveIterRunning {0};
     void scheduleIteration(IterationItem &&item);
 
     std::unique_ptr<std::thread> m_schedThread;
@@ -110,10 +120,11 @@ private:
     sstl::notification m_note_has_work;
 
     void scheduleLoop();
-    bool checkIter(IterationItem &iterItem, ExecutionContext &ectx);
-    bool runIter(IterationItem &iterItem, ExecutionContext &ectx);
+    int scheduleOnQueue(LaneQueue &lctx, IterQueue &staging);
+    bool checkIter(IterationItem &iterItem, ExecutionContext &ectx, LaneQueue &lctx);
+    bool runIter(IterationItem &iterItem, ExecutionContext &ectx, LaneQueue &lctx);
     bool maybeWaitForAWhile(size_t scheduled);
-    void maybeWaitForWork(const BlockingQueues &blockingSessions, const IterQueue &iters, size_t scheduled);
+    void maybeWaitForWork(size_t pending, size_t scheduled);
 };
 
 /**
@@ -122,9 +133,10 @@ private:
 class ExecutionContext : public std::enable_shared_from_this<ExecutionContext>
 {
     ExecutionEngine &m_engine;
+    std::any m_userData;
+    uint64_t m_laneId;
 
     friend class ExecutionEngine;
-
     /**
      * @brief remove from engine and give up our reference of session item
      */
@@ -148,7 +160,29 @@ public:
 
     void setSessionHandle(const std::string &h);
 
+    const std::any &userData() const
+    {
+        return m_userData;
+    }
+
+    void setUserData(std::any &&data)
+    {
+        m_userData = std::move(data);
+    }
+
     void dropExlusiveMode();
+
+    uint64_t laneId() const
+    {
+        return m_laneId;
+    }
+
+    void setLaneId(uint64_t id)
+    {
+        m_laneId = id;
+    }
+
+    void setExpectedRunningTime(uint64_t time);
 
     /**
      * @brief Make a resource context that first allocate from session's resources

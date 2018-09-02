@@ -53,32 +53,21 @@ if(USE_TENSORFLOW)
         "oplibraries/tensorflow/tfinstance.cpp"
         "oplibraries/tensorflow/tfsession.cpp"
         "oplibraries/tensorflow/tfutils.cpp"
+        "oplibraries/tensorflow/handlercallback.cpp"
         "oplibraries/tensorflow/worker/rendezvousmgr.cpp"
         "oplibraries/tensorflow/worker/rendezvouswithhook.cpp"
         "oplibraries/tensorflow/worker/devicecontextwithdevice.cpp"
         "oplibraries/tensorflow/worker/dummyworkercache.cpp"
         "oplibraries/tensorflow/worker/dummysessionmgr.cpp"
-        "oplibraries/tensorflow/worker/mdgraphmgr.cpp"
-
-        "oplibraries/tensorflow/v2/md_executor.cpp"
-        "oplibraries/tensorflow/v2/tfallocator.cpp"
-        "oplibraries/tensorflow/v2/exectask.cpp"
-        "oplibraries/tensorflow/v2/tensorutils.cpp"
-        "oplibraries/tensorflow/v2/md_executor_impl.cpp"
-        "oplibraries/tensorflow/v2/graphview.cpp"
-        "oplibraries/tensorflow/v2/itertask.cpp"
-        "oplibraries/tensorflow/v2/costmgr.cpp"
 
         "oplibraries/tensorflow/v3/sigraphmgr.cpp"
-        "oplibraries/tensorflow/v3/si_executor.cpp"
-        "oplibraries/tensorflow/v3/si_executor_impl.cpp"
-        "oplibraries/tensorflow/v3/si_executortask.cpp"
         "oplibraries/tensorflow/v3/tf_executor.cpp"
 
         "oplibraries/tensorflow/device/shadowdevices.cpp"
         "oplibraries/tensorflow/device/salusdevices.cpp"
         "oplibraries/tensorflow/device/cpu.cpp"
         "oplibraries/tensorflow/device/gpu/gpu.cpp"
+        "oplibraries/tensorflow/device/gpu/lane/lanemgr.cpp"
         "oplibraries/tensorflow/device/gpu/sessiondevice.cpp"
         "oplibraries/tensorflow/device/sessionallocator.cpp"
 #         "oplibraries/tensorflow/tfoplibrary.cpp"
@@ -86,6 +75,19 @@ if(USE_TENSORFLOW)
 #         "oplibraries/tensorflow/tfmocks/tfsession.cpp"
 #         "oplibraries/tensorflow/tfmocks/tfrendezvous.cpp"
     )
+    if(NOT WITH_SIEXECUTOR)
+        list(APPEND SRC_LIST
+            "oplibraries/tensorflow/v2/md_executor.cpp"
+            "oplibraries/tensorflow/v2/tfallocator.cpp"
+            "oplibraries/tensorflow/v2/exectask.cpp"
+            "oplibraries/tensorflow/v2/tensorutils.cpp"
+            "oplibraries/tensorflow/v2/md_executor_impl.cpp"
+            "oplibraries/tensorflow/v2/graphview.cpp"
+            "oplibraries/tensorflow/v2/itertask.cpp"
+            "oplibraries/tensorflow/v2/costmgr.cpp"
+            "oplibraries/tensorflow/v2/mdgraphmgr.cpp"
+        )
+    endif(NOT WITH_SIEXECUTOR)
 endif(USE_TENSORFLOW)
 
 add_executable(executor ${SRC_LIST})

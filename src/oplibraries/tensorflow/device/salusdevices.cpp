@@ -25,6 +25,10 @@
 #include "oplibraries/tensorflow/tfexception.h"
 #include "utils/threadutils.h"
 
+#if !defined(SALUS_ENABLE_SIEXECUTOR)
+#include "oplibraries/tensorflow/v2/tfallocator.h"
+#endif
+
 #include <mutex>
 
 namespace salus::oplib::tensorflow {
@@ -70,6 +74,7 @@ ISalusDevice &ISalusDevice::safe_cast(tf::Device &device)
     return *sdev;
 }
 
+#if !defined(SALUS_ENABLE_SIEXECUTOR)
 PerTaskDevice::PerTaskDevice(sstl::not_null<tf::Device *> other, std::unique_ptr<ResourceContext> &&rctx)
     : Device(other->env(), other->attributes())
     , m_base(other)
@@ -222,5 +227,6 @@ Resources PerTaskDevice::peakResourceUsage() const
     }
     return res;
 }
+#endif // !SALUS_ENABLE_SIEXECUTOR
 
 } // namespace salus::oplib::tensorflow

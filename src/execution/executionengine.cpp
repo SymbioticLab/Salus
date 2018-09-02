@@ -17,6 +17,8 @@
  *
  */
 
+#include "oplibraries/tensorflow/device/gpu/lane/lanemgr.h"
+
 #include "execution/executionengine.h"
 
 #include "execution/engine/iterationcontext.h"
@@ -30,13 +32,11 @@
 #include "utils/macros.h"
 #include "utils/pointerutils.h"
 #include "utils/threadutils.h"
-#include "executionengine.h"
-
-#include <boost/container/flat_map.hpp>
 
 #include <algorithm>
 #include <functional>
 #include <iomanip>
+#include <unordered_map>
 
 using std::chrono::duration_cast;
 using std::chrono::microseconds;
@@ -91,7 +91,6 @@ ExecutionEngine::~ExecutionEngine()
 std::shared_ptr<ExecutionContext> ExecutionEngine::makeContext()
 {
     if (m_interrupting) {
-        // Engine has been iterrupted
         return nullptr;
     }
 
@@ -113,23 +112,11 @@ void ExecutionEngine::scheduleIteration(IterationItem &&item)
     m_note_has_work.notify();
 }
 
-void ExecutionEngine::maybeWaitForWork(const BlockingQueues &blockingSessions, const IterQueue &iters, size_t scheduled)
+void ExecutionEngine::maybeWaitForWork(size_t pending, size_t scheduled)
 {
     maybeWaitForAWhile(scheduled);
 
-    bool noWork = blockingSessions.empty();
-    if (!noWork) {
-        noWork = true;
-        for (auto &[pSess, queue] : blockingSessions) {
-            UNUSED(pSess);
-            if (!queue.empty()) {
-                noWork = false;
-                break;
-            }
-        }
-    }
-    noWork = noWork && iters.empty();
-    if (noWork) {
+    if (pending == 0) {
         VLOG(2) << "ExecutionEngine wait on m_note_has_work";
         m_note_has_work.wait();
     }
@@ -138,16 +125,15 @@ void ExecutionEngine::maybeWaitForWork(const BlockingQueues &blockingSessions, c
 void ExecutionEngine::scheduleLoop()
 {
     LOG(INFO) << "ExecutionEngine scheduling thread started";
-    // a thread local queue
-    IterQueue iters;
-    // a higher priority queue. Only one session's iter in this queue can run, and will block iters queue
-    boost::circular_buffer<std::pair<PSessionItem, boost::circular_buffer<IterationItem>>> blockingSessions(128);
+
+    // a map of lane id to thread local queues.
+    std::unordered_map<uint64_t, LaneQueue> queues;
+    queues.reserve(15);
 
     // staging queue
     IterQueue staging;
 
     while (true) {
-        size_t scheduled = 0;
         DCHECK(staging.empty());
         // accept new iters
         {
@@ -155,136 +141,172 @@ void ExecutionEngine::scheduleLoop()
             staging.swap(m_iterQueue);
         }
 
+        // record the timestamp
+        auto currStamp = system_clock::now();
+
         // move things to aproriate queue
         for (auto &iter : staging) {
             auto ectx = iter.wectx.lock();
             if (!ectx) {
                 continue;
             }
-            if (ectx->m_item->exlusiveMode) {
-                bool found = false;
-                for (auto &[psess, queue] : blockingSessions) {
-                    if (psess == ectx->m_item) {
-                        found = true;
-                        queue.push_back(std::move(iter));
-                        break;
-                    }
-                }
-                if (!found) {
-                    blockingSessions.push_back();
-                    blockingSessions.back().first = ectx->m_item;
-                    blockingSessions.back().second.set_capacity(4);
-                    blockingSessions.back().second.push_back(std::move(iter));
-                }
-            } else {
-                iters.emplace_back(std::move(iter));
-            }
+            auto &lane = queues[ectx->laneId()];
+            lane.queue.emplace_back(std::move(iter));
+            lane.lastSeen = currStamp;
         }
         staging.clear();
 
+        // break if interrupting, after accepting every thing
         if (m_interrupting) {
             break;
         }
 
-        // schedule in blocking queue
-        bool hasBlocking = false;
-        while (!blockingSessions.empty()) {
-            auto &[pSess, queue] = blockingSessions.front();
-            if (queue.empty() && !pSess->exlusiveMode) {
-                // this session has done with exlusive mode
-                blockingSessions.pop_front();
-                continue;
+        // schedule each lane separately, release lane that is inactive for too long.
+        // it doesn't matter if later that lane has iter comes, just recreate it.
+
+        size_t scheduled = 0;
+        size_t pending = 0;
+
+        constexpr const auto MaxInactiveTime = 10s;
+        for (auto it = queues.begin(); it != queues.end();) {
+            auto &lctx = it->second;
+            if (lctx.queue.empty()
+                && currStamp - lctx.lastSeen > MaxInactiveTime
+                && lctx.numExpensiveIterRunning.load(std::memory_order_acquire) == 0) {
+                it = queues.erase(it);
+            } else {
+                scheduled += scheduleOnQueue(lctx, staging);
+                staging.clear();
+                pending += lctx.queue.size();
+                ++it;
             }
-            hasBlocking = true;
-
-            while (!queue.empty()) {
-                auto &iterItem = queue.front();
-
-                if (iterItem.iter->isCanceled()) {
-                    queue.pop_front();
-                    continue;
-                }
-
-                auto ectx = iterItem.wectx.lock();
-                if (!ectx) {
-                    queue.pop_front();
-                    continue;
-                }
-
-                if (runIter(iterItem, *ectx)) {
-                    queue.pop_front();
-                    scheduled += 1;
-                } else {
-                    break;
-                }
-            }
-            break;
         }
 
-        if (hasBlocking && scheduled > 0) {
-            maybeWaitForWork(blockingSessions, iters, scheduled);
-            continue;
-        }
-
-        iters.swap(staging);
-        for (auto &iterItem : staging) {
-            if (iterItem.iter->isCanceled()) {
-                continue;
-            }
-
-            auto ectx = iterItem.wectx.lock();
-            if (!ectx) {
-                continue;
-            }
-
-            // automatically place back if we can't schedule to run it by the end of this iteration
-            sstl::ScopeGuards put_back([&]() { iters.emplace_back(std::move(iterItem)); });
-
-            if (runIter(iterItem, *ectx)) {
-                put_back.dismiss();
-                scheduled += 1;
-            }
-        } // for (auto &iterItem : staging)
-        staging.clear();
-
-        maybeWaitForWork(blockingSessions, iters, scheduled);
+        maybeWaitForWork(pending, scheduled);
     }
 
     // Cleanup
     {
         // make sure no more new iters are pending
         auto g = sstl::with_guard(m_mu);
-        iters.splice(iters.end(), m_iterQueue);
+        staging.splice(staging.end(), m_iterQueue);
     }
 
-    for (const auto &iterItem : iters) {
+    for (const auto &iterItem : staging) {
         iterItem.iter->cancel();
-    }
-    for (const auto &[pSess, queue] : blockingSessions) {
-        UNUSED(pSess);
-        for (const auto &iterItem : queue) {
-            iterItem.iter->cancel();
-        }
     }
     LOG(INFO) << "ExecutionEngine stopped";
 }
 
-bool ExecutionEngine::checkIter(IterationItem &iterItem, ExecutionContext &)
+int ExecutionEngine::scheduleOnQueue(LaneQueue &lctx, IterQueue &staging)
+{
+    lctx.queue.swap(staging);
+    CHECK(lctx.queue.empty());
+
+    int scheduled = 0;
+
+    // First let go every mainIter=false
+    for (auto &iterItem : staging) {
+        if (iterItem.iter->isCanceled()) {
+            continue;
+        }
+        auto ectx = iterItem.wectx.lock();
+        if (!ectx) {
+            continue;
+        }
+
+        if (!iterItem.iter->isExpensive()) {
+            if (runIter(iterItem, *ectx, lctx)) {
+                scheduled += 1;
+                continue;
+            }
+        }
+        // put back all mainIter=true
+        lctx.queue.emplace_back(std::move(iterItem));
+    }
+    staging.clear();
+
+    // For all main iters
+    lctx.queue.swap(staging);
+
+    auto fairSorter = [](const auto &iterItemA, const auto &iterItemB) {
+        std::shared_ptr<ExecutionContext> ectxA = iterItemA.wectx.lock();
+        std::shared_ptr<ExecutionContext> ectxB = iterItemB.wectx.lock();
+        if (!ectxB) {
+            return true; // A goes first
+        }
+        if (!ectxA) {
+            return false; // B goes first
+        }
+
+        // fairness (equalize time)
+        auto reA = ectxA->m_item->usedRunningTime.load();
+        auto reB = ectxB->m_item->usedRunningTime.load();
+        return reA < reB;
+    };
+
+    auto preemptSorter = [](const auto &iterItemA, const auto &iterItemB) {
+        std::shared_ptr<ExecutionContext> ectxA = iterItemA.wectx.lock();
+        std::shared_ptr<ExecutionContext> ectxB = iterItemB.wectx.lock();
+        if (!ectxB) {
+            return true; // A goes first
+        }
+        if (!ectxA) {
+            return false; // B goes first
+        }
+
+        // shortest first
+        auto reA = static_cast<int64_t>(ectxA->m_item->totalRunningTime) - static_cast<int64_t>(ectxA->m_item->usedRunningTime);
+        auto reB = static_cast<int64_t>(ectxB->m_item->totalRunningTime) - static_cast<int64_t>(ectxB->m_item->usedRunningTime);
+        return reA < reB;
+    };
+
+    if (m_schedParam.scheduler == "fair") {
+        staging.sort(fairSorter);
+    } else if (m_schedParam.scheduler == "preempt") {
+        staging.sort(preemptSorter);
+    } else {
+        CHECK_EQ(m_schedParam.scheduler, "pack") << "Unknown scheduler selected: " << m_schedParam.scheduler;
+    }
+
+    for (auto &iterItem : staging) {
+        if (iterItem.iter->isCanceled()) {
+            continue;
+        }
+
+        auto ectx = iterItem.wectx.lock();
+        if (!ectx) {
+            continue;
+        }
+
+        if (runIter(iterItem, *ectx, lctx)) {
+            scheduled += 1;
+        } else {
+            lctx.queue.emplace_back(std::move(iterItem));
+        }
+    } // for (auto &iterItem : staging)
+    staging.clear();
+
+    return scheduled;
+}
+
+bool ExecutionEngine::checkIter(IterationItem &iterItem, ExecutionContext &, LaneQueue &lctx)
 {
     if (!iterItem.iter->isExpensive()) {
         return true;
     }
+
     // only allow one expensive iteration to run
     int64_t zero = 0;
-    return m_numExpensiveIterRunning.compare_exchange_weak(zero, 1);
+    return lctx.numExpensiveIterRunning.compare_exchange_weak(zero, 1);
 }
 
-bool ExecutionEngine::runIter(IterationItem &iterItem, ExecutionContext &ectx)
+bool ExecutionEngine::runIter(IterationItem &iterItem, ExecutionContext &ectx, LaneQueue &lctx)
 {
     DCHECK(ectx.m_item);
 
     VLOG(2) << "Try iteration " << ectx.m_item->sessHandle << ":" << iterItem.iter->graphId();
-    if (!checkIter(iterItem, ectx)) {
+    if (!checkIter(iterItem, ectx, lctx)) {
         VLOG(2) << "event: skip_iter "
                 << nlohmann::json({{"sess", ectx.m_item->sessHandle},
                                    {"graphId", iterItem.iter->graphId()},
@@ -302,11 +324,24 @@ bool ExecutionEngine::runIter(IterationItem &iterItem, ExecutionContext &ectx)
     }
 
     bool expensive = iterItem.iter->isExpensive();
-    auto iCtx = std::make_shared<IterationContext>(m_taskExecutor, ectx.m_item, [this, expensive](){
-        if (expensive) {
-            m_numExpensiveIterRunning--;
-        }
-    });
+
+    auto iCtx = std::make_shared<IterationContext>(m_taskExecutor, ectx.m_item,
+                                                   [&lctx, expensive, start = system_clock::now()](auto &sessItem) {
+                                                       if (expensive) {
+                                                           auto usedTime =
+                                                               duration_cast<milliseconds>(system_clock::now() - start).count();
+                                                           sessItem.usedRunningTime += usedTime;
+                                                           if (VLOG_IS_ON(1)) {
+                                                               LogOpTracing() << "event: sess_add_time " << nlohmann::json({
+                                                                   {"sess", sessItem.sessHandle},
+                                                                   {"usedRunningTime", sessItem.usedRunningTime.load()},
+                                                                   {"totalRunningTime", sessItem.totalRunningTime},
+                                                               });
+                                                           }
+                                                           // NOTE: lctx must be alive when any iters on it finishes.
+                                                           lctx.numExpensiveIterRunning--;
+                                                       }
+                                                   });
     iterItem.iter->runAsync(std::move(iCtx));
     return true;
 }
@@ -409,5 +444,11 @@ void ExecutionContext::dropExlusiveMode()
     DCHECK(m_item);
     m_item->setExclusiveMode(false);
     m_engine.m_note_has_work.notify();
+}
+
+void ExecutionContext::setExpectedRunningTime(uint64_t time)
+{
+    DCHECK(m_item);
+    m_item->totalRunningTime = time;
 }
 } // namespace salus

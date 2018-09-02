@@ -17,15 +17,24 @@
  */
 
 #include "oplibraries/tensorflow/tensorflow_headers.h"
-#include "tfinstance.h"
+
+#include "oplibraries/tensorflow/tfinstance.h"
+
 #include "execution/executionengine.h"
-#include "oplibraries/tensorflow/device/salusdevices.h"
 #include "oplibraries/tensorflow/device/gpu/gpu.h"
+#include "oplibraries/tensorflow/device/gpu/lane/lanemgr.h"
+#include "oplibraries/tensorflow/device/salusdevices.h"
+#include "oplibraries/tensorflow/handlercallback.h"
 #include "oplibraries/tensorflow/tfexception.h"
 #include "oplibraries/tensorflow/tfsession.h"
 #include "utils/macros.h"
 
 namespace salus::oplib::tensorflow {
+
+inline tf::StringPiece svToStringPiece(std::string_view sv)
+{
+    return {sv.data(), sv.size()};
+}
 
 /* static */ TFInstance &TFInstance::instance()
 {
@@ -36,6 +45,7 @@ namespace salus::oplib::tensorflow {
 TFInstance::TFInstance()
     : m_env(tf::Env::Default())
     , m_devCon()
+    , m_laneMgr(std::make_unique<LaneMgr>())
 {
 }
 
@@ -44,6 +54,8 @@ TFInstance::DeviceContainer::DeviceContainer()
     tf::SessionOptions sess_opts;
     // Disable old style RPCDevice creation if any.
     (*sess_opts.config.mutable_device_count())["RPC"] = 0;
+    // We don't create GPU device through DeviceFactory
+    (*sess_opts.config.mutable_device_count())["GPU"] = 0;
 
     // Load devices
     maybeRegisterSalusDeviceFactories();
@@ -60,6 +72,7 @@ TFInstance::DeviceContainer::DeviceContainer()
 
 TFInstance::~TFInstance() = default;
 
+#if !defined(SALUS_ENABLE_SIEXECUTOR)
 tf::Device *TFInstance::tfdevice(const DeviceSpec &spec) const
 {
     auto dt = sstl::to_underlying(spec.type);
@@ -78,41 +91,85 @@ tf::Device *TFInstance::tfdevice(const DeviceSpec &spec) const
     LOG(ERROR) << "Cannot find device for " << spec << ": " << ok;
     return nullptr;
 }
+#endif // !SALUS_ENABLE_SIEXECUTOR
 
-
-void TFInstance::handleCreateSession(const tf::CreateSessionRequest &req, tf::CreateSessionResponse &resp,
+void TFInstance::handleCreateSession(std::unique_ptr<tf::CreateSessionRequest> &&req, tf::CreateSessionResponse &resp,
                                      HandlerCallback &&cb)
 {
-    SALUS_THROW_IF_ERROR(ValidateExternalGraphDefSyntax(req.graph_def()));
+    SALUS_THROW_IF_ERROR(ValidateExternalGraphDefSyntax(req->graph_def()));
 
-    auto inserter = ExecutionEngine::instance().makeContext();
-
-    if (!inserter) {
-        cb(tf::errors::Aborted("Backend end engine interrupted"));
+    // NOTE: it's safe to capture resp by reference, because it is actually backed by cb
+    auto ectx = ExecutionEngine::instance().makeContext();
+    if (!ectx) {
+        cb(tf::errors::Aborted("Backend engine interrupted"));
         return;
     }
 
-    auto *gdef = const_cast<tf::CreateSessionRequest &>(req).mutable_graph_def();
-    auto session = std::make_shared<TFSession>(*this, inserter, req.config(), gdef);
-    auto handle = session->handle();
+    // We don't need exclusive mode anymore.
+    ectx->dropExlusiveMode();
 
-    // Register force interrupt handler
-    inserter->setInterruptCallback([this, handle]() {
-        popSession(handle)->safeClose();
-    });
+    LaneMgr::Layout layout;
+    // Get resource estimation from client
+    constexpr const auto rt = "MEMORY:GPU";
+    size_t limit = 0;
+    size_t persistant = 0;
+    auto &m = req->config().salus_options().resource_map();
+    persistant = static_cast<size_t>(std::round(sstl::getOrDefault(m.persistant(), rt, 0.0)));
+    limit += persistant;
+    limit += static_cast<size_t>(std::round(sstl::getOrDefault(m.temporary(), rt, 0.0)));
 
-    // Insert into the session map, which takes ownership of the session.
-    {
-        auto l = sstl::with_guard(m_mu);
-        if (!m_sessions.try_emplace(handle, std::move(session)).second) {
-            throw TFException(tf::errors::Internal("Error when inserting session ", handle));
-        }
+    if (limit == 0) {
+        limit = 14_sz * 1024_sz * 1024_sz * 1024_sz;
+        persistant = limit;
+        LOG(WARNING) << "No resource info for current session, assuming whole GPU allocation: " << limit;
     }
-    LOG(INFO) << "Accepting and created session " << handle;
+    layout.memoryLimits.push_back(limit);
+    layout.persistentOccupation.push_back(persistant);
 
-    // reply
-    resp.set_session_handle(handle);
-    cb(Status::OK());
+    auto totalRunningTime = static_cast<uint64_t>(std::round(sstl::getOrDefault(m.persistant(), "TIME:TOTAL", 0.0))) * 1000;
+    ectx->setExpectedRunningTime(totalRunningTime);
+
+    m_laneMgr->requestLanes(std::move(layout),
+        [&resp, cb = std::move(cb), req = std::move(req), ectx = std::move(ectx), this](auto &&lanes) mutable {
+            std::vector<tf::Device *> devices;
+
+            CHECK(!lanes.empty());
+            // add CPU device
+            devices.emplace_back(m_laneMgr->compatibleCPUDevice());
+
+            // prepare devices from lane
+            for (auto &lane : lanes) {
+                devices.emplace_back(lane->as_tfdevice());
+            }
+
+            // Keep a reference for lanes on ectx's user data
+            // which should outlive the TFSession.
+            ectx->setUserData(std::forward<decltype(lanes)>(lanes));
+            // NOTE: laneId on ectx is separated from actual lane implementation.
+            // It is only used to have separate scheduling domain. So use first lane's id as the id
+            // Revisit if later multi-lane for a job is implemented.
+            ectx->setLaneId(lanes.at(0)->id());
+
+            auto session =
+                std::make_shared<TFSession>(*this, ectx, std::move(devices), req->config(), req->mutable_graph_def());
+            auto handle = session->handle();
+
+            // Register force interrupt handler
+            ectx->setInterruptCallback([this, handle]() { popSession(handle)->safeClose(); });
+
+            // Insert into the session map, which takes ownership of the session.
+            {
+                auto l = sstl::with_guard(m_mu);
+                if (!m_sessions.try_emplace(handle, std::move(session)).second) {
+                    throw TFException(tf::errors::Internal("Error when inserting session ", handle));
+                }
+            }
+            LOG(INFO) << "Accepting and created session " << handle;
+
+            // reply
+            resp.set_session_handle(handle);
+            cb(Status::OK());
+        });
 }
 
 std::shared_ptr<TFSession> TFInstance::findSession(const std::string &sessHandle)
@@ -124,8 +181,8 @@ std::shared_ptr<TFSession> TFInstance::findSession(const std::string &sessHandle
         for (auto &[h, ptr] : m_sessions) {
             LOG(ERROR) << " Session " << h << "@" << as_hex(ptr);
         }
-        throw TFException(tf::errors::InvalidArgument("Session ", sessHandle,
-                                                      " is not found. Possibly, this master has restarted."));
+        throw TFException(
+            tf::errors::InvalidArgument("Session ", sessHandle, " is not found. Possibly, this master has restarted."));
     }
     return it->second;
 }
@@ -135,30 +192,34 @@ std::shared_ptr<TFSession> TFInstance::popSession(const std::string &sessHandle)
     auto g = sstl::with_guard(m_mu);
     auto nh = m_sessions.extract(sessHandle);
     if (!nh) {
-        throw TFException(tf::errors::InvalidArgument("Session ", sessHandle,
-                                                      " is not found. Possibly, this master has restarted."));
+        throw TFException(
+            tf::errors::InvalidArgument("Session ", sessHandle, " is not found. Possibly, this master has restarted."));
     }
     return std::move(nh.mapped());
 }
 
-void TFInstance::handleCloseSession(const tf::CloseSessionRequest &req, tf::CloseSessionResponse &resp,
+void TFInstance::handleCloseSession(std::unique_ptr<tf::CloseSessionRequest> &&req, tf::CloseSessionResponse &resp,
                                     HandlerCallback &&cb)
 {
     UNUSED(resp);
-    popSession(req.session_handle())->deferClose(std::move(cb));
+    popSession(req->session_handle())->deferClose(std::move(cb));
 }
 
-void TFInstance::handleListDevices(const tf::ListDevicesRequest &req, tf::ListDevicesResponse &resp,
+void TFInstance::handleListDevices(std::unique_ptr<tf::ListDevicesRequest> &&req, tf::ListDevicesResponse &resp,
                                    HandlerCallback &&cb)
 {
     UNUSED(req);
+    // This is never called
+    UNUSED(resp);
+    /*
     for (auto dev : devices()) {
         *(resp.add_local_device()) = dev->attributes();
     }
+    */
     cb(Status::OK());
 }
 
-void TFInstance::handleReset(const tf::ResetRequest &req, tf::ResetResponse &resp, HandlerCallback &&cb)
+void TFInstance::handleReset(std::unique_ptr<tf::ResetRequest> &&req, tf::ResetResponse &resp, HandlerCallback &&cb)
 {
     UNUSED(req);
     UNUSED(resp);
@@ -185,9 +246,15 @@ void TFInstance::handleReset(const tf::ResetRequest &req, tf::ResetResponse &res
     cb(s);
 }
 
-std::string TFInstance::dumpGPUMemoryMap() const
+std::string TFInstance::maybeDumpGPUMemoryMap(tf::Device *dev) const
 {
-    auto alloc = static_cast<SalusGPUDevice*>(tfdevice(devices::GPU0))->GetAllocator({});
-    return static_cast<tf::GPUDoubleBFCAllocator*>(alloc)->GenerateMemoryMap();
+    if (dev->parsed_name().has_type && dev->parsed_name().type == tf::DEVICE_GPU) {
+        auto alloc = dev->GetAllocator({});
+        auto s = alloc->Name();
+        if (alloc->Name().find("dbfc") != std::string::npos) {
+            return dynamic_cast<tf::GPUDoubleBFCAllocator *>(alloc)->GenerateMemoryMap();
+        }
+    }
+    return {};
 }
 } // namespace salus::oplib::tensorflow

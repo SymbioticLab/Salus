@@ -10,7 +10,7 @@ from parameterized import parameterized
 
 import tensorflow as tf
 
-from . import run_on_rpc_and_gpu, run_on_devices, run_on_sessions, assertAllClose
+from . import run_on_rpc_and_gpu, run_on_devices, run_on_sessions, assertAllClose, tfDistributedEndpointOrSkip
 from .lib import tfhelper
 from .lib.datasets import fake_data
 
@@ -235,65 +235,57 @@ def run_mnist_large(sess, batch_size=50):
 
 
 class MnistConvBase(unittest.TestCase):
-    def _runner(self):
+    def _runner(self, batch_size):
         return None
 
     def _config(self, **kwargs):
         c = tf.ConfigProto()
-        #c.graph_options.optimizer_options.opt_level = tf.OptimizerOptions.L0
+        # c.graph_options.optimizer_options.opt_level = tf.OptimizerOptions.L0
         c.allow_soft_placement = True
         return c
 
     @parameterized.expand([(25,), (50,), (100,)])
     def test_gpu(self, batch_size):
-        def func():
-            sess = tf.get_default_session()
-            return self._runner()(sess, batch_size=batch_size)
-
         config = self._config(batch_size=batch_size)
         config.allow_soft_placement = True
-        run_on_devices(func, '/device:GPU:0', config=config)
+        run_on_devices(self._runner(batch_size), '/device:GPU:0', config=config)
 
     @unittest.skip("No need to run on CPU")
     def test_cpu(self):
-        def func():
-            sess = tf.get_default_session()
-            return self._runner()(sess)
-
-        run_on_devices(func, '/device:CPU:0', config=self._config())
+        run_on_devices(self._runner(50), '/device:CPU:0', config=self._config())
 
     @parameterized.expand([(25,), (50,), (100,)])
     def test_rpc(self, batch_size):
-        def func():
-            sess = tf.get_default_session()
-            return self._runner()(sess, batch_size=batch_size)
-        run_on_sessions(func, 'zrpc://tcp://127.0.0.1:5501', dev='/device:GPU:0',
+        run_on_sessions(self._runner(batch_size), 'zrpc://tcp://127.0.0.1:5501', dev='/device:GPU:0',
+                        config=self._config(batch_size=batch_size))
+
+    @parameterized.expand([(25,), (50,), (100,)])
+    def test_distributed(self, batch_size):
+        run_on_sessions(self._runner(batch_size),
+                        tfDistributedEndpointOrSkip(),
+                        dev='/job:tfworker/device:GPU:0',
                         config=self._config(batch_size=batch_size))
 
     def test_correctness(self):
-        def func():
-            sess = tf.get_default_session()
-            return self._runner()(sess)
-
-        actual, expected = run_on_rpc_and_gpu(func, config=self._config())
+        actual, expected = run_on_rpc_and_gpu(self._runner(), config=self._config())
         assertAllClose(actual, expected, rtol=1e-3)
 
 
 class TestMnistSoftmax(MnistConvBase):
-    def _runner(self):
-        return run_mnist_softmax
+    def _runner(self, batch_size):
+        return lambda: run_mnist_softmax(tf.get_default_session(), batch_size)
 
 
 class TestMnistConv(MnistConvBase):
-    def _runner(self):
-        return run_mnist_conv
+    def _runner(self, batch_size):
+        return lambda: run_mnist_conv(tf.get_default_session(), batch_size)
 
     def _config(self, **kwargs):
         MB = 1024 * 1024
         memusages = {
-            25: (51.7 * MB - 38 * MB, 38 * MB),
-            50: (64.8 * MB - 38 * MB, 38 * MB),
-            100: (89 * MB - 38 * MB, 38 * MB),
+            25: (100 * MB - 38 * MB, 38 * MB),
+            50: (128 * MB - 58 * MB, 58 * MB),
+            100: (182 * MB - 112 * MB, 112 * MB),
         }
         batch_size = kwargs.get('batch_size', 50)
 
@@ -305,15 +297,15 @@ class TestMnistConv(MnistConvBase):
 
 
 class TestMnistLarge(MnistConvBase):
-    def _runner(self):
-        return run_mnist_large
+    def _runner(self, batch_size):
+        return lambda: run_mnist_large(tf.get_default_session(), batch_size)
 
     def _config(self, **kwargs):
         MB = 1024 * 1024
         memusages = {
-            25: (39 * MB - 23.5 * MB, 23.5 * MB),
-            50: (54 * MB - 23.5 * MB, 23.5 * MB),
-            100: (72 * MB - 23.5 * MB, 26 * MB),
+            25: (110 * MB - 61 * MB, 61 * MB),
+            50: (136 * MB - 86 * MB, 86 * MB),
+            100: (197 * MB - 137 * MB, 137 * MB),
         }
         batch_size = kwargs.get('batch_size', 50)
 

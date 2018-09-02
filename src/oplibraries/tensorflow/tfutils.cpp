@@ -17,9 +17,11 @@
  */
 
 #include "oplibraries/tensorflow/tensorflow_headers.h"
-#include "tfutils.h"
+#include "oplibraries/tensorflow/tfutils.h"
 #include "oplibraries/tensorflow/tfexception.h"
+
 #include <unordered_map>
+#include <sstream>
 
 namespace salus::oplib::tensorflow {
 
@@ -49,6 +51,36 @@ DeviceType tfDeviceTypeToType(const tf::DeviceType &type)
         return it->second;
     }
     throw TFException(tf::errors::InvalidArgument("Unknown tf::DeviceType: ", type.type()));
+}
+
+std::string tfGraphToGraphviz(const tf::Graph &g, const std::string &name)
+{
+    std::ostringstream os;
+    os << "digraph " << name << "{";
+
+    // graph attributes
+    os << "graph[num_nodes=" << g.num_nodes()
+       << ",num_edges=" << g.num_edges()
+       << ","
+    << "];";
+
+    // all nodes
+    for (auto *n : g.nodes()) {
+        os << n->id() << "[name=\"" << n->name() << "\""
+           << ",type=\"" << n->type_string() << "\""
+           << "];";
+    }
+    // all edges
+    for (auto e : g.edges()) {
+        os << e->src()->id() << "->" << e->dst()->id() << "["
+           << "src_output=" << e->src_output()
+           << ",dst_input=" << e->dst_input()
+            << ",id=" << e->id()
+           << "];";
+    }
+
+    os << "}";
+    return os.str();
 }
 
 } // namespace salus::oplib::tensorflow

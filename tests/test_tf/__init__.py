@@ -1,9 +1,11 @@
 from __future__ import print_function, division, absolute_import
 
 import sys
+import os
 import time
 from timeit import default_timer
 from contextlib import contextmanager
+from unittest import SkipTest
 
 import numpy as np
 import numpy.testing as npt
@@ -25,8 +27,13 @@ def eprint(*args, **kwargs):
     print(*args, file=sys.stderr, **kwargs)
 
 
-# TODO: implement the device selection as a session option.
-# So we can test both CPU and GPU using the same code.
+def tfDistributedEndpointOrSkip():
+    varname = 'SALUS_TFDIST_ENDPOINT'
+    if varname not in os.environ:
+        raise SkipTest('TF distributed service not available. To enable, set {}=grpc://localhost:2345'.format(varname))
+    return os.environ[varname]
+
+
 @contextmanager
 def sess_and_device(target='', dev='', config=None, seed=None):
     finalCfg = tf.ConfigProto()
@@ -102,10 +109,10 @@ def run_on_rpc_and_gpu(func, **kwargs):
 
 
 def assertAllClose(actual, expected, **kwargs):
-    def _assertAllClose(actual, expected, path):
+    def _assertAllClose(actual, expected, path, **kwargs):
         if isinstance(actual, (list, tuple)):
             for i, (a, e) in enumerate(zip(actual, expected)):
-                _assertAllClose(a, e, path + [i])
+                _assertAllClose(a, e, path + [i], **kwargs)
         else:
             rtol = kwargs.pop('rtol', 1e-5)
             msg = "At element actual"
@@ -113,4 +120,4 @@ def assertAllClose(actual, expected, **kwargs):
                 msg += '[{}]'.format(']['.join(str(i) for i in path))
             npt.assert_allclose(actual, expected, err_msg=msg, rtol=rtol, **kwargs)
 
-    return _assertAllClose(actual, expected, [])
+    return _assertAllClose(actual, expected, [], **kwargs)

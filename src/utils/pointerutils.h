@@ -76,9 +76,8 @@ struct ScopedUnref
     }
 
     constexpr ScopedUnref(ScopedUnref &&other) noexcept
+        : ScopedUnref(other.release())
     {
-        obj = other.obj;
-        other.obj = nullptr;
     }
 
     constexpr ScopedUnref &operator=(ScopedUnref &&other) noexcept

@@ -32,7 +32,8 @@ namespace {
 
 uint64_t maxBytesDumpLen()
 {
-    return sstl::fromEnvVarCached("EXEC_MAX_BYTES_DUMP_LEN", UINT64_C(20));
+    struct MaxBytesDumpLenTag {};
+    return sstl::fromEnvVarCached<MaxBytesDumpLenTag>("EXEC_MAX_BYTES_DUMP_LEN", UINT64_C(20));
 }
 
 class ThreadSafePerformanceTrackingCallback : public el::PerformanceTrackingCallback

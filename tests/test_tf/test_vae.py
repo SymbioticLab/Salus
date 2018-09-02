@@ -9,7 +9,7 @@ from timeit import default_timer
 
 from parameterized import parameterized
 
-from . import run_on_rpc_and_gpu, run_on_sessions, run_on_devices, assertAllClose
+from . import run_on_rpc_and_gpu, run_on_sessions, run_on_devices, assertAllClose, tfDistributedEndpointOrSkip
 from . import networks
 from .lib import tfhelper
 from .lib.datasets import fake_data
@@ -88,11 +88,10 @@ class TestVae(unittest.TestCase):
     def _config(self, args):
         KB = 1024
         MB = 1024 * KB
-        GB = 1024 * MB
         memusages = {
-            64: (1.9 * MB, 200 * KB),
-            128: (79.2 * MB, 18 * MB),
-            256: (1.01 * GB, 80 * MB),
+            64: (5 * MB, 21 * MB),
+            128: (7 * MB, 22 * MB),
+            256: (15 * MB, 23 * MB),
         }
 
         config = tf.ConfigProto()
@@ -106,6 +105,14 @@ class TestVae(unittest.TestCase):
         args = networks.vae.get_args(batch_size=batch_size)
         run_on_devices(lambda: run_vae(tf.get_default_session(), args), '/device:GPU:0',
                        config=self._config(args))
+
+    @parameterized.expand([(64,), (128,), (256,)])
+    def test_distributed(self, batch_size):
+        args = networks.vae.get_args(batch_size=batch_size)
+        run_on_sessions(lambda: run_vae(tf.get_default_session(), args),
+                        tfDistributedEndpointOrSkip(),
+                        dev='/job:tfworker/device:GPU:0',
+                        config=self._config(args))
 
     @parameterized.expand([(64,), (128,), (256,)])
     @unittest.skip("No need to run on CPU")

@@ -19,17 +19,18 @@
 #ifndef SALUS_OPLIB_TENSORFLOW_TFINSTANCE_H
 #define SALUS_OPLIB_TENSORFLOW_TFINSTANCE_H
 
-#include "oplibraries/tensorflow/tfutils.h"
 #include "oplibraries/tensorflow/tfoplibraryv2.h"
+#include "oplibraries/tensorflow/tfutils.h"
 #include "platform/thread_annotations.h"
-#include "utils/macros.h"
 #include "utils/cpp17.h"
+#include "utils/macros.h"
 #include "utils/pointerutils.h"
+
 #include <memory>
 #include <mutex>
+#include <string_view>
 #include <unordered_map>
 #include <vector>
-#include <string_view>
 
 namespace tensorflow {
 class ConfigProto;
@@ -41,6 +42,8 @@ class Env;
 namespace salus::oplib::tensorflow {
 
 class TFSession;
+struct HandlerCallback;
+class LaneMgr;
 
 /**
  * @brief Represents the tensorflow instance used in Salus.
@@ -58,7 +61,7 @@ class TFInstance
         static constexpr int MaxDeviceType = 2;
         static constexpr int MaxDeviceId = 3;
 
-        tf::Device * specToTF[MaxDeviceType][MaxDeviceId] = {};
+        tf::Device *specToTF[MaxDeviceType][MaxDeviceId] = {};
         std::unique_ptr<tf::DeviceMgr> deviceMgr;
         // devices in m_devices owned by m_deviceMgr
         std::vector<tf::Device *> devices;
@@ -87,6 +90,8 @@ class TFInstance
     };
     const DeviceContainer m_devCon;
 
+    std::unique_ptr<LaneMgr> m_laneMgr;
+
 public:
     SALUS_DISALLOW_COPY_AND_ASSIGN(TFInstance);
 
@@ -104,16 +109,10 @@ public:
     {
         return *m_env;
     }
-    auto &deviceMgr() const
-    {
-        return *m_devCon.deviceMgr;
-    }
-    auto &devices() const
-    {
-        return m_devCon.devices;
-    }
 
+#if !defined(SALUS_ENABLE_SIEXECUTOR)
     tf::Device *tfdevice(const DeviceSpec &spec) const;
+#endif
 
     /**
      * @brief find session
@@ -125,8 +124,8 @@ public:
      */
     std::shared_ptr<TFSession> popSession(const std::string &sessHandle);
 
-#define DECLARE_HANDLER(name)                                                                                \
-    void handle##name(const tf::name##Request &req, tf::name##Response &resp, HandlerCallback &&cb)
+#define DECLARE_HANDLER(name)                                                                                          \
+    void handle##name(std::unique_ptr<tf::name##Request> &&req, tf::name##Response &resp, HandlerCallback &&cb)
 
     DECLARE_HANDLER(CreateSession);
     DECLARE_HANDLER(CloseSession);
@@ -138,7 +137,7 @@ public:
     /**
      * @brief for debugging, dump memory map for GPU
      */
-     std::string dumpGPUMemoryMap() const;
+    std::string maybeDumpGPUMemoryMap(tf::Device *dev) const;
 };
 
 } // namespace salus::oplib::tensorflow

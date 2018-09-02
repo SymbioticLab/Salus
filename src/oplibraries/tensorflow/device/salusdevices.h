@@ -20,8 +20,8 @@
 #ifndef SALUS_OPLIB_TENSORFLOW_SALUSDEVICES
 #define SALUS_OPLIB_TENSORFLOW_SALUSDEVICES
 
+#include "oplibraries/tensorflow/tensorflow_headers.h"
 #include "resources/resources.h"
-#include "oplibraries/tensorflow/v2/tfallocator.h"
 
 #include <functional>
 #include <memory>
@@ -33,7 +33,9 @@ class Device;
 
 namespace salus::oplib::tensorflow {
 
+class ResourceContext;
 class PerTaskDevice;
+class PerOpAllocator;
 class ShadowDevice;
 /**
  * @brief We use an extension to tensorflow devices.
@@ -72,6 +74,7 @@ public:
     static ISalusDevice &safe_cast(tf::Device &device);
 };
 
+#if !defined(SALUS_ENABLE_SIEXECUTOR)
 /**
  * @brief Per task device knows the resource allocation for the particular task, it actually wrapps another
  * device
@@ -162,6 +165,7 @@ private:
     };
     std::unordered_map<AA, sstl::ScopedUnref<PerOpAllocator>, AAHasher> m_wrappedAllocators;
 };
+#endif // !SALUS_ENABLE_SIEXECUTOR
 
 void maybeRegisterSalusDeviceFactories();
 

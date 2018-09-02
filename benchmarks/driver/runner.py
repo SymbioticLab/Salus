@@ -11,6 +11,7 @@ from enum import Enum
 from typing import Iterable, Tuple, Union, Any, Dict
 
 from .server import SalusServer
+from .tfserver import TFDistServer
 from .utils import Popen, execute, snake_to_pascal
 from .utils.compatiblity import pathlib, subprocess as sp
 
@@ -34,6 +35,7 @@ RunConfig = namedtuple('RunConfig', [
 class Executor(Enum):
     Salus = "salus"
     TF = "tf"
+    TFDist = "tfdist"
 
 
 def enumerate_rcfgs(batch_sizes, batch_nums):
@@ -116,6 +118,9 @@ class UnittestRunner(Runner):
         # type: (Executor, Path) -> Popen
         env = self.env.copy()
         env['EXEC_ITER_NUMBER'] = str(self.wl.batch_num)
+        if executor == Executor.TFDist:
+            env['SALUS_TFDIST_ENDPOINT'] = TFDistServer.current_server().endpoint
+
         cwd = self.base_dir
         pkg, method = self._construct_test_name(executor)
         cmd = [
@@ -134,9 +139,9 @@ class UnittestRunner(Runner):
         """Construct test class and name from RunConfig"""
         supported_model = {
             'seq2seq': ('test_tf.test_seq', 'TestSeqPtb', {
-                'small': '1_small',
-                'medium': '2_medium',
-                'large': '3_large',
+                'small': '0_small',
+                'medium': '1_medium',
+                'large': '2_large',
             }),
             'mnistsf': ('test_tf.test_mnist_tf', 'TestMnistSoftmax', {
                 25: '0', 50: '1', 100: '2'
@@ -147,12 +152,17 @@ class UnittestRunner(Runner):
             'mnistlg': ('test_tf.test_mnist_tf', 'TestMnistLarge', {
                 25: '0', 50: '1', 100: '2'
             }),
+            'superres': ('test_tf.test_super_res', 'TestSuperRes', {
+                32: '0', 64: '1', 128: '2'
+            })
         }
 
         if executor == Executor.Salus:
             prefix = 'test_rpc_'
         elif executor == Executor.TF:
             prefix = 'test_gpu_'
+        elif executor == Executor.TFDist:
+            prefix = 'test_distributed_'
         else:
             raise ValueError(f'Unknown executor: {executor}')
 
@@ -189,12 +199,21 @@ class FathomRunner(Runner):
             '--action', 'train',
             '--num_iters', str(self.wl.batch_num),
             '--batch_size', str(self.wl.batch_size),
-            '--dev', '/gpu:0',
         ]
         if executor == Executor.Salus:
-            cmd += ['--target', SalusServer.current_server().endpoint]
+            cmd += [
+                '--target', SalusServer.current_server().endpoint,
+                '--dev', '/gpu:0',
+            ]
         elif executor == Executor.TF:
-            pass
+            cmd += [
+                '--dev', '/gpu:0',
+            ]
+        elif executor == Executor.TFDist:
+            cmd += [
+                '--target', TFDistServer.current_server().endpoint,
+                '--dev', '/job:tfworker/gpu:0',
+            ]
         else:
             raise ValueError(f'Unknown executor: {executor}')
 
