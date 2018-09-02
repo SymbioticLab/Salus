@@ -35,7 +35,7 @@ tf, salus, tfdist = load_exp17(path)
 column = '20iter-avg'
 pits = pd.DataFrame({
     'Salus': salus[column] / tf[column],
-    'TFDist': tfdist[column] / tf[column]
+    # 'TFDist': tfdist[column] / tf[column]
 })
 
 pits = pits[~pits.index.str.startswith('mnist')]
@@ -47,7 +47,7 @@ pu.axhlines(1.0, ax=ax, color='r', linestyle='--', linewidth=.5)
 ax.set_ylim(0.9, 1.25)
 ax.set_xlabel('Workloads')
 ax.set_ylabel('Normalized Per Iteration\nTraining Time')
-ax.legend()
+# ax.legend()
 
 ax.tick_params(axis='x', labelsize=7)
 
