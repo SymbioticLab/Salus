@@ -34,7 +34,7 @@ TBatchSize = Union[str, int]
 logger = logging.getLogger(__name__)
 
 flags.DEFINE_boolean('use_salus', True, 'Run on Salus or TF')
-flags.DEFINE_integer('concurrent', 3, 'Concurrent workload allowed on Salus')
+flags.DEFINE_integer('concurrent', 11, 'Concurrent workload allowed on Salus')
 flags.DEFINE_boolean('fifo', False, 'Use FIFO for TF')
 flags.DEFINE_float('overcommit', 1, 'Factor of amount of total memory in TF for over commit')
 flags.DEFINE_float('phymem', 14 * (1024 ** 3), 'Amount of physical memory in GPU, in bytes')
