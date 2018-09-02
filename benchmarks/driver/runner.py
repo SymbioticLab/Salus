@@ -94,7 +94,7 @@ class TFBenchmarkRunner(Runner):
             '--executor={}'.format(executor.value),
             '--num_batches={}'.format(self.wl.batch_num),
             '--batch_size={}'.format(self.wl.batch_size),
-            '--model_dir=models/{}_{}'.format(self.wl.name.rstrip('eval'), self.wl.batch_size)
+            '--model_dir=models/{}'.format(self.wl.name.rstrip('eval'))
         ]
         if self.wl.name.endswith('eval'):
             cmd += [

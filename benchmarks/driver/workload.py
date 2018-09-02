@@ -416,7 +416,7 @@ WorkloadTemplate.define('mnistcv', [25, 50, 100], UnittestRunner)
 WorkloadTemplate.define('mnistlg', [25, 50, 100], UnittestRunner)
 WorkloadTemplate.define('vae', [64, 128, 256], UnittestRunner)
 WorkloadTemplate.define('superres', [32, 64, 128], UnittestRunner)
-WorkloadTemplate.define('inception3eval', [25, 50, 100], TFBenchmarkRunner)
+WorkloadTemplate.define('inception3eval', [1], TFBenchmarkRunner)
 
 
 # noinspection PyUnusedLocal
