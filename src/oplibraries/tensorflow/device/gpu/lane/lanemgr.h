@@ -133,6 +133,11 @@ private:
 class GpuLane : public tf::core::RefCounted
 {
 public:
+    uint64_t id() const
+    {
+        return m_id;
+    }
+
     tf::Device *as_tfdevice() const
     {
         return m_dev.get();
@@ -170,7 +175,7 @@ public:
     void notifyGCB(sstl::ScopedUnref<GpuLane> &&self);
 
     GpuLane(LaneMgr::GpuControlBlock &gcb, size_t memoryLimit, int baseStreamIndex);
-    ~GpuLane();
+    ~GpuLane() override;
 private:
 
     void initializeDevice();
@@ -184,6 +189,9 @@ private:
 
     std::unique_ptr<tf::Allocator> m_alloc;
     std::unique_ptr<tf::BaseGPUDevice> m_dev;
+
+    inline static std::atomic_uint_fast64_t NextId {0};
+    uint64_t m_id;
 };
 
 class LaneHolder
@@ -203,6 +211,11 @@ public:
     tf::Device *as_tfdevice() const
     {
         return m_lane->as_tfdevice();
+    }
+
+    uint64_t id() const
+    {
+        return m_lane->id();
     }
 };
 

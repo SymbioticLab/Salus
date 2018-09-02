@@ -99,11 +99,20 @@ private:
         std::weak_ptr<ExecutionContext> wectx;
         std::unique_ptr<IterationTask> iter;
     };
+
+
     using IterQueue = std::list<IterationItem>;
     using BlockingQueues =
         boost::circular_buffer<std::pair<PSessionItem, boost::circular_buffer<IterationItem>>>;
+
+    struct LaneQueue
+    {
+        IterQueue queue;
+        std::chrono::system_clock::time_point lastSeen;
+        std::atomic_int_fast64_t numExpensiveIterRunning {0};
+    };
+
     IterQueue m_iterQueue GUARDED_BY(m_mu);
-    std::atomic_int_fast64_t m_numExpensiveIterRunning {0};
     void scheduleIteration(IterationItem &&item);
 
     std::unique_ptr<std::thread> m_schedThread;
@@ -111,10 +120,11 @@ private:
     sstl::notification m_note_has_work;
 
     void scheduleLoop();
-    bool checkIter(IterationItem &iterItem, ExecutionContext &ectx);
-    bool runIter(IterationItem &iterItem, ExecutionContext &ectx);
+    int scheduleOnQueue(LaneQueue &lctx, IterQueue &staging);
+    bool checkIter(IterationItem &iterItem, ExecutionContext &ectx, LaneQueue &lctx);
+    bool runIter(IterationItem &iterItem, ExecutionContext &ectx, LaneQueue &lctx);
     bool maybeWaitForAWhile(size_t scheduled);
-    void maybeWaitForWork(const BlockingQueues &blockingSessions, const IterQueue &iters, size_t scheduled);
+    void maybeWaitForWork(size_t pending, size_t scheduled);
 };
 
 /**
@@ -124,6 +134,7 @@ class ExecutionContext : public std::enable_shared_from_this<ExecutionContext>
 {
     ExecutionEngine &m_engine;
     std::any m_userData;
+    uint64_t m_laneId;
 
     friend class ExecutionEngine;
     /**
@@ -160,6 +171,16 @@ public:
     }
 
     void dropExlusiveMode();
+
+    uint64_t laneId() const
+    {
+        return m_laneId;
+    }
+
+    void setLaneId(uint64_t id)
+    {
+        m_laneId = id;
+    }
 
     void setExpectedRunningTime(uint64_t time);
 

@@ -262,6 +262,7 @@ GpuLane::GpuLane(LaneMgr::GpuControlBlock &gcb, size_t memoryLimit, int baseStre
     , m_totalMemory(memoryLimit)
     , m_availableMemory(memoryLimit)
     , m_baseStreamIndex(baseStreamIndex)
+    , m_id(++NextId)
 {
     // create TFDevice
     initializeDevice();

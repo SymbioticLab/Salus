@@ -133,6 +133,7 @@ void TFInstance::handleCreateSession(std::unique_ptr<tf::CreateSessionRequest> &
         [&resp, cb = std::move(cb), req = std::move(req), ectx = std::move(ectx), this](auto &&lanes) mutable {
             std::vector<tf::Device *> devices;
 
+            CHECK(!lanes.empty());
             // add CPU device
             devices.emplace_back(m_laneMgr->compatibleCPUDevice());
 
@@ -144,6 +145,10 @@ void TFInstance::handleCreateSession(std::unique_ptr<tf::CreateSessionRequest> &
             // Keep a reference for lanes on ectx's user data
             // which should outlive the TFSession.
             ectx->setUserData(std::forward<decltype(lanes)>(lanes));
+            // NOTE: laneId on ectx is separated from actual lane implementation.
+            // It is only used to have separate scheduling domain. So use first lane's id as the id
+            // Revisit if later multi-lane for a job is implemented.
+            ectx->setLaneId(lanes.at(0)->id());
 
             auto session =
                 std::make_shared<TFSession>(*this, ectx, std::move(devices), req->config(), req->mutable_graph_def());
