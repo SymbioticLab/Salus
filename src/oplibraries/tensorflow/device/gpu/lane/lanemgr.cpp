@@ -176,17 +176,20 @@ std::unique_ptr<LaneHolder> LaneMgr::GpuControlBlock::bestFitFor(size_t memory, 
 
     auto g = sstl::with_guard(*mu);
     // first see if open a new lane is possible
+    LOG(INFO) << "Checking to create lane for memory size " << memory << " available now " << availableMemory;
     if (availableMemory >= memory) {
         return std::make_unique<LaneHolder>(newLane(memory, std::move(g)), persistentSize);
     }
 
-    // use linear search because we at most will have handful of lanes
-    for (auto &lane : lanes) {
-        if (lane->totalMemory() >= memory && lane->availableMemory() >= persistentSize) {
-            return std::make_unique<LaneHolder>(sstl::add_ref(lane.get()), persistentSize);
+    struct NoSharedLaneTag {};
+    if (!sstl::fromEnvVarCached<NoSharedLaneTag>("SALUS_DISABLE_SHARED_LANE", false)) {
+        // use linear search because we at most will have handful of lanes
+        for (auto &lane : lanes) {
+            if (lane->totalMemory() >= memory && lane->availableMemory() >= persistentSize) {
+                return std::make_unique<LaneHolder>(sstl::add_ref(lane.get()), persistentSize);
+            }
         }
     }
-
     // TODO: extend an existing lane if all above failed
     return {};
 }
