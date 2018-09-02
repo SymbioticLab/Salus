@@ -199,12 +199,21 @@ class FathomRunner(Runner):
             '--action', 'train',
             '--num_iters', str(self.wl.batch_num),
             '--batch_size', str(self.wl.batch_size),
-            '--dev', '/gpu:0',
         ]
         if executor == Executor.Salus:
-            cmd += ['--target', SalusServer.current_server().endpoint]
+            cmd += [
+                '--target', SalusServer.current_server().endpoint,
+                '--dev', '/gpu:0',
+            ]
         elif executor == Executor.TF:
-            pass
+            cmd += [
+                '--dev', '/gpu:0',
+            ]
+        elif executor == Executor.TFDist:
+            cmd += [
+                '--target', TFDistServer.current_server().endpoint,
+                '--dev', '/job:tfworker/gpu:0',
+            ]
         else:
             raise ValueError(f'Unknown executor: {executor}')
 
