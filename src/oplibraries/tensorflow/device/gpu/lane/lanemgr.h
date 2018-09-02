@@ -36,7 +36,6 @@
 
 #include <memory>
 #include <list>
-#include <queue>
 #include <atomic>
 
 namespace salus::oplib::tensorflow {
@@ -62,7 +61,6 @@ public:
 
     void setDisabled(bool value)
     {
-        CHECK(value);
         m_disabled = value;
     }
 
@@ -84,7 +82,7 @@ private:
         {}
     };
     std::mutex m_mu;
-    std::queue<LaneRequest> m_pending GUARDED_BY(m_mu);
+    std::list<LaneRequest> m_pending GUARDED_BY(m_mu);
     void processRequests();
     void processRequests(sstl::detail::Guard &&g);
 

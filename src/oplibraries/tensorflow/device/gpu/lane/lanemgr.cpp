@@ -130,7 +130,7 @@ void LaneMgr::requestLanes(Layout layout, RequestLaneCallback &&cb)
     }
 
     auto g = sstl::with_guard(m_mu);
-    m_pending.emplace(std::move(layout), std::move(cb));
+    m_pending.emplace_back(std::move(layout), std::move(cb));
     processRequests(std::move(g));
 }
 
@@ -142,8 +142,11 @@ void LaneMgr::processRequests()
 void LaneMgr::processRequests(sstl::detail::Guard &&g)
 {
     UNUSED(g);
-    while (!m_pending.empty()) {
-        auto &req = m_pending.front();
+
+    auto it = m_pending.begin();
+    auto end = m_pending.end();
+    while (it != end) {
+        auto &req = *it;
 
         // TODO: the algorithm below assumes single GPU, to scale to multiple ones, a global lock is needed
         CHECK_EQ(req.layout.memoryLimits.size(), 1_sz) << "Only single lane layout is supported";
@@ -156,12 +159,14 @@ void LaneMgr::processRequests(sstl::detail::Guard &&g)
         auto lane = gcb.bestFitFor(req.layout.memoryLimits.at(firstIdx), req.layout.persistentOccupation.at(firstIdx));
         if (!lane) {
             // can't find a suitable allocation.
+            ++it;
             continue;
         }
         lanes.emplace_back(std::move(lane));
 
         req.cb(std::move(lanes));
-        m_pending.pop();
+
+        it = m_pending.erase(it);
     }
 }
 
