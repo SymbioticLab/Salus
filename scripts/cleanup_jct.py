@@ -114,6 +114,7 @@ def handle_10min(target, name, path):
 
 def generate_csv(logs_dir, output_dir):
     baseline_data = []
+    tfdist_data = []
     salus_data = []
 
     for name in os.listdir(logs_dir):
@@ -124,6 +125,7 @@ def generate_csv(logs_dir, output_dir):
         if len(name.split('_')) == 2:
             # 20iter
             handle_20iter(baseline_data, name, os.path.join(path, 'gpu.output'))
+            handle_20iter(tfdist_data, name, os.path.join(path, 'tfdist.output'))
             handle_20iter(salus_data, name, os.path.join(path, 'rpc.output'))
         elif len(name.split('_')) == 3:
             # more
@@ -137,6 +139,7 @@ def generate_csv(logs_dir, output_dir):
                 print('Unrecognized directory: ', name)
                 continue
             handlers[mode](baseline_data, name, os.path.join(path, 'gpu.output'))
+            handlers[mode](tfdist_data, name, os.path.join(path, 'tfdist.output'))
             handlers[mode](salus_data, name, os.path.join(path, 'rpc.output'))
         else:
             print('Unrecognized directory: ', name)
@@ -146,6 +149,7 @@ def generate_csv(logs_dir, output_dir):
 
     bldf = pd.DataFrame(baseline_data).groupby('Network').agg(reducenan).reset_index()
     sdf = pd.DataFrame(salus_data).groupby('Network').agg(reducenan).reset_index()
+    tddf = pd.DataFrame(tfdist_data).groupby('Network').agg(reducenan).reset_index()
 
     def cleancols(df):
         colnames = ['Network', '20iter-jct', '20iter-first', '20iter-avg',
@@ -161,10 +165,12 @@ def generate_csv(logs_dir, output_dir):
 
     bldf = cleancols(bldf)
     sdf = cleancols(sdf)
+    tddf = cleancols(tddf)
 
     Path(output_dir).mkdir(exist_ok=True)
     bldf.to_csv(os.path.join(output_dir, 'jct-baseline.csv'), index=False)
     sdf.to_csv(os.path.join(output_dir, 'jct-salus.csv'), index=False)
+    tddf.to_csv(os.path.join(output_dir, 'jct-tfdist.csv'), index=False)
 
 
 # Expected names:

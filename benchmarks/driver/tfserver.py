@@ -40,7 +40,10 @@ class TFDistServer(object):
             self.env['TF_CPP_MIN_LOG_LEVEL'] = '2'
 
         self.endpoint = FLAGS.tfserver_endpoint  # type: str
-        self.output = Path(outputdir)
+
+        self.output = None
+        if outputdir is not None:
+            self.output = Path(outputdir)
 
         self._build_cmd()
 

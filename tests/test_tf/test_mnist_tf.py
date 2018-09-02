@@ -5,7 +5,6 @@ import unittest
 import numpy as np
 from datetime import datetime
 from timeit import default_timer
-from functools import partial
 
 from parameterized import parameterized
 
@@ -236,7 +235,7 @@ def run_mnist_large(sess, batch_size=50):
 
 
 class MnistConvBase(unittest.TestCase):
-    def _runner(self):
+    def _runner(self, batch_size):
         return None
 
     def _config(self, **kwargs):
@@ -249,20 +248,20 @@ class MnistConvBase(unittest.TestCase):
     def test_gpu(self, batch_size):
         config = self._config(batch_size=batch_size)
         config.allow_soft_placement = True
-        run_on_devices(self._runner(), '/device:GPU:0', config=config)
+        run_on_devices(self._runner(batch_size), '/device:GPU:0', config=config)
 
     @unittest.skip("No need to run on CPU")
     def test_cpu(self):
-        run_on_devices(self._runner(), '/device:CPU:0', config=self._config())
+        run_on_devices(self._runner(50), '/device:CPU:0', config=self._config())
 
     @parameterized.expand([(25,), (50,), (100,)])
     def test_rpc(self, batch_size):
-        run_on_sessions(self._runner(), 'zrpc://tcp://127.0.0.1:5501', dev='/device:GPU:0',
+        run_on_sessions(self._runner(batch_size), 'zrpc://tcp://127.0.0.1:5501', dev='/device:GPU:0',
                         config=self._config(batch_size=batch_size))
 
     @parameterized.expand([(25,), (50,), (100,)])
     def test_distributed(self, batch_size):
-        run_on_sessions(self._runner(),
+        run_on_sessions(self._runner(batch_size),
                         tfDistributedEndpointOrSkip(),
                         dev='/job:tfworker/device:GPU:0',
                         config=self._config(batch_size=batch_size))
@@ -273,13 +272,13 @@ class MnistConvBase(unittest.TestCase):
 
 
 class TestMnistSoftmax(MnistConvBase):
-    def _runner(self):
-        return partial(run_mnist_softmax, sess=tf.get_default_session())
+    def _runner(self, batch_size):
+        return lambda: run_mnist_softmax(tf.get_default_session(), batch_size)
 
 
 class TestMnistConv(MnistConvBase):
-    def _runner(self):
-        return partial(run_mnist_conv, sess=tf.get_default_session())
+    def _runner(self, batch_size):
+        return lambda: run_mnist_conv(tf.get_default_session(), batch_size)
 
     def _config(self, **kwargs):
         MB = 1024 * 1024
@@ -298,8 +297,8 @@ class TestMnistConv(MnistConvBase):
 
 
 class TestMnistLarge(MnistConvBase):
-    def _runner(self):
-        return partial(run_mnist_large, sess=tf.get_default_session())
+    def _runner(self, batch_size):
+        return lambda: run_mnist_large(tf.get_default_session(), batch_size)
 
     def _config(self, **kwargs):
         MB = 1024 * 1024
