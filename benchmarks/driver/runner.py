@@ -94,8 +94,18 @@ class TFBenchmarkRunner(Runner):
             '--executor={}'.format(executor.value),
             '--num_batches={}'.format(self.wl.batch_num),
             '--batch_size={}'.format(self.wl.batch_size),
-            '--model={}'.format(self.wl.name),
+            '--model_dir=models/{}_{}'.format(self.wl.name.rstrip('eval'), self.wl.batch_size)
         ]
+        if self.wl.name.endswith('eval'):
+            cmd += [
+                '--model={}'.format(self.wl.name.rstrip('eval')),
+                '--eval'
+            ]
+        else:
+            cmd += [
+                '--model={}'.format(self.wl.name),
+            ]
+
         if FLAGS.no_capture:
             return execute(cmd, cwd=str(cwd), env=self.env)
         else:
