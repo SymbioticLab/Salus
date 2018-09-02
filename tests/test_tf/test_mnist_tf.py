@@ -5,12 +5,13 @@ import unittest
 import numpy as np
 from datetime import datetime
 from timeit import default_timer
+from functools import partial
 
 from parameterized import parameterized
 
 import tensorflow as tf
 
-from . import run_on_rpc_and_gpu, run_on_devices, run_on_sessions, assertAllClose
+from . import run_on_rpc_and_gpu, run_on_devices, run_on_sessions, assertAllClose, tfDistributedEndpointOrSkip
 from .lib import tfhelper
 from .lib.datasets import fake_data
 
@@ -246,47 +247,39 @@ class MnistConvBase(unittest.TestCase):
 
     @parameterized.expand([(25,), (50,), (100,)])
     def test_gpu(self, batch_size):
-        def func():
-            sess = tf.get_default_session()
-            return self._runner()(sess, batch_size=batch_size)
-
         config = self._config(batch_size=batch_size)
         config.allow_soft_placement = True
-        run_on_devices(func, '/device:GPU:0', config=config)
+        run_on_devices(self._runner(), '/device:GPU:0', config=config)
 
     @unittest.skip("No need to run on CPU")
     def test_cpu(self):
-        def func():
-            sess = tf.get_default_session()
-            return self._runner()(sess)
-
-        run_on_devices(func, '/device:CPU:0', config=self._config())
+        run_on_devices(self._runner(), '/device:CPU:0', config=self._config())
 
     @parameterized.expand([(25,), (50,), (100,)])
     def test_rpc(self, batch_size):
-        def func():
-            sess = tf.get_default_session()
-            return self._runner()(sess, batch_size=batch_size)
-        run_on_sessions(func, 'zrpc://tcp://127.0.0.1:5501', dev='/device:GPU:0',
+        run_on_sessions(self._runner(), 'zrpc://tcp://127.0.0.1:5501', dev='/device:GPU:0',
+                        config=self._config(batch_size=batch_size))
+
+    @parameterized.expand([(25,), (50,), (100,)])
+    def test_distributed(self, batch_size):
+        run_on_sessions(self._runner(),
+                        tfDistributedEndpointOrSkip(),
+                        dev='/job:tfworker/device:GPU:0',
                         config=self._config(batch_size=batch_size))
 
     def test_correctness(self):
-        def func():
-            sess = tf.get_default_session()
-            return self._runner()(sess)
-
-        actual, expected = run_on_rpc_and_gpu(func, config=self._config())
+        actual, expected = run_on_rpc_and_gpu(self._runner(), config=self._config())
         assertAllClose(actual, expected, rtol=1e-3)
 
 
 class TestMnistSoftmax(MnistConvBase):
     def _runner(self):
-        return run_mnist_softmax
+        return partial(run_mnist_softmax, sess=tf.get_default_session())
 
 
 class TestMnistConv(MnistConvBase):
     def _runner(self):
-        return run_mnist_conv
+        return partial(run_mnist_conv, sess=tf.get_default_session())
 
     def _config(self, **kwargs):
         MB = 1024 * 1024
@@ -306,7 +299,7 @@ class TestMnistConv(MnistConvBase):
 
 class TestMnistLarge(MnistConvBase):
     def _runner(self):
-        return run_mnist_large
+        return partial(run_mnist_large, sess=tf.get_default_session())
 
     def _config(self, **kwargs):
         MB = 1024 * 1024

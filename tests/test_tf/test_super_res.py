@@ -9,7 +9,7 @@ from timeit import default_timer
 
 from parameterized import parameterized
 
-from . import run_on_rpc_and_gpu, run_on_sessions, run_on_devices, assertAllClose
+from . import run_on_rpc_and_gpu, run_on_sessions, run_on_devices, assertAllClose, tfDistributedEndpointOrSkip
 from . import networks
 from .lib import tfhelper
 from .lib.datasets import fake_data_ex
@@ -92,7 +92,7 @@ class TestSuperRes(unittest.TestCase):
     @parameterized.expand([(32,), (64,), (128,)])
     def test_distributed(self, batch_size):
         run_on_sessions(self._get_func(batch_size),
-                        'grpc://localhost:2345',
+                        tfDistributedEndpointOrSkip(),
                         dev='/job:tfworker/device:GPU:0',
                         config=self._config(batch_size=batch_size))
 

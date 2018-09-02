@@ -1,9 +1,11 @@
 from __future__ import print_function, division, absolute_import
 
 import sys
+import os
 import time
 from timeit import default_timer
 from contextlib import contextmanager
+from unittest import SkipTest
 
 import numpy as np
 import numpy.testing as npt
@@ -25,8 +27,13 @@ def eprint(*args, **kwargs):
     print(*args, file=sys.stderr, **kwargs)
 
 
-# TODO: implement the device selection as a session option.
-# So we can test both CPU and GPU using the same code.
+def tfDistributedEndpointOrSkip():
+    varname = 'SALUS_TFDIST_ENDPOINT'
+    if varname not in os.environ:
+        raise SkipTest('TF distributed service not available. To enable, set {}=grpc://localhost:2345'.format(varname))
+    return os.environ[varname]
+
+
 @contextmanager
 def sess_and_device(target='', dev='', config=None, seed=None):
     finalCfg = tf.ConfigProto()

@@ -33,7 +33,7 @@ FLAGS = flags.FLAGS
 TBatchSize = Union[str, int]
 logger = logging.getLogger(__name__)
 
-flags.DEFINE_boolean('use_salus', False, 'Run on Salus or TF')
+flags.DEFINE_boolean('use_salus', True, 'Run on Salus or TF')
 flags.DEFINE_integer('concurrent', 3, 'Concurrent workload allowed on Salus')
 flags.DEFINE_boolean('fifo', False, 'Use FIFO for TF')
 flags.DEFINE_float('overcommit', 1, 'Factor of amount of total memory in TF for over commit')
@@ -55,7 +55,7 @@ def load_trace(path, ex):
                 bn = bn // FLAGS.scale_down
                 submit_time = submit_time / FLAGS.scale_down
             w = WTL.create(name, bs, bn, ex)
-            w.env['SALUS_TOTAL_TIME'] = int(row['duration'])  # seconds
+            w.env['SALUS_TOTAL_TIME'] = row['duration']  # seconds
             return w, submit_time, row
         return [create_from_row(row) for row in reader]
 

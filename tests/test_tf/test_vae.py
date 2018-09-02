@@ -9,7 +9,7 @@ from timeit import default_timer
 
 from parameterized import parameterized
 
-from . import run_on_rpc_and_gpu, run_on_sessions, run_on_devices, assertAllClose
+from . import run_on_rpc_and_gpu, run_on_sessions, run_on_devices, assertAllClose, tfDistributedEndpointOrSkip
 from . import networks
 from .lib import tfhelper
 from .lib.datasets import fake_data
@@ -110,7 +110,7 @@ class TestVae(unittest.TestCase):
     def test_distributed(self, batch_size):
         args = networks.vae.get_args(batch_size=batch_size)
         run_on_sessions(lambda: run_vae(tf.get_default_session(), args),
-                        'grpc://localhost:2345',
+                        tfDistributedEndpointOrSkip(),
                         dev='/job:tfworker/device:GPU:0',
                         config=self._config(args))
 

@@ -9,7 +9,7 @@ import tensorflow as tf
 
 from parameterized import parameterized
 
-from . import run_on_rpc_and_gpu, run_on_sessions, run_on_devices, assertAllClose
+from . import run_on_rpc_and_gpu, run_on_sessions, run_on_devices, assertAllClose, tfDistributedEndpointOrSkip
 from . import networks, datasets
 from .lib import tfhelper
 
@@ -83,6 +83,13 @@ class ResNetCaseBase(unittest.TestCase):
     def test_rpc(self, batch_size):
         run_on_sessions(self._get_func(batch_size),
                         'zrpc://tcp://127.0.0.1:5501', dev='/device:GPU:0',
+                        config=self._config(batch_size=batch_size))
+
+    @parameterized.expand([(25,), (50,)])
+    def test_distributed(self, batch_size):
+        run_on_sessions(self._get_func(batch_size),
+                        tfDistributedEndpointOrSkip(),
+                        dev='/job:tfworker/device:GPU:0',
                         config=self._config(batch_size=batch_size))
 
     @parameterized.expand([(50,)])

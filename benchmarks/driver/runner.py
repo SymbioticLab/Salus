@@ -11,6 +11,7 @@ from enum import Enum
 from typing import Iterable, Tuple, Union, Any, Dict
 
 from .server import SalusServer
+from .tfserver import TFDistServer
 from .utils import Popen, execute, snake_to_pascal
 from .utils.compatiblity import pathlib, subprocess as sp
 
@@ -34,6 +35,7 @@ RunConfig = namedtuple('RunConfig', [
 class Executor(Enum):
     Salus = "salus"
     TF = "tf"
+    TFDist = "tfdist"
 
 
 def enumerate_rcfgs(batch_sizes, batch_nums):
@@ -116,6 +118,9 @@ class UnittestRunner(Runner):
         # type: (Executor, Path) -> Popen
         env = self.env.copy()
         env['EXEC_ITER_NUMBER'] = str(self.wl.batch_num)
+        if executor == Executor.TFDist:
+            env['SALUS_TFDIST_ENDPOINT'] = TFDistServer.current_server().endpoint
+
         cwd = self.base_dir
         pkg, method = self._construct_test_name(executor)
         cmd = [
@@ -156,6 +161,8 @@ class UnittestRunner(Runner):
             prefix = 'test_rpc_'
         elif executor == Executor.TF:
             prefix = 'test_gpu_'
+        elif executor == Executor.TFDist:
+            prefix = 'test_distributed_'
         else:
             raise ValueError(f'Unknown executor: {executor}')
 

@@ -8,7 +8,7 @@ import tensorflow as tf
 
 from parameterized import parameterized
 
-from . import run_on_rpc_and_gpu, run_on_sessions, run_on_devices
+from . import run_on_rpc_and_gpu, run_on_sessions, run_on_devices, tfDistributedEndpointOrSkip
 from . import networks, datasets
 from .lib import tfhelper
 from .lib.seq2seq.ptb.ptb_word_lm import get_config
@@ -83,6 +83,13 @@ class SeqCaseBase(unittest.TestCase):
     @unittest.skip("No need to run on CPU")
     def test_cpu(self, model_size):
         run_on_devices(self.get_func_to_run(model_size), '/device:CPU:0')
+
+    @parameterized.expand(model_sizes)
+    def test_distributed(self, model_size):
+        run_on_sessions(self.get_func_to_run(model_size),
+                        tfDistributedEndpointOrSkip(),
+                        dev='/job:tfworker/device:GPU:0',
+                        config=self._config(model_size))
 
     @parameterized.expand(model_sizes)
     def test_rpc(self, model_size):
