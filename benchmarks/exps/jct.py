@@ -10,6 +10,7 @@ from typing import Iterable, Sequence, Union
 from benchmarks.driver.runner import RunConfig
 from benchmarks.driver.server import SalusServer
 from benchmarks.driver.server.config import presets
+from benchmarks.driver.tfserver import TFDistServer
 from benchmarks.driver.workload import WTL, Executor
 from benchmarks.driver.utils import atomic_directory, unique
 from benchmarks.exps import parse_output_float, maybe_forced_preset
@@ -24,6 +25,7 @@ flags.DEFINE_float('threshold', 0.1, 'What ratio is actual time allowed to have 
 flags.DEFINE_integer('max_chance', 10, 'How many times to try')
 flags.DEFINE_boolean('resume', False, 'Check and skip existing configurations')
 flags.DEFINE_multi_integer('extra_mins', [1, 5, 10], 'Extra lengths')
+flags.DEFINE_boolean('do_tfdist', False, 'Also measure TFDist JCT')
 
 
 def select_workloads(argv):
@@ -54,6 +56,12 @@ def do_jct(logdir, network, batch_size):
         if not (final_dst / 'gpu.output').exists() or not FLAGS.resume:
             logger.info('    Running on TF')
             WTL.block_run(network, batch_size, batch_num, Executor.TF, outputdir / 'gpu.output')
+
+        if FLAGS.do_tfdist:
+            if not (final_dst / 'tfdist.output').exists() or not FLAGS.resume:
+                with TFDistServer().run():
+                    logger.info('    Running on TFDist')
+                    WTL.block_run(network, batch_size, batch_num, Executor.TFDist, outputdir / 'tfdist.output')
 
         if not (final_dst / 'rpc.output').exists() or not FLAGS.resume:
             scfg = maybe_forced_preset(presets.MostEfficient)
