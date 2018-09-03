@@ -217,6 +217,21 @@ public:
     {
         return m_lane->id();
     }
+
+    size_t availableMemory() const
+    {
+        return m_lane->availableMemory();
+    }
+
+    size_t totalMemory() const
+    {
+        return m_lane->totalMemory();
+    }
+
+    int baseStreamIndex() const
+    {
+        return m_lane->baseStreamIndex();
+    }
 };
 
 } // namespace salus::oplib::tensorflow

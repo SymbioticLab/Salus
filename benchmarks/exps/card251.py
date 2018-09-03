@@ -56,6 +56,7 @@ def load_trace(path, ex):
                 submit_time = submit_time / FLAGS.scale_down
             w = WTL.create(name, bs, bn, ex)
             w.env['SALUS_TOTAL_TIME'] = row['duration']  # seconds
+            w.env['TF_CPP_MIN_LOG_LEVEL'] = ''  # we need LOG(INFO) from TF code
             return w, submit_time, row
         return [create_from_row(row) for row in reader]
 

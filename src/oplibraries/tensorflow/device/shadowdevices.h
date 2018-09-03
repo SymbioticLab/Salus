@@ -53,6 +53,11 @@ public:
 
     ~ForwardingAllocator() override;
 
+    sstl::not_null<tf::Allocator *> base() const
+    {
+        return m_base;
+    }
+
     std::string Name() override;
 
     void *AllocateRaw(size_t alignment, size_t num_bytes) override;

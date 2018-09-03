@@ -24,6 +24,7 @@
 #include "oplibraries/tensorflow/device/gpu/gpu.h"
 #include "oplibraries/tensorflow/device/gpu/lane/lanemgr.h"
 #include "oplibraries/tensorflow/device/salusdevices.h"
+#include "oplibraries/tensorflow/device/shadowdevices.h"
 #include "oplibraries/tensorflow/handlercallback.h"
 #include "oplibraries/tensorflow/tfexception.h"
 #include "oplibraries/tensorflow/tfsession.h"
@@ -126,50 +127,63 @@ void TFInstance::handleCreateSession(std::unique_ptr<tf::CreateSessionRequest> &
     layout.memoryLimits.push_back(limit);
     layout.persistentOccupation.push_back(persistant);
 
-    auto totalRunningTime = static_cast<uint64_t>(std::round(sstl::getOrDefault(m.persistant(), "TIME:TOTAL", 0.0))) * 1000;
+    auto totalRunningTime =
+        static_cast<uint64_t>(std::round(sstl::getOrDefault(m.persistant(), "TIME:TOTAL", 0.0))) * 1000;
     ectx->setExpectedRunningTime(totalRunningTime);
 
-    m_laneMgr->requestLanes(std::move(layout),
-        [&resp, cb = std::move(cb), req = std::move(req), ectx = std::move(ectx), this](auto &&lanes) mutable {
-            std::vector<tf::Device *> devices;
+    m_laneMgr->requestLanes(std::move(layout), [&resp, cb = std::move(cb), req = std::move(req), ectx = std::move(ectx),
+                                                this](auto &&lanes) mutable {
+        std::vector<tf::Device *> devices;
 
-            CHECK(!lanes.empty());
-            // add CPU device
-            devices.emplace_back(m_laneMgr->compatibleCPUDevice());
+        CHECK(!lanes.empty());
+        // add CPU device
+        devices.emplace_back(m_laneMgr->compatibleCPUDevice());
 
-            // prepare devices from lane
-            for (auto &lane : lanes) {
-                devices.emplace_back(lane->as_tfdevice());
+        // prepare devices from lane
+        for (auto &lane : lanes) {
+            devices.emplace_back(lane->as_tfdevice());
+        }
+
+        // NOTE: laneId on ectx is separated from actual lane implementation.
+        // It is only used to have separate scheduling domain. So use first lane's id as the id
+        // Revisit if later multi-lane for a job is implemented.
+        ectx->setLaneId(lanes.at(0)->id());
+
+        auto session =
+            std::make_shared<TFSession>(*this, ectx, std::move(devices), req->config(), req->mutable_graph_def());
+        auto handle = session->handle();
+
+        if (VLOG_IS_ON(1)) {
+            auto &lane = lanes.at(0);
+            LogOpTracing() << "event: lane_assigned "
+                           << nlohmann::json({
+                                  {"sess", handle},
+                                  {"laneId", lane->id()},
+                                  {"laneSize", lane->totalMemory()},
+                                  {"laneAvail", lane->availableMemory()},
+                                  {"laneStream", lane->baseStreamIndex()},
+                              });
+        }
+        // Keep a reference for lanes on ectx's user data
+        // which should outlive the TFSession.
+        ectx->setUserData(std::forward<decltype(lanes)>(lanes));
+
+        // Register force interrupt handler
+        ectx->setInterruptCallback([this, handle]() { popSession(handle)->safeClose(); });
+
+        // Insert into the session map, which takes ownership of the session.
+        {
+            auto l = sstl::with_guard(m_mu);
+            if (!m_sessions.try_emplace(handle, std::move(session)).second) {
+                throw TFException(tf::errors::Internal("Error when inserting session ", handle));
             }
+        }
+        LOG(INFO) << "Accepting and created session " << handle;
 
-            // Keep a reference for lanes on ectx's user data
-            // which should outlive the TFSession.
-            ectx->setUserData(std::forward<decltype(lanes)>(lanes));
-            // NOTE: laneId on ectx is separated from actual lane implementation.
-            // It is only used to have separate scheduling domain. So use first lane's id as the id
-            // Revisit if later multi-lane for a job is implemented.
-            ectx->setLaneId(lanes.at(0)->id());
-
-            auto session =
-                std::make_shared<TFSession>(*this, ectx, std::move(devices), req->config(), req->mutable_graph_def());
-            auto handle = session->handle();
-
-            // Register force interrupt handler
-            ectx->setInterruptCallback([this, handle]() { popSession(handle)->safeClose(); });
-
-            // Insert into the session map, which takes ownership of the session.
-            {
-                auto l = sstl::with_guard(m_mu);
-                if (!m_sessions.try_emplace(handle, std::move(session)).second) {
-                    throw TFException(tf::errors::Internal("Error when inserting session ", handle));
-                }
-            }
-            LOG(INFO) << "Accepting and created session " << handle;
-
-            // reply
-            resp.set_session_handle(handle);
-            cb(Status::OK());
-        });
+        // reply
+        resp.set_session_handle(handle);
+        cb(Status::OK());
+    });
 }
 
 std::shared_ptr<TFSession> TFInstance::findSession(const std::string &sessHandle)
@@ -252,7 +266,11 @@ std::string TFInstance::maybeDumpGPUMemoryMap(tf::Device *dev) const
         auto alloc = dev->GetAllocator({});
         auto s = alloc->Name();
         if (alloc->Name().find("dbfc") != std::string::npos) {
-            return dynamic_cast<tf::GPUDoubleBFCAllocator *>(alloc)->GenerateMemoryMap();
+            if (auto falloc = dynamic_cast<ForwardingAllocator*>(alloc)) {
+                if (auto dbfc = dynamic_cast<tf::GPUDoubleBFCAllocator*>(falloc->base().get())) {
+                    return dbfc->GenerateMemoryMap();
+                }
+            }
         }
     }
     return {};
