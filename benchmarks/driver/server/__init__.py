@@ -158,7 +158,9 @@ class SalusServer(object):
         try:
             if FLAGS.no_server:
                 print('Start server with the following command:')
-                print('env ' + ' '.join(f'{k}="{v}"' for k, v in self.env.items()) + ' ' + ' '.join(self.args))
+                prefixs = ['SALUS', 'TF', 'CUDA']
+                special_envs = ' '.join(f'{k}="{v}"' for k, v in self.env.items() if any(k.startswith(p) for p in prefixs))
+                print('env ' + special_envs + ' ' + ' '.join(self.args))
                 prompt.pause()
             else:
                 logger.info(f'Starting server with cmd: {self.args}')
