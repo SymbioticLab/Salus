@@ -81,7 +81,7 @@ def find_geometry(w, field):
 def main(argv):
     # type: (Sequence[str]) -> None
     scfg = maybe_forced_preset(presets.MostEfficient)
-    scfg.scheduler = 'pack'
+    scfg.scheduler = 'preempt'
 
     ex = Executor.Salus if FLAGS.use_salus else Executor.TF
     if FLAGS.fifo:

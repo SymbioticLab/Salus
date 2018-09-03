@@ -83,7 +83,7 @@ def main(argv):
     # type: (Sequence[str]) -> None
     scfg = maybe_forced_preset(presets.OpTracing)
     scfg.scheduler = FLAGS.sched
-    scfg.extra_args = ['-v1', '--vmodule="tf_executor*=0"']
+    scfg.extra_args = ['-v1', '--vmodule', 'tf_executor*=0']
 
     ex = Executor.Salus if FLAGS.use_salus else Executor.TF
     if FLAGS.fifo:
