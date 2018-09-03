@@ -41,7 +41,7 @@
 #include <list>
 #include <memory>
 #include <unordered_map>
-#include <unordered_set>
+#include <set>
 
 namespace salus {
 class IterationTask;
@@ -110,6 +110,7 @@ private:
         IterQueue queue;
         std::chrono::system_clock::time_point lastSeen;
         std::atomic_int_fast64_t numExpensiveIterRunning {0};
+        std::set<std::weak_ptr<SessionItem>, std::owner_less<std::weak_ptr<SessionItem>>> sessions;
     };
 
     IterQueue m_iterQueue GUARDED_BY(m_mu);

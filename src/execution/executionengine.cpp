@@ -153,6 +153,19 @@ void ExecutionEngine::scheduleLoop()
             auto &lane = queues[ectx->laneId()];
             lane.queue.emplace_back(std::move(iter));
             lane.lastSeen = currStamp;
+            if (lane.sessions.emplace(ectx->m_item).second) {
+                // new session to lane and remove old one
+                auto it = lane.sessions.begin();
+                auto ed = lane.sessions.end();
+                while (it != ed) {
+                    if (auto s = it->lock()) {
+                        s->numFinishedIters = 0;
+                        ++it;
+                    } else {
+                        it = lane.sessions.erase(it);
+                    }
+                }
+            }
         }
         staging.clear();
 
@@ -229,6 +242,19 @@ int ExecutionEngine::scheduleOnQueue(LaneQueue &lctx, IterQueue &staging)
     // For all main iters
     lctx.queue.swap(staging);
 
+    auto rrSorter = [](const auto &iterItemA, const auto &iterItemB) {
+        std::shared_ptr<ExecutionContext> ectxA = iterItemA.wectx.lock();
+        std::shared_ptr<ExecutionContext> ectxB = iterItemB.wectx.lock();
+        if (!ectxB) {
+            return true; // A goes first
+        }
+        if (!ectxA) {
+            return false; // B goes first
+        }
+
+        return ectxA->m_item->numFinishedIters < ectxB->m_item->numFinishedIters;
+    };
+
     auto fairSorter = [](const auto &iterItemA, const auto &iterItemB) {
         std::shared_ptr<ExecutionContext> ectxA = iterItemA.wectx.lock();
         std::shared_ptr<ExecutionContext> ectxB = iterItemB.wectx.lock();
@@ -265,10 +291,14 @@ int ExecutionEngine::scheduleOnQueue(LaneQueue &lctx, IterQueue &staging)
         staging.sort(fairSorter);
     } else if (m_schedParam.scheduler == "preempt") {
         staging.sort(preemptSorter);
+    } else if (m_schedParam.scheduler == "rr") {
+        staging.sort(rrSorter);
     } else {
         CHECK_EQ(m_schedParam.scheduler, "pack") << "Unknown scheduler selected: " << m_schedParam.scheduler;
     }
 
+    // If work conservation is disabled we will only schedule one iter
+    bool done = false;
     for (auto &iterItem : staging) {
         if (iterItem.iter->isCanceled()) {
             continue;
@@ -279,8 +309,16 @@ int ExecutionEngine::scheduleOnQueue(LaneQueue &lctx, IterQueue &staging)
             continue;
         }
 
+        if (!m_schedParam.workConservative && done) {
+            lctx.queue.emplace_back(std::move(iterItem));
+            continue;
+        }
+
         if (runIter(iterItem, *ectx, lctx)) {
             scheduled += 1;
+            if (!m_schedParam.workConservative) {
+                done = true;
+            }
         } else {
             lctx.queue.emplace_back(std::move(iterItem));
         }
@@ -331,6 +369,7 @@ bool ExecutionEngine::runIter(IterationItem &iterItem, ExecutionContext &ectx, L
                                                            auto usedTime =
                                                                duration_cast<milliseconds>(system_clock::now() - start).count();
                                                            sessItem.usedRunningTime += usedTime;
+                                                           ++sessItem.numFinishedIters;
                                                            if (VLOG_IS_ON(1)) {
                                                                LogOpTracing() << "event: sess_add_time " << nlohmann::json({
                                                                    {"sess", sessItem.sessHandle},

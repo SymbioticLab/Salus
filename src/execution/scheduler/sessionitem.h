@@ -98,6 +98,7 @@ public:
     // target runnimg time
     uint64_t totalRunningTime {0};
     std::atomic_uint_fast64_t usedRunningTime {0};
+    std::atomic_uint_fast64_t numFinishedIters {0};
 
     explicit SessionItem(std::string handle)
         : sessHandle(std::move(handle))

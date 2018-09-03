@@ -52,7 +52,7 @@ Options:
                                 Listen on ZeroMQ endpoint <endpoint>.
                                 [default: tcp://*:5501]
     -s <policy>, --sched=<policy>
-                                Use <policy> for scheduling . Choices: fair, preempt, pack.
+                                Use <policy> for scheduling . Choices: fair, preempt, pack, rr.
                                 [default: pack]
     --disable-wc                Disable work conservation. Only have effect when
                                 fairness is on.
