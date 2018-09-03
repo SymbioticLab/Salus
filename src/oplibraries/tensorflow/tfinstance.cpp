@@ -153,17 +153,15 @@ void TFInstance::handleCreateSession(std::unique_ptr<tf::CreateSessionRequest> &
             std::make_shared<TFSession>(*this, ectx, std::move(devices), req->config(), req->mutable_graph_def());
         auto handle = session->handle();
 
-        if (VLOG_IS_ON(1)) {
-            auto &lane = lanes.at(0);
-            LogOpTracing() << "event: lane_assigned "
-                           << nlohmann::json({
-                                  {"sess", handle},
-                                  {"laneId", lane->id()},
-                                  {"laneSize", lane->totalMemory()},
-                                  {"laneAvail", lane->availableMemory()},
-                                  {"laneStream", lane->baseStreamIndex()},
-                              });
-        }
+        auto &lane = lanes.at(0);
+        LOG(INFO) << "event: lane_assigned "
+                       << nlohmann::json({
+                              {"sess", handle},
+                              {"laneId", lane->id()},
+                              {"laneSize", lane->totalMemory()},
+                              {"laneAvail", lane->availableMemory()},
+                              {"laneStream", lane->baseStreamIndex()},
+                          });
         // Keep a reference for lanes on ectx's user data
         // which should outlive the TFSession.
         ectx->setUserData(std::forward<decltype(lanes)>(lanes));

@@ -13,6 +13,8 @@ from datetime import datetime
 from collections import defaultdict
 import multiprocessing as mp
 from pathlib import Path
+import subprocess as sp
+import tempfile
 
 import pandas as pd
 #import seaborn as sns
@@ -76,7 +78,11 @@ def load_trace_fifo(path):
 
 def load_serverevents(pathdir):
     # sess handle -> lane id
-    df = cm.load_generic(pathdir/'perf.output', event_filters=['lane_assigned'])
+    with tempfile.NamedTemporaryFile() as f:
+        server_output = pathdir/'server.output'
+        sp.check_call(['grep', 'lane_assigned', str(server_output)], stdout=f)
+        f.flush()
+        df = cm.load_generic(f.name, event_filters=['lane_assigned'])
     df = df.drop(['evt', 'level', 'loc', 'thread', 'type'], axis=1)
 
     # sess handles are unique

@@ -4,7 +4,7 @@ NSDI 19 Experiment
 
 Multi-lane packing. With optracing enabled. Mostly to see lane info
 
-Scheduler: preempt
+Scheduler: pack
 Work conservation: True
 Collected data: per iteration speed
 """
@@ -81,9 +81,9 @@ def find_geometry(w, field):
 
 def main(argv):
     # type: (Sequence[str]) -> None
-    scfg = maybe_forced_preset(presets.OpTracing)
-    scfg.scheduler = 'preempt'
-    scfg.extra_args = ['--verbose', '1', '--vmodule', 'tf_executor*=0']
+    scfg = maybe_forced_preset(presets.MostEfficient)
+    scfg.scheduler = 'pack'
+    scfg.logconf = 'log'
 
     ex = Executor.Salus if FLAGS.use_salus else Executor.TF
     if FLAGS.fifo:
