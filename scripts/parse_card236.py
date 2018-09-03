@@ -78,9 +78,7 @@ def plot_timeline(df, colors=None, **kwargs):
     ax = kwargs.pop('ax', None)
     if ax is None:
         ax = plt.gca()
-    
-    linewidth = kwargs.pop('linewidth', 10)
-    
+
     # sort df by no
     df['No'] = pd.to_numeric(df['name'].str.rpartition('.')[2])
     df = df.sort_values(by='No')    
@@ -89,24 +87,25 @@ def plot_timeline(df, colors=None, **kwargs):
     qmin = (df.Queued - offset) / pd.Timedelta(1, unit='s')
     xmin = (df.Started - offset) / pd.Timedelta(1, unit='s')
     xmax = (df.Finished - offset) / pd.Timedelta(1, unit='s')
-    lcs = []
- 
-    if colors is None:
-        colors = [None] * len(df)
-    for idx, q, left, right, name, color in zip(df['No'], qmin, xmin, xmax, df.name, colors):
-        model, _, _, no = name.split('.')
-        line = ax.plot([q, left], [idx, idx], linewidth=linewidth, color='#b6b6b6')[0]
-        line = ax.plot([left, right], [idx, idx],
-                       linewidth=linewidth, label='#{}: {}'.format(no, model),
-                       color=color,
-                       **kwargs)[0]
-        lcs.append(line)
-    ax.legend()
     
+    if colors is None:
+        color_cycle = ax._get_lines.prop_cycler
+        colors = [next(color_cycle)['color'] for _ in qmin]
+
+    for no, q, left, right, color, name in zip(df['No'], qmin, xmin, xmax, colors, df.name):
+        
+        # queuing time
+        ax.barh(no, left - q, 0.8, q, color='#b6b6b6')
+        # run time
+        bar = ax.barh(no, right - left, 0.8, left,
+                      color=color,
+                      label='#{3}: {0}'.format(*name.split('.')))
+
+    # ax.legend()
     ax.set_xlabel('Time (s)')
     # ax.set_ylabel('Workload')
     ax.yaxis.set_ticks([])
-    return lcs
+    return bar, colors
 
 
 def prepare_paper(path):
@@ -118,15 +117,14 @@ def prepare_paper(path):
     
     fig, axs = plt.subplots(nrows=2, sharex=True)
     fig.set_size_inches(3.25, 2.35, forward=True)
-    lines = plot_timeline(trace, ax=axs[0], linewidth=2.5)
+    _, colors = plot_timeline(trace, ax=axs[0])
     axs[0].set_ylabel('FIFO')
     axs[0].legend().remove()
     axs[0].set_xlabel('')
-    
-    colors = [l.get_color() for l in lines]
-    plot_timeline(df, ax=axs[1], linewidth=2.5, colors=colors)
+
+    plot_timeline(df, ax=axs[1], colors=colors)
     axs[1].set_ylabel('Salus')
-    #fig.subplots_adjust(bottom=0.35)
+    fig.subplots_adjust(bottom=0.35)
     axs[1].legend(loc="upper center", frameon=False,
                   bbox_to_anchor=[0.5, -0.8],
                   #bbox_transform=fig.transFigure,
