@@ -56,7 +56,7 @@ def load_latency(path):
     for f in path.glob('*.*.*.*.output'):
         model, executor, iterstr, runid, _ = f.name.split('.')
         s = parse_iterations(f)
-        
+
         speeds['{}.{}.{}'.format(model, executor, runid)] = s.set_index('timestamp').Duration
     return pd.DataFrame(speeds)
 
@@ -65,7 +65,7 @@ def plot_latency(df, **kwargs):
     ax = kwargs.pop('ax', None)
     if ax is None:
         ax = plt.gca()
-        
+
     df = df * 1000  # ms
 
     ax = df.boxplot(showfliers=False, ax=ax, **kwargs)
@@ -77,50 +77,89 @@ def plot_model_vs_latency(dfs, **kwargs):
     data = [
         {
             "# of models": len(df.columns),
-            "Avg. Latency (ms)": df.mean().mean()
+            "Avg. Latency (ms)": df.mean().mean() * 1000  # ms
         }
         for df in dfs
     ]
-    data = pd.DataFrame(data).set_index('# of models')
-    
+    data = pd.DataFrame(data).set_index('# of models').sort_index()
+
     ax = data['Avg. Latency (ms)'].plot.bar(**kwargs)
     ax.set_ylabel('Avg. Latency (ms)')
     return ax
 
 
-def prepare_paper(path):
-    path = Path(path)
-    three = load_latency(path/'card252'/'case2')
-    single = load_latency(path/'card252'/'case1')
+def save_latency(path, output):
+    three = load_latency(path/'case2')
+    single = load_latency(path/'case1')
 
-    with plt.style.context(['seaborn-paper', 'mypaper']):
-        fig, (ax0, ax1) = plt.subplots(ncols=2, sharey=True,
-                                       gridspec_kw={'width_ratios':[3, 3]})
-        
-        
-        ax = plot_latency(three, ax=ax0)
-        ax.set_xticklabels(['1', '2', '3'])
-        ax.set_title(f'{len(three.columns)} inception3\ninference on Salus')
-        ax.xaxis.grid(False)
+    fig, (ax0, ax1) = plt.subplots(ncols=2, sharey=True,
+                                   gridspec_kw={'width_ratios':[3, 3]})
 
-        ax = plot_latency(single, ax=ax1)
-        labels = [
-            {
-                'tf': 'TF',
-                'salus': 'Salus',
-                'tfdist': 'TFDist'
-            }[label.get_text().split('.')[1]]
-            for label in ax.get_xticklabels()
+
+    ax = plot_latency(three, ax=ax0)
+    ax.set_xticklabels(['1', '2', '3'])
+    ax.set_title(f'{len(three.columns)} inception3\ninference on Salus')
+    ax.xaxis.grid(False)
+
+    ax = plot_latency(single, ax=ax1)
+    labels = [
+        {
+            'tf': 'TF',
+            'salus': 'Salus',
+            'tfdist': 'TFDist'
+        }[label.get_text().split('.')[1]]
+        for label in ax.get_xticklabels()
+    ]
+    ax.set_xticklabels(labels)
+    ax.set_ylabel('')
+    ax.set_title('Baseline')
+    ax.xaxis.grid(False)
+
+    fig.tight_layout()
+    fig.set_size_inches(3.25, 1.5, forward=True)
+    fig.tight_layout()
+    fig.savefig(output, dpi=300)
+
+
+def save_latencies(path, output):
+    case4 = path/'case4'
+    # see how many models we have
+    models = defaultdict(list)
+
+    for f in case4.iterdir():
+        model, concurrency = f.name.split('-')
+        models[model].append(int(concurrency))
+
+    # for each model, have 3 per row.
+    if len(models) < 3:
+        nrows, ncols = 1, len(models)
+    else:
+        ncols = 3
+        nrows = len(models) // ncols
+    fig, axs = plt.subplots(nrows=nrows, ncols=ncols)
+    axs = axs.flatten()
+
+    for model, ax in zip(models.keys(), axs):
+        dfs = [
+            load_latency(case4/f'{model}-{n}')
+            for n in models[model]
         ]
-        ax.set_xticklabels(labels)
-        ax.set_ylabel('')
-        ax.set_title('Baseline')
-        ax.xaxis.grid(False)
-        
-        fig.tight_layout()
-        fig.set_size_inches(3.25, 1.5, forward=True)
-        fig.tight_layout()
-        fig.savefig('/tmp/workspace/card252.pdf', dpi=300)
-    
+        plot_model_vs_latency(dfs, ax=ax, color='gray')
+        ax.set_title(model.rstrip('eval'))
+        ax.xaxis.set_tick_params(rotation=0)
+
+    fig.tight_layout()
+    fig.set_size_inches(3.25, 1.35, forward=True)
+    fig.tight_layout()
+    fig.savefig(output, dpi=300)
+
+
+def prepare_paper(path):
+    path = Path(path)/'card252'
+    with plt.style.context(['seaborn-paper', 'mypaper']):
+        # save_latency(path, '/tmp/workspace/card252.pdf')
+        save_latencies(path, '/tmp/workspace/card252-2.pdf')
+
 
 path = '/tmp/workspace'
+prepare_paper(path)

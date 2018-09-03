@@ -59,7 +59,7 @@ def case4():
 
     for model in ['inception3eval', 'vgg19eval']:
         for i in [1, 2, 4, 8]:
-            run_seq(scfg.copy(output_dir=FLAGS.save_dir/'case3'/f'{model}-{i}'),
+            run_seq(scfg.copy(output_dir=FLAGS.save_dir/'case4'/f'{model}-{i}'),
                     *[WTL.create("inception3eval", 1, 1000) for _ in range(i)]
                     )
 
