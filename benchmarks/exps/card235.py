@@ -25,7 +25,7 @@ def case1():
     scfg = maybe_forced_preset(presets.MostEfficient)
     scfg.scheduler = 'fair'
 
-    run_seq(scfg.copy(output_dir=FLAGS.save_dir/'case2'),
+    run_seq(scfg.copy(output_dir=FLAGS.save_dir/'case1'),
             WTL.create("inception3eval", 50, 250),
             Pause(5),
             WTL.create("inception3eval", 50, 250),
