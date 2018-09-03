@@ -370,7 +370,7 @@ def main():
     
     
     with mp.Pool() as pool:
-        data = pool.map(process_mem, Path('logs/mem/tf').iterdir())
+        data = pool.map(process_mem, Path('/tmp/workspace/meminfer').iterdir())
     
     for n, p, m, a, _, csp in data:
         plt.figure()

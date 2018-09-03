@@ -28,19 +28,40 @@ def case1():
     scfg = maybe_forced_preset(presets.MostEfficient)
 
     run_tf(FLAGS.save_dir/'case1',
-           WTL.create("inception3eval", 1, 200, executor=Executor.TF))
+           WTL.create("inception3eval", 1, 1000, executor=Executor.TF))
 
     run_seq(scfg.copy(output_dir=FLAGS.save_dir/'case1'),
-            WTL.create("inception3eval", 1, 2000))
+            WTL.create("inception3eval", 1, 1000))
 
 
 def case2():
     scfg = maybe_forced_preset(presets.MostEfficient)
     run_seq(scfg.copy(output_dir=FLAGS.save_dir/'case2'),
-            WTL.create("inception3eval", 1, 200),
-            WTL.create("inception3eval", 1, 200),
-            WTL.create("inception3eval", 1, 200),
+            WTL.create("inception3eval", 1, 1000),
+            WTL.create("inception3eval", 1, 1000),
+            WTL.create("inception3eval", 1, 1000),
+            WTL.create("inception3eval", 1, 1000),
+            WTL.create("inception3eval", 1, 1000),
+            WTL.create("inception3eval", 1, 1000),
+            WTL.create("inception3eval", 1, 1000),
+            WTL.create("inception3eval", 1, 1000),
+            WTL.create("inception3eval", 1, 1000),
+            WTL.create("inception3eval", 1, 1000),
             )
+
+
+def case3():
+    run_tfdist(FLAGS.save_dir/'case3', WTL.create("inception3eval", 1, 1000, executor=Executor.TFDist))
+
+
+def case4():
+    scfg = maybe_forced_preset(presets.MostEfficient)
+
+    for model in ['inception3eval', 'vgg19eval']:
+        for i in [1, 2, 4, 8]:
+            run_seq(scfg.copy(output_dir=FLAGS.save_dir/'case3'/f'{model}-{i}'),
+                    *[WTL.create("inception3eval", 1, 1000) for _ in range(i)]
+                    )
 
 
 def main(argv):
@@ -49,4 +70,6 @@ def main(argv):
     {
         "case1": case1,
         "case2": case2,
+        "case3": case3,
+        "case4": case4,
     }[command]()

@@ -73,6 +73,21 @@ def plot_latency(df, **kwargs):
     return ax
 
 
+def plot_model_vs_latency(dfs, **kwargs):
+    data = [
+        {
+            "# of models": len(df.columns),
+            "Avg. Latency (ms)": df.mean().mean()
+        }
+        for df in dfs
+    ]
+    data = pd.DataFrame(data).set_index('# of models')
+    
+    ax = data['Avg. Latency (ms)'].plot.bar(**kwargs)
+    ax.set_ylabel('Avg. Latency (ms)')
+    return ax
+
+
 def prepare_paper(path):
     path = Path(path)
     three = load_latency(path/'card252'/'case2')
@@ -80,19 +95,20 @@ def prepare_paper(path):
 
     with plt.style.context(['seaborn-paper', 'mypaper']):
         fig, (ax0, ax1) = plt.subplots(ncols=2, sharey=True,
-                                       gridspec_kw={'width_ratios':[3, 2]})
+                                       gridspec_kw={'width_ratios':[3, 3]})
         
         
         ax = plot_latency(three, ax=ax0)
         ax.set_xticklabels(['1', '2', '3'])
-        ax.set_title('3 inception3\ninference on Salus')
+        ax.set_title(f'{len(three.columns)} inception3\ninference on Salus')
         ax.xaxis.grid(False)
 
         ax = plot_latency(single, ax=ax1)
         labels = [
             {
                 'tf': 'TF',
-                'salus': 'Salus'
+                'salus': 'Salus',
+                'tfdist': 'TFDist'
             }[label.get_text().split('.')[1]]
             for label in ax.get_xticklabels()
         ]
