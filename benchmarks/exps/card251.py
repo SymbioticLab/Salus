@@ -15,7 +15,6 @@ import logging
 import time
 import shutil
 from datetime import datetime
-from itertools import chain
 from timeit import default_timer
 from typing import Sequence, Union
 
@@ -82,7 +81,7 @@ def find_geometry(w, field):
 def main(argv):
     # type: (Sequence[str]) -> None
     scfg = maybe_forced_preset(presets.MostEfficient)
-    scfg.scheduler = 'pack'
+    scfg.scheduler = 'fifo'
     scfg.logconf = 'log'
 
     ex = Executor.Salus if FLAGS.use_salus else Executor.TF

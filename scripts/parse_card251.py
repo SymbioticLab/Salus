@@ -76,6 +76,40 @@ def load_trace_fifo(path):
     return df
 
 
+def load_refine(pathdir):
+    # load preempt select events
+    with tempfile.NamedTemporaryFile() as f:
+        server_output = pathdir/'server.output'
+        sp.check_call(['grep', 'fifo_select_sess', str(server_output)], stdout=f)
+        f.flush()
+        df = cm.load_generic(f.name, event_filters=['fifo_select_sess'])
+    df = df.drop(['evt', 'level', 'loc', 'thread', 'type'], axis=1)
+
+    # convert UTC from server to local
+    df['timestamp'] = df.timestamp.dt.tz_localize('UTC').dt.tz_convert('US/Eastern').dt.tz_localize(None)
+
+    sess2Model = {}
+    # model name -> sess handle
+    ptn = re.compile('Created session with handle (?P<sess>.+)$')
+    for fpath in pathdir.glob('*.*.*.*.output'):
+        with fpath.open() as f:
+            for line in f:
+                m = ptn.search(line)
+                if m:
+                    sess2Model[m.group('sess')] = fpath.name.rstrip('.output')
+
+    # add model name info to it
+    df['Model'] = df.Sess.map(sess2Model)
+
+    # make sure every session is covered
+    assert df.Model.isnull().sum() == 0
+
+    # for convinent
+    df['No'] = pd.to_numeric(df['Model'].str.rpartition('.')[2])
+
+    return df
+
+
 def load_serverevents(pathdir):
     # sess handle -> lane id
     with tempfile.NamedTemporaryFile() as f:
@@ -172,6 +206,40 @@ def plot_timeline(df, colors=None, **kwargs):
     return bar, colors
 
 
+def plot_refine(ax, df, refine_data):
+    # so that we can access job using no
+    df = df.set_index('No')
+
+    # for every preempt event pair, mask jobs that's not the left event's switch_to job
+    offset = df.Queued.min()
+    refine_data['Ntime'] = (refine_data['timestamp'] - offset) / pd.Timedelta(1, unit='s')
+
+    # also convert df.Queued to relative time
+    df['Started'] = (df.Started - offset) / pd.Timedelta(1, unit='s')
+    df['Finished'] = (df.Finished - offset) / pd.Timedelta(1, unit='s')
+
+    bars = []
+    # group refine_data by laneId
+    for laneId, grp in refine_data.groupby('LaneId'):
+        magic = grp.iterrows()
+        next(magic)
+        for (_, left), (_, right) in zip(grp.iterrows(), magic):
+            for no in df.index.unique():
+                if no == left.No:
+                    continue
+                if laneId != df.loc[no].LaneId:
+                    continue
+                l = max(df.loc[no].Started, left.Ntime)
+                r = min(df.loc[no].Finished, right.Ntime)
+                if l >= r:
+                    continue
+                # make sure left and right within job no's started and finished
+                # mask from left to right
+                bars.append(ax.barh(no, r - l, 0.85, l, color='#ffffff', edgecolor='#ffffff'))
+
+    return bars
+
+
 def plot_lanes(refined_df, **kwargs):
     lanes = refined_df.groupby(['LaneId', 'LaneSize']).agg({
             'Queued': 'first',
@@ -200,6 +268,9 @@ def prepare_paper(path):
         df = load_case(path/'card251.output')
         fifo = load_trace_fifo(path/'trace.csv')
 
+        # FIXME: refine doesn't work yet
+        # refine_data = load_refine(path)
+
         sevts = load_serverevents(path)
         df = refine_time_events(df, sevts)
 
@@ -211,6 +282,7 @@ def prepare_paper(path):
         axs[0].set_xlabel('')
 
         plot_timeline(df, ax=axs[1], linewidth=2.5, colors=colors)
+        # plot_refine(axs[1], df, refine_data)
         axs[1].set_ylabel('Salus')
         fig.subplots_adjust(bottom=0.35)
         axs[1].legend(loc="upper center", frameon=False,
