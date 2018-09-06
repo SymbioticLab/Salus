@@ -107,10 +107,13 @@ private:
 
     struct LaneQueue
     {
+        uint64_t id;
         IterQueue queue;
         std::chrono::system_clock::time_point lastSeen;
         std::atomic_int_fast64_t numExpensiveIterRunning {0};
         std::set<std::weak_ptr<SessionItem>, std::owner_less<std::weak_ptr<SessionItem>>> sessions;
+        SessionItem *lastSessionItem = nullptr;
+        std::list<std::weak_ptr<SessionItem>> fifoQueue;
     };
 
     IterQueue m_iterQueue GUARDED_BY(m_mu);

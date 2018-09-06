@@ -46,6 +46,9 @@ SchedulerRegistary::Register reg("preempt", [](auto &engine) {
 SchedulerRegistary::Register reg2("rr", [](auto &engine) {
     return std::make_unique<PreemptScheduler>(engine);
 });
+SchedulerRegistary::Register reg3("fifo", [](auto &engine) {
+    return std::make_unique<PreemptScheduler>(engine);
+});
 } // namespace
 
 PreemptScheduler::PreemptScheduler(TaskExecutor &engine) : BaseScheduler(engine) {}

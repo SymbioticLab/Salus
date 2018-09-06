@@ -154,6 +154,7 @@ void ExecutionEngine::scheduleLoop()
             lane.queue.emplace_back(std::move(iter));
             lane.lastSeen = currStamp;
             if (lane.sessions.emplace(ectx->m_item).second) {
+                lane.id = ectx->laneId();
                 // new session to lane and remove old one
                 auto it = lane.sessions.begin();
                 auto ed = lane.sessions.end();
@@ -165,6 +166,8 @@ void ExecutionEngine::scheduleLoop()
                         it = lane.sessions.erase(it);
                     }
                 }
+                // put session to the back of fifo
+                lane.fifoQueue.emplace_back(ectx->m_item);
             }
         }
         staging.clear();
@@ -271,30 +274,95 @@ int ExecutionEngine::scheduleOnQueue(LaneQueue &lctx, IterQueue &staging)
         return reA < reB;
     };
 
-    auto preemptSorter = [](const auto &iterItemA, const auto &iterItemB) {
-        std::shared_ptr<ExecutionContext> ectxA = iterItemA.wectx.lock();
-        std::shared_ptr<ExecutionContext> ectxB = iterItemB.wectx.lock();
-        if (!ectxB) {
-            return true; // A goes first
-        }
-        if (!ectxA) {
-            return false; // B goes first
-        }
-
-        // shortest first
-        auto reA = static_cast<int64_t>(ectxA->m_item->totalRunningTime) - static_cast<int64_t>(ectxA->m_item->usedRunningTime);
-        auto reB = static_cast<int64_t>(ectxB->m_item->totalRunningTime) - static_cast<int64_t>(ectxB->m_item->usedRunningTime);
-        return reA < reB;
-    };
-
     if (m_schedParam.scheduler == "fair") {
         staging.sort(fairSorter);
-    } else if (m_schedParam.scheduler == "preempt") {
-        staging.sort(preemptSorter);
     } else if (m_schedParam.scheduler == "rr") {
         staging.sort(rrSorter);
+    } else if (m_schedParam.scheduler == "pack") {
+        // do nothing
+    } else if (m_schedParam.scheduler == "fifo") {
+        PSessionItem sessItem = nullptr;
+        auto it = lctx.fifoQueue.begin();
+        auto ed = lctx.fifoQueue.end();
+        while (it != ed && !(sessItem = it->lock())) {
+            it = lctx.fifoQueue.erase(it);
+        }
+        if (sessItem) {
+            if (lctx.lastSessionItem != sessItem.get()) {
+                lctx.lastSessionItem = sessItem.get();
+                LOG(INFO) << "event: fifo_select_sess "
+                          << nlohmann::json({
+                                                {"sess", sessItem->sessHandle},
+                                                {"laneId", lctx.id},
+                                            });
+            }
+            for (auto &iterItem : staging) {
+                if (iterItem.iter->isCanceled()) {
+                    continue;
+                }
+                auto ectx = iterItem.wectx.lock();
+                if (!ectx) {
+                    continue;
+                }
+                if (ectx->m_item != sessItem) {
+                    lctx.queue.emplace_back(std::move(iterItem));
+                    continue;
+                }
+
+                if (runIter(iterItem, *ectx, lctx)) {
+                    scheduled += 1;
+                } else {
+                    lctx.queue.emplace_back(std::move(iterItem));
+                }
+            }
+        }
+        staging.clear();
     } else {
-        CHECK_EQ(m_schedParam.scheduler, "pack") << "Unknown scheduler selected: " << m_schedParam.scheduler;
+        CHECK_EQ(m_schedParam.scheduler, "preempt") << "Unknown scheduler selected: " << m_schedParam.scheduler;
+        // find the sessItem with least remaining time
+        int64_t minRemainingTime = std::numeric_limits<int64_t>::max();
+        PSessionItem sessItem = nullptr;
+        for (auto &ws : lctx.sessions) {
+            if (auto s = ws.lock()) {
+                auto remain = static_cast<int64_t>(s->totalRunningTime) - static_cast<int64_t>(s->usedRunningTime);
+                if (remain <= minRemainingTime) {
+                    minRemainingTime = remain;
+                    sessItem = std::move(s);
+                }
+            }
+        }
+        if (sessItem) {
+            if (lctx.lastSessionItem != sessItem.get()) {
+                lctx.lastSessionItem = sessItem.get();
+                LOG(INFO) << "event: preempt_select_sess "
+                          << nlohmann::json({
+                                                {"sess", sessItem->sessHandle},
+                                                {"totalRunningTime", sessItem->totalRunningTime},
+                                                {"usedRunningTime", sessItem->usedRunningTime.load()},
+                                                {"laneId", lctx.id},
+                                            });
+            }
+            for (auto &iterItem : staging) {
+                if (iterItem.iter->isCanceled()) {
+                    continue;
+                }
+                auto ectx = iterItem.wectx.lock();
+                if (!ectx) {
+                    continue;
+                }
+                if (ectx->m_item != sessItem) {
+                    lctx.queue.emplace_back(std::move(iterItem));
+                    continue;
+                }
+
+                if (runIter(iterItem, *ectx, lctx)) {
+                    scheduled += 1;
+                } else {
+                    lctx.queue.emplace_back(std::move(iterItem));
+                }
+            }
+        }
+        staging.clear();
     }
 
     // If work conservation is disabled we will only schedule one iter
