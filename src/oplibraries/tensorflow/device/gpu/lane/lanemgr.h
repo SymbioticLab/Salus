@@ -31,12 +31,14 @@
 
 #include "oplibraries/tensorflow/tfutils.h"
 #include "utils/fixed_function.hpp"
-#include "utils/threadutils.h"
 #include "utils/pointerutils.h"
+#include "utils/threadutils.h"
 
-#include <memory>
-#include <list>
 #include <atomic>
+#include <functional>
+#include <list>
+#include <memory>
+#include <set>
 
 namespace salus::oplib::tensorflow {
 
@@ -79,7 +81,8 @@ private:
         LaneRequest(Layout &&layout, RequestLaneCallback &&cb)
             : layout(std::move(layout))
             , cb(std::move(cb))
-        {}
+        {
+        }
     };
     std::mutex m_mu;
     std::list<LaneRequest> m_pending GUARDED_BY(m_mu);
@@ -90,17 +93,19 @@ private:
     class GpuControlBlock
     {
         LaneMgr &mgr;
+
     public:
         explicit GpuControlBlock(LaneMgr &mgr, int index, int gpuId, tfgpu::StreamExecutor &se, size_t totalMemory)
             : mgr(mgr)
-              , index(index)
-              , id(gpuId)
-              , se(se)
-              , totalMemory(totalMemory)
+            , index(index)
+            , id(gpuId)
+            , se(se)
+            , totalMemory(totalMemory)
         {
         }
 
-        tf::Allocator *cudaHostAlloc() const {
+        tf::Allocator *cudaHostAlloc() const
+        {
             return mgr.m_cpuCudaHostAlloc.get();
         }
 
@@ -109,11 +114,11 @@ private:
         tfgpu::StreamExecutor &se;
         const size_t totalMemory;
 
-        size_t availableMemory GUARDED_BY(*mu) {0};
+        size_t availableMemory GUARDED_BY(*mu){0};
 
         // Has to by dynamic allocated otherwise GCB can't be placed in vector
-        std::unique_ptr<std::mutex> mu {std::make_unique<std::mutex>()};
-        int nextStream GUARDED_BY(*mu) {0};
+        std::unique_ptr<std::mutex> mu{std::make_unique<std::mutex>()};
+        int nextStream GUARDED_BY(*mu){0};
 
         // lanes are sorted in asc order
         std::list<sstl::ScopedUnref<GpuLane>> lanes GUARDED_BY(*mu);
@@ -130,6 +135,7 @@ private:
     std::unique_ptr<SalusCPUDevice> m_cpu;
 };
 
+class LaneHolder;
 class GpuLane : public tf::core::RefCounted
 {
 public:
@@ -143,9 +149,12 @@ public:
         return m_dev.get();
     }
 
+    std::unique_ptr<LaneHolder> tryFit(size_t persistent, size_t peak);
+
     size_t availableMemory() const
     {
-        return m_availableMemory.load(std::memory_order_acquire);
+        auto g = sstl::with_guard(m_mu);
+        return m_availableMemory;
     }
 
     size_t totalMemory() const
@@ -158,25 +167,30 @@ public:
         return m_baseStreamIndex;
     }
 
-    /**
-     * @brief Add new session here
-     * @param size
-     */
-    void addHold(size_t size)
+    void removeHold(size_t size, size_t peak)
     {
-        m_availableMemory -= size;
-    }
-
-    void removeHold(size_t size)
-    {
+        auto g = sstl::with_guard(m_mu);
         m_availableMemory += size;
+        auto it = m_maxPeak.find(peak);
+        CHECK_NE(it, m_maxPeak.end());
+        m_maxPeak.erase(it);
     }
 
     void notifyGCB(sstl::ScopedUnref<GpuLane> &&self);
 
     GpuLane(LaneMgr::GpuControlBlock &gcb, size_t memoryLimit, int baseStreamIndex);
     ~GpuLane() override;
+
 private:
+    /**
+     * @brief Add new session here
+     * @param size
+     */
+    void addHoldUnsafe(size_t size, size_t peak)
+    {
+        m_availableMemory -= size;
+        m_maxPeak.insert(peak);
+    }
 
     void initializeDevice();
     tf::Allocator *getGPUAllocator();
@@ -184,13 +198,16 @@ private:
     LaneMgr::GpuControlBlock &m_gcb;
 
     const size_t m_totalMemory;
-    std::atomic_uint_fast64_t m_availableMemory;
     const int m_baseStreamIndex;
+
+    mutable std::mutex m_mu;
+    size_t m_availableMemory GUARDED_BY(m_mu);
+    std::multiset<size_t, std::greater<>> m_maxPeak GUARDED_BY(m_mu);
 
     std::unique_ptr<tf::Allocator> m_alloc;
     std::unique_ptr<tf::BaseGPUDevice> m_dev;
 
-    inline static std::atomic_uint_fast64_t NextId {0};
+    inline static std::atomic_uint_fast64_t NextId{0};
     uint64_t m_id;
 };
 
@@ -198,12 +215,14 @@ class LaneHolder
 {
     sstl::ScopedUnref<GpuLane> m_lane;
     size_t m_hold;
+    size_t m_peak;
+
 public:
-    explicit LaneHolder(sstl::ScopedUnref<GpuLane> &&lane, size_t hold)
+    explicit LaneHolder(sstl::ScopedUnref<GpuLane> &&lane, size_t hold, size_t peak)
         : m_lane(std::move(lane))
         , m_hold(hold)
+        , m_peak(peak)
     {
-        m_lane->addHold(m_hold);
     }
 
     ~LaneHolder();

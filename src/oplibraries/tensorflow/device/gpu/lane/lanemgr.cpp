@@ -32,7 +32,6 @@
 #include "oplibraries/tensorflow/tfinstance.h"
 #include "utils/envutils.h"
 #include "utils/threadutils.h"
-#include "lanemgr.h"
 
 namespace tfgpu = perftools::gputools;
 
@@ -76,7 +75,6 @@ LaneMgr::LaneMgr()
     m_cpu = std::make_unique<SalusCPUDevice>(opt, name, tf::Bytes(256 << 20), locality, tf::cpu_allocator(),
                                              m_cpuCudaHostAlloc.get());
 
-
     // Check env
     setDisabled(sstl::fromEnvVar("SALUS_DISABLE_LANEMGR", false));
 }
@@ -108,21 +106,11 @@ void LaneMgr::requestLanes(Layout layout, RequestLaneCallback &&cb)
 {
     CHECK_EQ(layout.persistentOccupation.size(), layout.memoryLimits.size());
 
-    if (m_disabled) {
-        auto g = sstl::with_guard(m_mu);
-
-        std::vector<std::shared_ptr<LaneHolder>> lanes;
-
+    static bool newLaneInitialized = false;
+    if (m_disabled && !newLaneInitialized) {
+        newLaneInitialized = true;
         auto &gcb = m_gpus.at(0);
-        static auto initialAvailable = gcb.availableMemory;
-
-        auto holder = gcb.bestFitFor(initialAvailable, layout.persistentOccupation.at(0));
-        CHECK_NE(holder, nullptr);
-
-        lanes.emplace_back(std::move(holder));
-
-        cb(std::move(lanes));
-        return;
+        gcb.newLane(gcb.availableMemory, sstl::with_guard(*gcb.mu));
     }
 
     for (size_t i = 0; i != layout.memoryLimits.size(); ++i) {
@@ -174,23 +162,32 @@ std::unique_ptr<LaneHolder> LaneMgr::GpuControlBlock::bestFitFor(size_t memory, 
 {
     CHECK_GE(memory, persistentSize);
 
+    size_t temporaryPeak = memory - persistentSize;
+
     auto g = sstl::with_guard(*mu);
     // first see if open a new lane is possible
     LOG(INFO) << "Checking to create lane for memory size " << memory << " available now " << availableMemory;
-    if (availableMemory >= memory) {
-        return std::make_unique<LaneHolder>(newLane(memory, std::move(g)), persistentSize);
+    if (!mgr.m_disabled) {
+        if (availableMemory >= memory) {
+            auto lane = newLane(memory, std::move(g));
+            auto holder = lane->tryFit(persistentSize, temporaryPeak);
+            CHECK_NE(holder, nullptr);
+            return holder;
+        }
     }
 
-    struct NoSharedLaneTag {};
+    struct NoSharedLaneTag
+    {
+    };
     if (!sstl::fromEnvVarCached<NoSharedLaneTag>("SALUS_DISABLE_SHARED_LANE", false)) {
         // use linear search because we at most will have handful of lanes
         for (auto &lane : lanes) {
-            if (lane->totalMemory() >= memory && lane->availableMemory() >= persistentSize) {
-                return std::make_unique<LaneHolder>(sstl::add_ref(lane.get()), persistentSize);
+            if (auto holder = lane->tryFit(persistentSize, temporaryPeak)) {
+                return holder;
             }
         }
     }
-    // TODO: extend an existing lane if all above failed
+    // TODO: defragmentation
     return {};
 }
 
@@ -223,15 +220,12 @@ sstl::ScopedUnref<GpuLane> LaneMgr::GpuControlBlock::newLane(size_t memory, sstl
 void LaneMgr::GpuControlBlock::removingLane(sstl::ScopedUnref<GpuLane> &&lane)
 {
     auto theLane = lane.release();
-    // This shouldn't be the last ref, because lanes holds another one
+    // This shouldn't be the last ref, because this->lanes holds another one
     CHECK(!theLane->Unref());
 
     // This is the only ref, so remove it from the list.
     if (theLane->RefCountIsOne()) {
-        if (!mgr.m_disabled) {
-            // Hold the single lane forever
-            maybeRemoveLane(theLane);
-        }
+        maybeRemoveLane(theLane);
     }
 
     // NOTE: may block or take long time
@@ -240,6 +234,10 @@ void LaneMgr::GpuControlBlock::removingLane(sstl::ScopedUnref<GpuLane> &&lane)
 
 void LaneMgr::GpuControlBlock::maybeRemoveLane(sstl::not_null<GpuLane *> lane)
 {
+    if (mgr.m_disabled) {
+        return;
+    }
+
     auto g = sstl::with_guard(*mu);
 
     // lanes contains ScopedUnref, so removing from
@@ -263,8 +261,9 @@ void LaneMgr::GpuControlBlock::maybeRemoveLane(sstl::not_null<GpuLane *> lane)
 GpuLane::GpuLane(LaneMgr::GpuControlBlock &gcb, size_t memoryLimit, int baseStreamIndex)
     : m_gcb(gcb)
     , m_totalMemory(memoryLimit)
-    , m_availableMemory(memoryLimit)
     , m_baseStreamIndex(baseStreamIndex)
+    , m_availableMemory(memoryLimit)
+    , m_maxPeak()
     , m_id(++NextId)
 {
     // create TFDevice
@@ -325,10 +324,10 @@ void GpuLane::initializeDevice()
 #endif
 
     tf::SessionOptions opt;
-    m_dev = std::make_unique<SalusGPUDevice>(opt, name, allocated_bytes, dev_locality, m_gcb.id,
-                                             GetShortDeviceDescription(m_gcb.id, desc), getGPUAllocator(),
-                                             process_state->GetCPUAllocator(numa_node), m_gcb.cudaHostAlloc(),
-                                             max_streams);
+    m_dev =
+        std::make_unique<SalusGPUDevice>(opt, name, allocated_bytes, dev_locality, m_gcb.id,
+                                         GetShortDeviceDescription(m_gcb.id, desc), getGPUAllocator(),
+                                         process_state->GetCPUAllocator(numa_node), m_gcb.cudaHostAlloc(), max_streams);
     SALUS_THROW_IF_ERROR(m_dev->Init(opt));
 }
 
@@ -343,9 +342,23 @@ tf::Allocator *GpuLane::getGPUAllocator()
     return m_alloc.get();
 }
 
+std::unique_ptr<LaneHolder> GpuLane::tryFit(size_t persistent, size_t peak)
+{
+    auto g = sstl::with_guard(m_mu);
+    auto maxPeak = peak;
+    if (!m_maxPeak.empty()) {
+        maxPeak = std::max(maxPeak, *m_maxPeak.cbegin());
+    }
+    if ((persistent + maxPeak) <= m_availableMemory) {
+        addHoldUnsafe(persistent, peak);
+        return std::make_unique<LaneHolder>(sstl::add_ref(this), persistent, peak);
+    }
+    return {};
+}
+
 LaneHolder::~LaneHolder()
 {
-    m_lane->removeHold(m_hold);
+    m_lane->removeHold(m_hold, m_peak);
     // Notify LaneMgr to unref lane
     auto l = m_lane.get();
     l->notifyGCB(std::move(m_lane));
