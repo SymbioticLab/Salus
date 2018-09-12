@@ -176,9 +176,9 @@ class TestSeqPtb(SeqCaseBase):
         GB = 1024 * MB
         if isEval:
             memusages = {
-                'small': (25.5 * MB - 19 * MB, 19 * MB),
-                'medium': (100.5 * MB - 76.5 * MB, 76.5 * MB),
-                'large': (321 * MB - 253 * MB, 253 * MB),
+                'small': (79.2 * MB, 18 * MB),
+                'medium': (1.01 * GB, 80 * MB),
+                'large': (5.05 * GB, 343.3 * MB),
             }
         else:
             memusages = {

@@ -16,7 +16,7 @@ from absl import flags
 from typing import Iterable, Union
 
 from benchmarks.driver.server.config import presets
-from benchmarks.driver.utils import unique
+from benchmarks.driver.utils import unique, try_with_default
 from benchmarks.driver.workload import WTL, Executor
 from benchmarks.exps import run_seq, maybe_forced_preset, run_tf, Pause
 
@@ -29,7 +29,8 @@ def main(argv):
     if len(argv) > 0:
         name = argv[0]
     if len(argv) > 1:
-        bs = int(argv[1])
+        bs = argv[1]
+        bs = try_with_default(int, bs, ValueError)(bs)
     if len(argv) > 2:
         bn = int(argv[2])
 

@@ -93,9 +93,9 @@ class TestVae(unittest.TestCase):
         MB = 1024 * KB
         if isEval:
             memusages = {
-                1: (2 * MB, 5.1 * MB),
-                5: (2 * MB, 5.1 * MB),
-                10: (2 * MB, 5.1 * MB),
+                1: (5 * MB, 21 * MB),
+                5: (7 * MB, 22 * MB),
+                10: (15 * MB, 23 * MB),
             }
         else:
             memusages = {
