@@ -113,45 +113,43 @@ def handle_10min(target, name, path):
 
 
 def generate_csv(logs_dir, output_dir):
-    baseline_data = []
-    tfdist_data = []
-    salus_data = []
-
-    for name in os.listdir(logs_dir):
-        path = os.path.join(logs_dir, name)
-        if not os.path.isdir(path):
-            continue
-
-        if len(name.split('_')) == 2:
-            # 20iter
-            handle_20iter(baseline_data, name, os.path.join(path, 'gpu.output'))
-            handle_20iter(tfdist_data, name, os.path.join(path, 'tfdist.output'))
-            handle_20iter(salus_data, name, os.path.join(path, 'rpc.output'))
-        elif len(name.split('_')) == 3:
-            # more
-            name, mode = name.rsplit('_', 1)
-            handlers = {
-                '1min': handle_1min,
-                '5min': handle_5min,
-                '10min': handle_10min,
-            }
-            if mode not in handlers:
-                print('Unrecognized directory: ', name)
+    flavors = [
+        ('baseline', 'gpu.output'),
+        ('salus', 'rpc.output'),
+        ('tfdist', 'tfdist.output'),
+        ('tfdist-mps', 'tfdist-mps.output'),
+        ('mps', 'gpu-mps.output')
+    ]
+    for casename, file in flavors:
+        data = []
+        for name in os.listdir(logs_dir):
+            path = os.path.join(logs_dir, name)
+            if not os.path.isdir(path):
                 continue
-            handlers[mode](baseline_data, name, os.path.join(path, 'gpu.output'))
-            handlers[mode](tfdist_data, name, os.path.join(path, 'tfdist.output'))
-            handlers[mode](salus_data, name, os.path.join(path, 'rpc.output'))
-        else:
-            print('Unrecognized directory: ', name)
 
-    def reducenan(x):
-        return x[x.notnull()] if x.nunique() == 1 else None
+            if len(name.split('_')) == 2:
+                # 20iter
+                handle_20iter(data, name, os.path.join(path, file))
+            elif len(name.split('_')) == 3:
+                # more
+                name, mode = name.rsplit('_', 1)
+                handlers = {
+                    '1min': handle_1min,
+                    '5min': handle_5min,
+                    '10min': handle_10min,
+                }
+                if mode not in handlers:
+                    print('Unrecognized directory: ', name)
+                    continue
+                handlers[mode](data, name, os.path.join(path, file))
+            else:
+                print('Unrecognized directory: ', name)
 
-    bldf = pd.DataFrame(baseline_data).groupby('Network').agg(reducenan).reset_index()
-    sdf = pd.DataFrame(salus_data).groupby('Network').agg(reducenan).reset_index()
-    tddf = pd.DataFrame(tfdist_data).groupby('Network').agg(reducenan).reset_index()
+        def reducenan(x):
+            return x[x.notnull()] if x.nunique() == 1 else None
 
-    def cleancols(df):
+        df = pd.DataFrame(data).groupby('Network').agg(reducenan).reset_index()
+
         colnames = ['Network', '20iter-jct', '20iter-first', '20iter-avg',
                     '1min-jct', '1min-num', '1min-avg',
                     '5min-jct', '5min-num', '5min-avg',
@@ -161,16 +159,10 @@ def generate_csv(logs_dir, output_dir):
             if col not in df:
                 df[col] = np.nan
         # reorder
-        return df[colnames]
+        df = df[colnames]
 
-    bldf = cleancols(bldf)
-    sdf = cleancols(sdf)
-    tddf = cleancols(tddf)
-
-    Path(output_dir).mkdir(exist_ok=True)
-    bldf.to_csv(os.path.join(output_dir, 'jct-baseline.csv'), index=False)
-    sdf.to_csv(os.path.join(output_dir, 'jct-salus.csv'), index=False)
-    tddf.to_csv(os.path.join(output_dir, 'jct-tfdist.csv'), index=False)
+        Path(output_dir).mkdir(exist_ok=True)
+        df.to_csv(os.path.join(output_dir, 'jct-{}.csv'.format(casename)), index=False)
 
 
 # Expected names:
