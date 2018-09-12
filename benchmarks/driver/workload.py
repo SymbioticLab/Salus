@@ -428,6 +428,9 @@ WorkloadTemplate.define('overfeateval', [1, 5, 10], TFBenchmarkRunner)
 WorkloadTemplate.define('inception3eval', [1, 5, 10], TFBenchmarkRunner)
 WorkloadTemplate.define('inception4eval', [1, 5, 10], TFBenchmarkRunner)
 WorkloadTemplate.define('speecheval', [1, 5, 10], FathomRunner)
+WorkloadTemplate.define('vaeeval', [1, 5, 10], UnittestRunner)
+WorkloadTemplate.define('superreseval', [1, 5, 10], UnittestRunner)
+WorkloadTemplate.define('seq2seqeval', ['small', 'medium', 'large'], UnittestRunner)
 
 
 # noinspection PyUnusedLocal

@@ -15,11 +15,11 @@ from .lib import tfhelper
 from .lib.datasets import fake_data_ex
 
 
-def run_superres(sess, input_data, batch_size=100):
+def run_superres(sess, input_data, batch_size=100, isEval=False):
     input_images, target_images = input_data(batch_size=batch_size)
 
     model = networks.SuperRes(input_images, target_images, batch_size=batch_size)
-    model.build_model()
+    model.build_model(isEval=isEval)
 
     salus_marker = tf.no_op(name="salus_main_iter")
     losses = []
@@ -30,9 +30,14 @@ def run_superres(sess, input_data, batch_size=100):
             if coord.should_stop():
                 break
             print("{}: Start running step {}".format(datetime.now(), i))
-            start_time = default_timer()
-            _, loss_value, _ = sess.run([model.g_optim, model.g_loss, salus_marker])
-            end_time = default_timer()
+            if isEval:
+                start_time = default_timer()
+                loss_value, _ = sess.run([model.g_loss, salus_marker])
+                end_time = default_timer()
+            else:
+                start_time = default_timer()
+                _, loss_value, _ = sess.run([model.g_optim, model.g_loss, salus_marker])
+                end_time = default_timer()
 
             duration = end_time - start_time
             examples_per_sec = batch_size / duration
@@ -53,15 +58,21 @@ def run_superres(sess, input_data, batch_size=100):
 
 
 class TestSuperRes(unittest.TestCase):
-    def _config(self, **kwargs):
+    def _config(self, isEval=False, **kwargs):
         KB = 1024
         MB = 1024 * KB
-        memusages = {
-            32: (252.79296875 * MB, 17.503280639648438 * MB),
-            # 64: (496.98071670532227 * MB, 31.690780639648438 * MB),
-            64: (500 * MB, 31.690780639648438 * MB),
-            128: (992.9807167053223 * MB, 60.44078063964844 * MB),
-        }
+        if isEval:
+            memusages = {
+                1: (137 * MB, 1 * MB),
+                5: (150 * MB, 1 * MB),
+                10: (166 * MB, 1 * MB),
+            }
+        else:
+            memusages = {
+                32: (252.79296875 * MB, 17.503280639648438 * MB),
+                64: (500 * MB, 31.690780639648438 * MB),
+                128: (992.9807167053223 * MB, 60.44078063964844 * MB),
+            }
         batch_size = kwargs.get('batch_size', 100)
 
         config = tf.ConfigProto()
@@ -70,7 +81,7 @@ class TestSuperRes(unittest.TestCase):
         config.salus_options.resource_map.persistant['MEMORY:GPU'] = memusages[batch_size][1]
         return config
 
-    def _get_func(self, batch_size):
+    def _get_func(self, batch_size, isEval=False):
         def func():
             def input_data(batch_size):
                 variable_specs = [
@@ -80,14 +91,27 @@ class TestSuperRes(unittest.TestCase):
                 input_images, target_images = fake_data_ex(batch_size, variable_specs=variable_specs)
                 return input_images, target_images
             sess = tf.get_default_session()
-            return run_superres(sess, input_data, batch_size=batch_size)
+            return run_superres(sess, input_data, batch_size=batch_size, isEval=isEval)
         return func
+
+    @parameterized.expand([(1,), (5,), (10,)])
+    def test_gpu_eval(self, batch_size):
+        config = self._config(batch_size=batch_size, isEval=True)
+        config.allow_soft_placement = True
+        run_on_devices(self._get_func(batch_size, isEval=True), '/device:GPU:0', config=config)
 
     @parameterized.expand([(32,), (64,), (128,)])
     def test_gpu(self, batch_size):
         config = self._config(batch_size=batch_size)
         config.allow_soft_placement = True
         run_on_devices(self._get_func(batch_size), '/device:GPU:0', config=config)
+
+    @parameterized.expand([(1,), (5,), (10,)])
+    def test_distributed_eval(self, batch_size):
+        run_on_sessions(self._get_func(batch_size, isEval=True),
+                        tfDistributedEndpointOrSkip(),
+                        dev='/job:tfworker/device:GPU:0',
+                        config=self._config(batch_size=batch_size, isEval=True))
 
     @parameterized.expand([(32,), (64,), (128,)])
     def test_distributed(self, batch_size):
@@ -98,9 +122,21 @@ class TestSuperRes(unittest.TestCase):
 
     @parameterized.expand([(64,)])
     @unittest.skip("No need to run on CPU")
+    def test_cpu_eval(self, batch_size):
+        run_on_devices(self._get_func(batch_size, isEval=True), '/device:CPU:0',
+                       config=self._config(batch_size=batch_size, isEval=True))
+
+    @parameterized.expand([(64,)])
+    @unittest.skip("No need to run on CPU")
     def test_cpu(self, batch_size):
         run_on_devices(self._get_func(batch_size), '/device:CPU:0',
                        config=self._config(batch_size=batch_size))
+
+    @parameterized.expand([(1,), (5,), (10,)])
+    def test_rpc_eval(self, batch_size):
+        run_on_sessions(self._get_func(batch_size, isEval=True),
+                        'zrpc://tcp://127.0.0.1:5501', dev='/device:GPU:0',
+                        config=self._config(batch_size=batch_size, isEval=True))
 
     @parameterized.expand([(32,), (64,), (128,)])
     def test_rpc(self, batch_size):

@@ -174,7 +174,8 @@ class UnittestRunner(Runner):
                 25: '0', 50: '1', 100: '2'
             }),
             'superres': ('test_tf.test_super_res', 'TestSuperRes', {
-                32: '0', 64: '1', 128: '2'
+                32: '0', 64: '1', 128: '2',
+                1: '0', 5: '1', 10: '2',
             })
         }
 
@@ -187,12 +188,17 @@ class UnittestRunner(Runner):
         else:
             raise ValueError(f'Unknown executor: {executor}')
 
-        if self.wl.name in supported_model:
-            pkg, cls, names = supported_model[self.wl.name]
+        if self.wl.name.endswith('eval'):
+            prefix += 'eval_'
+
+        model_name = self.wl.name.rsplit('eval')[0]
+
+        if model_name in supported_model:
+            pkg, cls, names = supported_model[model_name]
         else:
             # fallback to guessing
-            pkg = f'test_tf.test_{self.wl.name}'
-            cls = f'Test{snake_to_pascal(self.wl.name)}'
+            pkg = f'test_tf.test_{model_name}'
+            cls = f'Test{snake_to_pascal(model_name)}'
             names = {
                 s: str(idx)
                 for idx, s in enumerate(self.wl.wtl.available_batch_sizes())

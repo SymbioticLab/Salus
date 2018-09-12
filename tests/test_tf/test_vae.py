@@ -18,7 +18,7 @@ from .lib.datasets import fake_data
 IMAGE_SIZE_MNIST = 28
 
 
-def run_vae(sess, args=None):
+def run_vae(sess, args=None, isEval=False):
     """ parameters """
     if args is None:
         args = networks.vae.get_args()
@@ -27,7 +27,7 @@ def run_vae(sess, args=None):
     x_image, _, num_classes = fake_data(args.batch_size, None, height=IMAGE_SIZE_MNIST, width=IMAGE_SIZE_MNIST,
                                         depth=1, num_classes=10)
 
-    with tf.name_scope('modle'):
+    with tf.name_scope('model'):
         # inputs
         x = tf.reshape(x_image, [-1, 784], name='target_img')
         x_hat = tf.identity(x, name='input_img')
@@ -38,9 +38,12 @@ def run_vae(sess, args=None):
         # network architecture
         y, z, loss, neg_marginal_likelihood, kl_divergence = networks.vae.autoencoder(x_hat, x, dim_img, args.dim_z,
                                                                                       args.n_hidden, keep_prob)
+        batch_step = loss
 
-        # optimization
-        train_op = tf.train.AdamOptimizer(args.learn_rate).minimize(loss)
+        if not isEval:
+            # optimization
+            train_op = tf.train.AdamOptimizer(args.learn_rate).minimize(loss)
+            batch_step = train_op
 
     """ training """
     salus_marker = tf.no_op(name="salus_main_iter")
@@ -57,7 +60,7 @@ def run_vae(sess, args=None):
 
             print("{}: Start running step {}".format(datetime.now(), i))
             start_time = default_timer()
-            _, _, loss_value = sess.run([train_op, salus_marker, loss], feed_dict={keep_prob: 0.9})
+            _, _, loss_value = sess.run([batch_step, salus_marker, loss], feed_dict={keep_prob: 1 if isEval else 0.9})
             end_time = default_timer()
 
             if last_end_time > 0:
@@ -85,14 +88,21 @@ def run_vae(sess, args=None):
 
 
 class TestVae(unittest.TestCase):
-    def _config(self, args):
+    def _config(self, args, isEval=False):
         KB = 1024
         MB = 1024 * KB
-        memusages = {
-            64: (5 * MB, 21 * MB),
-            128: (7 * MB, 22 * MB),
-            256: (15 * MB, 23 * MB),
-        }
+        if isEval:
+            memusages = {
+                1: (2 * MB, 5.1 * MB),
+                5: (2 * MB, 5.1 * MB),
+                10: (2 * MB, 5.1 * MB),
+            }
+        else:
+            memusages = {
+                64: (5 * MB, 21 * MB),
+                128: (7 * MB, 22 * MB),
+                256: (15 * MB, 23 * MB),
+            }
 
         config = tf.ConfigProto()
         config.allow_soft_placement = True
@@ -100,11 +110,25 @@ class TestVae(unittest.TestCase):
         config.salus_options.resource_map.persistant['MEMORY:GPU'] = memusages[args.batch_size][1]
         return config
 
+    @parameterized.expand([(1,), (5,), (10,)])
+    def test_gpu_eval(self, batch_size):
+        args = networks.vae.get_args(batch_size=batch_size)
+        run_on_devices(lambda: run_vae(tf.get_default_session(), args, True), '/device:GPU:0',
+                       config=self._config(args, True))
+
     @parameterized.expand([(64,), (128,), (256,)])
     def test_gpu(self, batch_size):
         args = networks.vae.get_args(batch_size=batch_size)
         run_on_devices(lambda: run_vae(tf.get_default_session(), args), '/device:GPU:0',
                        config=self._config(args))
+
+    @parameterized.expand([(1,), (5,), (10,)])
+    def test_distributed_eval(self, batch_size):
+        args = networks.vae.get_args(batch_size=batch_size)
+        run_on_sessions(lambda: run_vae(tf.get_default_session(), args, True),
+                        tfDistributedEndpointOrSkip(),
+                        dev='/job:tfworker/device:GPU:0',
+                        config=self._config(args, True))
 
     @parameterized.expand([(64,), (128,), (256,)])
     def test_distributed(self, batch_size):
@@ -114,6 +138,13 @@ class TestVae(unittest.TestCase):
                         dev='/job:tfworker/device:GPU:0',
                         config=self._config(args))
 
+    @parameterized.expand([(1,), (5,), (10,)])
+    @unittest.skip("No need to run on CPU")
+    def test_cpu_eval(self, batch_size):
+        args = networks.vae.get_args(batch_size=batch_size)
+        run_on_devices(lambda: run_vae(tf.get_default_session(), args, True), '/device:CPU:0',
+                       config=self._config(args, True))
+
     @parameterized.expand([(64,), (128,), (256,)])
     @unittest.skip("No need to run on CPU")
     def test_cpu(self, batch_size):
@@ -121,11 +152,12 @@ class TestVae(unittest.TestCase):
         run_on_devices(lambda: run_vae(tf.get_default_session(), args), '/device:CPU:0',
                        config=self._config(args))
 
-    @parameterized.expand([(64,), (128,), (256,)])
-    def test_rpc(self, batch_size):
+    @parameterized.expand([(1,), (5,), (10,)])
+    def test_rpc_eval(self, batch_size):
         args = networks.vae.get_args(batch_size=batch_size)
-        run_on_devices(lambda sess: run_vae(tf.get_default_session(), args), '/device:GPU:0',
-                       config=self._config(args))
+        run_on_sessions(lambda: run_vae(tf.get_default_session(), args, True),
+                        'zrpc://tcp://127.0.0.1:5501', dev='/device:GPU:0',
+                        config=self._config(args, True))
 
     @parameterized.expand([(64,), (128,), (256,)])
     def test_rpc(self, batch_size):

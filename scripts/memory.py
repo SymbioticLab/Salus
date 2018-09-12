@@ -191,7 +191,8 @@ def find_minmax(df, plot=False):
     ma = cs.max()
 
     # start from first non zero
-    cspartial = cs[cs > (ma * 0.05)]
+    # start after first max
+    cspartial = cs[cs.index > cs.idxmax()]
     # duration
     dur = cspartial.index[-1] - cspartial.index[0]
 
@@ -360,7 +361,7 @@ def main():
 
 
     with mp.Pool() as pool:
-        data = pool.map(process_mem, Path('/tmp/workspace/mem/tf').iterdir())
+        data = pool.map(process_mem, Path('/tmp/workspace/tmpmem').iterdir())
 
     for n, p, m, a, _, csp in data:
         plt.figure()
@@ -373,7 +374,7 @@ def main():
                                        'Peak Mem (MB)',
                                        'Average',
                                        'Peak'])
-    data.to_csv('/tmp/workspace/mem.csv', index=False)
+    data.to_csv('/tmp/workspace/tmpmem.csv', index=False)
 
 #%% Produce mem-salus.csv
     with mp.Pool() as pool:

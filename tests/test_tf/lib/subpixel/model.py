@@ -39,17 +39,18 @@ class DCGAN(object):
         self.h2_w = None
         self.h2_b = None
 
-    def build_model(self):
+    def build_model(self, isEval=False):
         self.G = self.generator(self.inputs)
 
         self.g_loss = tf.reduce_mean(tf.square(self.target_images-self.G))
 
-        t_vars = tf.trainable_variables()
+        if not isEval:
+            t_vars = tf.trainable_variables()
 
-        self.g_vars = [var for var in t_vars if 'g_' in var.name]
+            self.g_vars = [var for var in t_vars if 'g_' in var.name]
 
-        self.g_optim = tf.train.AdamOptimizer(self.learning_rate, beta1=self.beta1) \
-            .minimize(self.g_loss, var_list=self.g_vars)
+            self.g_optim = tf.train.AdamOptimizer(self.learning_rate, beta1=self.beta1) \
+                .minimize(self.g_loss, var_list=self.g_vars)
 
     def generator(self, z):
         # project `z` and reshape
