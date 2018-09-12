@@ -427,6 +427,7 @@ WorkloadTemplate.define('alexneteval', [1, 5, 10], TFBenchmarkRunner)
 WorkloadTemplate.define('overfeateval', [1, 5, 10], TFBenchmarkRunner)
 WorkloadTemplate.define('inception3eval', [1, 5, 10], TFBenchmarkRunner)
 WorkloadTemplate.define('inception4eval', [1, 5, 10], TFBenchmarkRunner)
+WorkloadTemplate.define('speecheval', [1, 5, 10], FathomRunner)
 
 
 # noinspection PyUnusedLocal

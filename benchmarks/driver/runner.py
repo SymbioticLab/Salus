@@ -12,7 +12,7 @@ from typing import Iterable, Tuple, Union, Any, Dict
 
 from .server import SalusServer
 from .tfserver import TFDistServer
-from .utils import Popen, execute, snake_to_pascal
+from .utils import Popen, execute, snake_to_pascal, str2bool
 from .utils.compatiblity import pathlib, subprocess as sp
 
 Path = pathlib.Path
@@ -95,16 +95,27 @@ class TFBenchmarkRunner(Runner):
             '--num_batches={}'.format(self.wl.batch_num),
             '--batch_size={}'.format(self.wl.batch_size),
         ]
+        eval_interval = self.wl.env.pop('SALUS_TFBENCH_EVAL_INTERVAL', '0.1')
+        eval_rand_factor = self.wl.env.pop('SALUS_TFBENCH_EVAL_RAND_FACTOR', '5')
+        eval_block = self.wl.env.pop('SALUS_TFBENCH_EVAL_BLOCK', 'true')
         if self.wl.name.endswith('eval'):
+            model_name = self.wl.name.rsplit('eval')[0]
             cmd += [
-                '--model_dir=models/{}'.format(self.wl.name.rstrip('eval')),
-                '--model={}'.format(self.wl.name.rstrip('eval')),
+                '--model_dir=models/{}'.format(model_name),
+                '--model={}'.format(model_name),
+                '--eval_interval_secs={}'.format(eval_interval),
+                '--eval_interval_random_factor={}'.format(eval_rand_factor),
+                '--eval_block={}'.format(eval_block),
                 '--eval'
             ]
         else:
             cmd += [
                 '--model={}'.format(self.wl.name),
             ]
+            if str2bool(self.wl.env.pop('SALUS_SAVE_MODEL', '')):
+                cmd += [
+                    '--model_dir=models/{}'.format(self.wl.name),
+                ]
 
         if FLAGS.no_capture:
             return execute(cmd, cwd=str(cwd), env=self.env)
@@ -205,8 +216,8 @@ class FathomRunner(Runner):
         cmd = [
             'stdbuf', '-o0', '-e0', '--',
             'python', '-m', 'fathom.cli',
-            '--workload', self.wl.name,
-            '--action', 'train',
+            '--workload', self.wl.name.rsplit('eval')[0],
+            '--action', 'test' if self.wl.name.endswith('eval') else 'train',
             '--num_iters', str(self.wl.batch_num),
             '--batch_size', str(self.wl.batch_size),
         ]
