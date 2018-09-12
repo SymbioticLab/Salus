@@ -37,6 +37,6 @@ def main(argv):
         return WTL.create(name, bs, bn, executor=ex)
 
     wl = create_wl(Executor.TF)
-    wl.env['TF_CPP_MIN_VLOG_LEVEL'] = '1'
-    wl.env['TF_CPP_MIN_LOG_LEVEL'] = ''
+    # wl.env['TF_CPP_MIN_VLOG_LEVEL'] = '1'
+    # wl.env['TF_CPP_MIN_LOG_LEVEL'] = ''
     run_tf(FLAGS.save_dir / "tf", wl)

@@ -23,16 +23,38 @@ import plotutils as pu
 
 def load_memcsv(path):
     df = pd.read_csv(path)
-    df = df.query('not Network.str.contains("mnist") and not Network.str.contains("eval")')
+    df = df.query('not Network.str.contains("mnist")')
     return df
 
 
 def plot_mem(df, **kwargs):
+    df = df.query('not Network.str.contains("eval")')
     df = df.set_index('Network')
     df = df / 1024
     df['Peak'] = df['Peak Mem (MB)']
 
     ax = df.plot(y=['Average', 'Peak'], kind='barh', **kwargs)
+    return ax
+
+def plot_inferencemem(df, **kwargs):
+    df = df.query('Network.str.contains("eval")').copy()
+
+    # sort
+    #df['Model'] = df.Network.str.split('_')[0]
+    #df['Batch Size'] = pd.to_numeric(df.Network.str.split('_')[1])
+    df['Model'], df['Batch Size'] = df.Network.str.split('_').str
+    df['Batch Size'] = pd.to_numeric(df['Batch Size'])
+    df = df.sort_values(by=['Model', 'Batch Size'], ascending=[True, False])
+    df = df.drop(['Model', 'Batch Size'], axis=1)
+
+
+    df = df.set_index('Network')
+    df = df / 1024
+    df['Peak Usage'] = df['Peak Mem (MB)']
+    df['Model Usage'] = df['Persistent Mem (MB)']
+
+
+    ax = df.plot(y=['Peak Usage', 'Model Usage'], kind='barh', **kwargs)
     return ax
 
 
@@ -60,4 +82,6 @@ def prepare_paper(path):
         # plt.close()
 
 path = '/tmp/workspace'
-prepare_paper(path)
+# prepare_paper(path)
+df = load_memcsv('/tmp/workspace/mem.csv')
+plot_inferencemem(df)

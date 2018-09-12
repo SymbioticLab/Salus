@@ -39,7 +39,7 @@ def load_mem(path, return_logs=False, parallel_workers=0):
     df['act'] = df.act.cumsum() / 1024 / 1024
     # make sure index is consequtive
     df = df.reset_index(drop=True)
-    
+
     if return_logs:
         return df, logs
     else:
@@ -50,24 +50,24 @@ def load_holds(path):
         logs = pl.load_file(path)
     except TypeError:
         logs = path
-    
+
     df = pd.DataFrame(l.__dict__ for l in logs)
-    
+
     # get sess to ticket mapping
     mapping = df[df.type == 'tracker_ticket'][['sess', 'ticket']].set_index('ticket')
     mapping = mapping.to_dict()['sess']
-    
+
     df = df[df.type.isin(['tracker_hold', 'tracker_unhold'])]
     df = df.drop(['entry_type', 'level', 'loc', 'thread'], axis=1)
-    
+
     df.type.replace({
         'tracker_hold': 1,
         'tracker_unhold': -1,
     }, inplace=True)
-    
+
     df['sess'] = df.ticket.replace(mapping)
     df = df.set_index('timestamp').sort_index().reset_index()
-    
+
     return df
 
 def load_tfmem(path):
@@ -151,10 +151,10 @@ def plot_df_persess(df, marker=False, offset=None, fill=False, sessaxs=None, **k
             sessaxs[sess] = ax
         else:
             ax = sessaxs[sess]
-            
+
         act = dfsess.type * dfsess['size']
         act = act.cumsum() / 1024 / 1024
-        
+
         if fill:
             # fill nans
             act = pd.DataFrame(act).reset_index()
@@ -164,7 +164,7 @@ def plot_df_persess(df, marker=False, offset=None, fill=False, sessaxs=None, **k
             act[0] = act[0].ffill()
             act['timestamp'] = act['timestamp'].bfill()
             act = act.set_index('timestamp').dropna()
-        
+
         plot_cs(act, ax=ax, **kwargs)
         if marker:
             css = dfsess.reset_index()
@@ -348,16 +348,6 @@ def draw_sim(df, iters, phasechanging):
 
 #%% def main
 def main():
-#%% do sim
-
-    with mp.Pool() as pool:
-        data = pool.map(sim_dealloc, Path('logs/osdi18/mem/salus').iterdir())
-    
-    for n, df, iters, pc in data:
-        plt.figure()
-        ax = draw_sim(df, iters, pc)
-        ax.set_title(n)
-
 
 #%% Produce mem.csv
     def process_mem(item, loader=load_tfmem):
@@ -367,16 +357,16 @@ def main():
         ma, persist, avg, cspartial = find_minmax(df, plot=False)
         print(f"{item.name}: found")
         return item.name, persist, ma, avg, ma - persist, cspartial
-    
-    
+
+
     with mp.Pool() as pool:
-        data = pool.map(process_mem, Path('/tmp/workspace/meminfer').iterdir())
-    
+        data = pool.map(process_mem, Path('/tmp/workspace/mem/tf').iterdir())
+
     for n, p, m, a, _, csp in data:
         plt.figure()
         plot_cs(csp).set_title(n)
     data = [x[:-1] for x in data]
-    
+
     # data = [process_mem(item) for item in Path('logs/mem/tf').iterdir()]
     data = pd.DataFrame(data, columns=['Network',
                                        'Persistent Mem (MB)',
@@ -400,11 +390,22 @@ def main():
                                                  'Peak'])
     datasalus.to_csv('/tmp/workspace/mem-salus.csv', index=False)
 
+#%% do sim
+
+    with mp.Pool() as pool:
+        data = pool.map(sim_dealloc, Path('logs/osdi18/mem/salus').iterdir())
+
+    for n, df, iters, pc in data:
+        plt.figure()
+        ax = draw_sim(df, iters, pc)
+        ax.set_title(n)
+
+
 #%% Draw session alloc
 
     dfmem, logs = load_mem('logs/osdi18/cc/exp10/alloc.output', return_logs=True, parallel_workers=5)
     df = load_holds(logs)
-    
+
     axs = plot_df_persess(dfmem)
     axs = plot_df_persess(df, fill=True, sessaxs=axs)
 
@@ -416,20 +417,20 @@ def main():
     iters = load_iters(iterpath)
     # add iter info to df
     df['step'] = df.timestamp.apply(lambda ts: iters.searchsorted(ts)[0])
-    
+
     # select only a single step
     df = df[df['step'] == 6]
-    
+
     alloc = df[df.type > 0]
     sizes = alloc['size']
-    
+
     _, axs = plt.subplots(nrows=2)
-    
+
     ax = pu.cdf(sizes, ax=axs[0])
     pu.cleanup_axis_bytes(ax.xaxis)
     ax.set_title('CDF of allocation request sizes')
     ax.set_xlabel('Allcation Request Size')
-    
+
     ax = sizes.sort_values().reset_index(drop=True).cumsum().plot(ax=axs[1])
     ax.set_title('Cumulative sum of request sizes')
     ax.set_xlabel('Allocation Request')

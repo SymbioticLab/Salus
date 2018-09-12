@@ -25,7 +25,8 @@ flags.DEFINE_float('threshold', 0.1, 'What ratio is actual time allowed to have 
 flags.DEFINE_integer('max_chance', 10, 'How many times to try')
 flags.DEFINE_boolean('resume', False, 'Check and skip existing configurations')
 flags.DEFINE_multi_integer('extra_mins', [1, 5, 10], 'Extra lengths')
-flags.DEFINE_boolean('do_tfdist', False, 'Also measure TFDist JCT')
+flags.DEFINE_boolean('do_tfdist', True, 'Also measure TFDist JCT')
+flags.DEFINE_boolean('is_mps', False, 'MPS is on for TF jobs')
 
 
 def select_workloads(argv):
@@ -53,15 +54,20 @@ def do_jct(logdir, network, batch_size):
     final_dst = logdir / WTL.from_name(network).canonical_name(RunConfig(batch_size, batch_num, None))
     with atomic_directory(final_dst) as outputdir:
         logger.info(f'Measuring basic JCT for {batch_num} iterations')
-        if not (final_dst / 'gpu.output').exists() or not FLAGS.resume:
+        mps_name = '-mps' if FLAGS.is_mps else ''
+        if not (final_dst/'gpu{}.output'.format(mps_name)).exists() or not FLAGS.resume:
             logger.info('    Running on TF')
-            WTL.block_run(network, batch_size, batch_num, Executor.TF, outputdir / 'gpu.output')
+            WTL.block_run(network, batch_size, batch_num, Executor.TF, outputdir / 'gpu{}.output'.format(mps_name))
 
         if FLAGS.do_tfdist:
-            if not (final_dst / 'tfdist.output').exists() or not FLAGS.resume:
+            if not (final_dst/'tfdist{}.output'.format(mps_name)).exists() or not FLAGS.resume:
                 with TFDistServer().run():
                     logger.info('    Running on TFDist')
-                    WTL.block_run(network, batch_size, batch_num, Executor.TFDist, outputdir / 'tfdist.output')
+                    WTL.block_run(network, batch_size, batch_num, Executor.TFDist, outputdir / 'tfdist{}.output'.format(mps_name))
+
+        if FLAGS.is_mps:
+            logger.info('    Skipping Salus jct when MPS is on')
+            return final_dst
 
         if not (final_dst / 'rpc.output').exists() or not FLAGS.resume:
             scfg = maybe_forced_preset(presets.MostEfficient)

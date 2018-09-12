@@ -23,6 +23,7 @@ FLAGS = flags.FLAGS
 TBatchSize = Union[str, int]
 
 flags.DEFINE_boolean('use_salus', False, 'Use salus to measure rather than TF')
+flags.DEFINE_boolean('resume', False, 'Reuse existing data')
 
 
 def select_workloads(argv):
@@ -65,6 +66,15 @@ def do_mem(logdir, network, batch_size):
 
     ex = "salus" if FLAGS.use_salus else "tf"
     final_dst = logdir / ex / WTL.from_name(network).canonical_name(RunConfig(batch_size, batch_num, None))
+
+    if FLAGS.resume:
+        filename = {
+            'salus': 'rpc.output',
+            'tf': 'alloc.output'
+        }[ex]
+        if (final_dst / filename).exists():
+            return final_dst
+
     with atomic_directory(final_dst) as outputdir:
         if not FLAGS.use_salus:
             logger.info('    Running on TF')
