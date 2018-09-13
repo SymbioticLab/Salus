@@ -85,6 +85,7 @@ def test_seq_ptb(sess, config_name):
         tf.summary.scalar("Eval Loss", m.cost)
 
     salus_marker = tf.no_op(name="salus_main_iter")
+
     with tfhelper.initialized_scope(sess) as coord:
         for i in range(config.max_max_epoch):
             if coord.should_stop():

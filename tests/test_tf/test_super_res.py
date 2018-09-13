@@ -1,6 +1,9 @@
 from __future__ import print_function, absolute_import, division
 
 import unittest
+import os
+import random
+import time
 
 import tensorflow as tf
 import numpy as np
@@ -20,6 +23,13 @@ def run_superres(sess, input_data, batch_size=100, isEval=False):
 
     model = networks.SuperRes(input_images, target_images, batch_size=batch_size)
     model.build_model(isEval=isEval)
+
+    eval_interval = os.environ.get('SALUS_TFBENCH_EVAL_INTERVAL', '0.1')
+    eval_rand_factor = os.environ.get('SALUS_TFBENCH_EVAL_RAND_FACTOR', '5')
+    eval_block = os.environ.get('SALUS_TFBENCH_EVAL_BLOCK', 'true')
+
+    if eval_block != 'true':
+        raise ValueError("SALUS_TFBENCH_EVAL_BLOCK=false is not supported")
 
     salus_marker = tf.no_op(name="salus_main_iter")
     losses = []
@@ -46,6 +56,12 @@ def run_superres(sess, input_data, batch_size=100, isEval=False):
             fmt_str = '{}: step {}, loss = {:.2f} ({:.1f} examples/sec; {:.3f} sec/batch)'
             print(fmt_str.format(datetime.now(), i, loss_value, examples_per_sec, sec_per_batch))
             losses.append(loss_value)
+
+            if isEval:
+                factor = 1
+                if eval_rand_factor != "1":
+                    factor = random.randint(1, int(eval_rand_factor))
+                time.sleep(float(eval_interval) * factor)
 
         JCT = default_timer() - JCT
         print('Training time is %.3f sec' % JCT)

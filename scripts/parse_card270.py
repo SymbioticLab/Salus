@@ -39,7 +39,11 @@ def load_jcts(path):
         df = pd.read_csv(path/logfile)
         df = df.dropna(axis=1).dropna(axis=0)
 
-        df['BatchSize'] = df.Network.str.rpartition('_')[2].map({'small': 0, 'medium': 1, 'large': 2})
+        df['Network'] = df.Network.str.replace('small', '1')
+        df['Network'] = df.Network.str.replace('medium', '5')
+        df['Network'] = df.Network.str.replace('large', '10')
+
+        df['BatchSize'] = df.Network.str.rpartition('_')[2]
         df['BatchSize'] = pd.to_numeric(df.BatchSize)
         df = df.sort_values(['Network', 'BatchSize'])
         df = df.set_index('Network')
@@ -58,6 +62,32 @@ def load_jcts(path):
     return df
 
 
+def load_cardlog(path):
+    path = Path(path)
+    ptn = re.compile('Average excluding first iteration: (?P<latency>[\d.]+) sec/batch')
+    models = []
+    latencies = []
+    for file in (path/'card270'/'case1').glob('*.*.*.*.output'):
+        model = file.name.split('.')[0]
+        model = model.replace('small', '1')
+        model = model.replace('medium', '5')
+        model = model.replace('large', '10')
+        latency = None
+        with file.open() as f:
+            for line in f:
+                m = ptn.search(line)
+                if m:
+                    latency = float(m.group('latency'))
+                    break
+        assert latency is not None
+        models.append(model)
+        latencies.append(latency)
+    df = pd.DataFrame({'Latency': latencies, 'Network': models})
+    df = df.groupby('Network').mean()
+
+    return df
+
+
 def plot_latency(df, **kwargs):
     # make index label beautiful
     df = df.set_index(df.index.str.rsplit('eval_1').str[0])
@@ -68,3 +98,42 @@ def plot_latency(df, **kwargs):
     ax = df.plot.bar(**kwargs)
     ax.set_ylabel('Latency (ms)')
     return ax
+
+
+path = '/tmp/workspace'
+def prepare_paper(path):
+    path = Path(path)
+
+    df = load_jcts(path)
+
+    # load in exp data
+    exp = load_cardlog(path)
+    # Drop anything without exp data
+    df = df.assign(Salus=exp).dropna()
+
+    # TODO: fix deep speech
+    df = df.query('not index.str.contains("speech")')
+
+    with plt.style.context(['seaborn-paper', 'mypaper']):
+        fig, axs = plt.subplots(ncols=2, gridspec_kw={'width_ratios':[3, 1]})
+        fig.set_size_inches(3.25, 1.85, forward=True)
+
+        # set plot bar order
+        order = ['TF', 'MPS', 'Salus']
+        df = df[order]
+
+        ax = plot_latency(df, ax=axs[0])
+        ax.set_ylim([0, 60])
+        #ax.set_xticklabels(ax.get_xticklabels(), rotation=45, ha='right')
+
+        # Draw utilization, current number is hard coded
+        # we ran 42 jobs, 3 of each (without speech, which is wierd)
+        # so 42 for TF
+        ut = pd.DataFrame([42, 6, 1], index=order)
+        ax = ut.plot.bar(ax=axs[1])
+        #ax.tick_params(axis='x', labelrotation=0)
+        ax.legend().remove()
+        ax.set_ylabel('# of GPUs needed')
+
+        fig.tight_layout()
+        fig.savefig('/tmp/workspace/card270.pdf', dpi=300, bbox_inches='tight', pad_inches = .005)
