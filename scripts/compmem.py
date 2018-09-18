@@ -74,6 +74,7 @@ def _process_line_paral(line, event_filters, updater=None):
 
 def load_generic(path, event_filters=None, task_per_cpu=20):
     # count lines first
+    print('Counting file lines...')
     numLines = int(sp.check_output(["wc", "-l", path]).split()[0])
 
     # find optimal chunk size
@@ -88,7 +89,7 @@ def load_generic(path, event_filters=None, task_per_cpu=20):
     path = Path(path)
     # the process
     with path.open() as f, mp.Pool(processes=numCPU) as p,\
-            tqdm(total=numLines) as pb:
+            tqdm(total=numLines, desc='Parsing {}'.format(path.name), unit='lines') as pb:
         def updater(log):
             pb.update()
             return log
@@ -105,7 +106,7 @@ def load_generic(path, event_filters=None, task_per_cpu=20):
 
 def load_mem(path, **kwargs):
     df = load_generic(path, event_filters=['alloc', 'dealloc'], **kwargs)
-    
+
     # sanity check for nullptr in log
     if len(df.query('Ptr == 0')):
         print("There are nullptrs in log, check allocator logging.")
@@ -143,7 +144,7 @@ def load_comp(path, **kwargs):
     df = df.drop(['level', 'loc', 'entry_type', 'thread', 'type'],
                  axis=1, errors='ignore')
     df = df.dropna(how='all', axis=1)
-    
+
     # fix column names
     df = df.rename(columns={'Session': 'Sess'})
 
@@ -157,7 +158,7 @@ def load_all(path):
     comp = load_comp(path/'perf.output')
     return alloc, iters, comp
 
-    
+
 def calc_cumsum(df):
     cs = df.Size * df.Sign
     cs = cs.cumsum()
@@ -173,7 +174,7 @@ def normalize_time(df, offset=None):
     df['timestamp'] = (df.timestamp - offset).dt.total_seconds()
 
     df = df.set_index('timestamp')
-    
+
     return df, offset
 
 
@@ -288,13 +289,13 @@ def plot_comp(df, y=0.2, separateY=True, offset=None, return_offset=False, **kwa
                         index=['StepId', 'GraphId', 'Name',
                                'Type', 'Device', 'MainIter'],
                         columns='evt', aggfunc='first').reset_index()
-    
+
     # find start of GPU compute for each iter, using the first GPU compute in main iter
     # done by sort values and drop duplicates
     xmindf = df.query('MainIter and Device.str.contains("GPU")')
     xmin = xmindf.sort_values('running', ascending=True).drop_duplicates(['StepId'])
     xmin = xmin.sort_values('StepId')
-    
+
     # find end of GPU compute for each iter,
     # using the last _Recv in the same step on CPU
     mainIterSteps = df.query('MainIter').StepId.unique()
@@ -305,13 +306,13 @@ def plot_comp(df, y=0.2, separateY=True, offset=None, return_offset=False, **kwa
     xmax = xmax.sort_values('StepId')
 
     assert len(xmin) == len(xmax)
-    
+
     # prepare args
     ax = kwargs.pop('ax', None)
     if ax is None:
         ax = plt.gca()
     linewidths = kwargs.pop('linewidths', 10)
-    
+
     # set y as in axes coordinate
     def calc_y(row):
         if not separateY:
@@ -324,7 +325,7 @@ def plot_comp(df, y=0.2, separateY=True, offset=None, return_offset=False, **kwa
         return base_y
     y = xmin.apply(calc_y, axis=1)
     trans = ax.get_xaxis_transform(which='grid')
-    
+
     print(f'{y}, {xmin.running}, {xmax.done}')
 
     lc = ax.hlines(y=y, xmin=xmin.running, xmax=xmax.done,
@@ -347,13 +348,13 @@ def plot_comp_old(df, y=0.2, separateY=True, offset=None, return_offset=False, *
                         index=['StepId', 'GraphId', 'Name',
                                'Type', 'Device', 'MainIter'],
                         columns='evt', aggfunc='first').reset_index()
-    
+
     # prepare args
     ax = kwargs.pop('ax', None)
     if ax is None:
         ax = plt.gca()
     linewidths = kwargs.pop('linewidths', 10)
-    
+
     # set y as in axes coordinate
     def calc_y(row):
         if not separateY:
@@ -375,7 +376,7 @@ def plot_comp_old(df, y=0.2, separateY=True, offset=None, return_offset=False, *
     return lc
 
 
-def plot_all(alloc, iters=None, comp=None, offset=None):
+def plot_all(alloc, iters=None, comp=None, offset=None, ax=None, sessColors=None):
     def groupby(df, col):
         if df is None:
             return None
@@ -396,27 +397,32 @@ def plot_all(alloc, iters=None, comp=None, offset=None):
         raise ValueError('Not the same set of sessions')
 
     sesses = galloc.keys()
-    cycle = plt.rcParams['axes.prop_cycle'].by_key()['color']
+    if sessColors is None:
+        cycle = itertools.cycle(plt.rcParams['axes.prop_cycle'].by_key()['color'])
+    else:
+        cycle = [sessColors[sess] for sess in sesses]
+
     iters_y = 0.5
     comp_y = 0.4
-    for sess, color in zip(sesses, itertools.cycle(cycle)):
+    for sess, color in zip(sesses, cycle):
         salloc, offset = normalize_time(galloc[sess], offset)
-        plot_mem(salloc, offset=offset, color=color, label=sess)
-        
+        plot_mem(salloc, offset=offset, color=color, label=sess, ax=ax)
+
         if giters is not None:
             siters, offset = normalize_time(giters[sess], offset)
-            plot_iters(siters, y=iters_y, offset=offset, color=color)
-        
+            plot_iters(siters, y=iters_y, offset=offset, color=color, ax=ax)
+
         if gcomp is not None:
             scomp, offset = normalize_time(gcomp[sess], offset)
-            plot_comp(scomp, y=comp_y, offset=offset, color=color)
-        
+            plot_comp(scomp, y=comp_y, offset=offset, color=color, ax=ax)
+
         iters_y += 0.05
         comp_y += 0.02
-    
+
     print(f"Used offset value: {offset}")
-    
-    ax = plt.gca()
+
+    if ax is None:
+        ax = plt.gca()
     pu.cleanup_axis_timedelta(ax.xaxis)
     ax.xaxis.set_major_locator(pu.MaxNLocator(nbins=30))
     ax.legend()

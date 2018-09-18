@@ -15,7 +15,7 @@ from matplotlib.widgets import Slider
 import matplotlib.gridspec as gridspec
 
 import sys
-if sys.version_info[0] < 3: 
+if sys.version_info[0] < 3:
     from StringIO import StringIO
 else:
     from io import StringIO
@@ -40,14 +40,14 @@ def load_enditermap(path):
     df = df.query('type == "generic_evt" & (evt == "start_iter" | evt == "end_iter")')
     df = df.drop(['level', 'loc', 'entry_type', 'thread', 'type'], axis=1)
     df = df.dropna(how='all', axis=1)
-    
+
     # get only end_iter events for memmory map
     return df[df.evt == 'end_iter']
 
 def parse_mapstr(mapstr):
     """Parse mapstr, which is like:
         0x7f2a76000000, 2211840, 1;0x7f2a7621c000, 8200192, 0;
-    
+
        returns the dataframe and colors
     """
     # split to chunks of different allocator
@@ -60,10 +60,11 @@ def parse_mapstr(mapstr):
         else:
             name = 'default'
             memmap = chunk
-        
+
         # change ';' to '\n' and read directly as csv
         mapcsv = memmap.replace(';', '\n')
-        df = pd.read_csv(StringIO(mapcsv), header=None, names=['Origin', 'Size', 'InUse'])
+        df = pd.read_csv(StringIO(mapcsv), header=None, names=['Origin', 'Size', 'InUse'],
+                         index_col=False)
         df['Name'] = name
 
         # convert each column to proper type
@@ -72,12 +73,12 @@ def parse_mapstr(mapstr):
         df['InUse'] = pd.to_numeric(df.InUse).astype('bool')
         df['End'] = df.Origin + df.Size
         chunkdfs.append(df)
-    
+
     # concat all together
     df = pd.concat(chunkdfs)
     # set colors
     df['Color'] = df.InUse.apply(lambda inuse: 'r' if inuse else 'g')
-    
+
     return df
 
 
@@ -116,9 +117,9 @@ def draw_memmap(mapstr, lc=None, ax=None, **kwargs):
     if lc is None:
         lc = LineCollection([], **args)
         newlc = True
-    
+
     mapdf, lc = draw_on_lc(mapstr, lc)
-    
+
     ax.set_xlim([mapdf.NOrigin.min(), mapdf.NEnd.max()])
 
     if newlc:
@@ -133,15 +134,15 @@ class MemmapViewer(object):
         self.label = label
         if self.label is None:
             self.label = 'id = {index} size = {Size} timestamp = {timestamp}'
-        
+
         self.fig = plt.gcf()
         self.fig.set_size_inches([25, 15], forward=True)
         gs = gridspec.GridSpec(2, 1, height_ratios=[20,1])
-        
-        
+
+
         self._ax = self.fig.add_subplot(gs[0, 0])
         self._ax.set_ylim([-0.2, 0.2])
-        
+
         # create artists
         self._lc = draw_memmap('0x0, 17179869184, 0;', ax=self._ax)
         self._text = self._ax.text(0.5, 0.8, "",
@@ -153,10 +154,10 @@ class MemmapViewer(object):
         self._textalloc = []
 
         pu.cleanup_axis_bytes(self._ax.xaxis)
-        
+
         init_frame = 0
         self._step(init_frame)
-        
+
         # add a slider
         axstep = self.fig.add_subplot(gs[1, 0], facecolor='lightgoldenrodyellow')
         self._stepSlider = Slider(axstep, 'ID', 0, len(df), closedmax=False,
@@ -167,7 +168,7 @@ class MemmapViewer(object):
             self._step(int(val))
             self.fig.canvas.draw_idle()
         self._stepSlider.on_changed(update)
-        
+
         # listen key press
         self.fig.canvas.mpl_connect('key_press_event', lambda evt: self._keydown(evt))
 
@@ -176,25 +177,25 @@ class MemmapViewer(object):
         row = self.df.iloc[i]
         mapdf, _ = draw_on_lc(row.MemMap, self._lc)
         self._text.set_text(self.label.format(index=i, **dict(row.items())))
-        
+
         # draw some lines showing each allocator
         nAlloc = len(mapdf.Name.unique())
         while len(self._textalloc) < nAlloc:
             self._textalloc.append(self._ax.text(0, 0, "",
                                                  ha='center', va='baseline'))
-        
+
         allocSeg = []
         for (name, grp), t in zip(mapdf.groupby('Name'), self._textalloc):
             rgmin, rgmax = grp.NOrigin.min(), grp.NEnd.max()
             yval = -.1
             allocSeg.append([[rgmin, yval], [rgmax, yval]])
-            
+
             t.set_text(name)
             t.set_position([(rgmin+rgmax) / 2, yval * 1.2])
         self._lcalloc.set_segments(allocSeg)
 
         self._ax.set_xlim([mapdf.NOrigin.min(), mapdf.NEnd.max()])
-    
+
     def _keydown(self, evt):
         if evt.key == 'left':
             newval = max(self._stepSlider.val - 1, self._stepSlider.valmin)

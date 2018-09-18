@@ -19,6 +19,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 import plotutils as pu
+import compmem as cm
 
 
 def load_memcsv(path):
@@ -58,6 +59,21 @@ def plot_inferencemem(df, **kwargs):
     return ax
 
 
+def pp(path):
+    path = Path(path)
+    with plt.style.context(['seaborn-paper', 'mypaper']):
+        df = cm.load_mem(path/'alloc.output')
+        ax = cm.plot_mem(df)
+        ax.set_xlabel('Time (s)')
+        ax.set_ylabel('Memory Usage')
+        ax.set_ylim(bottom=0, top=12 * (1024**3))
+        ax.set_xlim(left=5, right=15)
+
+        fig = ax.figure
+        fig.set_size_inches(3.25, 1.5, forward=True)
+        fig.savefig('/tmp/workspace/exp1.pdf', dpi=300, bbox_inches='tight', pad_inches = .015)
+
+
 def prepare_paper(path):
     path = Path(path)
     with plt.style.context(['seaborn-paper', 'mypaper']):
@@ -83,5 +99,5 @@ def prepare_paper(path):
 
 path = '/tmp/workspace'
 # prepare_paper(path)
-df = load_memcsv('/tmp/workspace/mem.csv')
-plot_inferencemem(df)
+#df = load_memcsv('/tmp/workspace/mem.csv')
+#plot_inferencemem(df)

@@ -36,12 +36,25 @@ SessionAllocator::SessionAllocator(const std::string &sess, sstl::not_null<tf::A
 
 SessionAllocator::~SessionAllocator() = default;
 
+namespace {
+std::string maybeMemmap(tf::Allocator *alloc)
+{
+    if (alloc->Name().find("dbfc") != std::string::npos) {
+        if (auto dbfc = dynamic_cast<tf::GPUDoubleBFCAllocator*>(alloc)) {
+            return dbfc->GenerateMemoryMap();
+        }
+    }
+    return {};
+}
+} // namespace
+
 void SessionAllocator::postAllocation(void *ptr, size_t alignment, size_t num_bytes,
                                       const tf::AllocationAttributes &)
 {
     if (!ptr) {
         return;
     }
+    UNUSED(maybeMemmap);
     LogAlloc() << "event: alloc "
                << nlohmann::json({
                       {"ptr", reinterpret_cast<uint64_t>(ptr)},
@@ -49,6 +62,7 @@ void SessionAllocator::postAllocation(void *ptr, size_t alignment, size_t num_by
                       {"size", num_bytes},
                       {"alignment", alignment},
                       {"allocator", Name()},
+//                      {"memmap", maybeMemmap(base())},
                   });
 }
 
@@ -60,6 +74,7 @@ void SessionAllocator::preDeallocation(void *ptr)
                       {"sess", m_sessHandle},
                       {"size", RequestedSize(ptr)},
                       {"allocator", Name()},
+//                      {"memmap", maybeMemmap(base())},
                   });
 }
 

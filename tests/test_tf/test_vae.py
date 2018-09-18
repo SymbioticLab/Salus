@@ -115,9 +115,9 @@ class TestVae(unittest.TestCase):
             }
         else:
             memusages = {
-                64: (5 * MB, 21 * MB),
-                128: (7 * MB, 22 * MB),
-                256: (15 * MB, 23 * MB),
+                64: (10 * MB, 21 * MB),
+                128: (10 * MB, 22 * MB),
+                256: (20 * MB, 23 * MB),
             }
 
         config = tf.ConfigProto()

@@ -116,8 +116,14 @@ void TFInstance::handleCreateSession(std::unique_ptr<tf::CreateSessionRequest> &
     size_t persistant = 0;
     auto &m = req->config().salus_options().resource_map();
     persistant = static_cast<size_t>(std::round(sstl::getOrDefault(m.persistant(), rt, 0.0)));
+    // HACK: scale up 10% to mitigate OOM and fragmentation
+    persistant = static_cast<size_t>(persistant * 1.1);
     limit += persistant;
     limit += static_cast<size_t>(std::round(sstl::getOrDefault(m.temporary(), rt, 0.0)));
+
+    // HACK: Double the persistant and add to to temporary, just to be safe
+    limit = static_cast<size_t>(limit * 1.05); // and even more 10%
+    limit = std::min(limit, 16320875724_sz); // cap to max value
 
     if (limit == 0) {
         limit = 14_sz * 1024_sz * 1024_sz * 1024_sz;

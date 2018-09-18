@@ -281,6 +281,18 @@ def plot_lanes(refined_df, **kwargs):
     plt.stackplot(x, *ys)
 
 
+def plot_jcts(df, fifo, **kwargs):
+    ax = pu.cdf(df.JCT.dt.total_seconds(), label='SRTF')
+    ax = pu.cdf(fifo.JCT.dt.total_seconds(), label='FIFO', ax=ax)
+
+    ax.set_xlabel('JCT (s)')
+    ax.set_ylabel('CDF')
+
+    ax.legend()
+
+    return ax
+
+
 path = '/tmp/workspace'
 def prepare_paper(path):
     with plt.style.context(['seaborn-paper', 'mypaper']):
@@ -288,7 +300,6 @@ def prepare_paper(path):
         df = load_case(path/'card266.output')
         fifo = load_trace(path/'trace.csv')
 
-        # FIXME: refine doesn't work yet
         refine_data = load_refine(path)
 
         sevts = load_serverevents(path)

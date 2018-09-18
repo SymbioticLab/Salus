@@ -243,6 +243,25 @@ def parse_output_float(outputfile, pattern, group=1):
     raise ValueError(f"Pattern `{pattern}' not found in output file {outputfile}")
 
 
+def case_switch_main(fn):
+    """Turn a function returning a list of functions in to a main function that accepts names to choose the name"""
+    cases = fn()
+    if len(cases) == 0:
+        return lambda argv: None
+
+    dispatch = {
+        f.__name__: f
+        for f in cases
+    }
+    default = cases[0].__name__
+
+    def main(argv):
+        command = argv[0] if argv else default
+        return dispatch[command](argv[1:])
+
+    return main
+
+
 def update_jct(workload, update_global=False):
     # type: (Workload, bool) -> None
     """Parse and update JCT value of a completed workload"""

@@ -191,7 +191,10 @@ class SalusServer(object):
                     if f.stat().st_size == 0:
                         f.unlink()
                     else:
-                        shutil.move(str(f), str(self.config.output_dir))
+                        target = self.config.output_dir/f.name
+                        if target.exists():
+                            target.unlink()
+                        shutil.move(str(f), str(target))
 
     _current = deque()  # type: Deque[SalusServer]
 
