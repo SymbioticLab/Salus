@@ -20,7 +20,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import plotutils as pu
 
-    
+
 def parse_output_float(outputfile, pattern, group=1):
     """Parse outputfile using pattern"""
     if not outputfile.exists():
@@ -38,13 +38,13 @@ def parse_output_float(outputfile, pattern, group=1):
                 except (ValueError, IndexError):
                     continue
     raise ValueError(f"Pattern `{pattern}' not found in output file {outputfile}")
-    
+
 def parse_jct(outputfile):
     return parse_output_float(outputfile, r'^JCT: ([0-9.]+) .*')
 
 def load_exp62(path):
     path = Path(path)
-    
+
     data = pd.DataFrame(columns=['Average JCT', 'Makespan'])
     # load FIFO
     fifo_jct = parse_jct(next((path/'tf').iterdir()))
@@ -55,19 +55,19 @@ def load_exp62(path):
     for f in (path/'tf-nomps').iterdir():
         sp_jcts.append(parse_jct(f))
     data.loc['SP'] = [np.mean(sp_jcts), np.max(sp_jcts)]
-    
+
     # load MPS
     mps_jcts = []
     for f in (path/'tf-mps').iterdir():
         mps_jcts.append(parse_jct(f))
     data.loc['SP+MPS'] = [np.mean(mps_jcts), np.max(mps_jcts)]
-    
+
     # load MPS+OC
     mpsoc_jcts = []
     for f in (path/'tf-mps-oc').iterdir():
         mpsoc_jcts.append(parse_jct(f))
     data.loc['SP+MPS+OC'] = [np.mean(mpsoc_jcts), np.max(mpsoc_jcts)]
-    
+
     # load Salus
     salus_jcts = []
     for f in (path/'salus/2').iterdir():
@@ -76,29 +76,33 @@ def load_exp62(path):
     return data
 
 #%%
-path = 'logs/osdi18/cc/exp6_2'
+path = 'logs/nsdi19/exp6_2'
 
 data = load_exp62(path)
 
-plt.style.use(['seaborn-paper', 'mypaper'])
+data = data[['Average JCT']]
 
-ax = data.plot.bar()
-fig = ax.figure
+with plt.style.context(['seaborn-paper', 'mypaper', 'gray']):
 
-ax.tick_params(axis='x', labelsize=7, rotation=0)
-ax.set_ylim(0, 150)
-#ax.set_xlabel('')
-ax.set_ylabel('Time (s)')
-ax.legend(loc='upper left', bbox_to_anchor=(0, 1.1),)
-ax.annotate('{:.2f}'.format(data.loc['SP+MPS+OC']['Average JCT']),
-            xy=[data.index.get_loc('SP+MPS+OC') - 0.1, 145], size=7,
-            horizontalalignment='right', verticalalignment='top')
-ax.annotate('{:.2f}'.format(data.loc['SP+MPS+OC']['Makespan']),
-            xy=[data.index.get_loc('SP+MPS+OC') + 0.1, 145], size=7,
-            horizontalalignment='left', verticalalignment='top')
+    ax = data.plot.bar(hatch='////', color='w', edgecolor='k')
+    fig = ax.figure
 
-fig.set_size_inches(3.45, 1.75, forward=True)
-fig.tight_layout()
-#fig.subplots_adjust(hspace=0.1)
-fig.savefig('/tmp/workspace/exp62.pdf', dpi=300)
-#plt.close()
+    ax.tick_params(axis='x', labelsize=7, rotation=0)
+    ax.set_ylim(0, 150)
+    #ax.set_xlabel('')
+    ax.set_ylabel('Time (s)')
+    ax.legend(loc='upper left', bbox_to_anchor=(0, 1.1),)
+    ax.annotate('{:.2f}'.format(data.loc['SP+MPS+OC']['Average JCT']),
+                xy=[data.index.get_loc('SP+MPS+OC'), 150],
+                xytext=[0, 7], textcoords='offset points',
+                size=7,
+                horizontalalignment='center', verticalalignment='top')
+    #ax.annotate('{:.2f}'.format(data.loc['SP+MPS+OC']['Makespan']),
+    #            xy=[data.index.get_loc('SP+MPS+OC') + 0.1, 145], size=7,
+    #            horizontalalignment='left', verticalalignment='top')
+
+    fig.set_size_inches(3.45, 1.25, forward=True)
+    fig.tight_layout()
+    #fig.subplots_adjust(hspace=0.1)
+    fig.savefig('/tmp/workspace/exp62.pdf', dpi=300)
+    plt.close()

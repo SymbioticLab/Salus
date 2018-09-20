@@ -193,7 +193,8 @@ def refine_time_events(df, sevts):
     return df.reset_index()
 
 
-def plot_timeline(df, colors=None, returnSessColors=False, offset=None, **kwargs):
+def plot_timeline(df, props=None, returnSessProps=False, offset=None,
+                  new_jnos=None, plot_offset=None, **kwargs):
     ax = kwargs.pop('ax', None)
     if ax is None:
         ax = plt.gca()
@@ -208,40 +209,41 @@ def plot_timeline(df, colors=None, returnSessColors=False, offset=None, **kwargs
     xmin = (df.Started - offset) / pd.Timedelta(1, unit='s')
     xmax = (df.Finished - offset) / pd.Timedelta(1, unit='s')
 
-    if colors is None:
+    if props is None:
         color_cycle = ax._get_lines.prop_cycler
-        colors = [next(color_cycle)['color'] for _ in qmin]
+        props = [next(color_cycle) for _ in qmin]
     else:
-        colors = itertools.cycle(colors)
+        props = itertools.cycle(props)
 
     sessColors = {}
-
-    for (_, row), q, left, right, color in zip(df.iterrows(), qmin, xmin, xmax, colors):
+    if plot_offset is None:
+        plot_offset = 0
+    for (_, row), q, left, right, prop in zip(df.iterrows(), qmin, xmin, xmax, props):
         barheight = 0.8
+        no = row.No if new_jnos is None else new_jnos[row.No]
         # queuing time
-        ax.barh(row.No, left - q, barheight, q, color='#b6b6b6')
+        ax.barh(no, left - q, barheight, q + plot_offset, color='#b6b6b6')
         # run time
-        bar = ax.barh(row.No, right - left, barheight, left,
-                      color=color,
-                      label='#{3}: {0}'.format(*row.Model.split('.')))
+        bar = ax.barh(no, right - left, barheight, left + plot_offset,
+                      label='#{3}: {0}'.format(*row.Model.split('.')), **prop)
         if 'LaneId' in row:
-            ax.text(right + 2, row.No, f'Lane {row.LaneId}',
+            ax.text(right + 2 + plot_offset, no, f'Lane {row.LaneId}',
                     ha='left', va='center', fontsize=3)
-        if returnSessColors:
-            sessColors[row.Sess] = color
+        if returnSessProps:
+            sessColors[row.Sess] = prop
 
     # ax.legend()
     ax.set_xlabel('Time (s)')
     # ax.set_ylabel('Workload')
     ax.yaxis.set_ticks([])
 
-    if returnSessColors:
-        return bar, colors, sessColors
+    if returnSessProps:
+        return bar, props, sessColors
     else:
-        return bar, colors
+        return bar, props
 
 
-def plot_refine(ax, df, refine_data, offset=None):
+def plot_refine(ax, df, refine_data, offset=None, new_jnos=None, plot_offset=None):
     # so that we can access job using no
     df = df.set_index('No')
 
@@ -255,6 +257,8 @@ def plot_refine(ax, df, refine_data, offset=None):
     df['Finished'] = (df.Finished - offset) / pd.Timedelta(1, unit='s')
 
     bars = []
+    if plot_offset is None:
+        plot_offset = 0
     # group refine_data by laneId
     for laneId, grp in refine_data.groupby('LaneId'):
         magic = grp.iterrows()
@@ -282,6 +286,7 @@ def plot_refine(ax, df, refine_data, offset=None):
                     color = '#ffffff'
                     edgecolor = '#ffffff'
                 # mask from left to right
-                bars.append(ax.barh(no, r - l, width, l, color=color, edgecolor=edgecolor))
+                plot_no = no if new_jnos is None else new_jnos[no]
+                bars.append(ax.barh(plot_no, r - l, width, l + plot_offset, color=color, edgecolor=edgecolor))
     return bars
 

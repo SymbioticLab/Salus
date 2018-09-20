@@ -20,6 +20,7 @@ import pandas as pd
 #import seaborn as sns
 import numpy as np
 import matplotlib.pyplot as plt
+import matplotlib as mpl
 
 import plotutils as pu
 import compmem as cm
@@ -98,6 +99,11 @@ def plot_makespan(df, **kwargs):
     #df.dt.total_seconds
 
     df.plot.bar(ax=ax, **kwargs)
+    # draw directly using prop cycler
+    #cycler = ax._get_lines.prop_cycler
+    #for col, prop in zip(df.columns, cycler):
+    #    prop.update(kwargs)
+    #    ax.bar(df[col].index, df[col], label=col, **prop)
 
     ax.set_ylabel('Makespan (min)')
     ax.legend()
@@ -105,10 +111,10 @@ def plot_makespan(df, **kwargs):
     return ax
 
 
-path = '/tmp/workspace'
+path = 'logs/nsdi19'
 def prepare_paper(path):
     path = Path(path)
-    with plt.style.context(['seaborn-paper', 'mypaper']):
+    with plt.style.context(['seaborn-paper', 'mypaper', 'color3']):
         # fifo = ju.load_trace(path/'card266'/'salus'/'trace.csv')
         df = load_data(path/'card271')
 
@@ -116,7 +122,7 @@ def prepare_paper(path):
         fig.set_size_inches(3.25, 1.85, forward=True)
 
         # set col order
-        df = df[['Network', 'TF', 'Salus']]
+        df = df[['Network', 'Salus', 'TF']]
 
         ax = plot_makespan(df, ax=ax)
 
@@ -125,5 +131,5 @@ def prepare_paper(path):
 
         fig.tight_layout()
         fig.savefig('/tmp/workspace/card271.pdf', dpi=300)
-
+        plt.close()
     return df

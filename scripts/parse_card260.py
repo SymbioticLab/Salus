@@ -52,19 +52,23 @@ def load_data(path):
 
     df = df.reset_index()
 
+    # only draw one batch size: the largest one
+    df['Model'], df['BatchSize'] = df.Network.str.split('_').str
+    df.BatchSize.replace({'small': 1, 'medium': 5, 'large': 10}, inplace=True)
+    df['BatchSize'] = pd.to_numeric(df.BatchSize.replace({'small': 1, 'medium': 5, 'large': 10}))
+    # df = df[df.BatchSize == 1]
+    # df = df.reset_index().loc[df.reset_index().groupby(['Model'])['BatchSize'].idxmax()]
+    df = df.drop(['BatchSize', 'Network'], axis=1)
+    df = df.rename(columns={'Model': 'Network'})
+
+    # sort values
+    df = df.sort_values('Network', ascending=False)
+
     return df
 
 
 def plot_eval_pit_vs_speed(df, **kwargs):
     df = df.query('Network.str.contains("eval")').copy()
-
-    # sort
-    #df['Model'] = df.Network.str.split('_')[0]
-    #df['Batch Size'] = pd.to_numeric(df.Network.str.split('_')[1])
-    df['Model'], df['Batch Size'] = df.Network.str.split('_').str
-    df['Batch Size'] = pd.to_numeric(df['Batch Size'])
-    df = df.sort_values(by=['Model', 'Batch Size'], ascending=[True, False])
-    df = df.drop(['Model', 'Batch Size'], axis=1)
 
     df = df.set_index('Network')
 
@@ -74,17 +78,38 @@ def plot_eval_pit_vs_speed(df, **kwargs):
     return ax
 
 
-path = '/tmp/workspace'
+def plot_ratio(df, **kwargs):
+    df = df[df.Network.str.contains("eval")].set_index('Network')
+
+    ratio = df.TransferTime / df['20iter-avg']
+
+    ax = pu.cdf(ratio, **kwargs)
+
+    #ax.axvline(1)
+
+    ax.set_xlabel('Transfer Time to Inference Latency Ratio')
+
+    return ax
+
+try:
+    path
+except NameError:
+    path = '/tmp/workspace'
+
 def prepare_paper(path):
-    with plt.style.context(['seaborn-paper', 'mypaper']):
+    with plt.style.context(['seaborn-paper', 'mypaper', 'gray']):
         df = load_data(path)
 
         fig, ax = plt.subplots()
-        fig.set_size_inches(3.25, 4, forward=True)
+        fig.set_size_inches(3.25, 1.5, forward=True)
 
-        plot_eval_pit_vs_speed(df, ax=ax)
-        ax.set_xlabel('Time (s)')
-        ax.yaxis.label.set_size(8)
+        #plot_eval_pit_vs_speed(df, ax=ax)
+        #ax.set_xlabel('Time (s)')
+        #ax.yaxis.label.set_size(8)
+
+        plot_ratio(df, ax=ax)
+        ax.set_ylabel('CDF')
 
         fig.tight_layout()
-        fig.savefig('/tmp/workspace/card260.pdf', dpi=300, bbox_inches='tight', pad_inches = .005)
+        fig.savefig('/tmp/workspace/card260.pdf', dpi=300, bbox_inches='tight', pad_inches = .015)
+        plt.close()

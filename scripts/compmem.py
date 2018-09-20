@@ -376,7 +376,7 @@ def plot_comp_old(df, y=0.2, separateY=True, offset=None, return_offset=False, *
     return lc
 
 
-def plot_all(alloc, iters=None, comp=None, offset=None, ax=None, sessColors=None):
+def plot_all(alloc, iters=None, comp=None, offset=None, ax=None, sessProps=None):
     def groupby(df, col):
         if df is None:
             return None
@@ -397,24 +397,24 @@ def plot_all(alloc, iters=None, comp=None, offset=None, ax=None, sessColors=None
         raise ValueError('Not the same set of sessions')
 
     sesses = galloc.keys()
-    if sessColors is None:
-        cycle = itertools.cycle(plt.rcParams['axes.prop_cycle'].by_key()['color'])
+    if sessProps is None:
+        cycle = ax._get_lines.prop_cycler
     else:
-        cycle = [sessColors[sess] for sess in sesses]
+        cycle = [sessProps[sess] for sess in sesses]
 
     iters_y = 0.5
     comp_y = 0.4
-    for sess, color in zip(sesses, cycle):
+    for sess, prop in zip(sesses, cycle):
         salloc, offset = normalize_time(galloc[sess], offset)
-        plot_mem(salloc, offset=offset, color=color, label=sess, ax=ax)
+        plot_mem(salloc, offset=offset, label=sess, ax=ax, **prop)
 
         if giters is not None:
             siters, offset = normalize_time(giters[sess], offset)
-            plot_iters(siters, y=iters_y, offset=offset, color=color, ax=ax)
+            plot_iters(siters, y=iters_y, offset=offset, ax=ax, **prop)
 
         if gcomp is not None:
             scomp, offset = normalize_time(gcomp[sess], offset)
-            plot_comp(scomp, y=comp_y, offset=offset, color=color, ax=ax)
+            plot_comp(scomp, y=comp_y, offset=offset, ax=ax, **prop)
 
         iters_y += 0.05
         comp_y += 0.02

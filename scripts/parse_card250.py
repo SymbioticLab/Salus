@@ -110,7 +110,7 @@ def plot_speeds(df, **kwargs):
     return ax
 
 
-path = '/tmp/workspace'
+path = 'logs/nsdi19'
 def prepare_paper(path):
     path = Path(path)
     df = load_speeds(path/'card250'/'case1')
@@ -131,11 +131,11 @@ def prepare_paper(path):
     smoothed = smoothed.query('index >= @tmin and index <= @tmax')
     df.loc[smoothed.index, others] = smoothed
 
-    with plt.style.context(['seaborn-paper', 'mypaper']):
+    with plt.style.context(['seaborn-paper', 'mypaper', 'color3']):
         fig, ax = plt.subplots()
         plot_speeds(df, ax=ax)
 
         fig.tight_layout()
         fig.set_size_inches(3.25, 2.35, forward=True)
         fig.savefig('/tmp/workspace/card250.pdf', dpi=300)
-
+        plt.close()

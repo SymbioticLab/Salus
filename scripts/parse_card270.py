@@ -21,6 +21,7 @@ import pandas as pd
 #import seaborn as sns
 import numpy as np
 import matplotlib.pyplot as plt
+from matplotlib import cycler
 
 import plotutils as pu
 import compmem as cm
@@ -54,10 +55,12 @@ def load_jcts(path):
     df = pd.DataFrame(data)
 
     # drop mnist
-    df = df.query('not index.str.contains("mnist")')
+    df = df[~df.index.str.contains("mnist")]
+    #df = df.query('not index.str.contains("mnist")')
 
     # only keep eval with bs=1
-    df = df.query('index.str.contains("eval") and index.str.endswith("_1")')
+    #df = df.query('index.str.contains("eval") and index.str.endswith("_1")')
+    df = df[df.index.str.contains("eval") & df.index.str.endswith("_1")]
 
     return df
 
@@ -100,7 +103,7 @@ def plot_latency(df, **kwargs):
     return ax
 
 
-path = '/tmp/workspace'
+path = 'logs/nsdi19'
 def prepare_paper(path):
     path = Path(path)
 
@@ -111,15 +114,20 @@ def prepare_paper(path):
     # Drop anything without exp data
     df = df.assign(Salus=exp).dropna()
 
-    # TODO: fix deep speech
-    df = df.query('not index.str.contains("speech")')
+    # TODO: fix deep speech, which runs even faster than TF
+    #df = df.query('not index.str.contains("speech")')
+    df = df[~df.index.str.contains("speech")]
 
     with plt.style.context(['seaborn-paper', 'mypaper']):
-        fig, axs = plt.subplots(ncols=2, gridspec_kw={'width_ratios':[3, 1]})
-        fig.set_size_inches(3.25, 1.85, forward=True)
+
+        # override color cycle
+        plt.rc('axes', prop_cycle=cycler('color', ['ed7d31', '000000', '8cb5df', 'dcedd0']))
+
+        fig, axs = plt.subplots(ncols=2, gridspec_kw={'width_ratios':[4, 1]})
+        fig.set_size_inches(6.5, 1.85, forward=True)
 
         # set plot bar order
-        order = ['TF', 'MPS', 'Salus']
+        order = ['Salus','TF', 'MPS']
         df = df[order]
 
         ax = plot_latency(df, ax=axs[0])
@@ -130,10 +138,11 @@ def prepare_paper(path):
         # we ran 42 jobs, 3 of each (without speech, which is wierd)
         # so 42 for TF
         ut = pd.DataFrame([42, 6, 1], index=order)
-        ax = ut.plot.bar(ax=axs[1])
+        ax = ut.plot.bar(ax=axs[1], color='w', edgecolor='k', hatch='////', linewidth=1)
         #ax.tick_params(axis='x', labelrotation=0)
         ax.legend().remove()
         ax.set_ylabel('# of GPUs needed')
 
         fig.tight_layout()
         fig.savefig('/tmp/workspace/card270.pdf', dpi=300, bbox_inches='tight', pad_inches = .005)
+        plt.close()

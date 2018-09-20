@@ -1338,16 +1338,14 @@ void ExecutorState::runAsync(std::shared_ptr<IterationContext> &&ictx) noexcept
     ictx_ = std::move(ictx);
     ictx_->setGraphId(impl_->graph_id_);
 
-    if (vlog_) {
-        LogOpTracing() << "event: start_iter "
-                       << nlohmann::json({
-                              {"sess", impl_->params_.session},
-                              {"stepId", step_id_},
-                              {"mainIter", impl_->is_main_iter},
-                              {"graphId", impl_->graph_id_},
-                              {"device", impl_->params_.device->name()},
-                          });
-    }
+    LogAlloc() << "event: start_iter "
+               << nlohmann::json({
+                      {"sess", impl_->params_.session},
+                      {"stepId", step_id_},
+                      {"mainIter", impl_->is_main_iter},
+                      {"graphId", impl_->graph_id_},
+                      {"device", impl_->params_.device->name()},
+                  });
 
     const tf::Graph *graph = impl_->graph_.get();
     TaggedNodeSeq ready;
@@ -2055,16 +2053,14 @@ void ExecutorState::Finish()
         status = impl_->params_.device->Sync();
     }
 
-    if (vlog_) {
-        LogOpTracing() << "event: end_iter "
-                       << nlohmann::json({{"sess", impl_->params_.session},
-                                          {"graphId", impl_->graph_id_},
-                                          {"stepId", step_id_},
-                                          {"mainIter", impl_->is_main_iter},
-                                          {"device", impl_->params_.device->name()},
-                                          {"memMap", TFInstance::instance().maybeDumpGPUMemoryMap(impl_->params_.device)},
-                       });
-    }
+    LogAlloc() << "event: end_iter "
+               << nlohmann::json({{"sess", impl_->params_.session},
+                                  {"graphId", impl_->graph_id_},
+                                  {"stepId", step_id_},
+                                  {"mainIter", impl_->is_main_iter},
+                                  {"device", impl_->params_.device->name()},
+//                                  {"memMap", TFInstance::instance().maybeDumpGPUMemoryMap(impl_->params_.device)},
+               });
     if (impl_->is_main_iter) {
         impl_->params_.ins->dropExlusiveMode();
         ictx_->finish();

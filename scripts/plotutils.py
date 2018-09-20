@@ -202,7 +202,7 @@ class BytesLocator(Locator):
         return mtransforms.nonsingular(vmin, vmax)
 
 
-def cleanup_axis_bytes(axis, maxN=10, minorN=2):
+def cleanup_axis_bytes(axis, maxN=10, minorN=2, format='%(value).1f %(symbol)s'):
     # axis.set_major_locator(MaxNLocator(steps=[1, 2, 4, 6, 8, 10]))
     #dmin, dmax = axis.get_data_interval()
     #interval = dmax - dmin
@@ -219,7 +219,7 @@ def cleanup_axis_bytes(axis, maxN=10, minorN=2):
 
     axis.set_major_locator(locator)
     axis.set_minor_locator(AutoMinorLocator(minorN))
-    axis.set_major_formatter(FuncFormatter(lambda x, pos: bytes2human(x)))
+    axis.set_major_formatter(FuncFormatter(lambda x, pos: bytes2human(x, format=format)))
     return axis
 
 

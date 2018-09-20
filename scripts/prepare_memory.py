@@ -24,12 +24,14 @@ import compmem as cm
 
 def load_memcsv(path):
     df = pd.read_csv(path)
-    df = df.query('not Network.str.contains("mnist")')
+    df = df[~df.Network.str.contains("mnist")]
+    # df = df.query('not Network.str.contains("mnist")')
     return df
 
 
 def plot_mem(df, **kwargs):
-    df = df.query('not Network.str.contains("eval")')
+    df = df[~df.Network.str.contains("eval")]
+    # df = df.query('not Network.str.contains("eval")')
     df = df.set_index('Network')
     df = df / 1024
     df['Peak'] = df['Peak Mem (MB)']
@@ -38,7 +40,7 @@ def plot_mem(df, **kwargs):
     return ax
 
 def plot_inferencemem(df, **kwargs):
-    df = df.query('Network.str.contains("eval")').copy()
+    df = df[df.Network.str.contains("eval")].copy()
 
     # sort
     #df['Model'] = df.Network.str.split('_')[0]
@@ -59,27 +61,22 @@ def plot_inferencemem(df, **kwargs):
     return ax
 
 
-def pp(path):
-    path = Path(path)
-    with plt.style.context(['seaborn-paper', 'mypaper']):
-        df = cm.load_mem(path/'alloc.output')
-        ax = cm.plot_mem(df)
-        ax.set_xlabel('Time (s)')
-        ax.set_ylabel('Memory Usage')
-        ax.set_ylim(bottom=0, top=12 * (1024**3))
-        ax.set_xlim(left=5, right=15)
-
-        fig = ax.figure
-        fig.set_size_inches(3.25, 1.5, forward=True)
-        fig.savefig('/tmp/workspace/exp1.pdf', dpi=300, bbox_inches='tight', pad_inches = .015)
-
-
 def prepare_paper(path):
     path = Path(path)
-    with plt.style.context(['seaborn-paper', 'mypaper']):
+    with plt.style.context(['seaborn-paper', 'mypaper', 'color3']):
         df = load_memcsv(path/'mem.csv')
 
-        # draw larger ones first
+        # only draw one batch size: the largest one
+        df['Model'], df['BatchSize'] = df.Network.str.split('_').str
+        df.BatchSize.replace({'small': 1, 'medium': 5, 'large': 10}, inplace=True)
+        df['BatchSize'] = pd.to_numeric(df.BatchSize)
+        df = df.reset_index().loc[df.reset_index().groupby(['Model'])['BatchSize'].idxmax()]
+        df = df.drop(['index', 'BatchSize', 'Network'], axis=1)
+        df = df.rename(columns={'Model': 'Network'})
+
+        # sort values
+        df = df.sort_values('Network', ascending=False)
+
         ax = plot_mem(df)
         ax.set_xlabel('Memory Usage (GB)')
         ax.set_ylabel('')
@@ -93,11 +90,28 @@ def prepare_paper(path):
         #fig.subplots_adjust(top=1, bottom=0, left=0, right=1)
 
         fig = ax.figure
-        fig.set_size_inches(3.25, 4.5, forward=True)
-        fig.savefig('/tmp/workspace/mem.pdf', dpi=300, bbox_inches='tight', pad_inches = .005)
-        # plt.close()
+        fig.set_size_inches(3.25, 2.5, forward=True)
+        fig.savefig('/tmp/workspace/mem.pdf', dpi=300, bbox_inches='tight', pad_inches = .015)
+        plt.close()
 
-path = '/tmp/workspace'
+    with plt.style.context(['seaborn-paper', 'mypaper', 'gray']):
+        # a single mem
+        df = cm.load_mem(path/'exp1'/'alloc.output')
+        ax = cm.plot_mem(df)
+        ax.set_xlabel('Time (s)')
+        ax.set_ylabel('Memory Usage')
+        ax.set_ylim(bottom=0, top=12 * (1024**3))
+        ax.set_xlim(left=5, right=15)
+
+        fig = ax.figure
+        fig.set_size_inches(3.25, 1.5, forward=True)
+        fig.savefig('/tmp/workspace/exp1.pdf', dpi=300, bbox_inches='tight', pad_inches = .015)
+        plt.close()
+
+try:
+    path
+except NameError:
+    path = 'logs/nsdi19'
 # prepare_paper(path)
 #df = load_memcsv('/tmp/workspace/mem.csv')
 #plot_inferencemem(df)

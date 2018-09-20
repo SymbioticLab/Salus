@@ -40,10 +40,24 @@ pits = pd.DataFrame({
 })
 
 pits = pits[~pits.index.str.startswith('mnist')]
+#%%
 
-with plt.style.context(['seaborn-paper', 'mypaper']):
+# only training
+pits = pits[~pits.index.str.contains('eval')]
+
+# only one batch size
+# only draw one batch size: the largest one
+pits = pits.reset_index()
+pits['Model'], pits['BatchSize'] = pits.Network.str.split('_').str
+pits.BatchSize.replace({'small': 1, 'medium': 5, 'large': 10}, inplace=True)
+pits['BatchSize'] = pd.to_numeric(pits.BatchSize)
+pits = pits.reset_index().loc[pits.reset_index().groupby(['Model'])['BatchSize'].idxmax()]
+pits = pits.drop(['index', 'BatchSize', 'Network'], axis=1)
+pits = pits.rename(columns={'Model': 'Network'}).set_index('Network')
+
+with plt.style.context(['seaborn-paper', 'mypaper', 'color3']):
     ax = pits.plot.bar(legend=None)
-    pu.axhlines(1.0, ax=ax, color='r', linestyle='--', linewidth=.5)
+    pu.axhlines(1.0, ax=ax, color='k', linestyle='--', linewidth=1)
 
     ax.set_ylim(0.9, 2)
     ax.set_xlabel('Workloads')
@@ -52,7 +66,7 @@ with plt.style.context(['seaborn-paper', 'mypaper']):
 
     ax.tick_params(axis='x', labelsize=7)
 
-    ax.figure.set_size_inches(4.7, 2.35, forward=True)
+    ax.figure.set_size_inches(3.25, 2.35, forward=True)
     ax.figure.tight_layout()
-    ax.figure.savefig('/tmp/workspace/exp17.pdf', dpi=300)
-    #plt.close()
+    ax.figure.savefig('/tmp/workspace/exp17.pdf', dpi=300, bbox_inches='tight', pad_inches = .015)
+    plt.close()

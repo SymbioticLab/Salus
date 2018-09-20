@@ -411,7 +411,7 @@ def main():
     axs = plot_df_persess(df, fill=True, sessaxs=axs)
 
 #%% Size CDF
-    path = Path('/tmp/workspace/plotrun/resnet50_50')
+    path = Path('logs/nsdi19/mem/tf/inception3_50')
     mempath = str(path/'alloc.output')
     iterpath = str(next(path.glob('*.salus.*.output')))
     df = load_mem(mempath)

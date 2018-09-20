@@ -55,31 +55,18 @@ def plot_jcts(df, **kwargs):
 
     return ax
 
-def plot_memory(df, **kwargs):
-    pass
-
-
-path = '/opt/desktop'
-def prepare_paper(path):
+def do_timelines(path):
     path = Path(path)
-    with plt.style.context(['seaborn-paper', 'mypaper']):
+    # fifo = ju.load_trace(path/'card266'/'salus'/'trace.csv')
+    fifo = load_data(path/'card272'/'case0'/'fifo', 'case0.output')
 
-        # fifo = ju.load_trace(path/'card266'/'salus'/'trace.csv')
-        fifo = load_data(path/'card272'/'case0'/'fifo', 'case0.output')
+    srtf = load_data(path/'card266'/'salus', 'card266.output')
+    srtf_refine = ju.load_refine(path/'card266'/'salus')
 
-        srtf = load_data(path/'card266'/'salus', 'card266.output')
-        srtf_refine = ju.load_refine(path/'card266'/'salus')
+    fair = load_data(path/'card272'/'case2'/'salus', 'case2.output')
+    pack = load_data(path/'card272'/'case1'/'salus', 'case1.output')
 
-        fair = load_data(path/'card272'/'case2'/'salus', 'case2.output')
-        pack = load_data(path/'card272'/'case1'/'salus', 'case1.output')
-
-        fig, ax = plt.subplots()
-        fig.set_size_inches(3.25, 1.85, forward=True)
-        jcts = pd.DataFrame({'FIFO': fifo.JCT, 'SRTF': srtf.JCT, 'PACK': pack.JCT, 'FAIR': fair.JCT})
-        plot_jcts(jcts, ax=ax)
-        fig.tight_layout()
-        fig.savefig('/tmp/workspace/card266-jct.pdf', dpi=300)
-
+    with plt.style.context(['seaborn-paper', 'mypaper', 'color4']):
         fig, axs = plt.subplots(nrows=4, sharex=True)
         fig.set_size_inches(3.25, 5.35, forward=True)
         _, colors = ju.plot_timeline(fifo, ax=axs[0], linewidth=2.5)
@@ -107,5 +94,29 @@ def prepare_paper(path):
         #              )
 
         fig.tight_layout()
-        fig.savefig('/tmp/workspace/card266.pdf', dpi=300)
+        fig.savefig('/tmp/workspace/card272.pdf', dpi=300)
+
+
+path = 'logs/nsdi19'
+def prepare_paper(path):
+    path = Path(path)
+    with plt.style.context(['seaborn-paper', 'mypaper', 'color4']):
+
+        # fifo = ju.load_trace(path/'card266'/'salus'/'trace.csv')
+        fifo = load_data(path/'card272'/'case0'/'fifo', 'case0.output')
+
+        srtf = load_data(path/'card266'/'salus', 'card266.output')
+        srtf_refine = ju.load_refine(path/'card266'/'salus')
+
+        fair = load_data(path/'card272'/'case2'/'salus', 'case2.output')
+        pack = load_data(path/'card272'/'case1'/'salus', 'case1.output')
+
+        fig, ax = plt.subplots()
+        fig.set_size_inches(3.25, 1.85, forward=True)
+        jcts = pd.DataFrame({'FIFO': fifo.JCT, 'SRTF': srtf.JCT, 'PACK': pack.JCT, 'FAIR': fair.JCT})
+        plot_jcts(jcts, ax=ax)
+        fig.tight_layout()
+        fig.savefig('/tmp/workspace/card272-jct.pdf', dpi=300)
+        plt.close()
+
     return fifo, srtf, srtf_refine, fair, pack
