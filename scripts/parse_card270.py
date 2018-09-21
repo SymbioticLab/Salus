@@ -148,7 +148,7 @@ def prepare_paper(path):
         # Draw utilization, current number is hard coded
         # we ran 42 jobs, 3 of each (without speech, which is wierd)
         # so 42 for TF
-        ut = pd.DataFrame([42, 6, 1], index=order)
+        ut = pd.DataFrame([42, 6, 1], index=['TF', 'MPS', 'Salus'])
         ax = ut.plot.bar(ax=axs[1], color='w', edgecolor='k', hatch='////', linewidth=1)
         #ax.tick_params(axis='x', labelrotation=0)
         ax.legend().remove()
