@@ -98,12 +98,19 @@ def _preprocess_memmap_row(idxrow, ptr2sess, sessColors):
     mapdf = parse_mapstr(row.MemMap, noColor=True)
 
     def findSess(ptr):
-        thePtr = ptr
-        theRow = row
-        res = ptr2sess.query('Ptr == @thePtr and timestamp <= @theRow.timestamp')
-        if len(res) and res.iloc[-1].evt == 'alloc':
-            return res.iloc[-1].Sess
-        return None
+        try:
+            evts = ptr2sess.loc[ptr]
+        except KeyError:
+            return ''
+        idx = evts.index.searchsorted(row.timestamp) - 1
+        if idx == -1:
+            return ''
+        if evts.iat[idx, 1] == 'alloc':
+            return evts.iat[idx, 0]
+        #res = ptr2sess.query('Ptr == @thePtr and timestamp <= @theRow.timestamp')
+        #if len(res) and res.iloc[-1].evt == 'alloc':
+        #    return res.iloc[-1].Sess
+        return ''
     mapdf['Sess'] = mapdf.Origin.map(findSess)
 
     # set colors
@@ -112,14 +119,15 @@ def _preprocess_memmap_row(idxrow, ptr2sess, sessColors):
     return row.timestamp, mapdf
 
 
-def preprocess_memmap2(df, sessColors = None, task_per_cpu=20):
+def preprocess_memmap2(df, sessColors = None, ptr2sess=None, task_per_cpu=1000):
     # only use GPU data
     df = df[df.Allocator.str.contains("GPU")]
 
-    # build a index from (Ptr, timestamp) to Sess
-    keys, grps = zip(*[(ptr, grp.set_index('timestamp').sort_index().drop(['Ptr'], axis=1))
-                        for ptr, grp in df[['Ptr', 'Sess', 'timestamp', 'evt']].groupby('Ptr')])
-    ptr2sess = pd.concat(grps, keys=keys, names=['Ptr'])
+    if ptr2sess is None:
+        # build a index from (Ptr, timestamp) to Sess
+        keys, grps = zip(*[(ptr, grp.set_index('timestamp').sort_index().drop(['Ptr'], axis=1))
+                            for ptr, grp in df[['Ptr', 'Sess', 'timestamp', 'evt']].groupby('Ptr')])
+        ptr2sess = pd.concat(grps, keys=keys, names=['Ptr'])
 
     # sessColors
     if sessColors is None:
@@ -133,31 +141,33 @@ def preprocess_memmap2(df, sessColors = None, task_per_cpu=20):
 
     # the process
     with mp.Pool(processes=numCPU) as p,\
-            tqdm(total=len(df), desc='Parsing memmaps', unit='rows') as pb:
+            tqdm(total=len(df), desc='Parsing memmaps in parallel', unit='rows') as pb:
         def updater(log):
             pb.update()
             return log
 
         ilog = (updater(log) for log in
-                p.imap(partial(_preprocess_memmap_row,
+                p.imap_unordered(partial(_preprocess_memmap_row,
                                          ptr2sess=ptr2sess,
                                          sessColors=sessColors),
                                  df.iterrows(),
                                  chunksize=chunkSize)
                 )
         maps = list(ilog)
+        maps.sort(key=lambda x: x[0])
 
     return maps
 
 
-def preprocess_memmap3(df, sessColors = None):
+def preprocess_memmap3(df, sessColors = None, ptr2sess=None):
     # only use GPU data
     df = df[df.Allocator.str.contains("GPU")]
 
-    # build a index from (Ptr, timestamp) to Sess
-    keys, grps = zip(*[(ptr, grp.set_index('timestamp').sort_index().drop(['Ptr'], axis=1))
-                        for ptr, grp in df[['Ptr', 'Sess', 'timestamp', 'evt']].groupby('Ptr')])
-    ptr2sess = pd.concat(grps, keys=keys, names=['Ptr'])
+    if ptr2sess is None:
+        # build a index from (Ptr, timestamp) to Sess
+        keys, grps = zip(*[(ptr, grp.set_index('timestamp').sort_index().drop(['Ptr'], axis=1))
+                            for ptr, grp in df[['Ptr', 'Sess', 'timestamp', 'evt']].groupby('Ptr')])
+        ptr2sess = pd.concat(grps, keys=keys, names=['Ptr'])
 
     # sessColors
     if sessColors is None:
@@ -286,7 +296,7 @@ class MemmapViewer(object):
         self._do_preprocess = doPreprocess
         self._hdf = hdf
         if doPreprocess:
-            self.data = preprocess_memmap2(df, self.colormap)
+            self.data = preprocess_memmap2(df, self.colormap, self.ptr2sess)
         else:
             self.data = df
 
@@ -339,7 +349,10 @@ class MemmapViewer(object):
             return self.data[i]
         else:
             if self._hdf is None:
-                row = self.data.iloc[i]
+                try:
+                    row = self.data.iloc[i]
+                except AttributeError:
+                    row = self.data[i]
                 return _preprocess_memmap_row((i, row), self.ptr2sess, self.colormap)
             else:
                 ts = self.data[i]
@@ -410,9 +423,65 @@ class MemmapViewer(object):
         self._stepSlider.set_val(newval)
         self.fig.canvas.draw_idle()
 
+    def goto(self, val):
+        self._stepSlider.set_val(val)
+        self.fig.canvas.draw_idle()
+
+
+def render_video(df, st=0, length=None):
+    colors = [
+        #'#e6194b',
+        #'#3cb44b',
+        '#ffe119',
+        '#4363d8',
+        '#f58231',
+        '#911eb4',
+        '#46f0f0',
+        '#f032e6',
+        '#bcf60c',
+        '#fabebe',
+        '#008080',
+        '#e6beff',
+        '#9a6324',
+        '#fffac8',
+        '#800000',
+        '#aaffc3',
+        '#808000',
+        '#ffd8b1',
+        '#000075',
+        '#808080',
+        '#ffffff',
+        '#000000'
+    ]
+    colormap = {
+        sess: c
+        for sess, c in zip(df.Sess.unique(), itertools.cycle(colors))
+    }
+    # build a index from (Ptr, timestamp) to Sess
+    print("Building index...")
+    keys, grps = zip(*[(ptr, grp.set_index('timestamp').sort_index().drop(['Ptr'], axis=1))
+                        for ptr, grp in df[['Ptr', 'Sess', 'timestamp', 'evt']].groupby('Ptr')])
+    ptr2sess = pd.concat(grps, keys=keys, names=['Ptr'])
+
+
+    import matplotlib.animation as manimation
+    FFMpegWriter = manimation.writers['ffmpeg']
+    metadata = dict(title='Memory Allocation', artist='Aetf')
+    writer = FFMpegWriter(fps=15, metadata=metadata, bitrate=-1)
+
+    m = MemmapViewer(df, colormap, ptr2sess, doPreprocess=False)
+    m.goto(st)
+    if length is None:
+        length = len(df) - st
+    length = min(length, len(df) - st)
+    with writer.saving(m.fig, "/opt/desktop/memalloc.mp4", dpi=100):
+        for i in tqdm(range(length), desc='Writing frame', unit='frames'):
+            m.next()
+            writer.grab_frame()
+
 
 def main():
-    df = load_allocmemmap('/opt/desktop/card262/case3/alloc.output')
+    df = load_allocmemmap('/opt/desktop/card262/case3/part.output')
     df = df[df.Allocator.str.contains("GPU")]
     colors = [
         #'#e6194b',
@@ -451,9 +520,9 @@ def main():
     print("Building memmap...")
     #hdf = '/opt/desktop/card262.memmap.h5'
     hdf = None
-    doPreprocess = True
-    tss = preprocess_memmap(df, colormap, hdf=hdf, doPreprocess=doPreprocess)
+    doPreprocess = False
+    tss = preprocess_memmap(df, colormap, hdf=hdf)
 
-    m = MemmapViewer(tss, colormap, ptr2sess, hdf=hdf)
+    m = MemmapViewer(tss, colormap, ptr2sess, hdf=hdf, doPreprocess=doPreprocess)
 
     return m
