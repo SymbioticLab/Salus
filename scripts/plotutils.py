@@ -391,6 +391,45 @@ def cdf(X, ax=None, **kws):
     return ax
 
 
+def bar(df, width=0.8, ax=None, **kwargs):
+    if ax is None:
+        ax = plt.gca()
+    width = kwargs.pop('width', 0.8)
+
+    nseries = len(df.columns)
+
+    bar_width = width /nseries
+
+    ind = np.arange(len(df))
+    tick_ind = ind + bar_width * (nseries - 1) / 2
+
+    cycle = ax._get_lines.prop_cycler
+
+    for col, prop in zip(df.columns, cycle):
+        ax.bar(ind, df[col], bar_width, label=col, **{**prop, **kwargs})
+        ind = ind + bar_width
+
+    ax.set_xticks(tick_ind)
+    ax.set_xticklabels(df.index)
+    ax.tick_params(axis='x', rotation=90)
+    ax.legend()
+
+    return ax
+
+
+def bar_show_data(ax, x, y, fmt='{:.1f}', **kwargs):
+    kws = {
+        'xytext': [0, 7],
+        'textcoords': 'offset points',
+        'size': 7,
+        'horizontalalignment': 'center',
+        'verticalalignment': 'top'
+    }
+    ax.annotate(fmt.format(y),
+                xy=[x, y],
+                **{**kws, **kwargs})
+
+
 class DraggableLine:
     def __init__(self, ax, orientation, XorY, **kwargs):
         self.ax = ax

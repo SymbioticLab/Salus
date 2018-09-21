@@ -195,7 +195,7 @@ def plot_mem(df, marker=False, offset=None, return_offset=False, **kwargs):
 
     cumsum = calc_cumsum(df)
     ax = plot_cs(cumsum, **kwargs)
-    if marker:
+    if isinstance(marker, bool) and marker:
         ax = plot_marker(df, cumsum, ax=ax)
     pu.cleanup_axis_bytes(ax.yaxis)
 
@@ -376,7 +376,9 @@ def plot_comp_old(df, y=0.2, separateY=True, offset=None, return_offset=False, *
     return lc
 
 
-def plot_all(alloc, iters=None, comp=None, offset=None, ax=None, sessProps=None):
+def plot_all(alloc, iters=None, comp=None, offset=None, ax=None, sessProps=None,
+             mem_kws=None, iters_kws=None, comp_kws=None,
+             **kwargs):
     def groupby(df, col):
         if df is None:
             return None
@@ -398,23 +400,32 @@ def plot_all(alloc, iters=None, comp=None, offset=None, ax=None, sessProps=None)
 
     sesses = galloc.keys()
     if sessProps is None:
-        cycle = ax._get_lines.prop_cycler
+        #cycle = ax._get_lines.prop_cycler
+        cycle = [{} for sess in sesses]
     else:
         cycle = [sessProps[sess] for sess in sesses]
+
+    if mem_kws is None:
+        mem_kws = {}
+    if iters_kws is None:
+        iters_kws = {}
+    if comp_kws is None:
+        comp_kws = {}
 
     iters_y = 0.5
     comp_y = 0.4
     for sess, prop in zip(sesses, cycle):
         salloc, offset = normalize_time(galloc[sess], offset)
-        plot_mem(salloc, offset=offset, label=sess, ax=ax, **prop)
+        print({**prop, **kwargs, **mem_kws})
+        plot_mem(salloc, offset=offset, label=sess, ax=ax, **{**prop, **kwargs, **mem_kws})
 
         if giters is not None:
             siters, offset = normalize_time(giters[sess], offset)
-            plot_iters(siters, y=iters_y, offset=offset, ax=ax, **prop)
+            plot_iters(siters, y=iters_y, offset=offset, ax=ax, **{**prop, **kwargs, **iters_kws})
 
         if gcomp is not None:
             scomp, offset = normalize_time(gcomp[sess], offset)
-            plot_comp(scomp, y=comp_y, offset=offset, ax=ax, **prop)
+            plot_comp(scomp, y=comp_y, offset=offset, ax=ax, **{**prop, **kwargs, **comp_kws})
 
         iters_y += 0.05
         comp_y += 0.02

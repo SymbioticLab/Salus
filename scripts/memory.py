@@ -111,6 +111,9 @@ def load_iters(path):
     return pd.Series(iters)
 
 def plot_cs(cs, **kwargs):
+    cs = cs.reset_index()
+    cs['timestamp'] = cs.timestamp.dt.total_seconds()
+    cs = cs.set_index('timestamp')
     ax = cs.plot(**kwargs)
     return ax
 
@@ -214,10 +217,10 @@ def find_minmax(df, plot=False):
 
     # find average
     # convert to relative time
-    rcs = cs.reset_index()
+    rcs = cspartial.reset_index()
     rcs['timestamp'] = rcs.timestamp - rcs.timestamp[0]
     rcs['timestamp'] = rcs.timestamp / pd.Timedelta(microseconds=1)
-    durus = dur / pd.Timedelta(microseconds=1)
+    durus = rcs.timestamp.iat[-1] - rcs.timestamp.iat[0]
     # integral
     avg = np.trapz(rcs.act, x=rcs.timestamp) / durus
 

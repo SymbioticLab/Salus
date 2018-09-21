@@ -107,7 +107,9 @@ def prepare_paper(path):
         #ax.set_xlabel('Time (s)')
         #ax.yaxis.label.set_size(8)
 
-        plot_ratio(df, ax=ax)
+        plot_ratio(df, ax=ax,
+                   linewidth=1
+                   )
         ax.set_ylabel('CDF')
 
         fig.tight_layout()

@@ -88,9 +88,13 @@ def prepare_paper(path=path):
         fig, axs = plt.subplots(ncols=2, nrows=1, squeeze=False, gridspec_kw={'width_ratios':[3,2]})
         fig.set_size_inches(3.25, 1.5, forward=True)
 
-        plot_size_cdf(framework, axs[0][0], axs[0][1], label='Framework')
-        plot_size_cdf(model, axs[0][0], axs[0][1], label='Model', cumsum_kws={'zorder': 10})
-        plot_size_cdf(ephemeral, axs[0][0], axs[0][1], label='Ephemeral')
+        plot_size_cdf(framework, axs[0][0], axs[0][1], label='Framework',
+                      marker=',', markevery=0.1, linestyle=':', linewidth=2)
+        plot_size_cdf(model, axs[0][0], axs[0][1], label='Model',
+                      marker='.', markevery=0.1, linestyle='-.', linewidth=1,
+                      cumsum_kws={'zorder': 10})
+        plot_size_cdf(ephemeral, axs[0][0], axs[0][1], label='Ephemeral',
+                      marker='^', markevery=0.05, linestyle='-', markersize=3, linewidth=1)
 
         axs[0][0].set_xlim(left=1)
         axs[0][0].set_xscale('log', basex=2)
@@ -100,6 +104,16 @@ def prepare_paper(path=path):
         )
         bytesformatter = pu.FuncFormatter(lambda x, pos: pu.bytes2human(x, format='%(value).0f%(symbol)s'))
         axs[0][0].xaxis.set_major_formatter(bytesformatter)
+        #pu.cleanup_axis_bytes(axs[0][0].xaxis, maxN=5, format=)
+
+        axs[0][1].set_ylim(bottom=1)
+        axs[0][1].set_yscale('log', basey=2)
+        axs[0][1].set_yticks([1, 2**8, 2**16, 2**24, 2**32, 2**37])
+        axs[0][1].tick_params(axis='y',
+        #   labelsize='xx-small'
+        )
+        bytesformatter = pu.FuncFormatter(lambda x, pos: pu.bytes2human(x, format='%(value).0f%(symbol)s'))
+        axs[0][1].yaxis.set_major_formatter(bytesformatter)
         #pu.cleanup_axis_bytes(axs[0][0].xaxis, maxN=5, format=)
 
         # legend at the bottom

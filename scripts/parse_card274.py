@@ -39,6 +39,8 @@ def do_srtf2(path):
 
     offset_local = srtf.Queued.min()
 
+    #srtf = ju.update_start_time_using_refine(srtf, srtf_refine, offset=offset_local)
+
     jnos = [34, 80, 82, 86, 93, 94]
     new_jnos = {n:i for i, n in enumerate(jnos)}
     st_sec = 2651
@@ -48,7 +50,16 @@ def do_srtf2(path):
 
     #colors = ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd', '#8c564b', '#e377c2']
 
-    with plt.style.context(['seaborn-paper', 'mypaper', 'gray']):
+    with plt.style.context(['seaborn-paper', 'mypaper', 'color3']):
+        # first do a refine plot to update 'Started' in srtf
+        ax = plt.gca()
+        ju.plot_refine(ax, srtf, srtf_refine,
+                       offset=offset_local,
+                       new_jnos=new_jnos,
+                       plot_offset=-st_sec
+                       )
+        plt.close()
+
         fig, ax = plt.subplots()
 
         monochrome = cycler('color', ['0.0'])
@@ -99,11 +110,14 @@ def do_srtf3(path):
     sess2Model['Label'] = sess2Model.apply(lambda x : '#{}: {}'.format(x[3],x[0]), axis=1)
     df['Sess'] = df.Sess.map(sess2Model.Label)
 
-    with plt.style.context(['seaborn-paper', 'mypaper', 'gray']):
+    with plt.style.context(['seaborn-paper', 'mypaper', 'line12']):
         fig, ax = plt.subplots()
 
+        ax.set_prop_cycle(None)
+        #next(ax._get_lines.prop_cycler)
+
         # renormalize offset when plot
-        cm.plot_all(df, ax=ax)
+        cm.plot_all(df, ax=ax, linewidth=1, markersize=3, markevery=0.2)
         ax.set_ylim(bottom=0)
 
         ax.xaxis.set_major_locator(pu.MaxNLocator(nbins=3))
@@ -116,7 +130,7 @@ def do_srtf3(path):
         #fig.tight_layout()
         fig.set_size_inches(1.625, 2, forward=True)
         fig.savefig('/tmp/workspace/card274-srtf-mem.pdf', dpi=300, bbox_inches='tight', pad_inches = .015)
-        #fig.close()
+        plt.close()
 
 
 def do_srtf(path):
@@ -223,10 +237,13 @@ def do_fair(path):
 
     #colors = ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd', '#8c564b', '#e377c2']
 
-    with plt.style.context(['seaborn-paper', 'mypaper', 'color4']):
+    with plt.style.context(['seaborn-paper', 'mypaper', 'line12']):
         fig, ax = plt.subplots()
 
-        cm.plot_all(df, offset=offset_server, ax=ax)
+        cm.plot_all(df, offset=offset_server, ax=ax,
+                    markevery=0.05,
+                    linestyle='-',
+                    linewidth=.75)
         ax.set_ylim(bottom=0)
 
         #axs[1].legend().remove()
@@ -253,8 +270,11 @@ def do_fair(path):
         fig.savefig('/tmp/workspace/card274-fair.pdf', dpi=300, bbox_inches='tight', pad_inches = .015)
         #fig.close()
 
+try:
+    path
+except NameError:
+    path = 'logs/nsdi19'
 
-path = 'logs/nsdi19'
 def prepare_paper(logpath=path):
     logpath = Path(logpath)
 

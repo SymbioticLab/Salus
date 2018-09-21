@@ -58,8 +58,10 @@ pits = pits.rename(columns={'Model': 'Network'}).set_index('Network')
 with plt.style.context(['seaborn-paper', 'mypaper', 'color3']):
     ax = pits.plot.bar(legend=None)
     pu.axhlines(1.0, ax=ax, color='k', linestyle='--', linewidth=1)
+    pu.bar_show_data(ax, pits.index.get_loc('superres'), pits.at['superres', 'Salus'])
+    pu.bar_show_data(ax, pits.index.get_loc('vae'), pits.at['vae', 'Salus'])
 
-    ax.set_ylim(0.9, 2)
+    ax.set_ylim(0.9, 1.9)
     ax.set_xlabel('Workloads')
     ax.set_ylabel('Normalized Per Iteration\nTraining Time')
     # ax.legend()

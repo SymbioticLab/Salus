@@ -48,7 +48,7 @@ def plot_jcts(df, **kwargs):
         ax = plt.gca()
 
     for col in df.columns:
-        pu.cdf(df[col].dt.total_seconds(), label=col, ax=ax)
+        pu.cdf(df[col].dt.total_seconds(), label=col, ax=ax, **kwargs)
     ax.set_xlabel('JCT (s)')
     ax.set_ylabel('CDF')
     ax.legend()
@@ -100,7 +100,8 @@ def do_timelines(path):
 path = 'logs/nsdi19'
 def prepare_paper(path):
     path = Path(path)
-    with plt.style.context(['seaborn-paper', 'mypaper', 'color4']):
+    with plt.style.context(['seaborn-paper', 'mypaper', 'line12']):
+        # also use color
 
         # fifo = ju.load_trace(path/'card266'/'salus'/'trace.csv')
         fifo = load_data(path/'card272'/'case0'/'fifo', 'case0.output')
@@ -113,8 +114,11 @@ def prepare_paper(path):
 
         fig, ax = plt.subplots()
         fig.set_size_inches(3.25, 1.85, forward=True)
+
         jcts = pd.DataFrame({'FIFO': fifo.JCT, 'SRTF': srtf.JCT, 'PACK': pack.JCT, 'FAIR': fair.JCT})
-        plot_jcts(jcts, ax=ax)
+        plot_jcts(jcts, ax=ax, markevery=0.1, markersize=4, linewidth=1)
+
+
         fig.tight_layout()
         fig.savefig('/tmp/workspace/card272-jct.pdf', dpi=300)
         plt.close()

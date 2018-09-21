@@ -139,15 +139,15 @@ def preprocess_memmap2(df, sessColors = None, task_per_cpu=20):
             return log
 
         ilog = (updater(log) for log in
-                p.imap_unordered(partial(_preprocess_memmap_row,
+                p.imap(partial(_preprocess_memmap_row,
                                          ptr2sess=ptr2sess,
                                          sessColors=sessColors),
                                  df.iterrows(),
                                  chunksize=chunkSize)
                 )
-        maps = pd.concat({ts:mapdf for ts, mapdf in ilog}, orient='index')
+        maps = list(ilog)
 
-    return len(df), maps
+    return maps
 
 
 def preprocess_memmap3(df, sessColors = None):
@@ -286,7 +286,7 @@ class MemmapViewer(object):
         self._do_preprocess = doPreprocess
         self._hdf = hdf
         if doPreprocess:
-            self.data = preprocess_memmap3(df, self.colormap)
+            self.data = preprocess_memmap2(df, self.colormap)
         else:
             self.data = df
 
@@ -449,8 +449,10 @@ def main():
     ptr2sess = pd.concat(grps, keys=keys, names=['Ptr'])
 
     print("Building memmap...")
-    hdf = '/opt/desktop/card262.memmap.h5'
-    tss = preprocess_memmap(df, colormap, hdf)
+    #hdf = '/opt/desktop/card262.memmap.h5'
+    hdf = None
+    doPreprocess = True
+    tss = preprocess_memmap(df, colormap, hdf=hdf, doPreprocess=doPreprocess)
 
     m = MemmapViewer(tss, colormap, ptr2sess, hdf=hdf)
 

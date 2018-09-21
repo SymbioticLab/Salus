@@ -193,6 +193,43 @@ def refine_time_events(df, sevts):
     return df.reset_index()
 
 
+def update_start_time_using_refine(df, refine_data, offset=None):
+    # so that we can access job using no
+    df = df.set_index('No')
+    refine_data = refine_data.copy()
+
+    # for every preempt event pair, mask jobs that's not the left event's switch_to job
+    if offset is None:
+        offset = df.Queued.min()
+    refine_data['Ntime'] = (refine_data['timestamp'] - offset) / pd.Timedelta(1, unit='s')
+
+    # also convert df.Queued to relative time
+    df['Started'] = (df.Started - offset) / pd.Timedelta(1, unit='s')
+    df['Finished'] = (df.Finished - offset) / pd.Timedelta(1, unit='s')
+
+    # group refine_data by laneId
+    for laneId, grp in refine_data.groupby('LaneId'):
+        magic = grp.iterrows()
+        next(magic)
+        for (_, left), (_, right) in zip(grp.iterrows(), magic):
+            for no in df.index.unique():
+                if no == left.No:
+                    continue
+                if laneId != df.loc[no].LaneId:
+                    continue
+                # make sure left and right within job no's started and finished
+                l = max(df.loc[no].Started, left.Ntime)
+                r = min(df.loc[no].Finished, right.Ntime)
+                if l >= r:
+                    continue
+                # use queuing color if we begins from queuing segment
+                if l <= df.loc[no].Started:
+                    # update df's Started to r
+                    df.loc[no, 'Started'] = r
+
+    return df.reset_index()
+
+
 def plot_timeline(df, props=None, returnSessProps=False, offset=None,
                   new_jnos=None, plot_offset=None, **kwargs):
     ax = kwargs.pop('ax', None)
@@ -278,7 +315,7 @@ def plot_refine(ax, df, refine_data, offset=None, new_jnos=None, plot_offset=Non
                 if l <= df.loc[no].Started:
                     width = 0.8
                     color = '#b6b6b6'
-                    edgecolor = None
+                    edgecolor = '#b6b6b6'
                     # update df's Started to r
                     df.loc[no, 'Started'] = r
                 else:

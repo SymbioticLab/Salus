@@ -21,7 +21,7 @@ import pandas as pd
 #import seaborn as sns
 import numpy as np
 import matplotlib.pyplot as plt
-from matplotlib import cycler
+import matplotlib as mpl
 
 import plotutils as pu
 import compmem as cm
@@ -98,7 +98,7 @@ def plot_latency(df, **kwargs):
     # use ms as unit
     df = df * 1000
 
-    ax = df.plot.bar(**kwargs)
+    ax = pu.bar(df, **kwargs)
     ax.set_ylabel('Latency (ms)')
     return ax
 
@@ -118,19 +118,30 @@ def prepare_paper(path):
     #df = df.query('not index.str.contains("speech")')
     df = df[~df.index.str.contains("speech")]
 
-    with plt.style.context(['seaborn-paper', 'mypaper']):
+    with plt.style.context(['seaborn-paper', 'mypaper', 'hatchbar']):
 
+        # add color to the cycler
+        cycle = mpl.rcParams['axes.prop_cycle'].by_key()
+        cycle['color'] = ['ed7d31', '244185', '8cb5df', '000000',   'dcedd0', '006d2c']
+        mpl.rcParams['axes.prop_cycle'] = mpl.cycler(**cycle)
         # override color cycle
-        plt.rc('axes', prop_cycle=cycler('color', ['ed7d31', '000000', '8cb5df', 'dcedd0']))
+        #plt.rc('axes', prop_cycle=cycler('color', ['ed7d31', '000000', '8cb5df', 'dcedd0']))
 
         fig, axs = plt.subplots(ncols=2, gridspec_kw={'width_ratios':[4, 1]})
         fig.set_size_inches(6.5, 1.85, forward=True)
+
+        axs[0].set_prop_cycle(None)
+        cycle = axs[0]._get_lines.prop_cycler
+        for _, prop in zip(range(6), cycle):
+            print(prop)
 
         # set plot bar order
         order = ['Salus','TF', 'MPS']
         df = df[order]
 
         ax = plot_latency(df, ax=axs[0])
+        for _, prop in zip(range(6), cycle):
+            print(prop)
         ax.set_ylim([0, 60])
         #ax.set_xticklabels(ax.get_xticklabels(), rotation=45, ha='right')
 

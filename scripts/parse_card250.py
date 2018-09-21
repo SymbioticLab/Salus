@@ -17,6 +17,7 @@ import pandas as pd
 #import seaborn as sns
 import numpy as np
 import matplotlib.pyplot as plt
+import matplotlib as mpl
 
 import plotutils as pu
 import compmem as cm
@@ -84,7 +85,7 @@ def load_speeds(path, key='Speed'):
     return pd.DataFrame(speeds)
 
 
-def plot_speeds(df, **kwargs):
+def plot_speeds(df, total_kws=None, **kwargs):
     ax = kwargs.pop('ax', None)
     if ax is None:
         ax = plt.gca()
@@ -102,7 +103,9 @@ def plot_speeds(df, **kwargs):
     total = 0
     for col in df.columns:
         total += df[col]
-    total.plot(ax=ax, color='k', linestyle='--', **kwargs)
+    if total_kws is None:
+        total_kws = {}
+    total.plot(ax=ax, color='k', linestyle='--', **total_kws)
 
     ax.legend().remove()
     ax.set_xlabel('Time (s)')
@@ -131,9 +134,18 @@ def prepare_paper(path):
     smoothed = smoothed.query('index >= @tmin and index <= @tmax')
     df.loc[smoothed.index, others] = smoothed
 
-    with plt.style.context(['seaborn-paper', 'mypaper', 'color3']):
+    with plt.style.context(['seaborn-paper', 'mypaper', 'line12']):
         fig, ax = plt.subplots()
-        plot_speeds(df, ax=ax)
+        cycler = (mpl.cycler('color', ['ed7d31', '000000', '244185', '8cb5df'])
+                + mpl.cycler('linestyle', ['-', '-.', ':', '--'])
+                + mpl.cycler('marker', ['X', '*', '^', 'o'])
+                + mpl.cycler('markersize', [4, 5, 3, 2.5]))
+        ax.set_prop_cycle(cycler)
+        plot_speeds(df, ax=ax,
+                    markevery=8,
+                    #markersize=3,
+                    linestyle='-', linewidth=1,
+                    total_kws={'marker': 'None', 'zorder': -1, 'linewidth': 1})
 
         fig.tight_layout()
         fig.set_size_inches(3.25, 2.35, forward=True)

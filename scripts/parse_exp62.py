@@ -81,6 +81,7 @@ path = 'logs/nsdi19/exp6_2'
 data = load_exp62(path)
 
 data = data[['Average JCT']]
+data = data[data.index != 'FIFO']
 
 with plt.style.context(['seaborn-paper', 'mypaper', 'gray']):
 

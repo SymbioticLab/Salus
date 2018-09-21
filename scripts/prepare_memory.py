@@ -60,58 +60,66 @@ def plot_inferencemem(df, **kwargs):
     ax = df.plot(y=['Peak Usage', 'Model Usage'], kind='barh', **kwargs)
     return ax
 
-
-def prepare_paper(path):
-    path = Path(path)
+def do_membar(path):
     with plt.style.context(['seaborn-paper', 'mypaper', 'color3']):
-        df = load_memcsv(path/'mem.csv')
+            df = load_memcsv(path/'mem.csv')
 
-        # only draw one batch size: the largest one
-        df['Model'], df['BatchSize'] = df.Network.str.split('_').str
-        df.BatchSize.replace({'small': 1, 'medium': 5, 'large': 10}, inplace=True)
-        df['BatchSize'] = pd.to_numeric(df.BatchSize)
-        df = df.reset_index().loc[df.reset_index().groupby(['Model'])['BatchSize'].idxmax()]
-        df = df.drop(['index', 'BatchSize', 'Network'], axis=1)
-        df = df.rename(columns={'Model': 'Network'})
+            # only draw one batch size: the largest one
+            df['Model'], df['BatchSize'] = df.Network.str.split('_').str
+            df.BatchSize.replace({'small': 1, 'medium': 5, 'large': 10}, inplace=True)
+            df['BatchSize'] = pd.to_numeric(df.BatchSize)
+            df = df.reset_index().loc[df.reset_index().groupby(['Model'])['BatchSize'].idxmax()]
+            df = df.drop(['index', 'BatchSize', 'Network'], axis=1)
+            df = df.rename(columns={'Model': 'Network'})
 
-        # sort values
-        df = df.sort_values('Network', ascending=False)
+            # sort values
+            df = df.sort_values('Network', ascending=False)
 
-        ax = plot_mem(df)
-        ax.set_xlabel('Memory Usage (GB)')
-        ax.set_ylabel('')
-        ax.legend(fontsize='xx-small',frameon=False)
-        ax.tick_params(axis='x', which='major', labelsize=8)
-        ax.tick_params(axis='y', which='major', labelsize=8, length=2)
-        ax.yaxis.label.set_size(8)
-        #ax.xaxis.tick_top()
+            ax = plot_mem(df)
+            ax.set_xlabel('Memory Usage (GB)')
+            ax.set_ylabel('')
+            ax.legend(fontsize='xx-small',frameon=False)
+            ax.tick_params(axis='x', which='major', labelsize=8)
+            ax.tick_params(axis='y', which='major', labelsize=8, length=2)
+            ax.yaxis.label.set_size(8)
+            #ax.xaxis.tick_top()
 
-        #fig.tight_layout()
-        #fig.subplots_adjust(top=1, bottom=0, left=0, right=1)
+            #fig.tight_layout()
+            #fig.subplots_adjust(top=1, bottom=0, left=0, right=1)
 
-        fig = ax.figure
-        fig.set_size_inches(3.25, 2.5, forward=True)
-        fig.savefig('/tmp/workspace/mem.pdf', dpi=300, bbox_inches='tight', pad_inches = .015)
-        plt.close()
+            fig = ax.figure
+            fig.set_size_inches(3.25, 2.5, forward=True)
+            fig.savefig('/tmp/workspace/mem.pdf', dpi=300, bbox_inches='tight', pad_inches = .015)
+            plt.close()
 
-    with plt.style.context(['seaborn-paper', 'mypaper', 'gray']):
+
+def do_singlemem(path):
+    with plt.style.context(['seaborn-paper', 'mypaper', 'line12']):
         # a single mem
         df = cm.load_mem(path/'exp1'/'alloc.output')
-        ax = cm.plot_mem(df)
+        ax = cm.plot_mem(df, linewidth=.5, markevery=400, color='k')
+        pu.cleanup_axis_bytes(ax.yaxis, maxN=4)
         ax.set_xlabel('Time (s)')
-        ax.set_ylabel('Memory Usage')
+        ax.set_ylabel('TensorFlow\nMemory Usage')
         ax.set_ylim(bottom=0, top=12 * (1024**3))
-        ax.set_xlim(left=5, right=15)
+        ax.set_xlim(left=1.5, right=7)
 
         fig = ax.figure
         fig.set_size_inches(3.25, 1.5, forward=True)
         fig.savefig('/tmp/workspace/exp1.pdf', dpi=300, bbox_inches='tight', pad_inches = .015)
         plt.close()
 
+
+def prepare_paper(path):
+    path = Path(path)
+    do_membar(path)
+    do_singlemem(path)
+
+
 try:
     path
 except NameError:
-    path = 'logs/nsdi19'
+    path = Path('logs/nsdi19')
 # prepare_paper(path)
 #df = load_memcsv('/tmp/workspace/mem.csv')
 #plot_inferencemem(df)
