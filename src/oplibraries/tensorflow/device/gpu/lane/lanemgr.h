@@ -66,6 +66,16 @@ public:
         m_disabled = value;
     }
 
+    size_t numGPUs() const
+    {
+        return m_gpus.size();
+    }
+
+    size_t totalMemoryForGPU(size_t index) const
+    {
+        return m_gpus.at(index).totalMemory;
+    }
+
 private:
     std::vector<int> getValidGpuIds();
     void createCudaHostAllocator(tfgpu::StreamExecutor *se);

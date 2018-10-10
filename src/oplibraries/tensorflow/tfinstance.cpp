@@ -112,6 +112,7 @@ void TFInstance::handleCreateSession(std::unique_ptr<tf::CreateSessionRequest> &
     LaneMgr::Layout layout;
     // Get resource estimation from client
     constexpr const auto rt = "MEMORY:GPU";
+    const auto totalGPUMemory = m_laneMgr->totalMemoryForGPU(0);
     size_t limit = 0;
     size_t persistant = 0;
     auto &m = req->config().salus_options().resource_map();
@@ -123,10 +124,10 @@ void TFInstance::handleCreateSession(std::unique_ptr<tf::CreateSessionRequest> &
 
     // HACK: Double the persistant and add to to temporary, just to be safe
     limit = static_cast<size_t>(limit * 1.05); // and even more 10%
-    limit = std::min(limit, 16320875724_sz); // cap to max value
+    limit = std::min(limit, totalGPUMemory); // cap to max value
 
     if (limit == 0) {
-        limit = 14_sz * 1024_sz * 1024_sz * 1024_sz;
+        limit = totalGPUMemory;
         persistant = limit;
         LOG(WARNING) << "No resource info for current session, assuming whole GPU allocation: " << limit;
     }

@@ -62,6 +62,9 @@ LaneMgr::LaneMgr()
         }
         availableMemory = availableMemory - 300 * 1024 * 1024;
 
+        // We don't care about the theorical totalMemory, but what is available to us in maximum
+        totalMemory = availableMemory;
+
         auto &gcb = m_gpus.emplace_back(*this, m_gpus.size(), gpuId, *se, totalMemory);
         gcb.availableMemory = static_cast<size_t>(availableMemory);
         CHECK_LE(gcb.availableMemory, gcb.totalMemory);
