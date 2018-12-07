@@ -48,26 +48,26 @@
 include(FindPackageHandleStandardArgs)
 unset(TensorFlow_FOUND)
 
-set(TENSORFLOW_ROOT "${TENSORFLOW_ROOT}" CACHE PATH "Root directory to look in")
+set(TENSORFLOW_ROOT "$ENV{TensorFlow_DIR}" CACHE PATH "Root directory to look in")
 
 find_path(TensorFlow_HOME
     NAMES
-    tensorflow/core
-    tensorflow/cc
-    third_party
+    bazel-tensorflow/tensorflow/core
+    bazel-tensorflow/tensorflow/cc
+    bazel-tensorflow/third_party
     PATHS ${TENSORFLOW_ROOT}
     NO_DEFAULT_PATH
 )
 # fall back to system paths
 find_path(TensorFlow_HOME
     NAMES
-    tensorflow/core
-    tensorflow/cc
-    third_party
+    bazel-tensorflow/tensorflow/core
+    bazel-tensorflow/tensorflow/cc
+    bazel-tensorflow/third_party
 )
 
 find_library(TensorFlow_LIBRARY NAMES tensorflow_framework
-    PATHS ${TENSORFLOW_ROOT}
+    PATHS ${TensorFlow_HOME}
     PATH_SUFFIXES bazel-bin/tensorflow
     NO_DEFAULT_PATH
 )
@@ -75,7 +75,7 @@ find_library(TensorFlow_LIBRARY NAMES tensorflow_framework
 find_library(TensorFlow_LIBRARY NAMES tensorflow_framework)
 
 find_library(TensorFlow_Kernel_LIBRARY NAMES tensorflow_kernels
-    PATHS ${TENSORFLOW_ROOT}
+    PATHS ${TensorFlow_HOME}
     PATH_SUFFIXES bazel-bin/tensorflow
     NO_DEFAULT_PATH
 )

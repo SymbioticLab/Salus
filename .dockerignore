@@ -1,0 +1,7 @@
+benchmarks
+build
+scripts
+spack-packages
+tests/*data
+*.pyc
+__pycache__

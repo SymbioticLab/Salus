@@ -7,9 +7,6 @@ message("-- ${library_name} version: bundled")
 set(build_static_lib ON CACHE BOOL "Build static lib" FORCE)
 set(lib_utc_datetime ON CACHE BOOL "Use UTC datetime" FORCE)
 
-# Fix policy warnings
-cmake_policy(SET CMP0048 OLD)
-
 add_submodule(${library_name}
     PATCHES
     vmodule-respect-vlevel-elsewhere.patch
