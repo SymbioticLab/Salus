@@ -39,8 +39,6 @@ option(WITH_STATIC_STREAM "Use static GPU stream assignment, for debug only" ON)
 
 option(WITH_EXCLUSIVE_ITER "Each iteration runs exclusively" ON)
 
-option(WITH_SIEXECUTOR "Use SIExecutor instead of MDExecutor" ON)
-
 option(WITH_TIMEOUT_WARNING "Enable timeout warning. Note that the logging function should be enabled seperately" OFF)
 
 #---------------------------------------------------------------------------------------
@@ -101,7 +99,6 @@ add_feature_info(DISABLE_LOGGING DISABLE_LOGGING "disable all logging except INF
 add_feature_info(WITH_STATIC_STREAM WITH_STATIC_STREAM "use static GPU stream assignment, for debug only")
 add_feature_info(WITH_EXCLUSIVE_ITER WITH_EXCLUSIVE_ITER "Each iteration runs exclusively")
 add_feature_info(WITH_TIMEOUT_WARNING WITH_TIMEOUT_WARNING "Enable timeout warning")
-add_feature_info(WITH_SIEXECUTOR WITH_SIEXECUTOR "Use SIExecutor instead of MDExecutor")
 feature_summary(INCLUDE_QUIET_PACKAGES FATAL_ON_MISSING_REQUIRED_PACKAGES WHAT ALL)
 
 #---------------------------------------------------------------------------------------
@@ -146,10 +143,6 @@ endif(WITH_EXCLUSIVE_ITER)
 if(WITH_TIMEOUT_WARNING)
     set(SALUS_ENABLE_TIMEOUT_WARNING 1)
 endif(WITH_TIMEOUT_WARNING)
-
-if(WITH_SIEXECUTOR)
-    set(SALUS_ENABLE_SIEXECUTOR 1)
-endif(WITH_SIEXECUTOR)
 
 configure_file(src/config.h.in ${CMAKE_CURRENT_BINARY_DIR}/config.h)
 include_directories(${CMAKE_CURRENT_BINARY_DIR})

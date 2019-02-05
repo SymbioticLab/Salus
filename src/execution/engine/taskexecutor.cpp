@@ -1,6 +1,21 @@
-//
-// Created by peifeng on 4/17/18.
-//
+/*
+ * Copyright 2019 Peifeng Yu <peifeng@umich.edu>
+ * 
+ * This file is part of Salus
+ * (see https://github.com/SymbioticLab/Salus).
+ * 
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ * 
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ * 
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 
 #include "execution/engine/taskexecutor.h"
 
@@ -335,36 +350,11 @@ bool TaskExecutor::maybeWaitForAWhile(size_t scheduled)
     static auto last = system_clock::now();
     static auto sleep = initialSleep;
 
-#if defined(SALUS_ENABLE_SIEXECUTOR)
+    UNUSED(scheduled);
+    UNUSED(getBored);
+    UNUSED(last);
+    UNUSED(sleep);
     return false;
-#endif
-
-    auto now = system_clock::now();
-
-    if (scheduled > 0) {
-        last = now;
-        sleep = initialSleep;
-    }
-
-    auto idle = now - last;
-    if (idle <= getBored) {
-        return false;
-    }
-
-    if (sleep > 1s) {
-        LOG(WARNING) << "No progress for " << duration_cast<milliseconds>(idle).count() << "ms, sleep for "
-                     << duration_cast<milliseconds>(sleep).count() << "ms";
-    }
-
-    // no progress for a long time.
-    // give out our time slice to avoid using too much cycles
-    //             std::this_thread::yield();
-    std::this_thread::sleep_for(sleep);
-
-    // Next time we'll sleep longer
-    sleep *= 2;
-
-    return true;
 }
 
 POpItem TaskExecutor::runTask(POpItem &&opItem)

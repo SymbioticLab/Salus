@@ -50,8 +50,11 @@ RUN mkdir /var/run/sshd \
 #-----------------------------------
 FROM base-${APP_ENV} AS deps
 
-RUN spack install boost@1.66.0 \
-                  cppzmq@4.3.0 \
+# Update spack
+RUN cd $SPACK_HOME && git pull
+
+RUN spack install boost@1.66.0
+RUN spack install cppzmq@4.3.0 \
                   zeromq@4.2.5 \
                   nlohmann-json@3.1.2 \
                   protobuf@3.4.1 \

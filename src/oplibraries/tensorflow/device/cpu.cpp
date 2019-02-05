@@ -1,6 +1,21 @@
-//
-// Created by peifeng on 3/22/18.
-//
+/*
+ * Copyright 2019 Peifeng Yu <peifeng@umich.edu>
+ * 
+ * This file is part of Salus
+ * (see https://github.com/SymbioticLab/Salus).
+ * 
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ * 
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ * 
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 
 #include "oplibraries/tensorflow/tensorflow_headers.h"
 
@@ -14,30 +29,11 @@
 
 namespace salus::oplib::tensorflow {
 
-#if !defined(SALUS_ENABLE_SIEXECUTOR)
-class PerTaskCPUDevice : public PerTaskDevice
-{
-public:
-    explicit PerTaskCPUDevice(tf::Device *base, std::unique_ptr<ResourceContext> &&rctx)
-        : PerTaskDevice(base, std::move(rctx))
-    {
-    }
-
-    tf::DeviceContext *deviceContextForNode(int, bool) override
-    {
-        return nullptr;
-    }
-};
-#endif // !SALUS_ENABLE_SIEXECUTOR
-
 SalusCPUDevice::SalusCPUDevice(const tf::SessionOptions &options, const std::string &name, tf::Bytes memory_limit,
                                const tf::DeviceLocality &locality, tf::Allocator *allocator, tf::Allocator *cudaAlloc)
     : LocalDevice(options, tf::Device::BuildDeviceAttributes(name, tf::DEVICE_CPU, memory_limit, locality))
     , m_allocator(allocator)
     , m_cudaAlloc(cudaAlloc)
-#if !defined(SALUS_ENABLE_SIEXECUTOR)
-    , m_pool(std::make_shared<sstl::ObjectPool<PerTaskCPUDevice>>())
-#endif
 {
 }
 
@@ -69,14 +65,9 @@ Status SalusCPUDevice::MakeTensorFromProto(const tf::TensorProto &tensor_proto,
 std::shared_ptr<PerTaskDevice> SalusCPUDevice::createPerTaskDevice(sstl::not_null<const tf::Graph *> graph,
                                                                    std::unique_ptr<ResourceContext> &&rctx)
 {
-#if defined(SALUS_ENABLE_SIEXECUTOR)
     UNUSED(graph);
     UNUSED(rctx);
     return nullptr;
-#else
-    UNUSED(graph);
-    return m_pool->acquire(this, std::move(rctx));
-#endif
 }
 
 std::unique_ptr<ShadowDevice> SalusCPUDevice::createSessionDevice(std::string newBaseName, std::string sessHandle)

@@ -1,19 +1,20 @@
 /*
- * <one line to give the library's name and an idea of what it does.>
- * Copyright (C) 2018  Aetf <aetf@unlimitedcodeworks.xyz>
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation, either version 3 of the License, or
- * (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ * Copyright 2019 Peifeng Yu <peifeng@umich.edu>
+ * 
+ * This file is part of Salus
+ * (see https://github.com/SymbioticLab/Salus).
+ * 
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ * 
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ * 
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 #include "oplibraries/tensorflow/tensorflow_headers.h"
@@ -27,7 +28,6 @@
 #include "oplibraries/tensorflow/v3/sigraphmgr.h"
 #include "oplibraries/tensorflow/worker/dummysessionmgr.h"
 #include "oplibraries/tensorflow/worker/dummyworkercache.h"
-#include "oplibraries/tensorflow/v2/mdgraphmgr.h"
 #include "oplibraries/tensorflow/worker/rendezvousmgr.h"
 
 #include <cmath>
@@ -133,12 +133,8 @@ TFSession::TFSessionPrivate::TFSessionPrivate(TFInstance &inst, std::shared_ptr<
     m_workerEnv.compute_pool = computePool(m_inst.env());
     m_workerEnv.local_devices = std::move(devices);
 
-#if defined(SALUS_ENABLE_SIEXECUTOR)
     // No one is using workerEnv's device_mgr
     m_workerEnv.device_mgr = nullptr;
-#else
-    m_workerEnv.device_mgr = &m_inst.deviceMgr();
-#endif // SALUS_ENABLE_SIEXECUTOR
 
     m_rendezvousMgr = std::make_unique<SalusRendezvousMgr>(&m_workerEnv);
     m_workerEnv.rendezvous_mgr = m_rendezvousMgr.get();
@@ -147,13 +143,8 @@ TFSession::TFSessionPrivate::TFSessionPrivate(TFInstance &inst, std::shared_ptr<
     // NOTE that session_mgr also needs a worker_env to create session later on,
     // but not at this point, so it's ok to pass in a partially configured worker_env
     // Setup session manager that creates worker session later
-#if defined(SALUS_ENABLE_SIEXECUTOR)
     m_sessMgr = std::make_unique<LocalSessionMgr>(
         GetCreateWorkerSessionFnForSIGraphMgr(m_inst.namePrefix(), &m_workerEnv, ctx, config));
-#else
-    m_sessMgr = std::make_unique<LocalSessionMgr>(
-        GetCreateWorkerSessionFnForMDGraphMgr(m_inst.namePrefix(), &m_workerEnv, ctx, config));
-#endif // SALUS_ENABLE_SIEXECUTOR
     m_workerEnv.session_mgr = m_sessMgr.get();
 
     // Create a worker using the worker_env and add it to the cache, containing this only local worker
