@@ -70,15 +70,11 @@ if(USE_TENSORFLOW)
         "oplibraries/tensorflow/device/gpu/lane/lanemgr.cpp"
         "oplibraries/tensorflow/device/gpu/sessiondevice.cpp"
         "oplibraries/tensorflow/device/sessionallocator.cpp"
-#         "oplibraries/tensorflow/tfoplibrary.cpp"
-#         "oplibraries/tensorflow/tfmocks/tfdevice.cpp"
-#         "oplibraries/tensorflow/tfmocks/tfsession.cpp"
-#         "oplibraries/tensorflow/tfmocks/tfrendezvous.cpp"
     )
 endif(USE_TENSORFLOW)
 
-add_executable(executor ${SRC_LIST})
-target_link_libraries(executor
+add_executable(salus-server ${SRC_LIST})
+target_link_libraries(salus-server
     protos_gen
     platform
 
@@ -91,10 +87,10 @@ target_link_libraries(executor
 )
 
 if(USE_TENSORFLOW)
-    target_link_libraries(executor
+    target_link_libraries(salus-server
         tensorflow::kernels
     )
-    target_compile_definitions(executor
+    target_compile_definitions(salus-server
         PRIVATE
             GOOGLE_CUDA=1
     )
@@ -104,9 +100,33 @@ endif(USE_TENSORFLOW)
 # Instrucment
 #---------------------------------------------------------------------------------------
 if(WITH_GPERFTOOLS AND WITH_TCMALLOC)
-    target_link_libraries(executor gperftools::tcmalloc_and_profiler)
+    target_link_libraries(salus-server gperftools::tcmalloc_and_profiler)
 elseif(WITH_GPERFTOOLS)
-    target_link_libraries(executor gperftools::profiler)
+    target_link_libraries(salus-server gperftools::profiler)
 elseif(WITH_TCMALLOC)
-    target_link_libraries(executor gperftools::tcmalloc)
+    target_link_libraries(salus-server gperftools::tcmalloc)
 endif()
+
+#---------------------------------------------------------------------------------------
+# Installation
+#---------------------------------------------------------------------------------------
+set_target_properties(salus-server PROPERTIES
+    INSTALL_RPATH_USE_LINK_PATH TRUE
+)
+
+install(TARGETS salus-server
+    RUNTIME DESTINATION bin
+)
+
+# also install dependencies in spack-packages
+#if (DEFINED SALUS_DEPS_PATH)
+#    if (EXISTS ${SALUS_DEPS_PATH}/lib)
+#        install(DIRECTORY ${SALUS_DEPS_PATH}/lib/ DESTINATION DESTINATION lib
+#            USE_SOURCE_PERMISSIONS
+#            FILES_MATCHING
+#            PATTERN "*.so.*"
+#            PATTERN "*.so"
+#            PATTERN "pkgconfig" EXCLUDE
+#        )
+#    endif()
+#endif()

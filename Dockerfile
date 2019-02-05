@@ -106,7 +106,7 @@ WORKDIR /salus/salus
 
 ENV Salus_DIR=${SALUS_WORK_ROOT}/salus
 
-RUN cmake -H. -Bbuild -DCMAKE_BUILD_TYPE=${BUILD_TYPE} -DCMAKE_INSTALL_PREFIX=/usr
+RUN cmake -H. -Bbuild -DCMAKE_BUILD_TYPE=${BUILD_TYPE} -DCMAKE_INSTALL_PREFIX=/usr -DSALUS_DEPS_PATH=$SALUS_DEPS_DIR
 
 RUN cmake --build build -- -j
 

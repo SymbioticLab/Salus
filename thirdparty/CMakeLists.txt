@@ -38,7 +38,7 @@ function(add_submodule library_name)
         endforeach(patch)
     endif(NOT EXISTS ${third_party_dir}/${library_name}/CMakeLists.txt)
 
-    add_subdirectory(${third_party_dir}/${library_name})
+    add_subdirectory(${third_party_dir}/${library_name} EXCLUDE_FROM_ALL)
 endfunction(add_submodule)
 
 set(third_party_dir ${CMAKE_CURRENT_LIST_DIR})
