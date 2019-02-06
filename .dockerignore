@@ -3,5 +3,6 @@ build
 scripts
 spack-packages
 tests/*data
+Dockerfile
 *.pyc
 __pycache__

@@ -50,9 +50,6 @@ RUN mkdir /var/run/sshd \
 #-----------------------------------
 FROM base-${APP_ENV} AS deps
 
-# Update spack
-RUN cd $SPACK_HOME && git pull
-
 RUN spack install boost@1.66.0
 RUN spack install cppzmq@4.3.0 \
                   zeromq@4.2.5 \
@@ -106,7 +103,7 @@ WORKDIR /salus/salus
 
 ENV Salus_DIR=${SALUS_WORK_ROOT}/salus
 
-RUN cmake -H. -Bbuild -DCMAKE_BUILD_TYPE=${BUILD_TYPE} -DCMAKE_INSTALL_PREFIX=/usr -DSALUS_DEPS_PATH=$SALUS_DEPS_DIR
+RUN cmake -H. -Bbuild -DCMAKE_BUILD_TYPE=${BUILD_TYPE} -DCMAKE_INSTALL_PREFIX=/usr/local -DSALUS_DEPS_PATH=$SALUS_DEPS_DIR
 
 RUN cmake --build build -- -j
 
@@ -115,7 +112,33 @@ RUN cmake --build build --target install -- DESTDIR=/opt/salus
 # build a smaller image
 FROM deps as prod
 
-COPY --from=compile /opt/salus /usr
+
+COPY --from=compile /opt/salus /
+
+# grab gosu for easy step-down from root
+ENV GOSU_VERSION 1.11
+RUN set -x \
+    && apt-get update && apt-get install -y --no-install-recommends ca-certificates wget && rm -rf /var/lib/apt/lists/* \
+    && wget -O /usr/local/bin/gosu "https://github.com/tianon/gosu/releases/download/$GOSU_VERSION/gosu-$(dpkg --print-architecture)" \
+    && wget -O /usr/local/bin/gosu.asc "https://github.com/tianon/gosu/releases/download/$GOSU_VERSION/gosu-$(dpkg --print-architecture).asc" \
+    && export GNUPGHOME="$(mktemp -d)" \
+    && gpg --batch --keyserver ha.pool.sks-keyservers.net --recv-keys B42F6819007F00F88E364FD4036A9C25BF357DD4 \
+    && gpg --batch --verify /usr/local/bin/gosu.asc /usr/local/bin/gosu \
+    && { command -v gpgconf > /dev/null && gpgconf --kill all || :; } \
+    && rm -rf "$GNUPGHOME" /usr/local/bin/gosu.asc \
+    && chmod +x /usr/local/bin/gosu \
+    && gosu nobody true \
+    && apt-get purge -y --auto-remove ca-certificates wget
+
+# explicitly set user/group IDs
+RUN set -eux; \
+	groupadd -r salus --gid=999; \
+	useradd -r -g salus --uid=999 --home-dir=/var/lib/salus --shell=/bin/bash salus; \
+	mkdir -p /var/lib/salus; \
+	chown -R salus:salus /var/lib/salus
+
+COPY docker-entrypoint.sh /usr/local/bin/
+ENTRYPOINT ["docker-entrypoint.sh"]
 
 EXPOSE 5501
 
