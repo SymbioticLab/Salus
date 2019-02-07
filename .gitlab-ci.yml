@@ -21,9 +21,16 @@ build:
     - docker build --cache-from $IMAGE_TAG --cache-from $LATEST_TAG -t $IMAGE_TAG --build-arg APP_ENV=prod .
     - docker push $IMAGE_TAG
 
-unittest:
+cuda-gpu:
   image: $IMAGE_TAG
   tags:
     - gpu
   script:
-    - echo
+    - nvidia-smi
+
+sanity-check:
+  image: $IMAGE_TAG
+  tags:
+    - gpu
+  script:
+    - salus-server --help

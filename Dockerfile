@@ -57,12 +57,12 @@ RUN spack install cppzmq@4.3.0 \
                   protobuf@3.4.1 \
                   gperftools@2.7
 
-RUN spack view -v -d false hard "$SALUS_DEPS_DIR" boost@1.66.0 \
-                                                  cppzmq@4.3.0 \
-                                                  zeromq@4.2.5 \
-                                                  nlohmann-json@3.1.2 \
-                                                  protobuf@3.4.1 \
-                                                  gperftools@2.7
+RUN spack view -v -d true hard "$SALUS_DEPS_DIR" boost@1.66.0 \
+                                                 cppzmq@4.3.0 \
+                                                 zeromq@4.2.5 \
+                                                 nlohmann-json@3.1.2 \
+                                                 protobuf@3.4.1 \
+                                                 gperftools@2.7
 
 ENV CMAKE_PREFIX_PATH=$SALUS_DEPS_DIR
 
@@ -110,9 +110,22 @@ RUN cmake --build build -- -j
 RUN cmake --build build --target install -- DESTDIR=/opt/salus
 
 # build a smaller image
-FROM deps as prod
+FROM nvidia/cuda:9.1-cudnn7-runtime-ubuntu16.04 as prod
 
+# gcc7 runtime library
+RUN DEBIAN_FRONTEND=noninteractive apt-get update \
+    && (echo 'debconf debconf/frontend select Noninteractive' | debconf-set-selections) \
+    && apt-get install -y --no-install-recommends software-properties-common gnupg-curl ca-certificates apt-transport-https \
+    && add-apt-repository -y ppa:ubuntu-toolchain-r/test \
+    && apt-get update \
+    && apt-get install -y g++-7 gcc-7 \
+    && apt-get purge -y software-properties-common gnupg-curl \
+    && apt-get autoremove -y \
+    && rm -rf /var/lib/apt/lists/*
 
+COPY --from=deps /salus/tensorflow/bazel-bin/tensorflow/libtensorflow_kernels.so /salus/tensorflow/bazel-bin/tensorflow/
+COPY --from=deps /opt/salus-deps/lib/*.so /usr/local/lib
+COPY --from=deps /opt/salus-deps/lib/*.so.* /usr/local/lib
 COPY --from=compile /opt/salus /
 
 # grab gosu for easy step-down from root

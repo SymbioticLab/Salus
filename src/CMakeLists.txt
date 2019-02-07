@@ -110,9 +110,9 @@ endif()
 #---------------------------------------------------------------------------------------
 # Installation
 #---------------------------------------------------------------------------------------
-set_target_properties(salus-server PROPERTIES
-    INSTALL_RPATH_USE_LINK_PATH TRUE
-)
+#set_target_properties(salus-server PROPERTIES
+#    INSTALL_RPATH "${SALUS_DEPS_PATH}/lib"
+#)
 
 install(TARGETS salus-server
     RUNTIME DESTINATION bin
