@@ -11,6 +11,7 @@ variables:
 
 build:
   image: docker:latest
+  stage: build
   services:
     - docker:dind
   tags:
@@ -21,16 +22,28 @@ build:
     - docker build --cache-from $IMAGE_TAG --cache-from $LATEST_TAG -t $IMAGE_TAG --build-arg APP_ENV=prod .
     - docker push $IMAGE_TAG
 
-cuda-gpu:
+test-cuda-gpu:
+  stage: test
   image: $IMAGE_TAG
   tags:
     - gpu
   script:
     - nvidia-smi
 
-sanity-check:
+test-sanity:
+  stage: test
   image: $IMAGE_TAG
   tags:
     - gpu
   script:
     - salus-server --help
+
+release:
+  stage: release
+  services:
+    - docker:dind
+  script:
+    - docker login -u gitlab-ci-token -p $CI_JOB_TOKEN $CI_REGISTRY
+    - docker pull $IMAGE_TAG
+    - docker tag $IMAGE_TAG $LATEST_TAG
+    - docker push $LATEST_TAG
