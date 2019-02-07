@@ -124,8 +124,8 @@ RUN DEBIAN_FRONTEND=noninteractive apt-get update \
     && rm -rf /var/lib/apt/lists/*
 
 COPY --from=deps /salus/tensorflow/bazel-bin/tensorflow/libtensorflow_kernels.so /salus/tensorflow/bazel-bin/tensorflow/
-COPY --from=deps /opt/salus-deps/lib/*.so /usr/local/lib
-COPY --from=deps /opt/salus-deps/lib/*.so.* /usr/local/lib
+COPY --from=deps /opt/salus-deps/lib/*.so /usr/local/lib/
+COPY --from=deps /opt/salus-deps/lib/*.so.* /usr/local/lib/
 COPY --from=compile /opt/salus /
 
 # grab gosu for easy step-down from root
