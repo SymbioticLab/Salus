@@ -14,7 +14,7 @@ import numpy as np
 import tensorflow as tf
 from parameterized import parameterized
 
-from . import assertAllClose, run_on_rpc_and_cpu
+from . import assertAllClose, run_on_rpc_and_gpu
 
 
 def run_linear_reg(sess, training_epochs=100, learning_rate=0.01):
@@ -74,7 +74,7 @@ class TestLinreg(unittest.TestCase):
             sess = tf.get_default_session()
             return run_linear_reg(sess, training_epochs=epochs)
 
-        actual, expected = run_on_rpc_and_cpu(func)
+        actual, expected = run_on_rpc_and_gpu(func)
         assertAllClose(actual, expected, rtol=1e-6)
 
 

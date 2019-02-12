@@ -1,19 +1,20 @@
 /*
- * <one line to give the library's name and an idea of what it does.>
- * Copyright (C) 2017  Aetf <aetf@unlimitedcodeworks.xyz>
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation, either version 3 of the License, or
- * (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ * Copyright 2019 Peifeng Yu <peifeng@umich.edu>
+ * 
+ * This file is part of Salus
+ * (see https://github.com/SymbioticLab/Salus).
+ * 
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ * 
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ * 
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 #ifndef TENSORFLOW_HEADERS_H
@@ -28,33 +29,49 @@
 #include <tensorflow/core/common_runtime/device.h>
 #include <tensorflow/core/common_runtime/device_factory.h>
 #include <tensorflow/core/common_runtime/device_mgr.h>
+#include <tensorflow/core/common_runtime/dma_helper.h>
 #include <tensorflow/core/common_runtime/executor.h>
 #include <tensorflow/core/common_runtime/function.h>
+#include <tensorflow/core/common_runtime/gpu/gpu_device.h>
+#include <tensorflow/core/common_runtime/gpu/gpu_double_bfc_allocator.h>
+#include <tensorflow/core/common_runtime/gpu/gpu_init.h>
+#include <tensorflow/core/common_runtime/gpu/gpu_stream_util.h>
+#include <tensorflow/core/common_runtime/gpu/gpu_util.h>
+#include <tensorflow/core/common_runtime/gpu/process_state.h>
+#include <tensorflow/core/common_runtime/gpu/pool_allocator.h>
+#include <tensorflow/core/common_runtime/graph_optimizer.h>
 #include <tensorflow/core/common_runtime/local_device.h>
+#include <tensorflow/core/common_runtime/memory_types.h>
+#include <tensorflow/core/common_runtime/optimization_registry.h>
 #include <tensorflow/core/common_runtime/pending_counts.h>
+#include <tensorflow/core/common_runtime/renamed_device.h>
 #include <tensorflow/core/common_runtime/shape_refiner.h>
 #include <tensorflow/core/common_runtime/step_stats_collector.h>
-#include <tensorflow/core/distributed_runtime/zrpc/exechelper/graphview.h>
-#include <tensorflow/core/distributed_runtime/zrpc/exechelper/mdgraphmgr.h>
+#include <tensorflow/core/distributed_runtime/base_rendezvous_mgr.h>
+#include <tensorflow/core/distributed_runtime/master_env.h>
+#include <tensorflow/core/distributed_runtime/master_session.h>
+#include <tensorflow/core/distributed_runtime/session_mgr_interface.h>
+#include <tensorflow/core/distributed_runtime/worker.h>
+#include <tensorflow/core/distributed_runtime/worker_cache.h>
 #include <tensorflow/core/distributed_runtime/zrpc/exechelper/memorytypes.h>
-#include <tensorflow/core/distributed_runtime/zrpc/exechelper/tfoplibraryproxy.h>
-#include <tensorflow/core/distributed_runtime/zrpc/exechelper/allocators.h>
 #include <tensorflow/core/distributed_runtime/zrpc/exechelper/paginghelper.h>
-#include <tensorflow/core/distributed_runtime/zrpc/zrpc_wrapped_devicecontext.h>
-#include <tensorflow/core/distributed_runtime/zrpc/zrpc_rendezvous_mgr.h>
 #include <tensorflow/core/framework/allocator.h>
 #include <tensorflow/core/framework/function.h>
 #include <tensorflow/core/framework/function.pb.h>
+#include <tensorflow/core/framework/graph_def_util.h>
 #include <tensorflow/core/framework/node_def.pb.h>
 #include <tensorflow/core/framework/op_kernel.h>
 #include <tensorflow/core/framework/op_segment.h>
 #include <tensorflow/core/framework/rendezvous.h>
 #include <tensorflow/core/framework/resource_mgr.h>
 #include <tensorflow/core/framework/types.h>
-#include <tensorflow/core/graph/graph.h>
 #include <tensorflow/core/graph/algorithm.h>
+#include <tensorflow/core/graph/graph.h>
 #include <tensorflow/core/graph/graph_constructor.h>
+#include <tensorflow/core/graph/graph_partition.h>
+#include <tensorflow/core/graph/validate.h>
 #include <tensorflow/core/lib/core/status.h>
+#include <tensorflow/core/lib/core/threadpool.h>
 #include <tensorflow/core/lib/gtl/flatmap.h>
 #include <tensorflow/core/lib/gtl/flatset.h>
 #include <tensorflow/core/lib/gtl/inlined_vector.h>
@@ -75,7 +92,7 @@
 #undef NEED_UNDEF_NDEBUG
 #endif
 
-namespace tf = tensorflow;
+#include "oplibraries/tensorflow/tfutils.h"
 
 // Include our logging to override TF's logging, and to provide stream operators
 #include "platform/logging.h"
@@ -84,7 +101,7 @@ inline std::ostream &operator<<(std::ostream &os, const tensorflow::AllocatorAtt
 {
     return os << "tensorflow::AllocatorAttributes("
               << "on_host=" << c.on_host() << ", nic_compatible=" << c.nic_compatible()
-              << ", gpu_compatible=" << c.gpu_compatible() << ", track_sizes=" << c.track_sizes() << ")";
+              << ", gpu_compatible=" << c.gpu_compatible() << ")";
 }
 
 inline std::ostream &operator<<(std::ostream &os, const tensorflow::AllocationAttributes &c)
@@ -98,8 +115,7 @@ inline std::ostream &operator<<(std::ostream &os, const tensorflow::TensorValue 
 {
     os << "TensorValue(";
     if (c.tensor) {
-        os << "shape: " << c->shape().DebugString() << ", datatype: " << c->dtype()
-           << ", is ref: " << c.is_ref();
+        os << "shape: " << c->shape().DebugString() << ", datatype: " << c->dtype() << ", is ref: " << c.is_ref();
         if (c.is_ref()) {
             os << " (mutex: " << as_hex(c.mutex_if_ref) << ")";
         }
@@ -109,6 +125,31 @@ inline std::ostream &operator<<(std::ostream &os, const tensorflow::TensorValue 
     }
     os << ")";
     return os;
+}
+
+inline std::ostream &operator<<(std::ostream &os, const tensorflow::Node &c)
+{
+    return os << c.DebugString();
+}
+
+inline std::ostream &operator<<(std::ostream &os, const tensorflow::TensorShape &c)
+{
+    return os << c.DebugString();
+}
+
+inline std::ostream &operator<<(std::ostream &os, const tensorflow::Rendezvous::ParsedKey &c)
+{
+    return os << c.FullKey().ToString();
+}
+
+inline std::ostream &operator<<(std::ostream &os, const tensorflow::NodeDef &c)
+{
+    return os << SummarizeNodeDef(c);
+}
+
+inline std::ostream &operator<<(std::ostream &os, const tensorflow::DataType &c)
+{
+    return os << tensorflow::DataTypeString(c) << "(" << tensorflow::DataTypeSize(c) << ")";
 }
 
 #endif // TENSORFLOW_HEADERS_H

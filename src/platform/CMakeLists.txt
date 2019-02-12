@@ -1,5 +1,6 @@
 set(SRC_LIST
     "logging.cpp"
+    "profiler.cpp"
 )
 
 if(WIN32)

@@ -11,8 +11,8 @@ figure.subplot.right: 0.98
 figure.subplot.bottom: 0.11
 figure.subplot.top: 0.98
 savefig.transparent: True
-xtick.labelsize: 9
-ytick.labelsize: 9
+xtick.labelsize: 8
+ytick.labelsize: 8
 legend.columnspacing: 1.0
 legend.handlelength: 1.0
 legend.handletextpad: 0.4

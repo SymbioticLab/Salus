@@ -1,31 +1,35 @@
 /*
- * <one line to give the library's name and an idea of what it does.>
- * Copyright (C) 2017  Aetf <aetf@unlimitedcodeworks.xyz>
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation, either version 3 of the License, or
- * (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ * Copyright 2019 Peifeng Yu <peifeng@umich.edu>
+ * 
+ * This file is part of Salus
+ * (see https://github.com/SymbioticLab/Salus).
+ * 
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ * 
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ * 
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
-#ifndef OPEARTIONTASK_H
-#define OPEARTIONTASK_H
+#ifndef SALUS_EXEC_OPEARTIONTASK_H
+#define SALUS_EXEC_OPEARTIONTASK_H
 
 #include "execution/devices.h"
-#include "execution/resources.h"
+#include "resources/resources.h"
+
+#include <boost/range/any_range.hpp>
 
 #include <functional>
 #include <memory>
 #include <vector>
 
+namespace salus {
 class ResourceContext;
 class OperationTask
 {
@@ -40,26 +44,43 @@ public:
 
     virtual ~OperationTask();
 
-    virtual std::string DebugString() = 0;
+    virtual std::string DebugString() const = 0;
+
+    virtual uint64_t graphId() const = 0;
 
     // Estimate usage and cache the result
     virtual Resources estimatedUsage(const DeviceSpec &dev) = 0;
+    virtual bool hasExactEstimation(const DeviceSpec &dev) = 0;
 
     // All supported device types for this task
-    virtual const std::vector<DeviceType> &supportedDeviceTypes() const = 0;
+    using DeviceTypes =
+        boost::any_range<DeviceType, boost::forward_traversal_tag, DeviceType &, std::ptrdiff_t>;
+    virtual DeviceTypes supportedDeviceTypes() const = 0;
 
     virtual int failedTimes() const = 0;
 
-    virtual bool prepare(std::unique_ptr<ResourceContext> &&rctx) = 0;
+    virtual bool prepare(std::unique_ptr<ResourceContext> &&rctx) noexcept = 0;
 
     virtual ResourceContext &resourceContext() const = 0;
 
     // If allow paging happen when this task is running.
-    virtual bool allowConcurrentPaging() const = 0;
+    virtual bool isAsync() const = 0;
 
-    virtual void run(Callbacks cbs) = 0;
+    virtual void run(Callbacks cbs) noexcept = 0;
 
     virtual void cancel() = 0;
 };
 
-#endif // OPEARTIONTASK_H
+inline std::ostream& operator<<(std::ostream& out, const OperationTask& op)
+{
+    return out << op.DebugString();
+}
+
+inline std::ostream& operator<<(std::ostream& out, const std::unique_ptr<OperationTask>& op)
+{
+    return out << op->DebugString();
+}
+
+} // namespace salus
+
+#endif // SALUS_EXEC_OPEARTIONTASK_H

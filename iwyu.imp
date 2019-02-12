@@ -1,0 +1,11 @@
+[
+  # stdlib
+  { include: ["<bits/shared_ptr.h>", "private", "<memory>", "public"] },
+  { include: ["<bits/stdint-uintn.h>", "private", "<cstdint>", "public"] },
+  { include: ["<stdint.h>", "public", "<cstdint>", "public"] },
+  { include: ["<stddef.h>", "public", "<cstddef>", "public"] },
+  # third-party
+  { include: ["\"easylogging++.h\"", "private", "\"platform/logging.h\"", "public"] },
+  # project local
+  { include: ["@\".*\\.pb\\.h\"", "private", "\"protos.h\"", "public"] },
+]

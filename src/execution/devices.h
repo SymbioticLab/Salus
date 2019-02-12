@@ -1,30 +1,35 @@
 /*
- * <one line to give the library's name and an idea of what it does.>
- * Copyright (C) 2017  Aetf <aetf@unlimitedcodeworks.xyz>
+ * Copyright 2019 Peifeng Yu <peifeng@umich.edu>
  * 
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation, either version 3 of the License, or
- * (at your option) any later version.
+ * This file is part of Salus
+ * (see https://github.com/SymbioticLab/Salus).
  * 
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
  * 
- * You should have received a copy of the GNU General Public License
- * along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ *    http://www.apache.org/licenses/LICENSE-2.0
  * 
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
-#ifndef DEVICES_H
-#define DEVICES_H
+#ifndef SALUS_EXEC_DEVICES_H
+#define SALUS_EXEC_DEVICES_H
 
 #include <string>
 #include <tuple>
+#include <ostream>
 
 #include "utils/macros.h"
 
+namespace salus {
+
+// NOTE: this order is used in salus::oplib::tensorflow::TFInstance::DeviceContainer
+// If modify this, also update there.
 enum class DeviceType
 {
     CPU,
@@ -39,13 +44,13 @@ struct DeviceSpec
     DeviceType type;
     int id;
 
-    DeviceSpec() = default;
+    DeviceSpec() noexcept = default;
 
-    DeviceSpec(DeviceType t, int id = 0) : type(t), id(id) {}
+    explicit constexpr DeviceSpec(DeviceType t, int id = 0) noexcept : type(t), id(id) {}
 
     static DeviceSpec fromString(const std::string &str);
 
-    std::string DebugString() const;
+    std::string debugString() const;
 
 private:
     friend bool operator==(const DeviceSpec &lhs, const DeviceSpec &rhs);
@@ -64,22 +69,33 @@ inline bool operator!=(const DeviceSpec &lhs, const DeviceSpec &rhs)
     return lhs.tie() != rhs.tie();
 }
 
-std::ostream &operator<<(std::ostream &os, const DeviceSpec &c);
+inline std::ostream &operator<<(std::ostream &os, const DeviceSpec &c)
+{
+    return os << enumToString(c.type) << ":" << c.id;
+}
+
+namespace devices {
+constexpr DeviceSpec CPU0 {DeviceType::CPU, 0};
+constexpr DeviceSpec GPU0 {DeviceType::GPU, 0};
+constexpr DeviceSpec GPU1 {DeviceType::GPU, 1};
+} // namespace devices
+
+} // namespace salus
 
 namespace std {
 template<>
-class hash<DeviceSpec>
+class hash<salus::DeviceSpec>
 {
 public:
-    inline size_t operator()(const DeviceSpec &spec) const
+    inline size_t operator()(const salus::DeviceSpec &spec) const
     {
         size_t res = 0;
-        utils::hash_combine(res, spec.type);
-        utils::hash_combine(res, spec.id);
+        sstl::hash_combine(res, spec.type);
+        sstl::hash_combine(res, spec.id);
         return res;
     }
 };
 } // namespace std
 
 
-#endif // DEVICES_H
+#endif // SALUS_EXEC_DEVICES_H

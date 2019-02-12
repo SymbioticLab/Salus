@@ -1,0 +1,1 @@
+axes.prop_cycle: cycler('hatch', ['///', '--', '...','\///', 'xxx', '\\\\']) * cycler('color', ['w']) * cycler('edgecolor', ['k']) * cycler('linewidth', [1])

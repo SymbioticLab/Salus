@@ -9,32 +9,56 @@ from timeit import default_timer
 from parameterized import parameterized
 
 import tensorflow as tf
-from tensorflow.examples.tutorials.mnist import input_data
 
-from . import run_on_rpc_and_cpu, run_on_devices, run_on_sessions, assertAllClose
+from . import run_on_rpc_and_gpu, run_on_devices, run_on_sessions, assertAllClose, tfDistributedEndpointOrSkip
 from .lib import tfhelper
+from .lib.datasets import fake_data
 
 
-def run_mnist_softmax(sess, mnist, batch_size=50):
-    x = tf.placeholder(tf.float32, shape=[None, 784])
-    y_ = tf.placeholder(tf.float32, shape=[None, 10])
+def run_mnist_softmax(sess, batch_size=50):
+    x_image, y_, num_classes = fake_data(batch_size, None, height=28, width=28, depth=1, num_classes=10)
+    y_ = tf.one_hot(y_, num_classes)
+    x = tf.reshape(x_image, [-1, 784])
+
     W = tf.Variable(tf.zeros([784, 10]))
     b = tf.Variable(tf.zeros([10]))
-    sess.run(tf.global_variables_initializer())
     y = tf.matmul(x, W) + b
     cross_entropy = tf.reduce_mean(
-        tf.nn.softmax_cross_entropy_with_logits(labels=y_, logits=y))
+        tf.nn.softmax_cross_entropy_with_logits_v2(labels=tf.stop_gradient(y_), logits=y))
     train_step = tf.train.GradientDescentOptimizer(0.5).minimize(cross_entropy)
-    for _ in range(tfhelper.iteration_num_from_env()):
-        batch = mnist.train.next_batch(batch_size)
-        sess.run(train_step, feed_dict={x: batch[0], y_: batch[1]})
 
-    correct_prediction = tf.equal(tf.argmax(y, 1), tf.argmax(y_, 1))
-    accuracy = tf.reduce_mean(tf.cast(correct_prediction, tf.float32))
-    return sess.run(accuracy, feed_dict={x: mnist.test.images, y_: mnist.test.labels})
+    salus_marker = tf.no_op("salus_main_iter")
+    with tfhelper.initialized_scope(sess) as coord:
+        jct = default_timer()
+        speeds = []
+        losses = []
+        for i in range(tfhelper.iteration_num_from_env()):
+            if coord.should_stop():
+                break
+
+            print("{}: Start running step {}".format(datetime.now(), i))
+            start_time = default_timer()
+            _, loss_value, _ = sess.run([train_step, cross_entropy, salus_marker])
+            duration = default_timer() - start_time
+            examples_per_sec = batch_size / duration
+            sec_per_batch = float(duration)
+            speeds.append(sec_per_batch)
+
+            losses.append(loss_value)
+            fmt_str = '{}: step {}, loss = {:.2f} ({:.1f} examples/sec; {:.3f} sec/batch)'
+            print(fmt_str.format(datetime.now(), i, loss_value, examples_per_sec, sec_per_batch))
+        jct = default_timer() - jct
+        print('Training time is %.3f sec' % jct)
+        print('Average: %.3f sec/batch' % np.average(speeds))
+        if len(speeds) > 1:
+            print('First iteration: %.3f sec/batch' % speeds[0])
+            print('Average excluding first iteration: %.3f sec/batch' %
+                  np.average(speeds[1:]))
+
+        return losses
 
 
-def run_mnist_conv(sess, mnist, batch_size=50):
+def run_mnist_conv(sess, batch_size=50):
     def weight_variable(shape):
         initial = tf.truncated_normal(shape, stddev=0.1)
         return tf.Variable(initial)
@@ -49,10 +73,9 @@ def run_mnist_conv(sess, mnist, batch_size=50):
     def max_pool_2x2(x):
         return tf.nn.max_pool(x, ksize=[1, 2, 2, 1], strides=[1, 2, 2, 1], padding='SAME')
 
-    x = tf.placeholder(tf.float32, shape=[None, 784])
-    y_ = tf.placeholder(tf.float32, shape=[None, 10])
+    x_image, y_, num_classes = fake_data(batch_size, None, height=28, width=28, depth=1, num_classes=10)
+    y_ = tf.one_hot(y_, num_classes)
     keep_prob = tf.placeholder(tf.float32)
-    x_image = tf.reshape(x, [-1, 28, 28, 1])
 
     W_conv1 = weight_variable([5, 5, 1, 32])
     b_conv1 = bias_variable([32])
@@ -78,31 +101,31 @@ def run_mnist_conv(sess, mnist, batch_size=50):
     y_fc2 = tf.matmul(h_fc1_drop, W_fc2) + b_fc2
 
     cross_entropy = tf.reduce_mean(
-        tf.nn.softmax_cross_entropy_with_logits(labels=y_, logits=y_fc2))
+        tf.nn.softmax_cross_entropy_with_logits_v2(labels=tf.stop_gradient(y_), logits=y_fc2))
     train_step = tf.train.AdamOptimizer(1e-4).minimize(cross_entropy)
 
+    salus_marker = tf.no_op("salus_main_iter")
     speeds = []
     losses = []
     with tfhelper.initialized_scope(sess) as coord:
+        jct = default_timer()
         for i in range(tfhelper.iteration_num_from_env()):
             if coord.should_stop():
                 break
-            batch = mnist.train.next_batch(batch_size)
             print("{}: Start running step {}".format(datetime.now(), i))
             start_time = default_timer()
-            sess.run(train_step, feed_dict={
-                     x: batch[0], y_: batch[1], keep_prob: 0.5})
+            sess.run([train_step, salus_marker], feed_dict={keep_prob: 0.5})
             duration = default_timer() - start_time
             examples_per_sec = batch_size / duration
             sec_per_batch = float(duration)
             speeds.append(sec_per_batch)
-            loss_value = sess.run(cross_entropy, feed_dict={
-                                  x: batch[0], y_: batch[1], keep_prob: 0.5})
+            loss_value = sess.run(cross_entropy, feed_dict={keep_prob: 0.5})
 
             losses.append(loss_value)
             fmt_str = '{}: step {}, loss = {:.2f} ({:.1f} examples/sec; {:.3f} sec/batch)'
-            print(fmt_str.format(datetime.now(), i,
-                                 loss_value, examples_per_sec, sec_per_batch))
+            print(fmt_str.format(datetime.now(), i, loss_value, examples_per_sec, sec_per_batch))
+        jct = default_timer() - jct
+        print('Training time is %.3f sec' % jct)
         print('Average: %.3f sec/batch' % np.average(speeds))
         if len(speeds) > 1:
             print('First iteration: %.3f sec/batch' % speeds[0])
@@ -112,7 +135,7 @@ def run_mnist_conv(sess, mnist, batch_size=50):
         return losses
 
 
-def run_mnist_large(sess, mnist, batch_size=50):
+def run_mnist_large(sess, batch_size=50):
     def weight_variable(shape):
         initial = tf.truncated_normal(shape, stddev=0.1)
         return tf.Variable(initial)
@@ -127,10 +150,9 @@ def run_mnist_large(sess, mnist, batch_size=50):
     def max_pool_2x2(x):
         return tf.nn.max_pool(x, ksize=[1, 2, 2, 1], strides=[1, 2, 2, 1], padding='SAME')
 
-    x = tf.placeholder(tf.float32, shape=[None, 784])
-    y_ = tf.placeholder(tf.float32, shape=[None, 10])
+    x_image, y_, num_classes = fake_data(batch_size, None, height=28, width=28, depth=1, num_classes=10)
+    y_ = tf.one_hot(y_, num_classes)
     keep_prob = tf.placeholder(tf.float32)
-    x_image = tf.reshape(x, [-1, 28, 28, 1])
 
     W_conv1 = weight_variable([5, 5, 1, 32])
     b_conv1 = bias_variable([32])
@@ -169,24 +191,23 @@ def run_mnist_large(sess, mnist, batch_size=50):
     y_fc2 = tf.matmul(h_fc11_drop, W_fc2) + b_fc2
 
     cross_entropy = tf.reduce_mean(
-        tf.nn.softmax_cross_entropy_with_logits(labels=y_, logits=y_fc2))
+        tf.nn.softmax_cross_entropy_with_logits_v2(labels=tf.stop_gradient(y_), logits=y_fc2))
     train_step = tf.train.AdamOptimizer(1e-4).minimize(cross_entropy)
 
+    salus_marker = tf.no_op("salus_main_iter")
     speeds = []
     inbetween = []
     last_end_time = 0
     losses = []
     with tfhelper.initialized_scope(sess) as coord:
-        JCT = default_timer()
+        jct = default_timer()
         for i in range(tfhelper.iteration_num_from_env()):
             if coord.should_stop():
                 break
 
-            batch = mnist.train.next_batch(batch_size)
             print("{}: Start running step {}".format(datetime.now(), i))
             start_time = default_timer()
-            _, loss_value = sess.run([train_step, cross_entropy],
-                                     feed_dict={x: batch[0], y_: batch[1], keep_prob: 0.5})
+            _, loss_value, _ = sess.run([train_step, cross_entropy, salus_marker], feed_dict={keep_prob: 0.5})
             end_time = default_timer()
 
             if last_end_time > 0:
@@ -202,8 +223,8 @@ def run_mnist_large(sess, mnist, batch_size=50):
             fmt_str = '{}: step {}, loss = {:.2f} ({:.1f} examples/sec; {:.3f} sec/batch)'
             print(fmt_str.format(datetime.now(), i,
                                  loss_value, examples_per_sec, sec_per_batch))
-        JCT = default_timer() - JCT
-        print('Training time is %.3f sec' % JCT)
+        jct = default_timer() - jct
+        print('Training time is %.3f sec' % jct)
         print('Average: %.3f sec/batch' % np.average(speeds))
         if len(speeds) > 1:
             print('First iteration: %.3f sec/batch' % speeds[0])
@@ -214,90 +235,84 @@ def run_mnist_large(sess, mnist, batch_size=50):
 
 
 class MnistConvBase(unittest.TestCase):
-    def _runner(self):
+    def _runner(self, batch_size):
         return None
 
     def _config(self, **kwargs):
-        return tf.ConfigProto()
+        c = tf.ConfigProto()
+        # c.graph_options.optimizer_options.opt_level = tf.OptimizerOptions.L0
+        c.allow_soft_placement = True
+        return c
 
     @parameterized.expand([(25,), (50,), (100,)])
     def test_gpu(self, batch_size):
-        def func():
-            mnist = input_data.read_data_sets('MNIST_data', one_hot=True)
-            sess = tf.get_default_session()
-            return self._runner()(sess, mnist, batch_size=batch_size)
-
-        run_on_devices(func, '/device:GPU:0',
-                       config=self._config(batch_size=batch_size))
+        config = self._config(batch_size=batch_size)
+        config.allow_soft_placement = True
+        run_on_devices(self._runner(batch_size), '/device:GPU:0', config=config)
 
     @unittest.skip("No need to run on CPU")
     def test_cpu(self):
-        def func():
-            mnist = input_data.read_data_sets('MNIST_data', one_hot=True)
-            sess = tf.get_default_session()
-            return self._runner()(sess, mnist)
-
-        run_on_devices(func, '/device:CPU:0', config=self._config())
+        run_on_devices(self._runner(50), '/device:CPU:0', config=self._config())
 
     @parameterized.expand([(25,), (50,), (100,)])
     def test_rpc(self, batch_size):
-        def func():
-            mnist = input_data.read_data_sets('MNIST_data', one_hot=True)
-            sess = tf.get_default_session()
-            return self._runner()(sess, mnist, batch_size=batch_size)
-        run_on_sessions(func, 'zrpc://tcp://127.0.0.1:5501',
+        run_on_sessions(self._runner(batch_size), 'zrpc://tcp://127.0.0.1:5501', dev='/device:GPU:0',
+                        config=self._config(batch_size=batch_size))
+
+    @parameterized.expand([(25,), (50,), (100,)])
+    def test_distributed(self, batch_size):
+        run_on_sessions(self._runner(batch_size),
+                        tfDistributedEndpointOrSkip(),
+                        dev='/job:tfworker/device:GPU:0',
                         config=self._config(batch_size=batch_size))
 
     def test_correctness(self):
-        def func():
-            mnist = input_data.read_data_sets('MNIST_data', one_hot=True)
-            sess = tf.get_default_session()
-            return self._runner()(sess, mnist)
-
-        actual, expected = run_on_rpc_and_cpu(func, config=self._config())
+        actual, expected = run_on_rpc_and_gpu(self._runner(), config=self._config())
         assertAllClose(actual, expected, rtol=1e-3)
 
 
 class TestMnistSoftmax(MnistConvBase):
-    def _runner(self):
-        return run_mnist_softmax
+    def _runner(self, batch_size):
+        return lambda: run_mnist_softmax(tf.get_default_session(), batch_size)
 
 
 class TestMnistConv(MnistConvBase):
-    def _runner(self):
-        return run_mnist_conv
+    def _runner(self, batch_size):
+        return lambda: run_mnist_conv(tf.get_default_session(), batch_size)
 
     def _config(self, **kwargs):
         MB = 1024 * 1024
         memusages = {
-            25: (51.7 * MB - 38 * MB, 38 * MB),
-            50: (64.8 * MB - 38 * MB, 38 * MB),
-            100: (89 * MB - 38 * MB, 38 * MB),
+            25: (100 * MB - 38 * MB, 38 * MB),
+            50: (128 * MB - 58 * MB, 58 * MB),
+            100: (182 * MB - 112 * MB, 112 * MB),
         }
         batch_size = kwargs.get('batch_size', 50)
 
         config = tf.ConfigProto()
-        config.zmq_options.resource_map.temporary['MEMORY:GPU'] = memusages[batch_size][0]
-        config.zmq_options.resource_map.persistant['MEMORY:GPU'] = memusages[batch_size][1]
+        config.allow_soft_placement = True
+        config.salus_options.resource_map.temporary['MEMORY:GPU'] = memusages[batch_size][0]
+        config.salus_options.resource_map.persistant['MEMORY:GPU'] = memusages[batch_size][1]
         return config
 
 
 class TestMnistLarge(MnistConvBase):
-    def _runner(self):
-        return run_mnist_large
+    def _runner(self, batch_size):
+        return lambda: run_mnist_large(tf.get_default_session(), batch_size)
 
     def _config(self, **kwargs):
         MB = 1024 * 1024
         memusages = {
-            25: (39 * MB - 23.5 * MB, 23.5 * MB),
-            50: (54 * MB - 23.5 * MB, 23.5 * MB),
-            100: (72 * MB - 23.5 * MB, 26 * MB),
+            25: (110 * MB - 61 * MB, 61 * MB),
+            50: (136 * MB - 86 * MB, 86 * MB),
+            100: (197 * MB - 137 * MB, 137 * MB),
         }
         batch_size = kwargs.get('batch_size', 50)
 
         config = tf.ConfigProto()
-        config.zmq_options.resource_map.temporary['MEMORY:GPU'] = memusages[batch_size][0]
-        config.zmq_options.resource_map.persistant['MEMORY:GPU'] = memusages[batch_size][1]
+        config.allow_soft_placement = True
+        config.salus_options.resource_map.temporary['MEMORY:GPU'] = memusages[batch_size][0]
+        config.salus_options.resource_map.persistant['MEMORY:GPU'] = memusages[batch_size][1]
         return config
 
 

@@ -1,9 +1,11 @@
 from __future__ import print_function, division, absolute_import
 
 import sys
+import os
 import time
 from timeit import default_timer
 from contextlib import contextmanager
+from unittest import SkipTest
 
 import numpy as np
 import numpy.testing as npt
@@ -25,8 +27,13 @@ def eprint(*args, **kwargs):
     print(*args, file=sys.stderr, **kwargs)
 
 
-# TODO: implement the device selection as a session option.
-# So we can test both CPU and GPU using the same code.
+def tfDistributedEndpointOrSkip():
+    varname = 'SALUS_TFDIST_ENDPOINT'
+    if varname not in os.environ:
+        raise SkipTest('TF distributed service not available. To enable, set {}=grpc://localhost:2345'.format(varname))
+    return os.environ[varname]
+
+
 @contextmanager
 def sess_and_device(target='', dev='', config=None, seed=None):
     finalCfg = tf.ConfigProto()
@@ -44,6 +51,7 @@ def sess_and_device(target='', dev='', config=None, seed=None):
         np.random.seed(seed)
         with tf.device(dev):
             with tf.Session(target, config=finalCfg) as sess:
+                eprint("Running session {} with device {}".format(target, dev))
                 yield sess
 
 
@@ -76,16 +84,9 @@ def run_on_sessions(func, targets, *args, **kwargs):
                     res = func()
                     results.append(res)
                     retry = False
-            except Exception as ex:
-                import traceback
-                traceback.print_exc()
+            except tf.errors.UnavailableError as ex:
                 time.sleep(1)
-
-                retry = not isinstance(ex,tf.errors.ResourceExhaustedError)
-                if retry:
-                    eprint("Retrying due to error:", ex)
-                else:
-                    raise
+                eprint("Retrying due to error:", ex)
         duration = default_timer() - start_time
         print("JCT: {:.3f} s".format(duration))
 
@@ -94,28 +95,29 @@ def run_on_sessions(func, targets, *args, **kwargs):
 
 def run_on_rpc_and_cpu(func, **kwargs):
     config = tf.ConfigProto()
-    config.zmq_options.sched_cpu_only = True
+    config.allow_soft_placement = True
     kwargs = _add_config_to_kwargs(kwargs, config)
-    return run_on_sessions(func, 'zrpc://tcp://localhost:5501', '', **kwargs)
+    return run_on_sessions(func, 'zrpc://tcp://localhost:5501', '', dev='/device:CPU:0', **kwargs)
 
 
 def run_on_rpc_and_gpu(func, **kwargs):
     config = tf.ConfigProto()
-    config.zmq_options.sched_cpu_only = False
+    config.salus_options.sched_cpu_only = False
     config.allow_soft_placement = True
     kwargs = _add_config_to_kwargs(kwargs, config)
-    return run_on_sessions(func, 'zrpc://tcp://localhost:5501', '', **kwargs)
+    return run_on_sessions(func, 'zrpc://tcp://localhost:5501', '', dev='/device:GPU:0', **kwargs)
 
 
 def assertAllClose(actual, expected, **kwargs):
-    def _assertAllClose(actual, expected, path):
+    def _assertAllClose(actual, expected, path, **kwargs):
         if isinstance(actual, (list, tuple)):
             for i, (a, e) in enumerate(zip(actual, expected)):
-                _assertAllClose(a, e, path + [i])
+                _assertAllClose(a, e, path + [i], **kwargs)
         else:
+            rtol = kwargs.pop('rtol', 1e-5)
             msg = "At element actual"
             if len(path) > 0:
                 msg += '[{}]'.format(']['.join(str(i) for i in path))
-            npt.assert_allclose(actual, expected, err_msg=msg, **kwargs)
+            npt.assert_allclose(actual, expected, err_msg=msg, rtol=rtol, **kwargs)
 
-    return _assertAllClose(actual, expected, [])
+    return _assertAllClose(actual, expected, [], **kwargs)

@@ -1,20 +1,20 @@
 /*
- * <one line to give the library's name and an idea of what it does.>
- * Copyright (C) 2017  Aetf <aetf@unlimitedcodeworks.xyz>
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation, either version 3 of the License, or
- * (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program.  If not, see <http://www.gnu.org/licenses/>.
- *
+ * Copyright 2019 Peifeng Yu <peifeng@umich.edu>
+ * 
+ * This file is part of Salus
+ * (see https://github.com/SymbioticLab/Salus).
+ * 
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ * 
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ * 
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 #include "zmqserver.h"
@@ -212,38 +212,39 @@ void ZmqServer::dispatch(zmq::socket_t &sock)
             LOG(ERROR) << "Skipped one iteration due to no body message part found after identity frames";
             return;
         }
-        // TODO: handle multi-part body, which is used by RecvTensorResponse
-        // though it's doubtable if we will receive this on executor side.
+        // NOTE: we only assume there's only one body part.
         sock.recv(&body);
         VLOG(2) << "Received body frame: " << body;
     } catch (zmq::error_t &err) {
         LOG(ERROR) << "Skipped one iteration due to error while receiving: " << err;
         return;
     }
-    auto pEvenlop = utils::createMessage<executor::EvenlopDef>("executor.EvenlopDef",
-                                                               evenlop.data(), evenlop.size());
-    if (!pEvenlop) {
-        LOG(ERROR) << "Skipped one iteration due to malformatted request evenlop received.";
-        return;
-    }
-    VLOG(2) << "Received request evenlop: " << *pEvenlop;
 
-    // step 1. replace the first frame in identity with the requested identity and make a sender
-    if (!pEvenlop->recvidentity().empty()) {
-        identities->front().rebuild(pEvenlop->recvidentity().data(), pEvenlop->recvidentity().size());
-    }
-    auto sender = std::make_shared<SenderImpl>(*this, pEvenlop->seq(), std::move(identities));
+    m_iopool.post([this, identities{std::move(identities)}, evenlop{std::move(evenlop)}, body{std::move(body)}]() mutable {
+        auto pEvenlop = sstl::createMessage<executor::EvenlopDef>("executor.EvenlopDef", evenlop.data(), evenlop.size());
+        if (!pEvenlop) {
+            LOG(ERROR) << "Skipped one iteration due to malformatted request evenlop received.";
+            return;
+        }
+        VLOG(2) << "Received request evenlop: " << *pEvenlop;
 
-    // step 2. create request object
-    auto pRequest = utils::createMessage(pEvenlop->type(), body.data(), body.size());
-    if (!pRequest) {
-        LOG(ERROR) << "Skipped one iteration due to malformatted request received.";
-        return;
-    }
-    VLOG(2) << "Received request body byte array size " << body.size();
+        // step 1. replace the first frame in identity with the requested identity and make a sender
+        if (!pEvenlop->recvidentity().empty()) {
+            identities->front().rebuild(pEvenlop->recvidentity().data(), pEvenlop->recvidentity().size());
+        }
+        auto sender = std::make_shared<SenderImpl>(*this, pEvenlop->seq(), std::move(identities));
 
-    // step 3. dispatch
-    m_pLogic->dispatch(sender, *pEvenlop, *pRequest);
+        // step 2. create request object
+        auto pRequest = sstl::createMessage(pEvenlop->type(), body.data(), body.size());
+        if (!pRequest) {
+            LOG(ERROR) << "Skipped one iteration due to malformatted request received.";
+            return;
+        }
+        VLOG(2) << "Received request body byte array size " << body.size();
+
+        // step 3. dispatch
+        m_pLogic->dispatch(std::move(sender), *pEvenlop, *pRequest);
+    });
 }
 
 ZmqServer::SenderImpl::SenderImpl(ZmqServer &server, uint64_t seq, MultiPartMessage &&identities)
@@ -331,7 +332,9 @@ void ZmqServer::join()
 {
     // Handle SIGINT and SIGTERM
     // so the user can stop the server from terminal
-    signals::waitForTerminate();
+    for (auto [signo, action] = signals::waitForTerminate(); action != signals::SignalAction::Exit;) {
+        UNUSED(signo);
+    }
 
     LOG(INFO) << "Stopping ZmqServer";
     requestStop();

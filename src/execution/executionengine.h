@@ -1,82 +1,52 @@
 /*
- * <one line to give the library's name and an idea of what it does.>
- * Copyright (C) 2017  Aetf <aetf@unlimitedcodeworks.xyz>
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation, either version 3 of the License, or
- * (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program.  If not, see <http://www.gnu.org/licenses/>.
- *
+ * Copyright 2019 Peifeng Yu <peifeng@umich.edu>
+ * 
+ * This file is part of Salus
+ * (see https://github.com/SymbioticLab/Salus).
+ * 
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ * 
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ * 
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
-#ifndef EXECUTIONENGINE_H
-#define EXECUTIONENGINE_H
+#ifndef SALUS_EXEC_EXECUTIONENGINE_H
+#define SALUS_EXEC_EXECUTIONENGINE_H
 
-#include "devices.h"
-
-#include "execution/resources.h"
+#include "execution/devices.h"
+#include "execution/engine/taskexecutor.h"
+#include "execution/scheduler/schedulingparam.h"
 #include "execution/threadpool/threadpool.h"
 #include "platform/logging.h"
+#include "resources/resources.h"
 #include "utils/containerutils.h"
-#include "utils/threadutils.h"
 #include "utils/pointerutils.h"
+#include "utils/threadutils.h"
+
+#include <concurrentqueue.h>
+
+#include <boost/circular_buffer.hpp>
 
 #include <atomic>
+#include <any>
 #include <chrono>
 #include <future>
 #include <list>
 #include <memory>
-#include <type_traits>
 #include <unordered_map>
-#include <unordered_set>
+#include <set>
 
-class OperationTask;
-class ResourceContext;
-struct SessionItem;
-struct OperationItem;
+namespace salus {
+class IterationTask;
+class ExecutionContext;
 
-struct SchedulingParam
-{
-    /**
-     * Maximum head-of-line waiting tasks allowed before refuse to schedule
-     * later tasks in the same queue.
-     */
-    uint64_t maxHolWaiting = 50;
-    /**
-     * Whether to be work conservative. This has no effect when using scheduler 'pack'
-     */
-    bool workConservative = true;
-    /**
-     * The scheduler to use
-     */
-    std::string scheduler = "fair";
-};
-
-struct PagingCallbacks
-{
-    std::function<void()> forceEvicted;
-    std::function<size_t(uint64_t, std::unique_ptr<ResourceContext> &&)> volunteer;
-
-    operator bool() const
-    {
-        return forceEvicted && volunteer;
-    }
-};
-
-/**
-* @todo write docs
-*/
-using PSessionItem = std::shared_ptr<SessionItem>;
-using POpItem = std::shared_ptr<OperationItem>;
-class IScheduler;
 class ExecutionEngine
 {
 
@@ -85,176 +55,152 @@ public:
 
     ~ExecutionEngine();
 
-    class InserterImpl
-    {
-    public:
-        InserterImpl(InserterImpl &&other)
-            : InserterImpl(std::move(other.m_item), other.m_engine)
-        {
-        }
-        InserterImpl(const PSessionItem &item, ExecutionEngine &engine)
-            : m_item(item)
-            , m_engine(engine)
-        {
-        }
-
-        ~InserterImpl();
-
-        void enqueueOperation(std::unique_ptr<OperationTask> &&task);
-
-        void registerPagingCallbacks(PagingCallbacks &&pcb);
-
-        void deleteSession(std::function<void()> cb);
-
-    private:
-        PSessionItem m_item;
-        ExecutionEngine &m_engine;
-    };
-    using Inserter = std::shared_ptr<InserterImpl>;
-
-    Inserter registerSession(const std::string &sessHandle);
+    void startScheduler();
+    void stopScheduler();
 
     ThreadPool &pool()
     {
         return m_pool;
     }
 
-    void setSchedulingParam(const SchedulingParam &param)
+    void setSchedulingParam(const salus::SchedulingParam &param)
     {
         m_schedParam = param;
     }
 
-    const SchedulingParam &schedulingParam() const
+    const salus::SchedulingParam &schedulingParam() const
     {
         return m_schedParam;
     }
 
+    std::shared_ptr<ExecutionContext> makeContext();
 
 private:
+    friend class ExecutionContext;
+
     ExecutionEngine();
 
     // scheduler parameters
-    SchedulingParam m_schedParam;
+    salus::SchedulingParam m_schedParam;
 
-    std::atomic<bool> m_shouldExit{false};
-    std::unique_ptr<std::thread> m_schedThread;
-    void scheduleLoop();
-    bool shouldWaitForAWhile(size_t scheduled, std::chrono::nanoseconds &ns);
-
-    // Task life cycle
-    friend class IScheduler;
-    bool maybePreAllocateFor(OperationItem &opItem, const DeviceSpec &spec);
-    POpItem submitTask(POpItem &&opItem);
-    void taskStopped(OperationItem &opItem, bool failed);
-    void taskRunning(OperationItem &opItem);
-
-    // Bookkeeping
-    ResourceMonitor m_resMonitor;
-    std::atomic_int_fast64_t m_runningTasks{0};
-    std::atomic_int_fast64_t m_noPagingRunningTasks{0};
-
-    // Paging
-    bool doPaging();
-
-    // Incoming kernels
-    void pushToSessionQueue(POpItem &&opItem);
-
-    friend class ResourceContext;
-
-    std::list<PSessionItem> m_newSessions;
-    std::mutex m_newMu;
-
-    std::unordered_set<PSessionItem> m_deletedSessions;
-    std::mutex m_delMu;
-
-    utils::notification m_note_has_work;
-    // Use a minimal linked list because the only operation we need is
-    // iterate through the whole list, insert at end, and delete.
-    // Insert and delete rarely happens, and delete is handled in the same thread
-    // as iteration.
-    std::list<PSessionItem> m_sessions;
-
-    void insertSession(PSessionItem item);
-    void deleteSession(PSessionItem item);
-
-    // Backend thread pool
     ThreadPool m_pool;
-};
 
-class ResourceContext
-{
-    ResourceMonitor &resMon;
-    DeviceSpec m_spec;
-    uint64_t m_ticket;
+    ResourceMonitor m_resMonitor;
+    AllocationRegulator m_allocReg;
 
-public:
-    const DeviceSpec &spec() const
+    // Task executor
+    salus::TaskExecutor m_taskExecutor;
+
+    // Iteration scheduling
+    std::mutex m_mu;
+
+    struct IterationItem
     {
-        return m_spec;
-    }
-    uint64_t ticket() const
-    {
-        return m_ticket;
-    }
-
-    ResourceContext(const ResourceContext &other, const DeviceSpec &spec);
-    ResourceContext(SessionItem &item, ResourceMonitor &resMon);
-    ~ResourceContext();
-
-    bool initializeStaging(const DeviceSpec &spec, const Resources &res);
-    void releaseStaging();
-
-    struct OperationScope
-    {
-        explicit OperationScope(const ResourceContext &context, ResourceMonitor::LockedProxy &&proxy)
-            : valid(true)
-            , proxy(std::move(proxy))
-            , res()
-            , context(context)
-        {
-        }
-
-        OperationScope(OperationScope &&scope)
-            : valid(scope.valid)
-            , proxy(std::move(scope.proxy))
-            , res(std::move(scope.res))
-            , context(scope.context)
-        {
-            scope.valid = false;
-        }
-
-        ~OperationScope()
-        {
-            commit();
-        }
-
-        operator bool() const
-        {
-            return valid;
-        }
-
-        void rollback();
-
-    private:
-        void commit();
-
-        friend class ResourceContext;
-
-        bool valid;
-        ResourceMonitor::LockedProxy proxy;
-        Resources res;
-        const ResourceContext &context;
+        std::weak_ptr<ExecutionContext> wectx;
+        std::unique_ptr<IterationTask> iter;
     };
 
-    OperationScope allocMemory(size_t num_bytes) const;
-    void deallocMemory(size_t num_bytes) const;
 
-private:
-    void removeTicketFromSession() const;
+    using IterQueue = std::list<IterationItem>;
+    using BlockingQueues =
+        boost::circular_buffer<std::pair<PSessionItem, boost::circular_buffer<IterationItem>>>;
 
-    SessionItem &session;
-    std::atomic<bool> hasStaging;
+    struct LaneQueue
+    {
+        uint64_t id;
+        IterQueue queue;
+        std::chrono::system_clock::time_point lastSeen;
+        std::atomic_int_fast64_t numExpensiveIterRunning {0};
+        std::set<std::weak_ptr<SessionItem>, std::owner_less<std::weak_ptr<SessionItem>>> sessions;
+        SessionItem *lastSessionItem = nullptr;
+        std::list<std::weak_ptr<SessionItem>> fifoQueue;
+    };
+
+    IterQueue m_iterQueue GUARDED_BY(m_mu);
+    void scheduleIteration(IterationItem &&item);
+
+    std::unique_ptr<std::thread> m_schedThread;
+    std::atomic<bool> m_interrupting{false};
+    sstl::notification m_note_has_work;
+
+    void scheduleLoop();
+    int scheduleOnQueue(LaneQueue &lctx, IterQueue &staging);
+    bool checkIter(IterationItem &iterItem, ExecutionContext &ectx, LaneQueue &lctx);
+    bool runIter(IterationItem &iterItem, ExecutionContext &ectx, LaneQueue &lctx);
+    bool maybeWaitForAWhile(size_t scheduled);
+    void maybeWaitForWork(size_t pending, size_t scheduled);
 };
-std::ostream &operator<<(std::ostream &os, const ResourceContext &c);
 
-#endif // EXECUTIONENGINE_H
+/**
+ * @todo write docs
+ */
+class ExecutionContext : public std::enable_shared_from_this<ExecutionContext>
+{
+    ExecutionEngine &m_engine;
+    std::any m_userData;
+    uint64_t m_laneId;
+
+    friend class ExecutionEngine;
+    /**
+     * @brief remove from engine and give up our reference of session item
+     */
+    void removeFromEngine();
+
+public:
+    AllocationRegulator::Ticket m_ticket;
+    PSessionItem m_item;
+
+    explicit ExecutionContext(ExecutionEngine &engine, AllocationRegulator::Ticket ticket);
+
+    ~ExecutionContext()
+    {
+        removeFromEngine();
+    }
+
+    void scheduleIteartion(std::unique_ptr<IterationTask> &&iterTask);
+
+    void registerPagingCallbacks(PagingCallbacks &&pcb);
+    void setInterruptCallback(std::function<void()> cb);
+
+    void setSessionHandle(const std::string &h);
+
+    const std::any &userData() const
+    {
+        return m_userData;
+    }
+
+    void setUserData(std::any &&data)
+    {
+        m_userData = std::move(data);
+    }
+
+    void dropExlusiveMode();
+
+    uint64_t laneId() const
+    {
+        return m_laneId;
+    }
+
+    void setLaneId(uint64_t id)
+    {
+        m_laneId = id;
+    }
+
+    void setExpectedRunningTime(uint64_t time);
+
+    /**
+     * @brief Make a resource context that first allocate from session's resources
+     * @param spec
+     * @param res
+     * @param missing
+     * @return
+     */
+    std::unique_ptr<ResourceContext> makeResourceContext(uint64_t graphId, const DeviceSpec &spec,
+                                                         const Resources &res, Resources *missing = nullptr);
+
+    void finish(std::function<void()> cb);
+};
+
+} // namespace salus
+
+#endif // SALUS_EXEC_EXECUTIONENGINE_H

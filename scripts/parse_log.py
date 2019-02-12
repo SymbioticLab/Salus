@@ -1,5 +1,24 @@
+#
+# Copyright 2019 Peifeng Yu <peifeng@umich.edu>
+# 
+# This file is part of Salus
+# (see https://github.com/SymbioticLab/Salus).
+# 
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+# 
+#    http://www.apache.org/licenses/LICENSE-2.0
+# 
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
 from __future__ import print_function, absolute_import, division
 
+import json
 import re
 from datetime import datetime
 from collections import defaultdict
@@ -23,7 +42,7 @@ ptn_exec = re.compile(r"""^\[(?P<timestamp>\d+-\d+-\d+\s\d+:\d+:\d+\.\d{6}) (\d{
 ptn_tf = re.compile(r"""^.*(?P<timestamp>\d{4}-\d{2}-\d{2}\s\d{2}:\d{2}:\d{2}\.\d{6}):\s  # time
                          (?P<level>\w)\s
                          (?P<loc>.+)\]\s
-                         \[(?P<thread>\d+)\]\s
+                         (\[(?P<thread>\d+)\]\s)?
                          (?P<content>.*)$""", re.VERBOSE)
 
 
@@ -42,7 +61,8 @@ class Entry(object):
         self.entry_type = entry_type
 
         self.timestamp = datetime.strptime(g['timestamp'], '%Y-%m-%d %H:%M:%S.%f')
-        self.thread = int(g['thread'])
+        if g['thread'] is not None:
+            self.thread = int(g['thread'])
         self.loc = g['loc']
         self.level = g['level']
         self.raw_content = g['content']
@@ -117,7 +137,7 @@ def load_file(path, reinitialize=True, parallel_workers=0):
 
     if parallel_workers == 0:
         logs = []
-        with open(path) as f:
+        with pu.pbopen(path) as f:
             entry = None
             for line in f:
                 line = line.rstrip('\n')
@@ -212,20 +232,65 @@ ptn_mem_pre = re.compile(r"""Pre \s allocated \s AllocationTicket\((?P<ticket>\d
 ptn_mem_alloc = re.compile(r"""TFAllocator\s.+\s(?P<size>\d+)\sbytes\sof\smemory\sat\s
                                (?P<addr>\w+)\s.*\susing\sallocator\s
                                (?P<mem_type>\w+)@(?P<alloc_inst>\w+)\s
-                               with \s AllocationTicket\((?P<ticket>\d+).+""",
+                               with \s AllocationTicket\((?P<ticket>\d+).+
+                               sess=(?P<sess>\w+).+""",
                            re.VERBOSE)
 ptn_mem_dealloc = re.compile(r"""TFAllocator\sdeallocating\smemory\sat\s(?P<addr>\w+)\s
                                  size\s(?P<size>\d+)\s
                                  using\sallocator\s(?P<mem_type>\w+)@(?P<alloc_inst>\w+)\s
-                                 with \s AllocationTicket\((?P<ticket>\d+).+""",
+                                 with \s AllocationTicket\((?P<ticket>\d+).+
+                                 sess=(?P<sess>\w+).+""",
                              re.VERBOSE)
 ptn_progcnt = re.compile(r"""Progress counter for session (?P<sess>\w+): (?P<cnt>\d+)""")
 
-ptn_tf_vanilla_start = re.compile(r"""\w+ Kernel Compute start: seq=(?P<seq>\d+)""")
-ptn_tf_vanilla_done = re.compile(r"""\w+ Kernel Compute done: seq=(?P<seq>\d+)""")
-ptn_tf_vanilla_start_async = re.compile(r"""\w+ ComputeAsync start: seq=(?P<seq>\d+)""")
-ptn_tf_vanilla_done_async = re.compile(r"""\w+ ComputeAsync done: seq=(?P<seq>\d+)""")
+# OpItem Stat ExecTask(name=v/affine2/biases/Initializer/Const, type=Const, session=59089c8c075bcd3e, failures=0, inputsize=0) queued: 2018-03-29 23:33:53.088091647 scheduled: 2018-03-29 23:33:53.093002944 running: 2018-03-29 23:33:53.093008399 finished: 2018-03-29 23:33:53.093745447
+ptn_optracing = re.compile(r"""OpItem\sStat.*name=(?P<op>[^,]+),.*
+                               type=(?P<kernel>[^,]+),.*
+                               session=(?P<sess>[^,]+).*
+                               step_id=(?P<step>[^,()]+).*
+                               queued:\s(?P<task_ready>.+)\s
+                               scheduled:\s(?P<task_sched>.+)\s
+                               running:\s(?P<task_start>.+)\s
+                               finished: (?P<task_done>.+)$""",
+                           re.VERBOSE)
 
+# OpItem Event ExecTask(name=v/affine2/biases/Initializer/Const, type=Const, session=59089c8c075bcd3e, failures=0, inputsize=0) event: queued
+ptn_optracing_evt = re.compile(r"""OpItem\sEvent.*name=(?P<op>[^,]+),.*
+                                   type=(?P<kernel>[^,]+),.*
+                                   session=(?P<sess>[^,]+).*
+                                   step_id=(?P<step>[^,()]+).*?
+                                   (failed=(?P<failed>\d+))?\s
+                                   event:\s(?P<evt>[^,]+)$""",
+                               re.VERBOSE)
+
+# event: end_iter sess=
+ptn_optracing_evt = re.compile(r"""OpItem\sEvent.*name=(?P<op>[^,]+),.*
+                                   type=(?P<kernel>[^,]+),.*
+                                   session=(?P<sess>[^,]+).*
+                                   step_id=(?P<step>[^,()]+).*?
+                                   (failed=(?P<failed>\d+))?\s
+                                   event:\s(?P<evt>[^,]+)$""",
+                               re.VERBOSE)
+# event: type JSON
+ptn_generic_evt = re.compile(r"""event: (?P<evt>[^ ]+) (?P<props>.+)$""")
+
+# Session abcdefg has tracker ticket 123
+ptn_tracker_ticket = re.compile(r"""Session\s(?P<sess>\w+)\shas\s
+                                    tracker\sticket\s(?P<ticket>\d+)$
+                                """, re.VERBOSE)
+
+# Start session allocation hold: ticket=123, res=1213.5
+ptn_tracker_hold = re.compile(r"""Start\ssession\sallocation.+ticket=(?P<ticket>\d+)
+                                  ,.+res=(?P<res>[\d.]+)$
+                              """, re.VERBOSE)
+# End session allocation hold: ticket=123, res=1213.5
+ptn_tracker_unhold = re.compile(r"""End\ssession\sallocation.+ticket=(?P<ticket>\d+)
+                                  ,.+res=(?P<res>[\d.]+)$
+                              """, re.VERBOSE)
+
+# MismatchedResRequest of size 1234 mem map: 0x1234, 123, 1; 0x567, 456, 0;
+ptn_memmap = re.compile(r"""MismatchedResRequest \s of \s size \s (?P<Size>\d+)
+                            \s mem \s map:\s(?P<memmap>.+)""", re.VERBOSE)
 
 def seq_from_entry(entry):
     map_to_use = thread_seq_map
@@ -363,6 +428,7 @@ def match_exec_content(content, entry):
             'type': 'mem_alloc',
             'size': size,
             'addr': addr,
+            'sess': m.group('sess'),
             'block': block
         }
 
@@ -384,6 +450,7 @@ def match_exec_content(content, entry):
             'type': 'mem_dealloc',
             'addr': addr,
             'size': size,
+            'sess': m.group('sess'),
             'block': block
         }
 
@@ -392,7 +459,7 @@ def match_exec_content(content, entry):
         return {
             'type': 'mem_pre',
             'ticket': int(m.group('ticket')),
-            'sess': m.group('sess')
+            'sess': m.group('sess'),
         }
 
     m = ptn_progcnt.match(content)
@@ -412,16 +479,115 @@ def match_exec_content(content, entry):
             'type': 'sess_create',
             'sess': sess
         }
+        
+    m = ptn_optracing.match(content)
+    if m:
+        sess = m.group('sess')
+        return {
+            'type': 'optracing',
+            'sess': sess,
+            'op': m.group('op'),
+            'kernel': m.group('kernel'),
+            'step': int(m.group('step')),
+            'task_start': m.group('task_start'),
+            'task_ready': m.group('task_ready'),
+            'task_sched': m.group('task_sched'),
+            'task_done': m.group('task_done')
+        }
+
+    m = ptn_optracing_evt.match(content)
+    if m:
+        sess = m.group('sess')
+        failed = m.group('failed')
+        failed = None if failed is None else int(failed)
+        return {
+            'type': 'optracing_evt',
+            'sess': sess,
+            'op': m.group('op'),
+            'kernel': m.group('kernel'),
+            'step': int(m.group('step')),
+            'evt': m.group('evt'),
+            'failed': failed,
+        }
+        
+    m = ptn_tracker_ticket.match(content)
+    if m:
+        sess = m.group('sess')
+        ticket = m.group('ticket')
+        return {
+            'type': 'tracker_ticket',
+            'sess': sess,
+            'ticket': ticket
+        }
+    
+    m = ptn_tracker_hold.match(content)
+    if m:
+        ticket = m.group('ticket')
+        res = float(m.group('res'))
+        return {
+            'type': 'tracker_hold',
+            'ticket': ticket,
+            'size': res
+        }
+    
+    m = ptn_tracker_unhold.match(content)
+    if m:
+        ticket = m.group('ticket')
+        res = float(m.group('res'))
+        return {
+            'type': 'tracker_unhold',
+            'ticket': ticket,
+            'size': res
+        }
+    
+    m = ptn_memmap.match(content)
+    if m:
+        size = int(m.group('Size'))
+        memmap = m.group('memmap')
+        return {
+            'type': 'memmap',
+            'Size': size,
+            'memmap': memmap
+        }
+        
+    m = ptn_generic_evt.match(content)
+    if m:
+        # make every prop starts with captial word
+        props = {}
+        for k, v in json.loads(m.group('props')).items():
+            props[k[0].upper() + k[1:]] = v
+        ret = {
+        'type': 'generic_evt',
+        'evt': m.group('evt')
+        }
+        ret.update(props)
+        return ret
 
     return {}
 
 
+ptn_tf_vanilla_start = re.compile(r"""\w+ Kernel Compute start: seq=(?P<seq>\d+)""")
+ptn_tf_vanilla_done = re.compile(r"""\w+ Kernel Compute done: seq=(?P<seq>\d+)""")
+ptn_tf_vanilla_start_async = re.compile(r"""\w+ ComputeAsync start: seq=(?P<seq>\d+)""")
+ptn_tf_vanilla_done_async = re.compile(r"""\w+ ComputeAsync done: seq=(?P<seq>\d+)""")
 ptn_rpc_run = re.compile(r"""RpcClient::run(Async)?\s+calling rpc using rpc stub""")
 ptn_send_evenlop = re.compile(r"""Sending evenlop message_t: executor\.(?P<req_type>\w+) seq (?P<seq>\d+)""")
 ptn_evenlop_sent = re.compile(r"""Message sent for seq: (?P<seq>\d+)""")
 ptn_recv_resp = re.compile(r"""Received evenlop: seq=(?P<seq>\d+) type=executor\.(?P<req_type>\w+)""")
 ptn_rpc_return = re.compile(r"""RpcClient::run(Async)?\s+rpc returned with status:.*""")
-
+# Process node: 0 step -1 _SOURCE = NoOp[]() is dead: 0
+ptn_tf_process_node = re.compile(
+    r"""Process node: (?P<nid>\d+) step (?P<step>[-\d]+) (?P<op>[\w/]+) = (?P<kernel>[^[]+).*""")
+# NodeDone: 11 step 30 _retval_AssignAdd_0_0 = _Retval[T=DT_INT64, index=0, _device="/job:localhost/replica:0/task:0/device:CPU:0"](AssignAdd)
+ptn_tf_node_done = re.compile(
+    r"""NodeDone: (?P<nid>\d+) step (?P<step>[-\d]+) (?P<op>[\w/]+) = (?P<kernel>[^[]+).*""")
+# NodeReady: 11 step 30 _retval_AssignAdd_0_0 = _Retval[T=DT_INT64, index=0, _device="/job:localhost/replica:0/task:0/device:CPU:0"](AssignAdd)
+ptn_tf_node_ready = re.compile(
+    r"""NodeReady: (?P<nid>\d+) step (?P<step>[-\d]+) (?P<op>[\w/]+) = (?P<kernel>[^[]+).*""")
+# +12345, 0xabcde
+ptn_tf_alloc = re.compile(r"""^\+(?P<size>\d+), (?P<addr>.+)$""")
+# -, 0xabcde
+ptn_tf_dealloc = re.compile(r"""^-(?P<size>\d+), (?P<addr>.+)$""")
 
 def match_tf_content(content, entry):
     m = ptn_rpc_run.match(content)
@@ -510,6 +676,54 @@ def match_tf_content(content, entry):
             'type': 'compute_done',
             'seq': seq,
             'compute_time': (entry.timestamp - info['tf_vanilla_start'].timestamp).total_seconds()
+        }
+
+    m = ptn_tf_process_node.match(content)
+    if m:
+        nid = int(m.group('nid'))
+        return {
+            'type': 'task_start',
+            'nid': nid,
+            'step': int(m.group('step')),
+            'op': m.group('op'),
+            'kernel': m.group('kernel'),
+        }
+
+    m = ptn_tf_node_ready.match(content)
+    if m:
+        nid = int(m.group('nid'))
+        return {
+            'type': 'task_ready',
+            'nid': nid,
+            'step': int(m.group('step')),
+            'op': m.group('op'),
+            'kernel': m.group('kernel'),
+        }
+
+    m = ptn_tf_node_done.match(content)
+    if m:
+        nid = int(m.group('nid'))
+        return {
+            'type': 'task_done',
+            'nid': nid,
+            'step': int(m.group('step')),
+            'op': m.group('op'),
+            'kernel': m.group('kernel'),
+        }
+        
+    m = ptn_tf_alloc.match(content)
+    if m:
+        return {
+            'type': 'tf_alloc',
+            'size': int(m.group('size')),
+            'addr': m.group('addr')
+        }
+    
+    m = ptn_tf_dealloc.match(content)
+    if m:
+        return {
+            'type': 'tf_dealloc',
+            'addr': m.group('addr')
         }
 
     return {}

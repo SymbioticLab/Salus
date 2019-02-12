@@ -9,7 +9,7 @@ import tensorflow as tf
 
 from parameterized import parameterized
 
-from . import run_on_rpc_and_cpu, run_on_sessions, run_on_devices
+from . import run_on_rpc_and_gpu, run_on_sessions, run_on_devices, assertAllClose, tfDistributedEndpointOrSkip
 from . import networks, datasets
 from .lib import tfhelper
 
@@ -29,7 +29,7 @@ def run_resnet(sess, input_data, batch_size=100):
     resnet = networks.ResNet(hps, images, labels, "train")
 
     resnet.build_graph()
-
+    salus_marker = tf.no_op(name="salus_main_iter")
     losses = []
     with tfhelper.initialized_scope(sess) as coord:
         speeds = []
@@ -39,7 +39,7 @@ def run_resnet(sess, input_data, batch_size=100):
                 break
             print("{}: Start running step {}".format(datetime.now(), i))
             start_time = default_timer()
-            _, loss_value = sess.run([resnet.train_op, resnet.cost])
+            _, loss_value, _ = sess.run([resnet.train_op, resnet.cost, salus_marker])
             end_time = default_timer()
 
             duration = end_time - start_time
@@ -67,36 +67,43 @@ class ResNetCaseBase(unittest.TestCase):
     def _get_func(self, batch_size):
         return None
 
-    @parameterized.expand([(25,), (50,), (75,)])
+    @parameterized.expand([(50,)])
     def test_gpu(self, batch_size):
         config = self._config(batch_size=batch_size)
         config.allow_soft_placement = True
         run_on_devices(self._get_func(batch_size), '/device:GPU:0', config=config)
 
-    @parameterized.expand([(25,), (50,), (75,)])
+    @parameterized.expand([(25,), (50,)])
     @unittest.skip("No need to run on CPU")
     def test_cpu(self, batch_size):
         run_on_devices(self._get_func(batch_size), '/device:CPU:0',
                        config=self._config(batch_size=batch_size))
 
-    @parameterized.expand([(25,), (50,), (75,)])
+    @parameterized.expand([(25,), (50,)])
     def test_rpc(self, batch_size):
         run_on_sessions(self._get_func(batch_size),
-                        'zrpc://tcp://127.0.0.1:5501',
+                        'zrpc://tcp://127.0.0.1:5501', dev='/device:GPU:0',
                         config=self._config(batch_size=batch_size))
 
-    @parameterized.expand([(25,), (50,), (75,)])
+    @parameterized.expand([(25,), (50,)])
+    def test_distributed(self, batch_size):
+        run_on_sessions(self._get_func(batch_size),
+                        tfDistributedEndpointOrSkip(),
+                        dev='/job:tfworker/device:GPU:0',
+                        config=self._config(batch_size=batch_size))
+
+    @parameterized.expand([(50,)])
     def test_correctness(self, batch_size):
         config = self._config(batch_size=batch_size)
         config.allow_soft_placement = True
-        actual, expected = run_on_rpc_and_cpu(self._get_func(batch_size), config=config)
-        self.assertEquals(actual, expected)
+        actual, expected = run_on_rpc_and_gpu(self._get_func(batch_size), config=config)
+        assertAllClose(actual, expected, rtol=1e-3)
 
 
 @unittest.skip("Fake data is used as common dataset instead")
 class TestResNetCifar10(ResNetCaseBase):
     def _config(self, **kwargs):
-        # FIXME: update memory usage
+        # TODO: update memory usage
         memusages = {
             25: (6935520748 - 1661494764, 1661494764),
             50: (10211120620 - 1662531248, 1662531248),
@@ -106,8 +113,9 @@ class TestResNetCifar10(ResNetCaseBase):
         batch_size = kwargs.get('batch_size', 100)
 
         config = tf.ConfigProto()
-        config.zmq_options.resource_map.temporary['MEMORY:GPU'] = memusages[batch_size][0]
-        config.zmq_options.resource_map.persistant['MEMORY:GPU'] = memusages[batch_size][1]
+        config.allow_soft_placement = True
+        config.salus_options.resource_map.temporary['MEMORY:GPU'] = memusages[batch_size][0]
+        config.salus_options.resource_map.persistant['MEMORY:GPU'] = memusages[batch_size][1]
         return config
 
     def _get_func(self, batch_size):
@@ -130,14 +138,16 @@ class TestResNetFakeData(ResNetCaseBase):
         batch_size = kwargs.get('batch_size', 100)
 
         config = tf.ConfigProto()
-        config.zmq_options.resource_map.temporary['MEMORY:GPU'] = memusages[batch_size][0]
-        config.zmq_options.resource_map.persistant['MEMORY:GPU'] = memusages[batch_size][1]
+        config.allow_soft_placement = True
+        config.salus_options.resource_map.temporary['MEMORY:GPU'] = memusages[batch_size][0]
+        config.salus_options.resource_map.persistant['MEMORY:GPU'] = memusages[batch_size][1]
         return config
 
     def _get_func(self, batch_size):
         def func():
             def input_data(*a, **kw):
-                images, labels, num_classes = datasets.fake_data(*a, batch_num=50, height=224, width=224, num_classes=1000, **kw)
+                images, labels, num_classes = datasets.fake_data(*a, batch_num=50, height=224,
+                                                                 width=224, num_classes=1000, **kw)
                 labels = tf.one_hot(labels, num_classes, axis=-1)
                 return images, labels, num_classes
             sess = tf.get_default_session()

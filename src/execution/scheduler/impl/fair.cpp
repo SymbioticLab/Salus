@@ -1,19 +1,20 @@
 /*
- * <one line to give the library's name and an idea of what it does.>
- * Copyright (C) 2017  Aetf <aetf@unlimitedcodeworks.xyz>
+ * Copyright 2019 Peifeng Yu <peifeng@umich.edu>
  * 
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation, either version 3 of the License, or
- * (at your option) any later version.
+ * This file is part of Salus
+ * (see https://github.com/SymbioticLab/Salus).
  * 
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
  * 
- * You should have received a copy of the GNU General Public License
- * along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ * 
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 #include "fair.h"
@@ -37,6 +38,7 @@ using std::chrono::system_clock;
 using FpSeconds = std::chrono::duration<double, seconds::period>;
 using namespace std::chrono_literals;
 using namespace date;
+using namespace salus;
 
 namespace {
 SchedulerRegistary::Register reg("fair", [](auto &engine) {
@@ -45,7 +47,7 @@ SchedulerRegistary::Register reg("fair", [](auto &engine) {
 
 } // namespace
 
-FairScheduler::FairScheduler(ExecutionEngine &engine) : IScheduler(engine) {}
+FairScheduler::FairScheduler(TaskExecutor &engine) : BaseScheduler(engine) {}
 
 FairScheduler::~FairScheduler() = default;
 
@@ -54,11 +56,13 @@ std::string FairScheduler::name() const
     return "fair";
 }
 
-void FairScheduler::selectCandidateSessions(const SessionList &sessions,
-                                            const SessionChangeSet &changeset,
-                                            utils::not_null<CandidateList*> candidates)
+void FairScheduler::notifyPreSchedulingIteration(const SessionList &sessions,
+                                                 const SessionChangeSet &changeset,
+                                                 sstl::not_null<CandidateList *> candidates)
 {
     static auto lastSnapshotTime = system_clock::now();
+
+    BaseScheduler::notifyPreSchedulingIteration(sessions, changeset, candidates);
 
     candidates->clear();
 
@@ -76,7 +80,7 @@ void FairScheduler::selectCandidateSessions(const SessionList &sessions,
         for (auto &sess : sessions) {
             candidates->emplace_back(sess);
             // calculate progress counter increase since last snapshot
-            size_t mem = sess->resourceUsage(ResourceTag::GPU0Memory());
+            size_t mem = sess->resourceUsage(resources::GPU0Memory);
             aggResUsages[sess->sessHandle] += mem * sSinceLastSnapshot;
         }
 
@@ -87,6 +91,9 @@ void FairScheduler::selectCandidateSessions(const SessionList &sessions,
             return aggResUsages.at(lhs->sessHandle) < aggResUsages.at(rhs->sessHandle);
         });
     } else {
+        for (auto it = changeset.addedSessionBegin; it != changeset.addedSessionEnd; ++it) {
+            LOG(DEBUG) << "Adding session " << (*it)->sessHandle;
+        }
         // clear to reset everything to zero.
         aggResUsages.clear();
         aggResUsages.reserve(sessions.size());
@@ -107,7 +114,7 @@ std::pair<size_t, bool> FairScheduler::maybeScheduleFrom(PSessionItem item)
 
 std::pair<size_t, bool> FairScheduler::reportScheduleResult(size_t scheduled) const
 {
-    static auto workConservative = m_engine.schedulingParam().workConservative;
+    static auto workConservative = m_taskExec.schedulingParam().workConservative;
     // make sure the first session (with least progress) is
     // get scheduled solely, thus can keep up, without other
     // sessions interfere

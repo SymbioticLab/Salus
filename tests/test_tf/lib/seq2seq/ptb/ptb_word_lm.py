@@ -59,6 +59,9 @@ from __future__ import print_function
 import inspect
 from timeit import default_timer
 from datetime import datetime
+import os
+import random
+import time
 
 import numpy as np
 import tensorflow as tf
@@ -153,6 +156,7 @@ class PTBModel(object):
         self._final_state = state
 
         if not is_training:
+            self._train_op = None
             return
 
         self._lr = tf.Variable(0.0, trainable=False)
@@ -201,6 +205,13 @@ class PTBModel(object):
         iters = 0
         state = session.run(self.initial_state)
 
+        eval_interval = os.environ.get('SALUS_TFBENCH_EVAL_INTERVAL', '0.1')
+        eval_rand_factor = os.environ.get('SALUS_TFBENCH_EVAL_RAND_FACTOR', '5')
+        eval_block = os.environ.get('SALUS_TFBENCH_EVAL_BLOCK', 'true')
+
+        if eval_block != 'true':
+            raise ValueError("SALUS_TFBENCH_EVAL_BLOCK=false is not supported")
+
         fetches = {
             "cost": self.cost,
             "final_state": self.final_state,
@@ -229,6 +240,12 @@ class PTBModel(object):
             if verbose:
                 fmt_str = '{}: step {}, perplexity = {:.2f} ({:.1f} wps; {:.3f} sec/batch)'
                 print(fmt_str.format(datetime.now(), step, np.exp(costs / iters), local_speed, dur))
+
+            if self._train_op is None:
+                factor = 1
+                if eval_rand_factor != "1":
+                    factor = random.randint(1, int(eval_rand_factor))
+                time.sleep(float(eval_interval) * factor)
 
         return np.exp(costs / iters), speeds
 

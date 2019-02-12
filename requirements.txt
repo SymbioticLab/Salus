@@ -1,0 +1,14 @@
+psutil
+absl-py
+numpy
+green==2.11.0
+parameterized==0.6.1
+future
+future-fstrings
+enum34 ; python_version < '3.4'
+typing ; python_version < '3.5'
+
+backports.tempfile ; python_version < '3.2'
+subprocess32 ; python_version < '3.3'
+pathlib2 ; python_version < '3.6'
+futures ; python_version == '2.7'

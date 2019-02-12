@@ -1,28 +1,30 @@
 /*
- * <one line to give the library's name and an idea of what it does.>
- * Copyright (C) 2017  Aetf <aetf@unlimitedcodeworks.xyz>
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation, either version 3 of the License, or
- * (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program.  If not, see <http://www.gnu.org/licenses/>.
- *
+ * Copyright 2019 Peifeng Yu <peifeng@umich.edu>
+ * 
+ * This file is part of Salus
+ * (see https://github.com/SymbioticLab/Salus).
+ * 
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ * 
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ * 
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
-#ifndef STRINGUTILS_H
-#define STRINGUTILS_H
+#ifndef SALUS_SSTL_STRINGUTILS_H
+#define SALUS_SSTL_STRINGUTILS_H
 
+#include <cstddef>
+#include <cstdint>
 #include <string>
 
-namespace utils {
+namespace sstl {
 
 std::string bytesToHexString(const uint8_t *info, size_t infoLength, size_t maxLen = 20);
 
@@ -30,6 +32,6 @@ bool startsWith(const std::string &str, const std::string &prefix);
 
 bool endsWith(const std::string &str, const std::string &postfix);
 
-} // namespace utils
+} // namespace sstl
 
-#endif // STRINGUTILS_H
+#endif // SALUS_SSTL_STRINGUTILS_H

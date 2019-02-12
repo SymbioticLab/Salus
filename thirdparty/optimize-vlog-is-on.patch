@@ -1,0 +1,17 @@
+diff --git a/src/easylogging++.h b/src/easylogging++.h
+index a279872..9f941ac 100644
+--- a/src/easylogging++.h
++++ b/src/easylogging++.h
+@@ -3929,7 +3929,12 @@ class VersionInfo : base::StaticClass {
+ }  // namespace el
+ #undef VLOG_IS_ON
+ /// @brief Determines whether verbose logging is on for specified level current file.
++#if ELPP_VERBOSE_LOG
+ #define VLOG_IS_ON(verboseLevel) (ELPP->vRegistry()->allowed(verboseLevel, __FILE__))
++#else
++#define VLOG_IS_ON(verboseLevel) false
++#endif // ELPP_VERBOSE_LOG
++
+ #undef TIMED_BLOCK
+ #undef TIMED_SCOPE
+ #undef TIMED_SCOPE_IF

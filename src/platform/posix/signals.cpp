@@ -1,29 +1,31 @@
 /*
- * <one line to give the library's name and an idea of what it does.>
- * Copyright (C) 2017  Aetf <aetf@unlimitedcodeworks.xyz>
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation, either version 3 of the License, or
- * (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ * Copyright 2019 Peifeng Yu <peifeng@umich.edu>
+ * 
+ * This file is part of Salus
+ * (see https://github.com/SymbioticLab/Salus).
+ * 
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ * 
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ * 
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 #include "platform/signals.h"
 
 #include "platform/logging.h"
 
-#include <signal.h>
-
+#include <atomic>
+#include <csignal>
 #include <cstring>
-#include <unordered_map>
+#include <cstdio>
+#include <cerrno>
 
 namespace signals {
 
@@ -75,36 +77,53 @@ const char *signalName(int sig)
 }
 
 namespace {
-void handler(int signo)
+
+std::atomic_int gTheSignal;
+
+std::atomic<SignalAction> gSignalAction;
+
+extern "C" void handler(int signo)
 {
-    const char *action = "";
+    gTheSignal = signo;
     switch (signo) {
         case SIGINT:
         case SIGTERM:
-            action = ", exiting";
+            gSignalAction = SignalAction::Exit;
             break;
         default:
-            action = ", ignoring";
+            gSignalAction = SignalAction::Ignore;
     }
 
     // Flush and start a new line on stdout, so ^C won't mess up the output
-    std::cout << std::endl;
-    LOG(INFO) << "Received signal " << signalName(signo) << action;
+    auto esaved = errno;
+    printf("\n");
+    fflush(stdout);
+    errno = esaved;
 }
 
 } // namespace
 
 void initialize()
 {
+    gTheSignal = 0;
+    gSignalAction = SignalAction::Ignore;
+
     installSignalHandler(SIGINT, handler);
     installSignalHandler(SIGTERM, handler);
 }
 
-void waitForTerminate()
+std::pair<int, SignalAction> waitForTerminate()
 {
     sigset_t set;
     sigemptyset(&set);
-    sigsuspend(&set);
+    sigaddset(&set, SIGTERM);
+    sigaddset(&set, SIGINT);
+    int sig;
+    sigwait(&set, &sig);
+
+    LOG(INFO) << "Received signal " << signalName(sig) << "(" << sig << ")";
+
+    return {sig, SignalAction::Exit};
 }
 
 } // namespace signals

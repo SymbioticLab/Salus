@@ -1,24 +1,24 @@
 /*
- * <one line to give the library's name and an idea of what it does.>
- * Copyright (C) 2017  Aetf <aetf@unlimitedcodeworks.xyz>
+ * Copyright 2019 Peifeng Yu <peifeng@umich.edu>
  * 
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation, either version 3 of the License, or
- * (at your option) any later version.
+ * This file is part of Salus
+ * (see https://github.com/SymbioticLab/Salus).
  * 
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
  * 
- * You should have received a copy of the GNU General Public License
- * along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ *    http://www.apache.org/licenses/LICENSE-2.0
  * 
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
-#ifndef PROTOUTILS_H
-#define PROTOUTILS_H
+#ifndef SALUS_SSTL_PROTOUTILS_H
+#define SALUS_SSTL_PROTOUTILS_H
 
 #include "utils/pointerutils.h"
 
@@ -38,9 +38,9 @@
 
 using ProtoPtr = std::unique_ptr<::google::protobuf::Message>;
 
-namespace utils {
+namespace sstl {
 /**
- * Create the protobuf message of specific type name `type` from a byte buffer `data` of length `len`.
+ * @brief Create the protobuf message of specific type name `type` from a byte buffer `data` of length `len`.
  *
  * @return created Message, or nullptr if specified type not found or data is malformatted.
  */
@@ -53,7 +53,7 @@ std::unique_ptr<T> createMessage(const std::string &type, const void *data, size
 }
 
 /**
- * Create the protobuf message from a coded input stream. The stream is expected to contains first a
+ * @brief Create the protobuf message from a coded input stream. The stream is expected to contains first a
  * varint of length and followed by that length of bytes as the message.
  *
  * @return created Message, or nullptr if specified type not found or data is malformatted.
@@ -61,17 +61,18 @@ std::unique_ptr<T> createMessage(const std::string &type, const void *data, size
 ProtoPtr createLenLimitedMessage(const std::string &type, ::google::protobuf::io::CodedInputStream *stream);
 
 template<typename T>
-std::unique_ptr<T> createLenLimitedMessage(const std::string &type, ::google::protobuf::io::CodedInputStream *stream)
+std::unique_ptr<T> createLenLimitedMessage(const std::string &type,
+                                           ::google::protobuf::io::CodedInputStream *stream)
 {
     return static_unique_ptr_cast<T, ::google::protobuf::Message>(createLenLimitedMessage(type, stream));
 }
 
 /**
  * Create an empty message object of specified type name `type`.
- * 
+ *
  * @return created Message, or nullptr if not found.
  */
 ProtoPtr newMessage(const std::string &type);
-}
+} // namespace sstl
 
-#endif // PROTOUTILS_H
+#endif // SALUS_SSTL_PROTOUTILS_H

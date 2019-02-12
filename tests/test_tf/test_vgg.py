@@ -9,7 +9,7 @@ import tensorflow as tf
 
 from parameterized import parameterized
 
-from . import run_on_rpc_and_cpu, run_on_rpc_and_gpu, run_on_sessions, run_on_devices
+from . import run_on_rpc_and_gpu, run_on_sessions, run_on_devices, assertAllClose, tfDistributedEndpointOrSkip
 from . import networks, datasets
 from .lib import tfhelper
 
@@ -33,6 +33,7 @@ def run_vgg(vgg, sess, input_data, batch_size=100):
     # vgg.prob: [batch_size, 1000]
     # labels: [batch_size,]
 
+    salus_marker = tf.no_op(name="salus_main_iter")
     with tfhelper.initialized_scope(sess) as coord:
         speeds = []
         losses = []
@@ -42,7 +43,8 @@ def run_vgg(vgg, sess, input_data, batch_size=100):
                 break
             print("{}: Start running step {}".format(datetime.now(), i))
             start_time = default_timer()
-            _, loss_value = sess.run([train_step, cross_entropy], feed_dict={train_mode: True})
+            _, loss_value, _ = sess.run([train_step, cross_entropy, salus_marker],
+                                        feed_dict={train_mode: True})
             end_time = default_timer()
             losses.append(loss_value)
 
@@ -70,7 +72,7 @@ class VGGCaseBase(unittest.TestCase):
     def _config(self, **kwargs):
         return tf.ConfigProto()
 
-    @parameterized.expand([(25,), (50,), (100,)])
+    @parameterized.expand([(50,)])
     def test_gpu(self, batch_size):
         def func():
             def input_data(*a, **kw):
@@ -100,7 +102,8 @@ class VGGCaseBase(unittest.TestCase):
             sess = tf.get_default_session()
             return run_vgg(self._vgg(), sess, input_data, batch_size=batch_size)
 
-        run_on_sessions(func, 'zrpc://tcp://127.0.0.1:5501', config=self._config(batch_size=batch_size))
+        run_on_sessions(func, 'zrpc://tcp://127.0.0.1:5501', dev='/device:GPU:0',
+                        config=self._config(batch_size=batch_size))
 
     def test_fake_data(self):
         def func():
@@ -109,8 +112,8 @@ class VGGCaseBase(unittest.TestCase):
             sess = tf.get_default_session()
             return run_vgg(self._vgg(), sess, input_data)
 
-        actual, expected = run_on_rpc_and_cpu(func, config=tf.ConfigProto(allow_soft_placement=True))
-        self.assertEquals(actual, expected)
+        actual, expected = run_on_rpc_and_gpu(func, config=tf.ConfigProto(allow_soft_placement=True))
+        assertAllClose(actual, expected, rtol=1e-3)
 
     @unittest.skip("Not yet implemented")
     def test_fake_data_gpu(self):
@@ -123,6 +126,7 @@ class VGGCaseBase(unittest.TestCase):
         actual, expected = run_on_rpc_and_gpu(func)
         self.assertEquals(actual, expected)
 
+    @unittest.skip("Hang. See card#238")
     def test_flowers(self):
         def func():
             def input_data(*a, **kw):
@@ -130,28 +134,19 @@ class VGGCaseBase(unittest.TestCase):
             sess = tf.get_default_session()
             return run_vgg(self._vgg(), sess, input_data)
 
-        actual, expected = run_on_rpc_and_cpu(func)
-        self.assertEquals(actual, expected)
+        actual, expected = run_on_rpc_and_gpu(func)
+        assertAllClose(actual, expected, rtol=1e-3)
 
-    @unittest.skip("Skip distributed runtime")
-    def test_dist(self):
+    def test_distributed(self):
         def func():
             def input_data(*a, **kw):
                 return datasets.fake_data(*a, height=224, width=224, num_classes=1000, **kw)
             sess = tf.get_default_session()
             return run_vgg(self._vgg(), sess, input_data)
 
-        run_on_sessions(func, 'grpc://localhost:2222')
-
-    @unittest.skip("Skip distributed runtime")
-    def test_dist_gpu(self):
-        def func():
-            def input_data(*a, **kw):
-                return datasets.fake_data(*a, height=224, width=224, num_classes=1000, **kw)
-            sess = tf.get_default_session()
-            return run_vgg(self._vgg(), sess, input_data)
-        run_on_devices(func, '/job:local/task:0/device:GPU:0', target='grpc://localhost:2222',
-                       config=tf.ConfigProto(allow_soft_placement=True))
+        run_on_sessions(func, tfDistributedEndpointOrSkip(),
+                        dev='/job:tfworker/device:GPU:0',
+                        config=tf.ConfigProto(allow_soft_placement=True))
 
 
 class TestVgg11(VGGCaseBase):
@@ -168,8 +163,9 @@ class TestVgg11(VGGCaseBase):
         batch_size = kwargs.get('batch_size', 100)
 
         config = tf.ConfigProto()
-        config.zmq_options.resource_map.temporary['MEMORY:GPU'] = memusages[batch_size][0]
-        config.zmq_options.resource_map.persistant['MEMORY:GPU'] = memusages[batch_size][1]
+        config.allow_soft_placement = True
+        config.salus_options.resource_map.temporary['MEMORY:GPU'] = memusages[batch_size][0]
+        config.salus_options.resource_map.persistant['MEMORY:GPU'] = memusages[batch_size][1]
         return config
 
 
@@ -186,8 +182,9 @@ class TestVgg16(VGGCaseBase):
         batch_size = kwargs.get('batch_size', 100)
 
         config = tf.ConfigProto()
-        config.zmq_options.resource_map.temporary['MEMORY:GPU'] = memusages[batch_size][0]
-        config.zmq_options.resource_map.persistant['MEMORY:GPU'] = memusages[batch_size][1]
+        config.allow_soft_placement = True
+        config.salus_options.resource_map.temporary['MEMORY:GPU'] = memusages[batch_size][0]
+        config.salus_options.resource_map.persistant['MEMORY:GPU'] = memusages[batch_size][1]
         return config
 
 
@@ -205,8 +202,9 @@ class TestVgg19(VGGCaseBase):
         batch_size = kwargs.get('batch_size', 100)
 
         config = tf.ConfigProto()
-        config.zmq_options.resource_map.temporary['MEMORY:GPU'] = memusages[batch_size][0]
-        config.zmq_options.resource_map.persistant['MEMORY:GPU'] = memusages[batch_size][1]
+        config.allow_soft_placement = True
+        config.salus_options.resource_map.temporary['MEMORY:GPU'] = memusages[batch_size][0]
+        config.salus_options.resource_map.persistant['MEMORY:GPU'] = memusages[batch_size][1]
         return config
 
 

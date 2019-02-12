@@ -38,12 +38,22 @@ macro(eval expr)
   file(REMOVE ${_fname})
 endmacro(eval)
 
+# Add a global default compile option
 macro(add_compile_options_with_check flag)
   string(REPLACE "-" "_" retvar "COMPILER_SUPPORT_${flag}")
   check_cxx_compiler_flag(${flag} ${retvar})
   if(${retvar})
     add_compile_options(${flag})
   endif()
+endmacro()
+
+# Add compile option to a build type with check
+macro(build_type_add_compile_option_with_check buildtype flag)
+    string(REPLACE "-" "_" retvar "COMPILER_SUPPORT_${flag}")
+    check_cxx_compiler_flag(${flag} ${retvar})
+    if(${retvar})
+        set(CMAKE_CXX_FLAGS_${buildtype} "${CMAKE_CXX_FLAGS_${buildtype}}" ${flag})
+    endif()
 endmacro()
 
 # Print all properties for a target

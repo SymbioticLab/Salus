@@ -1,34 +1,35 @@
 /*
- * <one line to give the library's name and an idea of what it does.>
- * Copyright (C) 2017  Aetf <aetf@unlimitedcodeworks.xyz>
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation, either version 3 of the License, or
- * (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program.  If not, see <http://www.gnu.org/licenses/>.
- *
+ * Copyright 2019 Peifeng Yu <peifeng@umich.edu>
+ * 
+ * This file is part of Salus
+ * (see https://github.com/SymbioticLab/Salus).
+ * 
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ * 
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ * 
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
-#ifndef LOGGING_H
-#define LOGGING_H
+#ifndef SALUS_PLATFORM_LOGGING_H
+#define SALUS_PLATFORM_LOGGING_H
 
-#include "utils/cpp17.h"
-
-#ifdef NDEBUG
-#define ELPP_DISABLE_DEBUG_LOGS
-#endif
+#include "config.h"
 
 #include "easylogging++.h"
 
+#if defined(SALUS_ENABLE_JSON_LOG)
+#include <nlohmann/json.hpp>
+#endif
+
 #include <type_traits>
+#include <optional>
 
 #ifdef _WIN32
 
@@ -113,24 +114,25 @@ inline const char *thread_id(const el::LogMessage *)
 // logger ids
 constexpr const auto kAllocTag = "alloc";
 constexpr const auto kPerfTag = "performance";
+constexpr const auto kOpTracing = "optracing";
 constexpr const auto kDefTag = "default";
 
 // logging configurations
 struct Params
 {
-    utils::optional<std::string> configFile;
-    utils::optional<int> verbosity;
-    utils::optional<std::string> vModules;
-    utils::optional<std::string> vLogFile;
-    utils::optional<std::string> pLogFile;
+    std::optional<std::string> configFile;
+    std::optional<int> verbosity;
+    std::optional<std::string> vModules;
+    std::optional<std::string> vLogFile;
+    std::optional<std::string> pLogFile;
 };
 void initialize(const Params &params);
 
 } // namespace logging
 
-#define PerfLog(level) CLOG(level, logging::kPerfTag)
-#define AllocLog(level) CLOG(level, logging::kAllocTag)
-#define AllocVLog(level) CVLOG(level, logging::kAllocTag)
+#define LogPerf() CLOG(TRACE, logging::kPerfTag)
+#define LogAlloc() CLOG(TRACE, logging::kAllocTag)
+#define LogOpTracing() CLOG(TRACE, logging::kOpTracing)
 
 // Additional operator<< implementations
 MAKE_LOGGABLE(std::exception_ptr, ep, os);
@@ -143,10 +145,8 @@ MAKE_LOGGABLE(executor::OpKernelDef, c, os);
 MAKE_LOGGABLE(executor::EvenlopDef, c, os);
 
 namespace zmq {
-class message_t;
 class error_t;
 }
-MAKE_LOGGABLE(zmq::message_t, c, os);
 MAKE_LOGGABLE(zmq::error_t, c, os);
 
 namespace google {
@@ -194,4 +194,18 @@ constexpr PtrPrintHelper as_hex(const std::shared_ptr<T> &p)
 
 MAKE_LOGGABLE(PtrPrintHelper, helper, os);
 
-#endif // LOGGING_H
+#if defined(SALUS_ENABLE_JSON_LOG)
+template<typename T>
+constexpr auto as_json(T &&obj)
+{
+    return nlohmann::json(std::forward<T>(obj));
+}
+#else
+template<typename T>
+constexpr const char *as_json(T &&)
+{
+    return "";
+}
+#endif
+
+#endif // SALUS_PLATFORM_LOGGING_H
