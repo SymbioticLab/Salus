@@ -2,7 +2,7 @@
 
 [![pipeline status]][gitlabci]
 
-Implementation of Salus (arXiv paper link coming soon).
+Implementation of Salus ([arXiv paper][arXiv]).
 
 Must be used with a customized tensorflow at [SymbioticLab/tensorflow-salus][tf-salus].
 Note that these two projects are tightly coupled together. Make sure to use latest commit from both projects.
@@ -36,6 +36,7 @@ Requires `CMake 3.10` and modern compiler with c++14 support, e.g. `GCC 5.4` is 
 
 See [toplevel CMakeLists.txt](CMakeLists.txt) for details.
 
+[arXiv]: https://arxiv.org/abs/1902.04610
 [tf-salus]: https://github.com/SymbioticLab/tensorflow-salus
 [gitlabci]: https://gitlab.com/Salus/Salus/pipelines
 [pipeline status]: https://gitlab.com/Salus/Salus/badges/master/pipeline.svg
