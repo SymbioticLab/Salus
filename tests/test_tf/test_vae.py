@@ -124,6 +124,8 @@ class TestVae(unittest.TestCase):
         config.allow_soft_placement = True
         config.salus_options.resource_map.temporary['MEMORY:GPU'] = memusages[args.batch_size][0]
         config.salus_options.resource_map.persistant['MEMORY:GPU'] = memusages[args.batch_size][1]
+        config.salus_options.resource_map.temporary['MEMORY:GPU0'] = memusages[args.batch_size][0]
+        config.salus_options.resource_map.persistant['MEMORY:GPU0'] = memusages[args.batch_size][1]
         return config
 
     @parameterized.expand([(1,), (5,), (10,)])

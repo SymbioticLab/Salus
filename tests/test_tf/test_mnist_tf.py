@@ -293,6 +293,8 @@ class TestMnistConv(MnistConvBase):
         config.allow_soft_placement = True
         config.salus_options.resource_map.temporary['MEMORY:GPU'] = memusages[batch_size][0]
         config.salus_options.resource_map.persistant['MEMORY:GPU'] = memusages[batch_size][1]
+        config.salus_options.resource_map.temporary['MEMORY:GPU0'] = memusages[batch_size][0]
+        config.salus_options.resource_map.persistant['MEMORY:GPU0'] = memusages[batch_size][1]
         return config
 
 
@@ -313,6 +315,8 @@ class TestMnistLarge(MnistConvBase):
         config.allow_soft_placement = True
         config.salus_options.resource_map.temporary['MEMORY:GPU'] = memusages[batch_size][0]
         config.salus_options.resource_map.persistant['MEMORY:GPU'] = memusages[batch_size][1]
+        config.salus_options.resource_map.temporary['MEMORY:GPU0'] = memusages[batch_size][0]
+        config.salus_options.resource_map.persistant['MEMORY:GPU0'] = memusages[batch_size][1]
         return config
 
 
