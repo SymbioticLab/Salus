@@ -266,8 +266,9 @@ class MnistConvBase(unittest.TestCase):
                         dev='/job:tfworker/device:GPU:0',
                         config=self._config(batch_size=batch_size))
 
-    def test_correctness(self):
-        actual, expected = run_on_rpc_and_gpu(self._runner(), config=self._config())
+    @parameterized.expand([(25,), (50,), (100,)])
+    def test_correctness(self, batch_size):
+        actual, expected = run_on_rpc_and_gpu(self._runner(batch_size), config=self._config())
         assertAllClose(actual, expected, rtol=1e-3)
 
 
