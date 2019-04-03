@@ -156,6 +156,7 @@ void TFInstance::handleCreateSession(std::unique_ptr<tf::CreateSessionRequest> &
         // NOTE: laneId on ectx is separated from actual lane implementation.
         // It is only used to have separate scheduling domain. So use first lane's id as the id
         // Revisit if later multi-lane for a job is implemented.
+        // TODO: support multiple lane id
         ectx->setLaneId(lanes.at(0)->id());
 
         auto session =

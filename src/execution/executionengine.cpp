@@ -25,6 +25,7 @@
 #include "execution/engine/resourcecontext.h"
 #include "execution/iterationtask.h"
 #include "platform/logging.h"
+#include "platform/thread_annotations.h"
 #include "utils/containerutils.h"
 #include "utils/date.h"
 #include "utils/debugging.h"
@@ -125,6 +126,7 @@ void ExecutionEngine::maybeWaitForWork(size_t pending, size_t scheduled)
 void ExecutionEngine::scheduleLoop()
 {
     LOG(INFO) << "ExecutionEngine scheduling thread started";
+    threading::set_thread_name("ExecutionEngine");
 
     // a map of lane id to thread local queues.
     std::unordered_map<uint64_t, LaneQueue> queues;

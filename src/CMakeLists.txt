@@ -62,6 +62,7 @@ if(USE_TENSORFLOW)
 
         "oplibraries/tensorflow/v3/sigraphmgr.cpp"
         "oplibraries/tensorflow/v3/tf_executor.cpp"
+        "oplibraries/tensorflow/v3/smblocker.cpp"
 
         "oplibraries/tensorflow/device/shadowdevices.cpp"
         "oplibraries/tensorflow/device/salusdevices.cpp"
@@ -96,6 +97,14 @@ if(USE_TENSORFLOW)
     )
 endif(USE_TENSORFLOW)
 
+target_link_options(salus-server
+    PRIVATE
+        "LINKER:--dynamic-list=${CMAKE_CURRENT_SOURCE_DIR}/salus-server.list"
+)
+set_target_properties(salus-server PROPERTIES
+    LINK_DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/salus-server.list
+)
+
 #---------------------------------------------------------------------------------------
 # Instrucment
 #---------------------------------------------------------------------------------------
@@ -106,6 +115,11 @@ elseif(WITH_GPERFTOOLS)
 elseif(WITH_TCMALLOC)
     target_link_libraries(salus-server gperftools::tcmalloc)
 endif()
+
+#---------------------------------------------------------------------------------------
+# CUDA Hooker
+#---------------------------------------------------------------------------------------
+add_subdirectory(cudahook)
 
 #---------------------------------------------------------------------------------------
 # Installation

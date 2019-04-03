@@ -1,0 +1,43 @@
+/*
+ * Copyright (c) 2019, peifeng <email>
+ * All rights reserved.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are met:
+ *
+ *     * Redistributions of source code must retain the above copyright notice,
+ *       this list of conditions and the following disclaimer.
+ *     * Redistributions in binary form must reproduce the above copyright notice,
+ *       this list of conditions and the following disclaimer in the documentation
+ *       and/or other materials provided with the distribution.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+ * "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
+ * LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
+ * A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER
+ * OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
+ * EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
+ * PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
+ * PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
+ * LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
+ * NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
+ * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ */
+
+#ifndef USE_FUNC
+#error USE_FUNC(funcname, ret, params, ...) should be defined before including hooked_functions.def
+#endif
+
+USE_FUNC(cuLaunch, int, (void* f), f)
+USE_FUNC(cuLaunchGrid, int, (void* f, int grid_width, int grid_height), f, grid_width, grid_height)
+USE_FUNC(cuLaunchGridAsync, int, (void* f, int grid_width, int grid_height, void* stream), f, grid_width, grid_height, stream)
+USE_FUNC(cuFuncSetBlockShape, int, (void* f, int x, int y, int z), f, x, y, z)
+USE_FUNC(cuFuncSetSharedSize, int, (void* f, unsigned int bytes), f, bytes)
+
+USE_FUNC(cuLaunchKernel, int, (void* f, unsigned int gridDimX, unsigned int gridDimY, unsigned int gridDimZ,
+                               unsigned int blockDimX, unsigned int blockDimY, unsigned int blockDimZ,
+                               unsigned int sharedMemBytes, void* hStream, void** kernelParams, void** extra),
+                              f, gridDimX, gridDimY, gridDimZ, blockDimX, blockDimY, blockDimZ,
+                              sharedMemBytes, hStream, kernelParams, extra)
+
+#undef USE_FUNC

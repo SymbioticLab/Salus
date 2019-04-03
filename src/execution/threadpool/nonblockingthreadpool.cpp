@@ -26,6 +26,7 @@
 #include "EventCount.h"
 #include "utils/fixed_function.hpp"
 #include "RunQueue.h"
+#include "platform/thread_annotations.h"
 
 #include <atomic>
 #include <memory>
@@ -329,6 +330,8 @@ int ThreadPoolPrivate::nonEmptyQueueIndex()
 
 void ThreadPoolPrivate::workerLoop(int thread_id)
 {
+    salus::threading::set_thread_name("ThreadPoolWorker");
+
     const auto numThreads = m_options.numThreads;
     const auto spinCount = m_options.spinCount;
     const auto allowSpinning = m_options.allowSpinning;

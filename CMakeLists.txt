@@ -1,6 +1,7 @@
 # Version 3.8 required from CheckCXXFeature.cmake
 # Version 3.10 required from Boost 1.66.0 for imported target
-cmake_minimum_required(VERSION 3.10.0)
+# Version 3.13 required for target_link_options
+cmake_minimum_required(VERSION 3.13.0)
 
 project(executor VERSION 1.0.0 LANGUAGES C CXX)
 
@@ -83,6 +84,9 @@ endif(WITH_TCMALLOC)
 
 find_package(nlohmann_json)
 set_package_properties(nlohmann_json PROPERTIES TYPE OPTIONAL PURPOSE "For OpTracing logging")
+
+set(THREADS_PREFER_PTHREAD_FLAG)
+find_package(Threads)
 
 # Bundled third party library
 add_subdirectory(thirdparty)

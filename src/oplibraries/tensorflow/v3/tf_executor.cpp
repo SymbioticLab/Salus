@@ -19,6 +19,7 @@ limitations under the License.
 #include "execution/engine/iterationcontext.h"
 #include "execution/iterationtask.h"
 #include "oplibraries/tensorflow/tfinstance.h"
+#include "oplibraries/tensorflow/v3/smblocker.h"
 #include "utils/envutils.h"
 
 namespace salus::oplib::tensorflow {
@@ -1484,7 +1485,14 @@ void ExecutorState::Process(TaggedNode tagged_node, tf::int64)
     inline_ready.push_back(tagged_node);
     while (!inline_ready.empty()) {
         tagged_node = inline_ready.front();
+
+        if (SMBlocker::instance().maybeBlock(impl_->graph_id_, tagged_node.node->id())) {
+            continue;
+        }
+        SMBlocker::instance().wait(impl_->graph_id_, tagged_node.node->id());
+
         inline_ready.pop_front();
+
         const auto *node = tagged_node.node;
         FrameState *input_frame = tagged_node.input_frame;
         const tf::int64 input_iter = tagged_node.input_iter;
@@ -1564,6 +1572,8 @@ void ExecutorState::Process(TaggedNode tagged_node, tf::int64)
                 AsyncState *state = new AsyncState(params, tagged_node, &item, first_input, nullptr);
 
                 auto done = [this, state]() {
+                    SMBlocker::instance().saveCurrentThreadResults(impl_->graph_id_, state->item->node->id());
+
                     auto *device = impl_->params_.device;
                     Entry *first_input = state->first_input; // Shorthand
 
@@ -1606,6 +1616,9 @@ void ExecutorState::Process(TaggedNode tagged_node, tf::int64)
                 tf::OpKernelContext ctx(&params, item.num_outputs);
                 CHECK_NOTNULL(op_kernel);
                 device->Compute(op_kernel, &ctx);
+
+                SMBlocker::instance().saveCurrentThreadResults(impl_->graph_id_, item.node->id());
+
                 s = ProcessOutputs(item, &ctx, &outputs, nullptr);
                 if (s.ok() && impl_->device_record_tensor_accesses_) {
                     // Get the list of all tensors accessed during the execution

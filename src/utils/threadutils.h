@@ -163,12 +163,17 @@ class semaphore
 {
     std::mutex m_mu;
     std::condition_variable m_cv;
-    uint32_t m_count = 0; // Initialized as locked.
+    uint64_t m_count = 0;
 
 public:
-    void notify(uint32_t c = 1);
+    // Initialized as locked.
+    explicit semaphore(uint64_t init = 0) : m_count(init) {}
 
-    void wait(uint32_t c = 1);
+    void notify(uint64_t c = 1);
+
+    void wait(uint64_t c = 1);
+
+    bool may_block(uint64_t c = 1);
 };
 
 /**
