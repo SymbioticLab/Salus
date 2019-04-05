@@ -116,23 +116,35 @@ class TFBenchmarkRunner(Runner):
         eval_interval = self.wl.env.pop('SALUS_TFBENCH_EVAL_INTERVAL', '0.1')
         eval_rand_factor = self.wl.env.pop('SALUS_TFBENCH_EVAL_RAND_FACTOR', '5')
         eval_block = self.wl.env.pop('SALUS_TFBENCH_EVAL_BLOCK', 'true')
+
+        eval_model_dir = self.wl.env.pop('SALUS_TFBENCH_EVAL_MODEL_DIR', 'models')
+        eval_model_dir = str(Path(eval_model_dir).joinpath(self.wl.name.rstrip('eval')))
+
+        eval_saved_model_dir = self.wl.env.pop('SALUS_TFBENCH_EVAL_SAVED_MODEL_DIR', None)
+        if eval_saved_model_dir is not None:
+            eval_saved_model_dir = str(Path(eval_saved_model_dir).joinpath(self.wl.name.rstrip('eval')))
+
         if self.wl.name.endswith('eval'):
             model_name = self.wl.name.rsplit('eval')[0]
             cmd += [
-                '--model_dir=models/{}'.format(model_name),
+                '--model_dir=' + eval_model_dir,
                 '--model={}'.format(model_name),
                 '--eval_interval_secs={}'.format(eval_interval),
                 '--eval_interval_random_factor={}'.format(eval_rand_factor),
                 '--eval_block={}'.format(eval_block),
                 '--eval'
             ]
+            if eval_saved_model_dir is not None:
+                cmd += [
+                    '--saved_model_dir=' + eval_saved_model_dir
+                ]
         else:
             cmd += [
                 '--model={}'.format(self.wl.name),
             ]
             if str2bool(self.wl.env.pop('SALUS_SAVE_MODEL', '')):
                 cmd += [
-                    '--model_dir=models/{}'.format(self.wl.name),
+                    '--model_dir=' + eval_model_dir,
                 ]
 
         if FLAGS.no_capture:

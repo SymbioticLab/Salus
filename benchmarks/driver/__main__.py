@@ -156,7 +156,7 @@ def parse_expname(args):
 
 
 def main():
-    # type: (Sequence[str]) -> None
+    # type: () -> None
     # find first argument not starting with dash
     exp, argv = parse_expname(sys.argv)
 
