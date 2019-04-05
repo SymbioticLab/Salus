@@ -77,20 +77,18 @@ def do_mem(logdir, network, batch_size):
 
     logger.info(f'Saving model checkpoint for {network}_{batch_size} for {batch_num} iter')
 
-    final_dst = logdir / 'tf' / WTL.from_name(network).canonical_name(RunConfig(batch_size, batch_num, None))
+    final_dst = logdir / WTL.from_name(network).canonical_name(RunConfig(batch_size, batch_num, None))
 
     with atomic_directory(final_dst) as outputdir:
         logger.info('    Running on TF')
         wl = WTL.create(network, batch_size, batch_num, Executor.TF)
         wl.env['SALUS_SAVE_MODEL'] = '1'
+
+        model_dir = pathlib.Path('~/../symbiotic/peifeng/tf_cnn_benchmarks_models/legacy_checkpoint_models')
+        model_dir = model_dir.expanduser().resolve()
+        wl.env['SALUS_TFBENCH_EVAL_MODEL_DIR'] = str(model_dir)
+
         run_tf(outputdir, wl)
-        # filter and move file to a more convinent name
-        for f in pathlib.Path(outputdir).iterdir():
-            with f.with_name('alloc.output').open('w') as file:
-                grep = execute(['egrep', r"] (\+|-)", f.name], stdout=file, cwd=str(f.parent))
-                grep.wait()
-            f.unlink()
-            break
     return final_dst
 
 
