@@ -69,9 +69,9 @@ void salus_kernel_launch_callback(unsigned int gridDimX, unsigned int gridDimY, 
         {blockDimX, blockDimY, blockDimZ},
         sharedMemBytes,
     });
-    LOG(DEBUG) << "Got kernel launch params: ("
+    LOG(DEBUG) << "Got kernel launch params: blk=("
                << gridDimX << "," << gridDimY << "," << gridDimZ
-               << ") x (" << blockDimX << "," << blockDimY << "," << blockDimZ << "), " << sharedMemBytes;
+               << ") x thd=(" << blockDimX << "," << blockDimY << "," << blockDimZ << "), " << sharedMemBytes;
 }
 
 } // extern "C"
@@ -112,17 +112,20 @@ void SMBlocker::saveCurrentThreadResults(uint64_t graphId, int nodeId)
     // update cache
     std::unique_lock l{m_mu};
 
-    auto &usage = m_cache[std::make_pair(graphId, nodeId)];
+    SMUsage newUsage{0, 0};
+    for (const auto &res : SavedCudaKernelLaunches) {
+        newUsage.threadPerBlock = max(newUsage.threadPerBlock, res.threadPerBlock);
+        newUsage.blockCount = max(newUsage.blockCount, res.blockCount);
+    }
 
+    auto &usage = m_cache[std::make_pair(graphId, nodeId)];
     if (usage.blockCount != 0 || usage.threadPerBlock != 0) {
         LOG(WARNING) << "Overriding SM usage for graph " << graphId << " node " << nodeId
-                     << ", previous: " << usage.blockCount << " " << usage.threadPerBlock;
+                     << ", previous: blk=" << usage.blockCount << " thd=" << usage.threadPerBlock
+                     << ", new: blk=" << newUsage.blockCount << " thd=" << newUsage.threadPerBlock;
     }
+    usage = newUsage;
 
-    for (const auto &res : SavedCudaKernelLaunches) {
-        usage.threadPerBlock = max(usage.threadPerBlock, res.threadPerBlock);
-        usage.blockCount = max(usage.blockCount, res.blockCount);
-    }
     SavedCudaKernelLaunches.clear();
 }
 
