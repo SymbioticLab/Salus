@@ -119,7 +119,7 @@ void SMBlocker::saveCurrentThreadResults(uint64_t graphId, int nodeId)
     }
 
     auto &usage = m_cache[std::make_pair(graphId, nodeId)];
-    if (usage.blockCount != 0 || usage.threadPerBlock != 0) {
+    if ((usage.blockCount != 0 || usage.threadPerBlock != 0) && usage != newUsage) {
         LOG(WARNING) << "Overriding SM usage for graph " << graphId << " node " << nodeId
                      << ", previous: blk=" << usage.blockCount << " thd=" << usage.threadPerBlock
                      << ", new: blk=" << newUsage.blockCount << " thd=" << newUsage.threadPerBlock;

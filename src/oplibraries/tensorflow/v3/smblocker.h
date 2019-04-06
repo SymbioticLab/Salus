@@ -42,6 +42,14 @@ struct SMUsage
 {
     uint64_t threadPerBlock = 0;
     uint64_t blockCount = 0;
+
+    bool operator ==(const SMUsage &other) {
+        return threadPerBlock == other.threadPerBlock && blockCount == other.blockCount;
+    }
+
+    bool operator !=(const SMUsage &other) {
+        return !(*this == other);
+    }
 };
 
 class SMBlocker
