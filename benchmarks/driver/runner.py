@@ -40,6 +40,11 @@ logger = logging.getLogger(__name__)
 flags.DEFINE_string('tfbench_base', '../tf_benchmarks', 'Base dir of TFBenchmark based workloads')
 flags.DEFINE_string('unit_base', 'tests', 'Base dir of unittest based workloads')
 flags.DEFINE_string('fathom_base', '../fathom', 'Base dir of Fathom based workloads')
+flags.DEFINE_string('tfweb_base', '../tfweb', 'Base dir of TFWeb based workloads')
+flags.DEFINE_string('tfweb_saved_model_dir', '~/../symbiotic/peifeng/tf_cnn_benchmarks_models/saved_models',
+                    'SavedModel dir of TFWeb based workloads')
+flags.DEFINE_string('tfweb_request_body_dir', '~/../symbiotic/peifeng/tf_cnn_benchmarks_models/reqeusts',
+                    'Predefined request body dir for TFWeb based workloads')
 flags.DEFINE_boolean('no_capture', False, 'Do not capture workload outputs')
 
 
@@ -280,3 +285,95 @@ class FathomRunner(Runner):
             output_file.parent.mkdir(exist_ok=True, parents=True)
             with output_file.open('w') as f:
                 return execute(cmd, cwd=str(cwd), env=self.env, stdout=f, stderr=sp.STDOUT)
+
+
+class TFWebRunner(Runner):
+    """
+    Run a TFWeb based inference job
+
+    We start several servers and a balancer on the same node.
+    The server commandline: tfweb --model=path/to/saved_model/network --sess_target=...
+    The client commandline: gobetween from-file xxx.toml
+    """
+
+    def __init__(self, wl, base_dir=None):
+        super().__init__(wl)
+        self.base_dir = base_dir
+        if self.base_dir is None:
+            self.base_dir = FLAGS.tfweb_base
+
+    def __call__(self, executor, output_file):
+        # type: (Executor, Path) -> Popen
+        model_name = self.wl.name.rstrip('web')
+        cwd = self.base_dir
+        cmd = [
+            'stdbuf', '-o0', '-e0', '--',
+            'examples/cluster/start_cluster',
+            '--model="{}"'.format(str(Path(FLAGS.tfweb_saved_model_dir).joinpath(model_name))),
+        ]
+
+        if executor == Executor.Salus:
+            cmd += [
+                '--sess_target', SalusServer.current_server().endpoint,
+            ]
+        elif executor == Executor.TF:
+            cmd += [
+                '--sess_target', '""',
+            ]
+        elif executor == Executor.TFDist:
+            cmd += [
+                '--sess_target', TFDistServer.current_server().endpoint,
+            ]
+        else:
+            raise ValueError(f'Unknown executor: {executor}')
+
+        num_replicas = self.wl.env.pop('SALUS_TFWEB_REPLICAS', '1')
+        cmd += [
+            '--num_replicas', num_replicas
+        ]
+
+        if FLAGS.no_capture:
+            return execute(cmd, cwd=str(cwd), env=self.env)
+        else:
+            output_file.parent.mkdir(exist_ok=True, parents=True)
+            with output_file.open('w') as f:
+                return execute(cmd, cwd=str(cwd), env=self.env, stdout=f, stderr=sp.STDOUT)
+
+
+class TFWebClientRunner(Runner):
+    """
+    Run a tfweb client attacker.
+    Command: examples/cluster/tfweb-client TARGET REQ_BODY PLANTXT
+    """
+
+    def __init__(self, wl, base_dir=None):
+        super().__init__(wl)
+        self.base_dir = base_dir
+        if self.base_dir is None:
+            self.base_dir = FLAGS.tfweb_base
+
+    def __call__(self, executor, output_file):
+        # type: (Executor, Path) -> Popen
+
+        model_name = self.wl.name.rstrip('client')
+
+        cwd = self.base_dir
+        cmd = [
+            'stdbuf', '-o0', '-e0', '--',
+            'examples/tfweb-client',
+            '-output', str(output_file),
+            self.wl.target,
+            # request body
+            str(Path(FLAGS.tfweb_request_body_dir).joinpath(model_name).with_suffix('.txt')),
+            # always write plan to stdin
+            '-',
+        ]
+
+        proc = execute(cmd, cwd=str(cwd), env=self.env, stdin=sp.PIPE)
+        proc.stdin.write(self._plan_to_bytes())
+        proc.stdin.close()
+        return proc
+
+    def _plan_to_bytes(self):
+        return ' '.join(self.wl.plan).encode('utf-8')
+
