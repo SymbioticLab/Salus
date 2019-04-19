@@ -59,8 +59,24 @@ public:
 
     void saveCurrentThreadResults(uint64_t graphId, int nodeId);
 
-    bool maybeBlock(uint64_t graphId, int nodeId);
-    void wait(uint64_t graphId, int nodeId);
+    /**
+     * @brief Non-blocking version of wait
+     * @param graphId
+     * @param nodeId
+     * @param priority Smaller priority is higher, default is 10
+     * @return true if successfully get needed resource
+     */
+    bool tryTake(uint64_t graphId, int nodeId, int priority);
+
+    /**
+     * @brief Blocking wait
+     * @param graphId
+     * @param nodeId
+     * @param priority
+     */
+    void wait(uint64_t graphId, int nodeId, int priority);
+
+    static constexpr int MaxPriority = 100;
 
 private:
     static SMUsage queryAvailableSM();
@@ -71,7 +87,7 @@ private:
 
     const SMUsage m_maxUsage;
 
-    sstl::semaphore m_freeBlocks;
+    sstl::priority_semaphore<MaxPriority> m_freeBlocks;
 
     using KernelId = std::pair<uint64_t, int>;
     std::unordered_map<KernelId, SMUsage, boost::hash<KernelId>> m_cache;

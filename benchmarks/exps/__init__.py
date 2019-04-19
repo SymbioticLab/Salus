@@ -356,3 +356,21 @@ def select_workloads(argv,             # type: Iterable[str]
     wls = itertools.product(wls, batch_num, executor)
 
     return [WTL.create(name, bs, bn, ex) for (name, bs), bn, ex in wls]
+
+
+def wait_on_pipe(pipe):
+    logger.info(f'Waiting workload to be ready on {pipe}')
+    with open(pipe, 'rb') as f:
+        f.read(1)
+
+
+def release_on_pipe(pipe):
+    logger.info(f'Signaling workload to continue on {pipe}')
+    with open(pipe, 'wb') as f:
+        f.write(b"a")
+    logger.info(f'Workload continued on {pipe}')
+
+
+def sync_on_pipe(pipe):
+    wait_on_pipe(pipe)
+    release_on_pipe(pipe)

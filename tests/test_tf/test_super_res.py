@@ -19,6 +19,8 @@ from .lib.datasets import fake_data_ex
 
 
 def run_superres(sess, input_data, batch_size=100, isEval=False):
+    batch_size = tfhelper.batch_size_from_env(batch_size)
+
     input_images, target_images = input_data(batch_size=batch_size)
 
     model = networks.SuperRes(input_images, target_images, batch_size=batch_size)
@@ -57,7 +59,7 @@ def run_superres(sess, input_data, batch_size=100, isEval=False):
             print(fmt_str.format(datetime.now(), i, loss_value, examples_per_sec, sec_per_batch))
             losses.append(loss_value)
 
-            if isEval:
+            if isEval and eval_rand_factor != '0':
                 factor = 1
                 if eval_rand_factor != "1":
                     factor = random.randint(1, int(eval_rand_factor))

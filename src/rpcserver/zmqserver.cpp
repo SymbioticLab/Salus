@@ -22,6 +22,7 @@
 #include "rpcservercore.h"
 #include "platform/logging.h"
 #include "platform/signals.h"
+#include "platform/thread_annotations.h"
 #include "utils/protoutils.h"
 
 #include "protos.h"
@@ -292,6 +293,8 @@ void ZmqServer::sendMessage(MultiPartMessage &&parts)
 
 void ZmqServer::sendLoop()
 {
+    salus::threading::set_thread_name("ZmqSendLoop");
+
     zmq::socket_t sock(m_zmqCtx, zmq::socket_type::pair);
     sock.connect(kBeAddr);
     VLOG(2) << "Sending loop started";

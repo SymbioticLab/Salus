@@ -151,9 +151,6 @@ class WorkloadTemplate(object):
 
     def _create_from_rcfg(self, rcfg, executor=Executor.Salus):
         # type: (RunConfig, Executor) -> Workload
-        if rcfg.batch_size not in self.available_batch_sizes():
-            raise ValueError(f"Batch size `{rcfg.batch_size}' is not supported for {self.name},"
-                             f" available ones: {self.available_batch_sizes()}")
         return Workload(self, rcfg, executor, self.geometry(rcfg, executor).copy())
 
     @classmethod

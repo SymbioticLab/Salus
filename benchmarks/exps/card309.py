@@ -1,0 +1,147 @@
+# -*- coding: future_fstrings -*-
+#
+# Copyright 2019 Peifeng Yu <peifeng@umich.edu>
+# 
+# This file is part of Salus
+# (see https://github.com/SymbioticLab/Salus).
+# 
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+# 
+#    http://www.apache.org/licenses/LICENSE-2.0
+# 
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+"""
+Card 309: Experiment multiple inference jobs together
+
+Record inference latency. Compare inference job latency running along vs. running with others.
+
+The latency should be measured with increasing throughput (qps) for the inference job.
+
+Collected data:
+    - inference per iteration speed (latency)
+    - training throughput (derived from per iteration speed and batch size)
+"""
+from __future__ import absolute_import, print_function, division, unicode_literals
+
+import os
+import tempfile
+from typing import Sequence
+
+from absl import flags
+import logging
+
+from benchmarks.driver.server.config import presets
+from benchmarks.driver.workload import WTL, Executor
+from benchmarks.driver.utils.compatiblity import pathlib
+from benchmarks.exps import (
+    run_seq, maybe_forced_preset, case_switch_main, RunFn, sync_on_pipe, wait_on_pipe,
+    release_on_pipe,
+)
+
+
+FLAGS = flags.FLAGS
+logger = logging.getLogger(__name__)
+
+flags.DEFINE_integer('num_replicas', 1, 'Number of replicas to run concurrently')
+
+
+def set_env(wl):
+    wl.env['SALUS_TFBENCH_EVAL_INTERVAL'] = '0'
+    wl.env['SALUS_TFBENCH_EVAL_RAND_FACTOR'] = '0'
+    wl.env['SALUS_TFBENCH_EVAL_BLOCK'] = 'true'
+
+    model_dir = pathlib.Path('~/../symbiotic/peifeng/tf_cnn_benchmarks_models/legacy_checkpoint_models')
+    model_dir = model_dir.expanduser().resolve()
+    wl.env['SALUS_TFBENCH_EVAL_MODEL_DIR'] = model_dir
+
+    # run for 60 seconds, ignoring BATCH_NUM
+    wl.env['SALUS_ITER_SECONDS'] = '120'
+
+
+def do_inferences(scfg, names, batch_sizes):
+    batch_num = 100
+    # batch_sizes = [1, 2, 4, 8, 16, 32]
+    # batch_sizes = [1024, 1536, 2048, 4096]
+    for bs in batch_sizes:
+        wls = []
+        for name in names:
+            if not name.endswith('eval'):
+                raise ValueError('Not an inference workload!!!')
+            wl = WTL.create(name, bs, batch_num, executor=Executor.Salus)
+            set_env(wl)
+            wls.append(wl)
+
+        run_seq(scfg, *wls)
+
+
+def same(argv):
+    # type: (Sequence[str]) -> None
+    scfg = maybe_forced_preset(presets.MostEfficient)
+    scfg.logconf = 'disable'
+
+    name = "alexneteval"
+    if len(argv) > 1:
+        name = argv[0]
+    batch_sizes = [int(v) for v in argv[1:]]
+
+    if not batch_sizes:
+        batch_sizes = [1, 2, 4, 8]
+
+    do_inferences(scfg.copy(output_dir=FLAGS.save_dir / str(FLAGS.num_replicas)),
+                  [name] * FLAGS.num_replicas,
+                  batch_sizes)
+
+
+def diff(argv):
+    # type: (Sequence[str]) -> None
+    scfg = maybe_forced_preset(presets.MostEfficient)
+    scfg.logconf = 'disable'
+
+    # all non-integer argv are treated as names
+    names = []
+    batch_sizes = []
+    for arg in argv:
+        try:
+            batch_sizes.append(int(arg))
+        except ValueError:
+            names.append(arg)
+
+    # create jobs
+    batch_num = 100
+    # batch_sizes = [1, 2, 4, 8, 16, 32]
+    # batch_sizes = [1024, 1536, 2048, 4096]
+    for bs in batch_sizes:
+        with tempfile.TemporaryDirectory() as td:
+            wls = []
+            pipes = []
+            for name in names:
+                if not name.endswith('eval'):
+                    raise ValueError('Not an inference workload!!!')
+                wl = WTL.create(name, bs, batch_num, executor=Executor.Salus)
+                set_env(wl)
+                wls.append(wl)
+
+                # also add a small pause to make sure every job starts
+                pipe = str(pathlib.Path(td).joinpath(wl.canonical_name).with_suffix('.pipe'))
+                os.mkfifo(pipe)
+                pipes.append(pipes)
+
+            # wait all jobs to be ready
+            wls.append(RunFn(lambda workloads, **kwargs: [wait_on_pipe(pipe) for pipe in pipes] and None))
+            # signal all jobs to start
+            wls.append(RunFn(lambda workloads, **kwargs: [release_on_pipe(pipe) for pipe in pipes] and None))
+
+            run_seq(scfg.copy(output_dir=FLAGS.save_dir / '-'.join(names)),
+                    *wls)
+
+
+@case_switch_main
+def main():
+    return same, diff

@@ -69,9 +69,11 @@ void salus_kernel_launch_callback(unsigned int gridDimX, unsigned int gridDimY, 
         {blockDimX, blockDimY, blockDimZ},
         sharedMemBytes,
     });
-    LOG(DEBUG) << "Got kernel launch params: blk=("
-               << gridDimX << "," << gridDimY << "," << gridDimZ
-               << ") x thd=(" << blockDimX << "," << blockDimY << "," << blockDimZ << "), " << sharedMemBytes;
+    if (false) {
+        LOG(DEBUG) << "Got kernel launch params: blk=("
+                   << gridDimX << "," << gridDimY << "," << gridDimZ
+                   << ") x thd=(" << blockDimX << "," << blockDimY << "," << blockDimZ << "), " << sharedMemBytes;
+    }
 }
 
 } // extern "C"
@@ -103,9 +105,11 @@ SMBlocker::SMBlocker()
 
 void SMBlocker::saveCurrentThreadResults(uint64_t graphId, int nodeId)
 {
+    LOG(DEBUG) << "Release at SMBlocker: graph " << graphId << " node " << nodeId
+               << " sm " << CurrentThreadHoldingBlocks;
     // release blocks first
     {
-        m_freeBlocks.notify(CurrentThreadHoldingBlocks);
+        m_freeBlocks.post(CurrentThreadHoldingBlocks);
         CurrentThreadHoldingBlocks = 0;
     }
 
@@ -129,23 +133,32 @@ void SMBlocker::saveCurrentThreadResults(uint64_t graphId, int nodeId)
     SavedCudaKernelLaunches.clear();
 }
 
-bool SMBlocker::maybeBlock(uint64_t graphId, int nodeId)
+bool SMBlocker::tryTake(uint64_t graphId, int nodeId, int priority)
 {
     auto smUsage = getUsageForKernel(graphId, nodeId);
 
-    return m_freeBlocks.may_block(smUsage);
+    auto res = m_freeBlocks.try_wait(smUsage, priority);
+    if (res) {
+        // save the count
+        CurrentThreadHoldingBlocks = smUsage;
+        LOG(DEBUG) << "Passed at SMBlocker: graph " << graphId << " node " << nodeId
+                   << " sm " << smUsage << " priority " << priority;
+    }
+    return res;
 }
 
-void SMBlocker::wait(uint64_t graphId, int nodeId)
+void SMBlocker::wait(uint64_t graphId, int nodeId, int priority)
 {
     auto smUsage = getUsageForKernel(graphId, nodeId);
 
     // save the count
     CurrentThreadHoldingBlocks = smUsage;
 
-    LOG(DEBUG) << "Wait at SMBlocker: graph " << graphId << " node " << nodeId;
-    m_freeBlocks.wait(smUsage);
-    LOG(DEBUG) << "Passed at SMBlocker: graph " << graphId << " node " << nodeId;
+    LOG(DEBUG) << "Wait at SMBlocker: graph " << graphId << " node " << nodeId
+               << " sm " << smUsage << " priority " << priority;
+    m_freeBlocks.wait(smUsage, priority);
+    LOG(DEBUG) << "Passed at SMBlocker: graph " << graphId << " node " << nodeId
+               << " sm " << smUsage << " priority " << priority;
 }
 
 uint64_t SMBlocker::getUsageForKernel(uint64_t graphId, int nodeId)

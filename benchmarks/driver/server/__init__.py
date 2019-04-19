@@ -77,9 +77,11 @@ class SalusServer(object):
         """Find the absolute path to server executable, according to 'config.build_type'"""
         candidates = [
             self.config.build_dir / self.config.build_type / 'src' / 'executor',
+            self.config.build_dir / self.config.build_type / 'src' / 'salus-server',
             self.config.build_dir / self.config.build_type / 'bin' / 'executor',
             self.config.build_dir / self.config.build_type / 'bin' / 'salus-server',
             self.config.build_dir / self.config.build_type.lower() / 'src' / 'executor',
+            self.config.build_dir / self.config.build_type.lower() / 'src' / 'salus-server',
             self.config.build_dir / self.config.build_type.lower() / 'bin' / 'executor',
             self.config.build_dir / self.config.build_type.lower() / 'bin' / 'salus-server',
         ]

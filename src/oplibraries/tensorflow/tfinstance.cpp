@@ -140,7 +140,13 @@ void TFInstance::handleCreateSession(std::unique_ptr<tf::CreateSessionRequest> &
         static_cast<uint64_t>(std::round(sstl::getOrDefault(m.persistant(), "TIME:TOTAL", 0.0))) * 1000;
     ectx->setExpectedRunningTime(totalRunningTime);
 
-    m_laneMgr->requestLanes(std::move(layout), [&resp, cb = std::move(cb), req = std::move(req), ectx = std::move(ectx),
+    // smaller is higher priority
+    auto priority = static_cast<int>(sstl::getOrDefault(m.persistant(), "SCHED:PRIORITY", 20));
+
+    LOG(INFO) << "Accept session with priority " << priority;
+
+    m_laneMgr->requestLanes(std::move(layout), [&resp, priority,
+                                                cb = std::move(cb), req = std::move(req), ectx = std::move(ectx),
                                                 this](auto &&lanes) mutable {
         std::vector<tf::Device *> devices;
 
@@ -174,7 +180,7 @@ void TFInstance::handleCreateSession(std::unique_ptr<tf::CreateSessionRequest> &
                           });
         // Keep a reference for lanes on ectx's user data
         // which should outlive the TFSession.
-        ectx->setUserData(std::forward<decltype(lanes)>(lanes));
+        ectx->setUserData(TFExecutionCtxData{std::forward<decltype(lanes)>(lanes), priority});
 
         // Register force interrupt handler
         ectx->setInterruptCallback([this, handle]() { popSession(handle)->safeClose(); });

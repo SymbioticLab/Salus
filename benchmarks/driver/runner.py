@@ -30,7 +30,7 @@ from typing import Iterable, Tuple, Union, Any, Dict
 
 from .server import SalusServer
 from .tfserver import TFDistServer
-from .utils import Popen, execute, snake_to_pascal, str2bool
+from .utils import Popen, execute, snake_to_pascal, str2bool, remove_suffix
 from .utils.compatiblity import pathlib, subprocess as sp
 
 Path = pathlib.Path
@@ -123,14 +123,26 @@ class TFBenchmarkRunner(Runner):
         eval_block = self.wl.env.pop('SALUS_TFBENCH_EVAL_BLOCK', 'true')
 
         eval_model_dir = self.wl.env.pop('SALUS_TFBENCH_EVAL_MODEL_DIR', 'models')
-        eval_model_dir = str(Path(eval_model_dir).joinpath(self.wl.name.rstrip('eval')))
+        eval_model_dir = str(Path(eval_model_dir).joinpath(remove_suffix(self.wl.name, 'eval')))
 
         eval_saved_model_dir = self.wl.env.pop('SALUS_TFBENCH_EVAL_SAVED_MODEL_DIR', None)
         if eval_saved_model_dir is not None:
-            eval_saved_model_dir = str(Path(eval_saved_model_dir).joinpath(self.wl.name.rstrip('eval')))
+            eval_saved_model_dir = str(Path(eval_saved_model_dir).joinpath(remove_suffix(self.wl.name, 'eval')))
+
+        num_seconds = self.wl.env.pop('SALUS_ITER_SECONDS', None)
+        if num_seconds is not None:
+            cmd += [
+                '--num_seconds={}'.format(num_seconds)
+            ]
+
+        wait_for_signal = self.wl.env.pop('SALUS_WAIT_FOR_SIGNAL', None)
+        if wait_for_signal is not None:
+            cmd += [
+                '--wait_for_signal={}'.format(wait_for_signal)
+            ]
 
         if self.wl.name.endswith('eval'):
-            model_name = self.wl.name.rsplit('eval')[0]
+            model_name = remove_suffix(self.wl.name, 'eval')
             cmd += [
                 '--model_dir=' + eval_model_dir,
                 '--model={}'.format(model_name),
@@ -174,6 +186,7 @@ class UnittestRunner(Runner):
         # type: (Executor, Path) -> Popen
         env = self.env.copy()
         env['EXEC_ITER_NUMBER'] = str(self.wl.batch_num)
+        env['SALUS_BATCH_SIZE'] = str(self.wl.batch_size)
         if executor == Executor.TFDist:
             env['SALUS_TFDIST_ENDPOINT'] = TFDistServer.current_server().endpoint
 
@@ -214,6 +227,12 @@ class UnittestRunner(Runner):
             })
         }
 
+        variable_batch_size_models = {'vae', 'superres'}
+        if remove_suffix(self.wl.name, 'eval') not in variable_batch_size_models:
+            if self.wl.batch_size not in self.wl.wtl.available_batch_sizes():
+                raise ValueError(f"Batch size `{self.wl.batch_size}' is not supported for {self.wl.name},"
+                                 f" available ones: {self.wl.wtl.available_batch_sizes()}")
+
         if executor == Executor.Salus:
             prefix = 'test_rpc_'
         elif executor == Executor.TF:
@@ -226,7 +245,7 @@ class UnittestRunner(Runner):
         if self.wl.name.endswith('eval'):
             prefix += 'eval_'
 
-        model_name = self.wl.name.rsplit('eval')[0]
+        model_name = remove_suffix(self.wl.name, 'eval')
 
         if model_name in supported_model:
             pkg, cls, names = supported_model[model_name]
@@ -234,11 +253,16 @@ class UnittestRunner(Runner):
             # fallback to guessing
             pkg = f'test_tf.test_{model_name}'
             cls = f'Test{snake_to_pascal(model_name)}'
+
+            # get method name
             names = {
                 s: str(idx)
                 for idx, s in enumerate(self.wl.wtl.available_batch_sizes())
             }
-        method = f'{cls}.{prefix}{names[self.wl.batch_size]}'
+
+        postfix = names.get(self.wl.batch_size, '0')
+
+        method = f'{cls}.{prefix}{postfix}'
         return pkg, method
 
 
@@ -257,7 +281,7 @@ class FathomRunner(Runner):
         cmd = [
             'stdbuf', '-o0', '-e0', '--',
             'python', '-m', 'fathom.cli',
-            '--workload', self.wl.name.rsplit('eval')[0],
+            '--workload', remove_suffix(self.wl.name, 'eval'),
             '--action', 'test' if self.wl.name.endswith('eval') else 'train',
             '--num_iters', str(self.wl.batch_num),
             '--batch_size', str(self.wl.batch_size),
@@ -287,6 +311,49 @@ class FathomRunner(Runner):
                 return execute(cmd, cwd=str(cwd), env=self.env, stdout=f, stderr=sp.STDOUT)
 
 
+class TFWebDirectRunner(Runner):
+    """Using TFWeb's load infrastructure to directly run"""
+
+    def __init__(self, wl, base_dir=None):
+        super().__init__(wl)
+        self.base_dir = base_dir
+        if self.base_dir is None:
+            self.base_dir = FLAGS.tfweb_base
+
+    def __call__(self, executor, output_file):
+        model_name = remove_suffix(self.wl.name, 'eval')
+        cwd = self.base_dir
+        cmd = [
+            'stdbuf', '-o0', '-e0', '--',
+            'examples/direct/client',
+            '--model="{}"'.format(str(Path(FLAGS.tfweb_saved_model_dir).joinpath(model_name))),
+            '--batch_size={}'.format(self.wl.batch_size),
+            '--batch_num={}'.format(self.wl.batch_num),
+        ]
+
+        if executor == Executor.Salus:
+            cmd += [
+                '--sess_target', SalusServer.current_server().endpoint,
+            ]
+        elif executor == Executor.TF:
+            cmd += [
+                '--sess_target', '""',
+            ]
+        elif executor == Executor.TFDist:
+            cmd += [
+                '--sess_target', TFDistServer.current_server().endpoint,
+            ]
+        else:
+            raise ValueError(f'Unknown executor: {executor}')
+
+        if FLAGS.no_capture:
+            return execute(cmd, cwd=str(cwd), env=self.env)
+        else:
+            output_file.parent.mkdir(exist_ok=True, parents=True)
+            with output_file.open('w') as f:
+                return execute(cmd, cwd=str(cwd), env=self.env, stdout=f, stderr=sp.STDOUT)
+
+
 class TFWebRunner(Runner):
     """
     Run a TFWeb based inference job
@@ -304,7 +371,7 @@ class TFWebRunner(Runner):
 
     def __call__(self, executor, output_file):
         # type: (Executor, Path) -> Popen
-        model_name = self.wl.name.rstrip('web')
+        model_name = remove_suffix(self.wl.name, 'web')
         cwd = self.base_dir
         cmd = [
             'stdbuf', '-o0', '-e0', '--',
@@ -355,7 +422,7 @@ class TFWebClientRunner(Runner):
     def __call__(self, executor, output_file):
         # type: (Executor, Path) -> Popen
 
-        model_name = self.wl.name.rstrip('client')
+        model_name = remove_suffix(self.wl.name, 'client')
 
         cwd = self.base_dir
         cmd = [

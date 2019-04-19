@@ -1104,6 +1104,11 @@ private:
             return ready_.end();
         }
 
+        auto size() const
+        {
+            return ready_.size();
+        }
+
     private:
         tf::gtl::InlinedVector<TaggedNode, 16> ready_;
         size_t front_index_;
@@ -1482,14 +1487,21 @@ void ExecutorState::Process(TaggedNode tagged_node, tf::int64)
     Status s;
     EntryVector outputs;
     bool completed = false;
+    uint64_t failedTake = 0;
+    auto priority = std::any_cast<TFExecutionCtxData>(impl_->params_.ins->userData()).priority;
     inline_ready.push_back(tagged_node);
     while (!inline_ready.empty()) {
         tagged_node = inline_ready.front();
 
-        if (SMBlocker::instance().maybeBlock(impl_->graph_id_, tagged_node.node->id())) {
-            continue;
+        if (!SMBlocker::instance().tryTake(impl_->graph_id_, tagged_node.node->id(), priority)) {
+            ++failedTake;
+            if (failedTake < inline_ready.size()) {
+                continue;
+            } else {
+                SMBlocker::instance().wait(impl_->graph_id_, tagged_node.node->id(), priority);
+                failedTake = 0;
+            }
         }
-        SMBlocker::instance().wait(impl_->graph_id_, tagged_node.node->id());
 
         inline_ready.pop_front();
 

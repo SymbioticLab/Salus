@@ -25,6 +25,7 @@
 #include <functional>
 #include <memory>
 #include <string_view>
+#include <vector>
 
 #define CallWithMasterMethodName(m)                                                                                    \
     m(CreateSession) m(ExtendSession) m(PartialRunSetup) m(CloseSession) m(ListDevices) m(Reset) m(RunStep)
@@ -71,6 +72,13 @@ DeviceType tfDeviceTypeToType(const std::string &type);
 using POpKernel = std::unique_ptr<tf::OpKernel, void (*)(tf::OpKernel *)>;
 
 std::string tfGraphToGraphviz(const tf::Graph &g, const std::string &name);
+
+class LaneHolder;
+struct TFExecutionCtxData
+{
+    std::vector<std::shared_ptr<LaneHolder>> lanes;
+    int priority;
+};
 
 } // namespace salus::oplib::tensorflow
 

@@ -86,6 +86,14 @@ def remove_prefix(text, prefix):
     return text  # or whatever
 
 
+def remove_suffix(text, suffix):
+    # type: (str, str) -> str
+    """Remove suffix from text if any"""
+    if text.endswith(suffix):
+        return text[:len(text)-len(suffix)]
+    return text
+
+
 def try_with_default(func, default=None, ignore=Exception):
     """ A wrapper that ignores exception from a function.
     """
@@ -301,6 +309,7 @@ __all__ = [
     'eprint',
     'remove_none',
     'remove_prefix',
+    'remove_suffix',
     'try_with_default',
     'execute',
     'kill_tree',
