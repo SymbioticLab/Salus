@@ -93,4 +93,7 @@ def pause(prompt='Press enter to continue...'):
     """Pause the execution and wait the user to press enter"""
 
     # we don't want to guard against KeyboardInterrupt
-    input(prompt)
+    try:
+        input(prompt)
+    except EOFError:
+        pass

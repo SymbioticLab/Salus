@@ -68,14 +68,15 @@ if(USE_TENSORFLOW)
         "oplibraries/tensorflow/device/salusdevices.cpp"
         "oplibraries/tensorflow/device/cpu.cpp"
         "oplibraries/tensorflow/device/gpu/gpu.cpp"
+        "oplibraries/tensorflow/device/gpu/smeventpoller.cpp"
         "oplibraries/tensorflow/device/gpu/lane/lanemgr.cpp"
         "oplibraries/tensorflow/device/gpu/sessiondevice.cpp"
         "oplibraries/tensorflow/device/sessionallocator.cpp"
     )
 endif(USE_TENSORFLOW)
 
-add_executable(salus-server ${SRC_LIST})
-target_link_libraries(salus-server
+add_executable(salus-server-exec ${SRC_LIST})
+target_link_libraries(salus-server-exec
     protos_gen
     platform
 
@@ -88,20 +89,20 @@ target_link_libraries(salus-server
 )
 
 if(USE_TENSORFLOW)
-    target_link_libraries(salus-server
+    target_link_libraries(salus-server-exec
         tensorflow::kernels
     )
-    target_compile_definitions(salus-server
+    target_compile_definitions(salus-server-exec
         PRIVATE
             GOOGLE_CUDA=1
     )
 endif(USE_TENSORFLOW)
 
-target_link_options(salus-server
+target_link_options(salus-server-exec
     PRIVATE
         "LINKER:--dynamic-list=${CMAKE_CURRENT_SOURCE_DIR}/salus-server.list"
 )
-set_target_properties(salus-server PROPERTIES
+set_target_properties(salus-server-exec PROPERTIES
     LINK_DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/salus-server.list
 )
 
@@ -109,11 +110,11 @@ set_target_properties(salus-server PROPERTIES
 # Instrucment
 #---------------------------------------------------------------------------------------
 if(WITH_GPERFTOOLS AND WITH_TCMALLOC)
-    target_link_libraries(salus-server gperftools::tcmalloc_and_profiler)
+    target_link_libraries(salus-server-exec gperftools::tcmalloc_and_profiler)
 elseif(WITH_GPERFTOOLS)
-    target_link_libraries(salus-server gperftools::profiler)
+    target_link_libraries(salus-server-exec gperftools::profiler)
 elseif(WITH_TCMALLOC)
-    target_link_libraries(salus-server gperftools::tcmalloc)
+    target_link_libraries(salus-server-exec gperftools::tcmalloc)
 endif()
 
 #---------------------------------------------------------------------------------------
@@ -122,15 +123,30 @@ endif()
 add_subdirectory(cudahook)
 
 #---------------------------------------------------------------------------------------
+# Exec Wrapper
+#---------------------------------------------------------------------------------------
+add_subdirectory(wrapper)
+file(COPY ${CMAKE_CURRENT_BINARY_DIR}/wrapper/salus-server
+    DESTINATION ${CMAKE_CURRENT_BINARY_DIR}
+    FILE_PERMISSIONS OWNER_READ OWNER_WRITE OWNER_EXECUTE
+    GROUP_READ GROUP_WRITE GROUP_EXECUTE
+    WORLD_EXECUTE
+)
+install(PROGRAMS ${CMAKE_CURRENT_BINARY_DIR}/salus-server
+    DESTINATION ${CMAKE_INSTALL_PREFIX}/bin
+)
+
+#---------------------------------------------------------------------------------------
 # Installation
 #---------------------------------------------------------------------------------------
-#set_target_properties(salus-server PROPERTIES
+#set_target_properties(salus-server-exec PROPERTIES
 #    INSTALL_RPATH "${SALUS_DEPS_PATH}/lib"
 #)
 
-install(TARGETS salus-server
+install(TARGETS salus-server-exec
     RUNTIME DESTINATION bin
 )
+
 
 # also install dependencies in spack-packages
 #if (DEFINED SALUS_DEPS_PATH)

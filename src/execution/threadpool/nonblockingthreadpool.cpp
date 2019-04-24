@@ -330,7 +330,11 @@ int ThreadPoolPrivate::nonEmptyQueueIndex()
 
 void ThreadPoolPrivate::workerLoop(int thread_id)
 {
-    salus::threading::set_thread_name("ThreadPoolWorker");
+    if (m_options.workerName.empty()) {
+        salus::threading::set_thread_name("ThreadPoolWorker");
+    } else {
+        salus::threading::set_thread_name(m_options.workerName);
+    }
 
     const auto numThreads = m_options.numThreads;
     const auto spinCount = m_options.spinCount;

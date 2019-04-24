@@ -164,6 +164,8 @@ class TFBenchmarkRunner(Runner):
                     '--model_dir=' + eval_model_dir,
                 ]
 
+        cmd += self.wl.extra_args
+
         if FLAGS.no_capture:
             return execute(cmd, cwd=str(cwd), env=self.env)
         else:
@@ -196,6 +198,7 @@ class UnittestRunner(Runner):
             'stdbuf', '-o0', '-e0', '--',
             'python', '-m', pkg, method,
         ]
+        cmd += self.wl.extra_args
         if FLAGS.no_capture:
             return execute(cmd, cwd=str(cwd), env=self.env)
         else:
@@ -303,6 +306,8 @@ class FathomRunner(Runner):
         else:
             raise ValueError(f'Unknown executor: {executor}')
 
+        cmd += self.wl.extra_args
+
         if FLAGS.no_capture:
             return execute(cmd, cwd=str(cwd), env=self.env)
         else:
@@ -345,6 +350,7 @@ class TFWebDirectRunner(Runner):
             ]
         else:
             raise ValueError(f'Unknown executor: {executor}')
+        cmd += self.wl.extra_args
 
         if FLAGS.no_capture:
             return execute(cmd, cwd=str(cwd), env=self.env)
@@ -398,6 +404,7 @@ class TFWebRunner(Runner):
         cmd += [
             '--num_replicas', num_replicas
         ]
+        cmd += self.wl.extra_args
 
         if FLAGS.no_capture:
             return execute(cmd, cwd=str(cwd), env=self.env)
@@ -435,6 +442,7 @@ class TFWebClientRunner(Runner):
             # always write plan to stdin
             '-',
         ]
+        cmd += self.wl.extra_args
 
         proc = execute(cmd, cwd=str(cwd), env=self.env, stdin=sp.PIPE)
         proc.stdin.write(self._plan_to_bytes())

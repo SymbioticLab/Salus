@@ -69,11 +69,9 @@ void salus_kernel_launch_callback(unsigned int gridDimX, unsigned int gridDimY, 
         {blockDimX, blockDimY, blockDimZ},
         sharedMemBytes,
     });
-    if (false) {
-        LOG(DEBUG) << "Got kernel launch params: blk=("
-                   << gridDimX << "," << gridDimY << "," << gridDimZ
-                   << ") x thd=(" << blockDimX << "," << blockDimY << "," << blockDimZ << "), " << sharedMemBytes;
-    }
+    VLOG(3) << "Got kernel launch params: blk=("
+            << gridDimX << "," << gridDimY << "," << gridDimZ
+            << ") x thd=(" << blockDimX << "," << blockDimY << "," << blockDimZ << "), " << sharedMemBytes;
 }
 
 } // extern "C"
@@ -103,21 +101,25 @@ SMBlocker::SMBlocker()
 {
 }
 
+uint64_t SMBlocker::currentThreadSMHolding() const
+{
+    return CurrentThreadHoldingBlocks;
+}
+
 void SMBlocker::saveCurrentThreadResults(uint64_t graphId, int nodeId)
 {
-    LOG(DEBUG) << "Release at SMBlocker: graph " << graphId << " node " << nodeId
-               << " sm " << CurrentThreadHoldingBlocks;
-    // release blocks first
-    {
-        m_freeBlocks.post(CurrentThreadHoldingBlocks);
-        CurrentThreadHoldingBlocks = 0;
-    }
+    // reset current thread value
+    CurrentThreadHoldingBlocks = 0;
 
     // update cache
     std::unique_lock l{m_mu};
 
     SMUsage newUsage{0, 0};
+    LOG(DEBUG) << "SavedCudaKernelLaunches " << SavedCudaKernelLaunches.size();
     for (const auto &res : SavedCudaKernelLaunches) {
+        LOG(DEBUG) << "SavedCudaKernelLaunches: blk=("
+                   << res.blockCount.x << "," << res.blockCount.y << "," << res.blockCount.z
+                   << ") x thd=(" << res.threadPerBlock.x << "," << res.threadPerBlock.y << "," << res.threadPerBlock.z << ")";
         newUsage.threadPerBlock = max(newUsage.threadPerBlock, res.threadPerBlock);
         newUsage.blockCount = max(newUsage.blockCount, res.blockCount);
     }
@@ -141,7 +143,7 @@ bool SMBlocker::tryTake(uint64_t graphId, int nodeId, int priority)
     if (res) {
         // save the count
         CurrentThreadHoldingBlocks = smUsage;
-        LOG(DEBUG) << "Passed at SMBlocker: graph " << graphId << " node " << nodeId
+        LogSMTracing() << "Passed at SMBlocker: graph " << graphId << " node " << nodeId
                    << " sm " << smUsage << " priority " << priority;
     }
     return res;
@@ -154,10 +156,10 @@ void SMBlocker::wait(uint64_t graphId, int nodeId, int priority)
     // save the count
     CurrentThreadHoldingBlocks = smUsage;
 
-    LOG(DEBUG) << "Wait at SMBlocker: graph " << graphId << " node " << nodeId
+    LogSMTracing() << "Wait at SMBlocker: graph " << graphId << " node " << nodeId
                << " sm " << smUsage << " priority " << priority;
     m_freeBlocks.wait(smUsage, priority);
-    LOG(DEBUG) << "Passed at SMBlocker: graph " << graphId << " node " << nodeId
+    LogSMTracing() << "Passed at SMBlocker: graph " << graphId << " node " << nodeId
                << " sm " << smUsage << " priority " << priority;
 }
 
@@ -168,6 +170,11 @@ uint64_t SMBlocker::getUsageForKernel(uint64_t graphId, int nodeId)
     auto usage = sstl::getOrDefault(m_cache, {graphId, nodeId}, {});
 
     return std::min(usage.blockCount, m_maxUsage.blockCount);
+}
+
+void SMBlocker::release(uint64_t numSms)
+{
+    m_freeBlocks.post(numSms);
 }
 
 } // namespace salus::oplib::tensorflow

@@ -23,6 +23,7 @@
 
 #include "execution/engine/resourcecontext.h"
 #include "oplibraries/tensorflow/device/gpu/sessiondevice.h"
+#include "oplibraries/tensorflow/v3/smblocker.h"
 #include "utils/threadutils.h"
 
 #include <thread>
@@ -37,7 +38,11 @@ SalusGPUDevice::SalusGPUDevice(const tf::SessionOptions &options, const std::str
                     false /* sync every op */, max_streams)
     , m_streamUsed(static_cast<size_t>(max_streams), false)
     , m_cudaHostAlloc(cuda_host_alloc)
+    , m_SMPoller(nullptr)
 {
+    auto executor_status = tf::GPUMachineManager()->ExecutorForDevice(gpu_id);
+
+    m_SMPoller = std::make_unique<SMEventPoller>(executor_status.ValueOrDie());
 }
 
 tf::Allocator *SalusGPUDevice::GetAllocator(tf::AllocatorAttributes attr)
@@ -53,6 +58,24 @@ tf::Allocator *SalusGPUDevice::GetAllocator(tf::AllocatorAttributes attr)
         }
     }
     return gpu_allocator_;
+}
+
+void SalusGPUDevice::Compute(tf::OpKernel *op_kernel, tf::OpKernelContext *context)
+{
+    BaseGPUDevice::Compute(op_kernel, context);
+
+    m_SMPoller->thenReleaseSM(context->op_device_context<tf::GPUDeviceContext>()->stream(),
+                              SMBlocker::instance().currentThreadSMHolding());
+}
+
+void SalusGPUDevice::ComputeAsync(tf::AsyncOpKernel *op_kernel, tf::OpKernelContext *context,
+                                  tf::AsyncOpKernel::DoneCallback done)
+{
+    BaseGPUDevice::ComputeAsync(op_kernel, context, [this, context, done = std::move(done)]() {
+        m_SMPoller->thenReleaseSM(context->op_device_context<tf::GPUDeviceContext>()->stream(),
+                                  SMBlocker::instance().currentThreadSMHolding());
+        done();
+    });
 }
 
 Status SalusGPUDevice::Sync()

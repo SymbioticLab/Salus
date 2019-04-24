@@ -1,2 +1,2 @@
 #! /bin/bash
-python -m benchmarks.driver "$@"
+vex tfbuild python -m benchmarks.driver "$@"

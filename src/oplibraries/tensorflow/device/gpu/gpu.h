@@ -22,6 +22,7 @@
 
 #include "oplibraries/tensorflow/tensorflow_headers.h"
 #include "oplibraries/tensorflow/device/salusdevices.h"
+#include "oplibraries/tensorflow/device/gpu/smeventpoller.h"
 #include "utils/objectpool.h"
 
 #include <mutex>
@@ -49,6 +50,10 @@ public:
     bool RequiresRecordingAccessedTensors() const override;
 
     Status FillContextMap(const tf::Graph *graph, std::vector<tf::DeviceContext *> *device_context_map) override;
+
+    void Compute(tf::OpKernel *op_kernel, tf::OpKernelContext *context) override;
+    void ComputeAsync(tf::AsyncOpKernel *op_kernel, tf::OpKernelContext *context,
+                      tf::AsyncOpKernel::DoneCallback done) override;
 
     void flushCacheFor(sstl::not_null<const tf::Graph *> graph) override;
 
@@ -99,6 +104,7 @@ private:
     std::mutex m_muStream;
     std::vector<bool> m_streamUsed;
     tf::Allocator *m_cudaHostAlloc;
+    std::unique_ptr<SMEventPoller> m_SMPoller;
 };
 
 class SalusGPUDeviceFactory : public tf::BaseGPUDeviceFactory

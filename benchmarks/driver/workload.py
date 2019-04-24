@@ -25,7 +25,7 @@ from builtins import super, str
 import csv
 import logging
 from collections import defaultdict
-from typing import Dict, Iterable, Type, Union
+from typing import Dict, Iterable, Type, Union, Optional
 
 from .runner import Runner, RunConfig, Popen, Executor
 from .runner import TFBenchmarkRunner, UnittestRunner, FathomRunner, TFWebRunner, TFWebClientRunner
@@ -357,8 +357,9 @@ class Workload(object):
         self.rcfg = rcfg
         self.executor = executor
         self._geo = geo
-        self.proc = None  # type: Popen
-        self.output_file = None  # type: Path
+        self.proc = None  # type: Optional[Popen]
+        self.output_file = None  # type: Optional[Path]
+        self.extra_args = []
 
     @property
     def name(self):

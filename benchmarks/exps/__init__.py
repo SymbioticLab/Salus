@@ -42,6 +42,7 @@ logger = logging.getLogger(__name__)
 FLAGS = flags.FLAGS
 
 flags.DEFINE_boolean('ignore_error', False, 'Ignore error on workload')
+flags.DEFINE_string('logconf', None, 'Override default logconf in preset')
 
 
 class Pause(int):
@@ -236,11 +237,15 @@ def parse_actions_from_cmd(argv):
 def maybe_forced_preset(default):
     # type: (Callable[[], SalusConfig]) -> SalusConfig
     """Maybe return forced preset"""
+    preset_ctor = default
     if FLAGS.force_preset:
-        logger.info(f'Using server config preset: {FLAGS.force_preset}')
-        return getattr(presets, FLAGS.force_preset)()
-    logger.info(f'Using server config preset: {default.__name__}')
-    return default()
+        preset_ctor = getattr(presets, FLAGS.force_preset)
+    logger.info(f'Using server config preset: {preset_ctor.__name__}')
+    scfg = preset_ctor()
+    if FLAGS.logconf is not None:
+        logger.info(f'Using server logconf: {FLAGS.logconf}')
+        scfg.logconf = FLAGS.logconf
+    return scfg
 
 
 def parse_output_float(outputfile, pattern, group=1):

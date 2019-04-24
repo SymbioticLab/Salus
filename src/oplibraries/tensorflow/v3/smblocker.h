@@ -57,6 +57,22 @@ class SMBlocker
 public:
     static SMBlocker &instance();
 
+    /**
+     * @brief Release this amount of numSms
+     */
+    void release(uint64_t numSms);
+
+    /**
+     * @brief Return the number of sms held by current thread
+     * @return
+     */
+    uint64_t currentThreadSMHolding() const;
+
+    /**
+     * @brief Save current thread's launch parameter
+     * @param graphId
+     * @param nodeId
+     */
     void saveCurrentThreadResults(uint64_t graphId, int nodeId);
 
     /**
@@ -69,7 +85,7 @@ public:
     bool tryTake(uint64_t graphId, int nodeId, int priority);
 
     /**
-     * @brief Blocking wait
+     * @brief Blocking wait, takes SMs
      * @param graphId
      * @param nodeId
      * @param priority
