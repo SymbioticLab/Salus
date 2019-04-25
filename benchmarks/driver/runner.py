@@ -118,8 +118,8 @@ class TFBenchmarkRunner(Runner):
             '--num_batches={}'.format(self.wl.batch_num),
             '--batch_size={}'.format(self.wl.batch_size),
         ]
-        eval_interval = self.wl.env.pop('SALUS_TFBENCH_EVAL_INTERVAL', '0.1')
-        eval_rand_factor = self.wl.env.pop('SALUS_TFBENCH_EVAL_RAND_FACTOR', '5')
+        eval_interval = self.wl.env.pop('SALUS_TFBENCH_EVAL_INTERVAL', None)
+        eval_rand_factor = self.wl.env.pop('SALUS_TFBENCH_EVAL_RAND_FACTOR', None)
         eval_block = self.wl.env.pop('SALUS_TFBENCH_EVAL_BLOCK', 'true')
 
         eval_model_dir = self.wl.env.pop('SALUS_TFBENCH_EVAL_MODEL_DIR', 'models')
@@ -146,11 +146,17 @@ class TFBenchmarkRunner(Runner):
             cmd += [
                 '--model_dir=' + eval_model_dir,
                 '--model={}'.format(model_name),
-                '--eval_interval_secs={}'.format(eval_interval),
-                '--eval_interval_random_factor={}'.format(eval_rand_factor),
                 '--eval_block={}'.format(eval_block),
                 '--eval'
             ]
+            if eval_interval is not None:
+                cmd += [
+                    '--eval_interval_secs={}'.format(eval_interval),
+                ]
+            if eval_rand_factor is not None:
+                cmd += [
+                    '--eval_interval_random_factor={}'.format(eval_rand_factor),
+                ]
             if eval_saved_model_dir is not None:
                 cmd += [
                     '--saved_model_dir=' + eval_saved_model_dir
@@ -165,6 +171,7 @@ class TFBenchmarkRunner(Runner):
                 ]
 
         cmd += self.wl.extra_args
+        logger.info(f'Starting workload with cmd: {cmd}')
 
         if FLAGS.no_capture:
             return execute(cmd, cwd=str(cwd), env=self.env)
@@ -199,6 +206,8 @@ class UnittestRunner(Runner):
             'python', '-m', pkg, method,
         ]
         cmd += self.wl.extra_args
+
+        logger.info(f'Starting workload with cmd: {cmd}')
         if FLAGS.no_capture:
             return execute(cmd, cwd=str(cwd), env=self.env)
         else:
@@ -307,6 +316,7 @@ class FathomRunner(Runner):
             raise ValueError(f'Unknown executor: {executor}')
 
         cmd += self.wl.extra_args
+        logger.info(f'Starting workload with cmd: {cmd}')
 
         if FLAGS.no_capture:
             return execute(cmd, cwd=str(cwd), env=self.env)
@@ -351,6 +361,7 @@ class TFWebDirectRunner(Runner):
         else:
             raise ValueError(f'Unknown executor: {executor}')
         cmd += self.wl.extra_args
+        logger.info(f'Starting workload with cmd: {cmd}')
 
         if FLAGS.no_capture:
             return execute(cmd, cwd=str(cwd), env=self.env)
@@ -405,6 +416,7 @@ class TFWebRunner(Runner):
             '--num_replicas', num_replicas
         ]
         cmd += self.wl.extra_args
+        logger.info(f'Starting workload with cmd: {cmd}')
 
         if FLAGS.no_capture:
             return execute(cmd, cwd=str(cwd), env=self.env)
@@ -443,6 +455,7 @@ class TFWebClientRunner(Runner):
             '-',
         ]
         cmd += self.wl.extra_args
+        logger.info(f'Starting workload with cmd: {cmd}')
 
         proc = execute(cmd, cwd=str(cwd), env=self.env, stdin=sp.PIPE)
         proc.stdin.write(self._plan_to_bytes())
