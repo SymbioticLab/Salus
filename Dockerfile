@@ -1,5 +1,5 @@
 # Defining environment
-ARG APP_ENV=dev
+ARG APP_ENV=prod
 ARG BUILD_TYPE=Debug
 
 FROM scratch as spackbc
@@ -49,6 +49,11 @@ RUN mkdir /var/run/sshd \
 # Dependencies
 #-----------------------------------
 FROM base-${APP_ENV} AS deps
+
+# I need gdb
+RUN spack install gdb \
+    && spack view -d false -v add $SPACK_PACKAGES gdb \
+    && spack-pin gdb
 
 RUN spack install boost@1.66.0
 RUN spack install cppzmq@4.3.0 \

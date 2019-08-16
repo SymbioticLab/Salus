@@ -232,13 +232,13 @@ std::string DebugString(const Resources &res, const std::string &indent)
 Resources platformLimits()
 {
     Resources res;
-    res[{ResourceType::MEMORY, devices::CPU0}] = 100_sz * 1024 * 1024 * 1024;
+    res[{ResourceType::MEMORY, devices::CPU0}] = 50_sz * 1024 * 1024 * 1024;
 
-    // 14 G for GPU 0
-    res[{ResourceType::MEMORY, devices::GPU0}] = 14_sz * 1024 * 1024 * 1024;
+    // 15 G for GPU 0
+    res[{ResourceType::MEMORY, devices::GPU0}] = 15_sz * 1024 * 1024 * 1024;
 
-    // 128 streams for GPU 0
-    res[{ResourceType::GPU_STREAM, devices::GPU0}] = 128;
+    // 80 streams for GPU 0
+    res[{ResourceType::GPU_STREAM, devices::GPU0}] = 80;
 
     res[{ResourceType::EXCLUSIVE, devices::GPU0}] = 1;
 
