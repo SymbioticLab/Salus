@@ -10,7 +10,7 @@ import numpy as np
 import matplotlib.pyplot as plt 
 
 training_job_name = "resnet50_25.salus.500iter.0.output"
-inference_job_name = "resnet50eval_1.salus.1000iter.1.output"
+inference_job_name = "resnet50eval_1.salus.2000iter.1.output"
 log_path = "scripts/templogs/zyc1"
 policy_list = [
     "pack", "fair", "preempt", "mix"
@@ -22,8 +22,10 @@ font = {'family' : 'normal',
 
 plt.rc('font', **font)
 
-if __name__=="__main__":    
+if __name__=="__main__":   
+    ## training  
     lines = []
+    fig = plt.figure(figsize=(15,15))
     for policy in policy_list:
         path = os.path.join(log_path, policy)
         with open(os.path.join(path, training_job_name), "r") as f:
@@ -37,9 +39,31 @@ if __name__=="__main__":
         plt.yticks(np.arange(min_v, max_v, 5))
         line, = plt.plot(speeds, linewidth=5.0)
         lines.append(line)
-    plt.legend(lines, policy_list)
+    plt.legend(lines, policy_list, prop={'size':30})
     plt.title("exp1 - " + training_job_name)
     plt.xlabel("iter")
     plt.ylabel("images/sec")
-    plt.show()
+    # plt.show()
+    os.system("mkdir -p scripts/imgs/exp1")
+    plt.savefig('scripts/imgs/exp1/' + training_job_name + ".png", dpi=fig.dpi)
+
+    ## inference 
+    for policy in policy_list:
+        path = os.path.join(log_path, policy)
+        with open(os.path.join(path, inference_job_name), "r") as f:
+            content = f.read()
+        pattern = re.compile(r"\d+\.\d ")
+        items = pattern.findall(content)[100:]
+        # print(len(results))
+        speeds = list(map(lambda str: float(str.strip()), items))
+        latency = list(map(lambda x: 1000/x, speeds))
         
+        min_v = np.min(latency)
+        max_v = np.max(latency)
+        avg_v = np.mean(latency)
+        sorted_list = sorted(latency)
+        tail_v = sorted_list[int(len(sorted_list)*0.99)]
+
+        print("%s %.2f %.2f %.2f %.2f" % (
+            policy, min_v, max_v, avg_v, tail_v
+        ))

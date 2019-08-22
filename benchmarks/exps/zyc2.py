@@ -1,5 +1,5 @@
 '''
-Created Date: Thursday, August 22nd 2019, 1:23:43 pm
+Created Date: Thursday, August 22nd 2019, 7:58:16 pm
 Author: Yuchen Zhong
 Email: yczhong@hku.hk
 '''
@@ -28,8 +28,8 @@ def case(policy):
 
     folder_name = policy
     workload_list = [
-        WTL.create("resnet50", 25, 500), # training
-        WTL.create("resnet50eval", 1, 2000)
+        WTL.create("inception4", 25, 500), # training
+        WTL.create("inception4eval", 1, 2000)
     ]
     run_seq(scfg.copy(output_dir=FLAGS.save_dir/folder_name),
             *workload_list
