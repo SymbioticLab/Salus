@@ -33,12 +33,6 @@ tests/verbose.log
 !tests/driver/**
 
 # Scripts
-scripts/**
-!scripts/*.sh
-!scripts/Note
-!scripts/nvvpreader
-!scripts/**/*.py
-
 # python
 .cache
 __pycache__
