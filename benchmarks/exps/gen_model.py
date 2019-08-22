@@ -27,7 +27,6 @@ Collected data: speed over time
 """
 from __future__ import absolute_import, print_function, division, unicode_literals
 
-import os
 from absl import flags
 
 from benchmarks.driver.runner import Executor
@@ -39,45 +38,32 @@ from benchmarks.exps import run_seq, maybe_forced_preset, Pause, run_tf, run_tfd
 
 FLAGS = flags.FLAGS
 
-def case1():
-    scfg = maybe_forced_preset(presets.MostEfficient)
-    scfg.scheduler = 'mix'
-    # scfg.env['SALUS_DISABLE_SHARED_LANE'] = '1'
-    os.environ["SALUS_TIMEOUT"] = "666666"
-
-    folder_name = "case1"
-    workload_list = [
-        WTL.create("resnet50eval", 1, 1000),
-        Pause(3),
-        WTL.create("resnet50eval", 1, 1000)       
-    ]
-    run_seq(scfg.copy(output_dir=FLAGS.save_dir/folder_name),
-            *workload_list
-            )
-
-
-def case2():
+def case(model):
     scfg = maybe_forced_preset(presets.MostEfficient)
     scfg.scheduler = 'pack'
     scfg.env['SALUS_DISABLE_SHARED_LANE'] = '1'
-    os.environ["SALUS_TIMEOUT"] = "0"
 
-    folder_name = "case2"
+    folder_name = model
     workload_list = [
-        WTL.create("resnet50eval", 1, 1000),
-        Pause(3),
-        WTL.create("resnet50eval", 1, 1000)       
+        WTL.create(model, 50, 250)
     ]
     run_seq(scfg.copy(output_dir=FLAGS.save_dir/folder_name),
             *workload_list
             )
 
-
+  
 def main(argv):
-    command = argv[0] if argv else "case1"
-
-    {
-        "case1": case1,
-        "case2": case2
-    }[command]()
-
+    model_list = [
+        "alexnet",
+        "vgg11",
+        "vgg16",
+        "vgg19",
+        "overfeat",
+        "inception3",
+        "inception4",
+        "resnet50",
+        "resnet101",
+        "resnet152",
+    ]
+    for model in model_list:
+        case(model)
