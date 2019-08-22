@@ -302,12 +302,12 @@ int ExecutionEngine::scheduleOnQueue(LaneQueue &lctx, IterQueue &staging)
                 if (lctx.lastSessionItem != sessItem.get()) {
                     lctx.lastSessionItem = sessItem.get();
                     LOG(INFO) << "event: mix_select_sess "
-                              << nlohmann::json({
-                                                {"sess", sessItem->sessHandle},
-                                                {"totalRunningTime", sessItem->totalRunningTime},
-                                                {"usedRunningTime", sessItem->usedRunningTime.load()},
-                                                {"laneId", lctx.id},
-                                            });
+                            << nlohmann::json({
+                                                    {"sess", sessItem->sessHandle},
+                                                    {"totalRunningTime", sessItem->totalRunningTime},
+                                                    {"usedRunningTime", sessItem->usedRunningTime.load()},
+                                                    {"laneId", lctx.id},
+                                                });
                 }
                 for (auto &iterItem : staging) {
                     if (iterItem.iter->isCanceled()) {
@@ -329,6 +329,7 @@ int ExecutionEngine::scheduleOnQueue(LaneQueue &lctx, IterQueue &staging)
                     }
                 }
             }
+            staging.clear();   
         }
     } else if (m_schedParam.scheduler == "fifo") {
         PSessionItem sessItem = nullptr;
