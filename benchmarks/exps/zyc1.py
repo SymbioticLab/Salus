@@ -60,5 +60,11 @@ def case(policy):
 
 
 def main(argv):
-    policy = argv[0]
-    case(policy)
+    policy_list = [
+        "pack",
+        "fair",
+        "preempt",
+        "mix"
+    ]
+    for policy in policy_list:
+        case(policy)
