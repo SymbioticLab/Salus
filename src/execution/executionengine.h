@@ -1,15 +1,15 @@
 /*
  * Copyright 2019 Peifeng Yu <peifeng@umich.edu>
- * 
+ *
  * This file is part of Salus
  * (see https://github.com/SymbioticLab/Salus).
- * 
+ *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
- * 
+ *
  *    http://www.apache.org/licenses/LICENSE-2.0
- * 
+ *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -108,6 +108,7 @@ private:
     struct LaneQueue
     {
         uint64_t id;
+        bool isInference;
         IterQueue queue;
         std::chrono::system_clock::time_point lastSeen;
         std::atomic_int_fast64_t numExpensiveIterRunning {0};
@@ -139,6 +140,7 @@ class ExecutionContext : public std::enable_shared_from_this<ExecutionContext>
     ExecutionEngine &m_engine;
     std::any m_userData;
     uint64_t m_laneId;
+    bool isInference;
 
     friend class ExecutionEngine;
     /**
@@ -199,6 +201,14 @@ public:
                                                          const Resources &res, Resources *missing = nullptr);
 
     void finish(std::function<void()> cb);
+
+    void setInference(bool flag) {
+        isInference = flag;
+    }
+
+    bool getInference() const {
+        return isInference;
+    }
 };
 
 } // namespace salus

@@ -1,15 +1,15 @@
 /*
  * Copyright 2019 Peifeng Yu <peifeng@umich.edu>
- * 
+ *
  * This file is part of Salus
  * (see https://github.com/SymbioticLab/Salus).
- * 
+ *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
- * 
+ *
  *    http://www.apache.org/licenses/LICENSE-2.0
- * 
+ *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -50,7 +50,7 @@ public:
         std::vector<size_t> memoryLimits;
         std::vector<size_t> persistentOccupation;
     };
-    void requestLanes(Layout layout, RequestLaneCallback &&cb);
+    void requestLanes(Layout layout, bool flag,  RequestLaneCallback &&cb);
 
     tf::Device *compatibleCPUDevice() const;
 
@@ -78,11 +78,12 @@ private:
     struct LaneRequest
     {
         Layout layout;
+        bool isInference;
         RequestLaneCallback cb;
-
         LaneRequest() = default;
-        LaneRequest(Layout &&layout, RequestLaneCallback &&cb)
+        LaneRequest(Layout &&layout, bool flag, RequestLaneCallback &&cb)
             : layout(std::move(layout))
+            , isInference(flag)
             , cb(std::move(cb))
         {
         }
@@ -127,8 +128,8 @@ private:
         std::list<sstl::ScopedUnref<GpuLane>> lanes GUARDED_BY(*mu);
 
         std::unique_ptr<LaneHolder> bestFitFor(size_t memory, size_t persistentSize);
-
-        sstl::ScopedUnref<GpuLane> newLane(size_t memory, sstl::detail::Guard &&g);
+        std::unique_ptr<LaneHolder> bestFitForInference(size_t memory, size_t persistentSize);
+        sstl::ScopedUnref<GpuLane> newLane(size_t memory, bool flag, sstl::detail::Guard &&g);
 
         void removingLane(sstl::ScopedUnref<GpuLane> &&lane);
         void maybeRemoveLane(sstl::not_null<GpuLane *> lane);
@@ -181,10 +182,14 @@ public:
 
     void notifyGCB(sstl::ScopedUnref<GpuLane> &&self);
 
-    GpuLane(LaneMgr::GpuControlBlock &gcb, size_t memoryLimit, int baseStreamIndex);
+    GpuLane(LaneMgr::GpuControlBlock &gcb, size_t memoryLimit, int baseStreamIndex, bool flag);
     ~GpuLane() override;
 
+    bool getInference() const {
+        return isInference;
+    }
 private:
+    bool isInference;
     /**
      * @brief Add new session here
      * @param size

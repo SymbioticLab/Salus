@@ -1,15 +1,15 @@
 /*
  * Copyright 2019 Peifeng Yu <peifeng@umich.edu>
- * 
+ *
  * This file is part of Salus
  * (see https://github.com/SymbioticLab/Salus).
- * 
+ *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
- * 
+ *
  *    http://www.apache.org/licenses/LICENSE-2.0
- * 
+ *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -98,7 +98,7 @@ void LaneMgr::createCudaHostAllocator(tfgpu::StreamExecutor *se)
                                                             true /*allow_growth*/, "cuda_host_bfc" /*name*/);
 }
 
-void LaneMgr::requestLanes(Layout layout, RequestLaneCallback &&cb)
+void LaneMgr::requestLanes(Layout layout, bool isInference, RequestLaneCallback &&cb)
 {
     CHECK_EQ(layout.persistentOccupation.size(), layout.memoryLimits.size());
 
@@ -106,7 +106,7 @@ void LaneMgr::requestLanes(Layout layout, RequestLaneCallback &&cb)
     if (m_disabled && !newLaneInitialized) {
         newLaneInitialized = true;
         auto &gcb = m_gpus.at(0);
-        gcb.newLane(gcb.availableMemory, sstl::with_guard(*gcb.mu));
+        gcb.newLane(gcb.availableMemory, false, sstl::with_guard(*gcb.mu));
     }
 
     for (size_t i = 0; i != layout.memoryLimits.size(); ++i) {
@@ -114,7 +114,7 @@ void LaneMgr::requestLanes(Layout layout, RequestLaneCallback &&cb)
     }
 
     auto g = sstl::with_guard(m_mu);
-    m_pending.emplace_back(std::move(layout), std::move(cb));
+    m_pending.emplace_back(std::move(layout), isInference, std::move(cb));
     processRequests(std::move(g));
 }
 
@@ -140,7 +140,12 @@ void LaneMgr::processRequests(sstl::detail::Guard &&g)
 
         // using a best fit policy
         const auto firstIdx = 0;
-        auto lane = gcb.bestFitFor(req.layout.memoryLimits.at(firstIdx), req.layout.persistentOccupation.at(firstIdx));
+        std::shared_ptr<LaneHolder> lane;
+        if (req.isInference) {
+            lane = gcb.bestFitForInference(req.layout.memoryLimits.at(firstIdx), req.layout.persistentOccupation.at(firstIdx));
+        } else {
+            lane = gcb.bestFitFor(req.layout.memoryLimits.at(firstIdx), req.layout.persistentOccupation.at(firstIdx));
+        }
         if (!lane) {
             // can't find a suitable allocation.
             ++it;
@@ -165,7 +170,7 @@ std::unique_ptr<LaneHolder> LaneMgr::GpuControlBlock::bestFitFor(size_t memory, 
     LOG(INFO) << "Checking to create lane for memory size " << memory << " available now " << availableMemory;
     if (!mgr.m_disabled) {
         if (availableMemory >= memory) {
-            auto lane = newLane(memory, std::move(g));
+            auto lane = newLane(memory, false, std::move(g));
             auto holder = lane->tryFit(persistentSize, temporaryPeak);
             CHECK_NE(holder, nullptr);
             return holder;
@@ -178,6 +183,9 @@ std::unique_ptr<LaneHolder> LaneMgr::GpuControlBlock::bestFitFor(size_t memory, 
     if (!sstl::fromEnvVarCached<NoSharedLaneTag>("SALUS_DISABLE_SHARED_LANE", false)) {
         // use linear search because we at most will have handful of lanes
         for (auto &lane : lanes) {
+            // if it is an inference lane, skip it
+            if (lane->getInference())
+                continue;
             if (auto holder = lane->tryFit(persistentSize, temporaryPeak)) {
                 return holder;
             }
@@ -187,7 +195,30 @@ std::unique_ptr<LaneHolder> LaneMgr::GpuControlBlock::bestFitFor(size_t memory, 
     return {};
 }
 
-sstl::ScopedUnref<GpuLane> LaneMgr::GpuControlBlock::newLane(size_t memory, sstl::detail::Guard &&g)
+
+std::unique_ptr<LaneHolder> LaneMgr::GpuControlBlock::bestFitForInference(size_t memory, size_t persistentSize)
+{
+    CHECK_GE(memory, persistentSize);
+
+    size_t temporaryPeak = memory - persistentSize;
+
+    auto g = sstl::with_guard(*mu);
+    // first see if open a new lane is possible
+    LOG(INFO) << "Checking to create lane for memory size " << memory << " available now " << availableMemory;
+    if (!mgr.m_disabled) {
+        if (availableMemory >= memory) {
+            auto lane = newLane(memory, true, std::move(g));
+            auto holder = lane->tryFit(persistentSize, temporaryPeak);
+            CHECK_NE(holder, nullptr);
+            return holder;
+        }
+    }
+
+    // TODO: defragmentation
+    return {};
+}
+
+sstl::ScopedUnref<GpuLane> LaneMgr::GpuControlBlock::newLane(size_t memory, bool flag, sstl::detail::Guard &&g)
 {
     CHECK_GT(memory, 0);
 
@@ -199,7 +230,7 @@ sstl::ScopedUnref<GpuLane> LaneMgr::GpuControlBlock::newLane(size_t memory, sstl
 
     availableMemory -= memory;
 
-    auto lane = sstl::make_scoped_unref<GpuLane>(*this, memory, nextStream++);
+    auto lane = sstl::make_scoped_unref<GpuLane>(*this, memory, nextStream++, flag);
 
     // Insert into lanes, which is from small to large
     auto it = lanes.begin();
@@ -254,8 +285,9 @@ void LaneMgr::GpuControlBlock::maybeRemoveLane(sstl::not_null<GpuLane *> lane)
     CHECK_LE(availableMemory, totalMemory);
 }
 
-GpuLane::GpuLane(LaneMgr::GpuControlBlock &gcb, size_t memoryLimit, int baseStreamIndex)
-    : m_gcb(gcb)
+GpuLane::GpuLane(LaneMgr::GpuControlBlock &gcb, size_t memoryLimit, int baseStreamIndex, bool flag)
+    : isInference(flag)
+    , m_gcb(gcb)
     , m_totalMemory(memoryLimit)
     , m_baseStreamIndex(baseStreamIndex)
     , m_availableMemory(memoryLimit)

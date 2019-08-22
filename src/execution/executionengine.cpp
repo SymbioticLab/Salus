@@ -1,15 +1,15 @@
 /*
  * Copyright 2019 Peifeng Yu <peifeng@umich.edu>
- * 
+ *
  * This file is part of Salus
  * (see https://github.com/SymbioticLab/Salus).
- * 
+ *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
- * 
+ *
  *    http://www.apache.org/licenses/LICENSE-2.0
- * 
+ *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -153,6 +153,7 @@ void ExecutionEngine::scheduleLoop()
             auto &lane = queues[ectx->laneId()];
             lane.queue.emplace_back(std::move(iter));
             lane.lastSeen = currStamp;
+            lane.isInference = ectx->getInference();
             if (lane.sessions.emplace(ectx->m_item).second) {
                 lane.id = ectx->laneId();
                 // new session to lane and remove old one
@@ -280,6 +281,55 @@ int ExecutionEngine::scheduleOnQueue(LaneQueue &lctx, IterQueue &staging)
         staging.sort(rrSorter);
     } else if (m_schedParam.scheduler == "pack") {
         // do nothing
+    } else if (m_schedParam.scheduler == "mix") {
+        // for inference jobs, do nothing
+        if (lctx.isInference) {
+            // do nothing
+        } else {
+            // for training jobs, preempt
+            int64_t minRemainingTime = std::numeric_limits<int64_t>::max();
+            PSessionItem sessItem = nullptr;
+            for (auto &ws : lctx.sessions) {
+                if (auto s = ws.lock()) {
+                    auto remain = static_cast<int64_t>(s->totalRunningTime) - static_cast<int64_t>(s->usedRunningTime);
+                    if (remain <= minRemainingTime) {
+                        minRemainingTime = remain;
+                        sessItem = std::move(s);
+                    }
+                }
+            }
+            if (sessItem) {
+                if (lctx.lastSessionItem != sessItem.get()) {
+                    lctx.lastSessionItem = sessItem.get();
+                    LOG(INFO) << "event: mix_select_sess "
+                              << nlohmann::json({
+                                                {"sess", sessItem->sessHandle},
+                                                {"totalRunningTime", sessItem->totalRunningTime},
+                                                {"usedRunningTime", sessItem->usedRunningTime.load()},
+                                                {"laneId", lctx.id},
+                                            });
+                }
+                for (auto &iterItem : staging) {
+                    if (iterItem.iter->isCanceled()) {
+                        continue;
+                    }
+                    auto ectx = iterItem.wectx.lock();
+                    if (!ectx) {
+                        continue;
+                    }
+                    if (ectx->m_item != sessItem) {
+                        lctx.queue.emplace_back(std::move(iterItem));
+                        continue;
+                    }
+
+                    if (runIter(iterItem, *ectx, lctx)) {
+                        scheduled += 1;
+                    } else {
+                        lctx.queue.emplace_back(std::move(iterItem));
+                    }
+                }
+            }
+        }
     } else if (m_schedParam.scheduler == "fifo") {
         PSessionItem sessItem = nullptr;
         auto it = lctx.fifoQueue.begin();

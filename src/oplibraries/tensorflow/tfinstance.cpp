@@ -1,15 +1,15 @@
 /*
  * Copyright 2019 Peifeng Yu <peifeng@umich.edu>
- * 
+ *
  * This file is part of Salus
  * (see https://github.com/SymbioticLab/Salus).
- * 
+ *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
- * 
+ *
  *    http://www.apache.org/licenses/LICENSE-2.0
- * 
+ *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -95,6 +95,15 @@ void TFInstance::handleCreateSession(std::unique_ptr<tf::CreateSessionRequest> &
     const auto totalGPUMemory = m_laneMgr->totalMemoryForGPU(0);
     size_t limit = 0;
     size_t persistant = 0;
+    auto timeout = req->config().operation_timeout_in_ms();
+
+    // inference job
+    if (timeout == 666666) {
+        ectx->setInference(true);
+    } else {
+        ectx->setInference(false);
+    }
+    auto flag = ectx->getInference();
     auto &m = req->config().salus_options().resource_map();
     persistant = static_cast<size_t>(std::round(sstl::getOrDefault(m.persistant(), rt, 0.0)));
     // HACK: scale up 10% to mitigate OOM and fragmentation
@@ -118,7 +127,7 @@ void TFInstance::handleCreateSession(std::unique_ptr<tf::CreateSessionRequest> &
         static_cast<uint64_t>(std::round(sstl::getOrDefault(m.persistant(), "TIME:TOTAL", 0.0))) * 1000;
     ectx->setExpectedRunningTime(totalRunningTime);
 
-    m_laneMgr->requestLanes(std::move(layout), [&resp, cb = std::move(cb), req = std::move(req), ectx = std::move(ectx),
+    m_laneMgr->requestLanes(std::move(layout), flag, [&resp, cb = std::move(cb), req = std::move(req), ectx = std::move(ectx),
                                                 this](auto &&lanes) mutable {
         std::vector<tf::Device *> devices;
 
