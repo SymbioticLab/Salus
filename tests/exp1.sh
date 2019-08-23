@@ -52,7 +52,7 @@ for workload in ${WORKLOADS[@]}; do
     # logs
     cmd=${cmd}"> ${log_dir}${model}.output 2>&1 &"
     # echo $cmd
-    COMMANDS[${#COMMANDS[@]}]=$cmd
+    COMMANDS[${#COMMANDS[@]}]="${cmd}"
 done
 
 echo ${#COMMANDS[@]} "jobs are loaded"
