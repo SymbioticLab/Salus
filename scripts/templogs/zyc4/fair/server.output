@@ -1,0 +1,16 @@
+[2019-08-23 13:46:33.744055] [23133] [default] [I] Running build type: Release
+[2019-08-23 13:46:33.744139] [23133] [default] [I] Verbose logging level: 1 file: verbose.log
+[2019-08-23 13:46:33.744148] [23133] [default] [I] Performance logging: disabled file: verbose.log
+[2019-08-23 13:46:33.744154] [23133] [default] [I] Allocation logging: disabled
+[2019-08-23 13:46:33.744159] [23133] [default] [I] Scheduling parameters:
+[2019-08-23 13:46:33.744164] [23133] [default] [I]     Policy: fair
+[2019-08-23 13:46:33.744169] [23133] [default] [I]     MaxQueueHeadWaiting: 50
+[2019-08-23 13:46:33.744174] [23133] [default] [I]     WorkConservative: on
+[2019-08-23 13:46:33.744249] [23174] [default] [I] TaskExecutor scheduling thread started
+[2019-08-23 13:46:33.744343] [23175] [default] [I] ExecutionEngine scheduling thread started
+[2019-08-23 13:46:33.744977] [23133] [default] [I] Starting server listening at tcp://127.0.0.1:5501
+[2019-08-23 13:47:51.658680] [23133] [default] [I] Received signal SIGTERM(15)
+[2019-08-23 13:47:51.658743] [23133] [default] [I] Stopping ZmqServer
+[2019-08-23 13:47:51.659627] [23133] [default] [I] ZmqServer stopped
+[2019-08-23 13:47:51.659695] [23175] [default] [I] ExecutionEngine stopped
+[2019-08-23 13:47:51.659804] [23174] [default] [I] TaskExecutor stopped
