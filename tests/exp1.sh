@@ -11,9 +11,6 @@ dir=`echo $0 | cut -d / -f2 | cut -d . -f1`
 log_dir=templogs/$dir
 mkdir -p $log_dir
 
-salus_dir="/salus/salus/build/Debug/bin"
-salus_bin="salus-server"
-
 benchmark_dir="../../tf_benchmarks/scripts/tf_cnn_benchmarks"
 exe="tf_cnn_benchmarks.py"
 
@@ -60,22 +57,10 @@ echo ${#COMMANDS[@]} "jobs are loaded"
 
 cd $benchmark_dir
 
-POLICIES=(
-    "pack"
-    "fair"
-    "preempt"
-    "mix"
-)
-
-for policy in ${POLICIES[@]}; do
-    mkdir -p $log_dir/$policy
-    printf "\n***** SALUS START *****\n"
-    eval "${salus_dir}/${salus_bin} -s ${policy} -v 9 -c /salus/salus/scripts/logconf/disable.config &"
-
-    for cmd in ${COMMANDS[@]}; do
-        printf "\n***** Running: ${cmd} *****\n"
-        eval $cmd
-    done
-
-    mv /tmp/server.output $log_dir/$policy
+for (( i=0;i<${#COMMANDS[@]};i++ )); do
+    cmd=${COMMANDS[$i]}
+    printf "\n***** Running $i *****\n"
+    eval $cmd
 done
+
+mv /tmp/server.output $log_dir/$policy
