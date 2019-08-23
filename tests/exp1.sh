@@ -69,11 +69,11 @@ POLICIES=(
 for policy in ${POLICIES[@]}; do
     mkdir -p $log_dir/$policy
     printf "\n***** SALUS START *****\n"
-    eval "${salus_dir}/${salus_bin} -s ${policy} -v 9 -c /salus/salus/scripts/logconf/disable.config"
+    eval "stdbuf -o0 -e0 -- ${salus_dir}/${salus_bin} -s ${policy} -v 9 -c /salus/salus/scripts/logconf/disable.config"
 
     for cmd in ${COMMANDS[@]}; do
         printf "\n***** Running: ${cmd} *****\n"
-        eval "${cmd}"
+        ${cmd}
     done
 
     mv /tmp/server.output $log_dir/$policy
