@@ -29,9 +29,9 @@ def case(policy):
     folder_name = policy
     workload_list = [
         WTL.create("alexnet", 25, 250), # training
-        WTL.create("resnet50eval", 1, 2000),
-        WTL.create("resnet50eval", 1, 2000),
-        WTL.create("resnet50eval", 1, 2000)
+        WTL.create("resnet50eval", 1, 500),
+        WTL.create("resnet50eval", 1, 500),
+        WTL.create("resnet50eval", 1, 500)
     ]
     run_seq(scfg.copy(output_dir=FLAGS.save_dir/folder_name),
             *workload_list
