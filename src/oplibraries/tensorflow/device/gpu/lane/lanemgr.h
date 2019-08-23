@@ -224,6 +224,7 @@ class LaneHolder
     sstl::ScopedUnref<GpuLane> m_lane;
     size_t m_hold;
     size_t m_peak;
+    bool isInference;
 
 public:
     explicit LaneHolder(sstl::ScopedUnref<GpuLane> &&lane, size_t hold, size_t peak)
@@ -258,6 +259,14 @@ public:
     int baseStreamIndex() const
     {
         return m_lane->baseStreamIndex();
+    }
+
+    void setInference(bool flag) {
+        isInference = flag;
+    }
+    bool getInference() const
+    {
+        return isInference;
     }
 };
 

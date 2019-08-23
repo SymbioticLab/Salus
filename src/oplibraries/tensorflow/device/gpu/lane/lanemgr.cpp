@@ -172,6 +172,7 @@ std::unique_ptr<LaneHolder> LaneMgr::GpuControlBlock::bestFitFor(size_t memory, 
         if (availableMemory >= memory) {
             auto lane = newLane(memory, false, std::move(g));
             auto holder = lane->tryFit(persistentSize, temporaryPeak);
+            holder->setInference(false);
             CHECK_NE(holder, nullptr);
             return holder;
         }
@@ -209,6 +210,7 @@ std::unique_ptr<LaneHolder> LaneMgr::GpuControlBlock::bestFitForInference(size_t
         if (availableMemory >= memory) {
             auto lane = newLane(memory, true, std::move(g));
             auto holder = lane->tryFit(persistentSize, temporaryPeak);
+            holder->setInference(true);
             CHECK_NE(holder, nullptr);
             return holder;
         }

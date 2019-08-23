@@ -104,6 +104,7 @@ void TFInstance::handleCreateSession(std::unique_ptr<tf::CreateSessionRequest> &
         ectx->setInference(false);
     }
     auto flag = ectx->getInference();
+    LOG(INFO) << "inference flag:" << flag;
     auto &m = req->config().salus_options().resource_map();
     persistant = static_cast<size_t>(std::round(sstl::getOrDefault(m.persistant(), rt, 0.0)));
     // HACK: scale up 10% to mitigate OOM and fragmentation
@@ -157,6 +158,7 @@ void TFInstance::handleCreateSession(std::unique_ptr<tf::CreateSessionRequest> &
                               {"laneSize", lane->totalMemory()},
                               {"laneAvail", lane->availableMemory()},
                               {"laneStream", lane->baseStreamIndex()},
+                              {"laneFlag", lane->getInference()}
                           });
         // Keep a reference for lanes on ectx's user data
         // which should outlive the TFSession.

@@ -282,6 +282,8 @@ int ExecutionEngine::scheduleOnQueue(LaneQueue &lctx, IterQueue &staging)
     } else if (m_schedParam.scheduler == "pack") {
         // do nothing
     } else if (m_schedParam.scheduler == "mix") {
+        LOG(INFO) << "scheduling: lane id" << lctx.id;
+        LOG(INFO) << "lane type" << lctx.isInference;
         // for inference jobs, do nothing
         if (lctx.isInference) {
             // do nothing
@@ -329,7 +331,7 @@ int ExecutionEngine::scheduleOnQueue(LaneQueue &lctx, IterQueue &staging)
                     }
                 }
             }
-            staging.clear();   
+            staging.clear();
         }
     } else if (m_schedParam.scheduler == "fifo") {
         PSessionItem sessItem = nullptr;

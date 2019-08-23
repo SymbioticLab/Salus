@@ -1,4 +1,5 @@
 from __future__ import print_function
+import os
 
 import unittest
 from datetime import datetime
@@ -182,6 +183,9 @@ class TestVgg16(VGGCaseBase):
         batch_size = kwargs.get('batch_size', 100)
 
         config = tf.ConfigProto()
+        config.gpu_options.allow_growth = True
+        timeout = os.environ.get("SALUS_TIMEOUT", "0")
+        config.operation_timeout_in_ms = int(timeout)
         config.allow_soft_placement = True
         config.salus_options.resource_map.temporary['MEMORY:GPU'] = memusages[batch_size][0]
         config.salus_options.resource_map.persistant['MEMORY:GPU'] = memusages[batch_size][1]

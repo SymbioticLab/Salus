@@ -3,10 +3,11 @@
 export CUDA_VISIBLE_DEVICES=0,1
 rm -f *.output
 
-JOBS=${1:-2}
+JOBS=${1:-5}
 for i in $(seq $JOBS); do
     echo $i
     #python -m test_tf.test_mnist_tf TestMnistLarge.test_rpc_1 > $i.output 2>&1 &
+    export SALUS_TIMEOUT=0
     python -m test_tf.test_vgg TestVgg16.test_rpc_only_2 > $i.output 2>&1 &
     #sleep 1
 done
