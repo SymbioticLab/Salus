@@ -1,16 +1,16 @@
-[2019-08-22 10:53:33.521318] [29327] [default] [I] Running build type: Release
-[2019-08-22 10:53:33.521389] [29327] [default] [I] Verbose logging level: 0 file: verbose.log
-[2019-08-22 10:53:33.521396] [29327] [default] [I] Performance logging: disabled file: verbose.log
-[2019-08-22 10:53:33.521401] [29327] [default] [I] Allocation logging: disabled
-[2019-08-22 10:53:33.521404] [29327] [default] [I] Scheduling parameters:
-[2019-08-22 10:53:33.521408] [29327] [default] [I]     Policy: preempt
-[2019-08-22 10:53:33.521412] [29327] [default] [I]     MaxQueueHeadWaiting: 50
-[2019-08-22 10:53:33.521415] [29327] [default] [I]     WorkConservative: on
-[2019-08-22 10:53:33.521949] [29327] [default] [I] Starting server listening at tcp://127.0.0.1:5501
-[2019-08-22 10:53:33.522362] [29368] [default] [I] TaskExecutor scheduling thread started
-[2019-08-22 10:53:33.522455] [29369] [default] [I] ExecutionEngine scheduling thread started
-[2019-08-22 10:54:45.391875] [29327] [default] [I] Received signal SIGTERM(15)
-[2019-08-22 10:54:45.391956] [29327] [default] [I] Stopping ZmqServer
-[2019-08-22 10:54:45.392507] [29327] [default] [I] ZmqServer stopped
-[2019-08-22 10:54:45.392606] [29369] [default] [I] ExecutionEngine stopped
-[2019-08-22 10:54:45.392727] [29368] [default] [I] TaskExecutor stopped
+[2019-08-23 13:08:01.224057] [13294] [default] [I] Running build type: Release
+[2019-08-23 13:08:01.224142] [13294] [default] [I] Verbose logging level: 1 file: verbose.log
+[2019-08-23 13:08:01.224152] [13294] [default] [I] Performance logging: disabled file: verbose.log
+[2019-08-23 13:08:01.224158] [13294] [default] [I] Allocation logging: disabled
+[2019-08-23 13:08:01.224163] [13294] [default] [I] Scheduling parameters:
+[2019-08-23 13:08:01.224168] [13294] [default] [I]     Policy: preempt
+[2019-08-23 13:08:01.224173] [13294] [default] [I]     MaxQueueHeadWaiting: 50
+[2019-08-23 13:08:01.224178] [13294] [default] [I]     WorkConservative: on
+[2019-08-23 13:08:01.224256] [13335] [default] [I] TaskExecutor scheduling thread started
+[2019-08-23 13:08:01.224369] [13336] [default] [I] ExecutionEngine scheduling thread started
+[2019-08-23 13:08:01.225044] [13294] [default] [I] Starting server listening at tcp://127.0.0.1:5501
+[2019-08-23 13:08:51.294893] [13294] [default] [I] Received signal SIGTERM(15)
+[2019-08-23 13:08:51.294967] [13294] [default] [I] Stopping ZmqServer
+[2019-08-23 13:08:51.296136] [13294] [default] [I] ZmqServer stopped
+[2019-08-23 13:08:51.296234] [13336] [default] [I] ExecutionEngine stopped
+[2019-08-23 13:08:51.296341] [13335] [default] [I] TaskExecutor stopped
