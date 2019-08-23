@@ -9,7 +9,7 @@ import os
 import numpy as np 
 import matplotlib.pyplot as plt 
 
-training_job_name = "resnet50_25.salus.500iter.0.output"
+training_job_name = "resnet50_25.salus.250iter.0.output"
 inference_job_name = "resnet50eval_1.salus.2000iter.1.output"
 log_path = "scripts/templogs/zyc1"
 policy_list = [
