@@ -5,7 +5,7 @@
 
 export CUDA_VISIBLE_DEVICES=0
 
-rm -r /tmp/server.output
+rm -rf /tmp/server.output
 
 dir=`echo $0 | cut -d / -f2 | cut -d . -f1`
 log_dir=templogs/$dir
@@ -27,7 +27,8 @@ WORKLOADS=(
 
 
 COMMANDS=()
-for workload in ${WORKLOADS[@]}; do
+for (( i=0;i<${#WORKLOADS[@]};i++ )); do
+    workload=${WORKLOADS[$i]}
     model=`echo ${workload} | cut -d _ -f1`
     batch_size=`echo ${workload} | cut -d _ -f2`
     num_batches=`echo ${workload} | cut -d _ -f3`
@@ -41,7 +42,7 @@ for workload in ${WORKLOADS[@]}; do
         --display_every=1 "
     
     if [[ $workload =~ "eval" ]]; then
-        cmd=$cmd"--eval \
+        cmd=${cmd}"--eval \
                   --eval_block=true \
                   --eval_interval_random_factor=5 \
                   --eval_interval_secs=1 \
@@ -52,7 +53,7 @@ for workload in ${WORKLOADS[@]}; do
     # logs
     cmd=${cmd}"> ${log_dir}${model}.output 2>&1 &"
     # echo $cmd
-    COMMANDS[${#COMMANDS[@]}]="${cmd}"
+    COMMANDS[$i]="${cmd}"
 done
 
 echo ${#COMMANDS[@]} "jobs are loaded"
@@ -73,7 +74,7 @@ for policy in ${POLICIES[@]}; do
 
     for cmd in ${COMMANDS[@]}; do
         printf "\n***** Running: ${cmd} *****\n"
-        eval "stdbuf -o0 -e0 -- ${cmd}"
+        eval $cmd
     done
 
     mv /tmp/server.output $log_dir/$policy
