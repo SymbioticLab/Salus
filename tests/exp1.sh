@@ -73,7 +73,7 @@ for policy in ${POLICIES[@]}; do
 
     for cmd in ${COMMANDS[@]}; do
         printf "\n***** Running: ${cmd} *****\n"
-        eval ""stdbuf -o0 -e0 -- ${cmd}"
+        eval "stdbuf -o0 -e0 -- ${cmd}"
     done
 
     mv /tmp/server.output $log_dir/$policy
