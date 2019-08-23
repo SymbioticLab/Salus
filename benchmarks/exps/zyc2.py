@@ -28,7 +28,7 @@ def case(policy):
 
     folder_name = policy
     workload_list = [
-        WTL.create("resnet50", 25, 500), # training
+        WTL.create("resnet50", 25, 250), # training
         WTL.create("resnet50eval", 1, 2000),
         WTL.create("resnet50eval", 1, 2000)
     ]
