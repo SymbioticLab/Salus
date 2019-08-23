@@ -5,7 +5,7 @@
 
 export CUDA_VISIBLE_DEVICES=0
 
-rm /tmp/server.output
+rm -r /tmp/server.output
 
 dir=`echo $0 | cut -d / -f2 | cut -d . -f1`
 log_dir=templogs/$dir
@@ -69,11 +69,11 @@ POLICIES=(
 for policy in ${POLICIES[@]}; do
     mkdir -p $log_dir/$policy
     printf "\n***** SALUS START *****\n"
-    eval "stdbuf -o0 -e0 -- ${salus_dir}/${salus_bin} -s ${policy} -v 9 -c /salus/salus/scripts/logconf/disable.config"
+    eval "stdbuf -o0 -e0 -- ${salus_dir}/${salus_bin} -s ${policy} -v 9 -c /salus/salus/scripts/logconf/disable.config &"
 
     for cmd in ${COMMANDS[@]}; do
         printf "\n***** Running: ${cmd} *****\n"
-        ${cmd}
+        eval ""stdbuf -o0 -e0 -- ${cmd}"
     done
 
     mv /tmp/server.output $log_dir/$policy
