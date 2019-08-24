@@ -37,7 +37,7 @@ def Debugging(**kwargs):
     # type: (...) -> SalusConfig
     return SalusConfig(
         build_type='Debug',
-        logconf='log',
+        logconf='disable',
         hide_output=False
     ).update(**kwargs)
 

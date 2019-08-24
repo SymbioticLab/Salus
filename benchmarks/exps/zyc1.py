@@ -19,7 +19,7 @@ from benchmarks.exps import run_seq, maybe_forced_preset, Pause, run_tf, run_tfd
 FLAGS = flags.FLAGS
 
 def case(policy):
-    scfg = maybe_forced_preset(presets.MostEfficient)
+    scfg = maybe_forced_preset(presets.Debugging)
     scfg.scheduler = policy
     if policy == "mix":
         os.environ["SALUS_TIMEOUT"] = "666666"
@@ -28,8 +28,8 @@ def case(policy):
 
     folder_name = policy
     workload_list = [
-        WTL.create("resnet50", 25, 250), # training
-        WTL.create("resnet50eval", 1, 2000)
+        WTL.create("resnet50", 64, 100), # training
+        WTL.create("resnet50eval", 1, 1000)
     ]
     run_seq(scfg.copy(output_dir=FLAGS.save_dir/folder_name),
             *workload_list

@@ -57,9 +57,9 @@ class SalusServer(object):
         self.env = os.environ.copy()
         self.env.update(cfg.env)
         if 'CUDA_VISIBLE_DEVICES' not in self.env:
-            self.env['CUDA_VISIBLE_DEVICES'] = '1'
+            self.env['CUDA_VISIBLE_DEVICES'] = '0'
         if 'TF_CPP_MIN_LOG_LEVEL' not in self.env:
-            self.env['TF_CPP_MIN_LOG_LEVEL'] = '2'
+            self.env['TF_CPP_MIN_LOG_LEVEL'] = '1'
 
         if cfg.save_outerr:
             FLAGS.server_save_output = 'server'
@@ -128,7 +128,7 @@ class SalusServer(object):
             '--listen', remove_prefix(self.endpoint, 'zrpc://'),
             '--logconf', self._find_logconf(),
             '--sched', self.config.scheduler,
-            '--verbose', "1"
+            '--verbose', "9"
         ]
         self.args += self.config.extra_args
 
@@ -183,6 +183,9 @@ class SalusServer(object):
                 prompt.pause()
             else:
                 logger.info(f'Starting server with cmd: {self.args}')
+
+                print("self.args: {}".format(self.args))
+                print("self.env: {}".format(self.env))
                 # start
                 self.proc = execute(self.args, env=self.env, stdin=sp.DEVNULL, stdout=stdout, stderr=stderr)
 

@@ -1,16 +1,16 @@
 # -*- coding: future_fstrings -*-
 #
 # Copyright 2019 Peifeng Yu <peifeng@umich.edu>
-# 
+#
 # This file is part of Salus
 # (see https://github.com/SymbioticLab/Salus).
-# 
+#
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
-# 
+#
 #    http://www.apache.org/licenses/LICENSE-2.0
-# 
+#
 # Unless required by applicable law or agreed to in writing, software
 # distributed under the License is distributed on an "AS IS" BASIS,
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -419,7 +419,7 @@ class Workload(object):
 WorkloadTemplate.define('vgg11', [25, 50, 100], TFBenchmarkRunner)
 WorkloadTemplate.define('vgg16', [25, 50, 100], TFBenchmarkRunner)
 WorkloadTemplate.define('vgg19', [25, 50, 100], TFBenchmarkRunner)
-WorkloadTemplate.define('resnet50', [25, 50, 75], TFBenchmarkRunner)
+WorkloadTemplate.define('resnet50', [32, 64, 96], TFBenchmarkRunner)
 WorkloadTemplate.define('resnet101', [25, 50, 75], TFBenchmarkRunner)
 WorkloadTemplate.define('resnet152', [25, 50, 75], TFBenchmarkRunner)
 WorkloadTemplate.define('googlenet', [25, 50, 100], TFBenchmarkRunner)

@@ -105,11 +105,11 @@ class TFBenchmarkRunner(Runner):
         cmd = [
             'stdbuf', '-o0', '-e0', '--',
             'python', 'tf_cnn_benchmarks.py',
+            '--salus=true',
             '--display_every=1',
             '--num_gpus=1',
             '--variable_update=parameter_server',
-            '--nodistortions',
-            '--executor={}'.format(executor.value),
+            '--distortions=false',
             '--num_batches={}'.format(self.wl.batch_num),
             '--batch_size={}'.format(self.wl.batch_size),
         ]
@@ -119,7 +119,7 @@ class TFBenchmarkRunner(Runner):
         if self.wl.name.endswith('eval'):
             model_name = self.wl.name.rsplit('eval')[0]
             cmd += [
-                '--train_dir=models/{}'.format(model_name),
+                '--train_dir=/salus/tf_benchmarks/scripts/tf_cnn_benchmarks/models/{}'.format(model_name),
                 '--model={}'.format(model_name),
                 '--eval_interval_secs={}'.format(eval_interval),
                 '--eval_interval_random_factor={}'.format(eval_rand_factor),
