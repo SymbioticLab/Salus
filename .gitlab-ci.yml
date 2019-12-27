@@ -5,6 +5,8 @@ stages:
 
 variables:
   DOCKER_HOST: tcp://docker:2375
+  # This will instruct Docker not to start over TLS.
+  DOCKER_TLS_CERTDIR: ""
   DOCKER_DRIVER: overlay2
   IMAGE_TAG: $CI_REGISTRY_IMAGE:$CI_COMMIT_REF_SLUG
   LATEST_TAG: $CI_REGISTRY_IMAGE:latest
