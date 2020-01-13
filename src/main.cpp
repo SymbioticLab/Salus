@@ -17,13 +17,18 @@
  * limitations under the License.
  */
 
+#include "utils/macros.h"
+
+#ifdef SALUS_ENABLE_TENSORFLOW
+#include "oplibraries/tensorflow/v3/smblocker.h"
+#endif
+
 #include "execution/executionengine.h"
 #include "resources/resources.h"
 #include "platform/logging.h"
 #include "platform/signals.h"
 #include "platform/profiler.h"
 #include "rpcserver/zmqserver.h"
-#include "utils/macros.h"
 #include "utils/envutils.h"
 
 #include <docopt.h>
@@ -45,6 +50,7 @@ const static auto listen = "--listen";
 const static auto maxHolWaiting = "--max-hol-waiting";
 const static auto disableFairness = "--disable-fairness";
 const static auto disableWorkConservative = "--disable-wc";
+const static auto smFactor = "--sm-factor";
 const static auto scheduler = "--sched";
 
 const static auto logConf = "--logconf";
@@ -77,6 +83,7 @@ Options:
                                 fairness is on.
     --max-hol-waiting=<num>     Maximum number of task allowed go before queue head
                                 in scheduling. [default: 50]
+    --sm-factor=<num>           Scale factor for # of SMs. [default: 1]
     -c <file>, --logconf=<file> Path to log configuration file. Note that
                                 settings in this file takes precedence over
                                 other command line arguments.
@@ -214,6 +221,17 @@ void configureExecution(std::map<std::string, docopt::value> &args)
     salus::ExecutionEngine::instance().setSchedulingParam({maxQueueHeadWaiting, !disableWorkConservative, sched});
 }
 
+void configureSMBlocker(std::map<std::string, docopt::value> &args)
+{
+#ifdef SALUS_ENABLE_TENSORFLOW
+    // docopt doesn't handle double number
+    // so we get as string and do conversion ourselves
+    auto scale = std::atof(value_or<std::string>(args[flags::smFactor], "1.0"s).c_str());
+
+    salus::oplib::tensorflow::SMBlocker::setScaleFactorSM(scale);
+#endif
+}
+
 void printConfiguration(std::map<std::string, docopt::value> &)
 {
     LOG(INFO) << "Running build type: " << SALUS_BUILD_TYPE;
@@ -237,6 +255,11 @@ void printConfiguration(std::map<std::string, docopt::value> &)
     LOG(INFO) << "    Policy: " << param.scheduler;
     LOG(INFO) << "    MaxQueueHeadWaiting: " << param.maxHolWaiting;
     LOG(INFO) << "    WorkConservative: " << (param.workConservative ? "on" : "off");
+
+#ifdef SALUS_ENABLE_TENSORFLOW
+    LOG(INFO) << "GPU execution:";
+    LOG(INFO) << "    SM scale factor: " << salus::oplib::tensorflow::SMBlocker::scaleFactorSM();
+#endif
 }
 
 int main(int argc, char **argv)
@@ -249,6 +272,8 @@ int main(int argc, char **argv)
     signals::initialize();
 
     configureExecution(args);
+
+    configureSMBlocker(args);
 
     printConfiguration(args);
 

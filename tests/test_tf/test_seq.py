@@ -19,10 +19,12 @@ def run_seq_ptb(sess, config_name):
     eval_config = get_config(config_name)
     config.max_max_epoch = 1
     config.max_epoch = 1
+    config.batch_size = tfhelper.batch_size_from_env(config.batch_size)
+    print("Using batch size {}".format(config.batch_size))
 
     eval_config.max_max_epoch = 1
     eval_config.max_epoch = 1
-    eval_config.batch_size = 1
+    eval_config.batch_size = config.batch_size
     eval_config.num_steps = 1
 
     train_input, valid_input, test_input = datasets.ptb_data(config, eval_config)
@@ -65,10 +67,12 @@ def test_seq_ptb(sess, config_name):
     eval_config = get_config(config_name)
     config.max_max_epoch = 1
     config.max_epoch = 1
+    config.batch_size = tfhelper.batch_size_from_env(config.batch_size)
+    print("Using batch size {}".format(config.batch_size))
 
     eval_config.max_max_epoch = 1
     eval_config.max_epoch = 1
-    eval_config.batch_size = 1
+    eval_config.batch_size = config.batch_size
     eval_config.num_steps = 1
 
     train_input, valid_input, test_input = datasets.ptb_data(config, eval_config)

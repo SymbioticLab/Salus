@@ -57,6 +57,17 @@ class SMBlocker
 public:
     static SMBlocker &instance();
 
+    static void setScaleFactorSM(double factor)
+    {
+        m_scaleFactorSM = factor;
+    }
+
+    static double scaleFactorSM()
+    {
+        CHECK_NE(m_scaleFactorSM, 0.0) << "Must call SMBlocker::setScaleFactorSM before getting value";
+        return m_scaleFactorSM;
+    }
+
     /**
      * @brief Release this amount of numSms
      */
@@ -95,13 +106,38 @@ public:
     static constexpr int MaxPriority = 100;
 
 private:
+    static double m_scaleFactorSM;
     static SMUsage queryAvailableSM();
 
-    SMBlocker();
+    explicit SMBlocker(double factor);
 
     uint64_t getUsageForKernel(uint64_t graphId, int nodeId);
 
-    const SMUsage m_maxUsage;
+    class MaxSMUsage
+    {
+        SMUsage usage;
+        double scale;
+    public:
+        explicit MaxSMUsage(SMUsage u, double scale = 1.0)
+            : usage(u)
+            , scale(scale)
+        {}
+
+        SMUsage get() const {
+            return {usage.threadPerBlock, static_cast<uint64_t>(usage.blockCount * scale)};
+        }
+        double getScale() const {
+            return scale;
+        }
+        void set(SMUsage u) {
+            usage = u;
+        }
+        void setScale(double s) {
+            scale = s;
+        }
+    };
+
+    MaxSMUsage m_maxUsage;
 
     sstl::priority_semaphore<MaxPriority> m_freeBlocks;
 

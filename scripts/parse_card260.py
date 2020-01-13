@@ -1,16 +1,16 @@
 #!/usr/bin/env python3
 #
 # Copyright 2019 Peifeng Yu <peifeng@umich.edu>
-# 
+#
 # This file is part of Salus
 # (see https://github.com/SymbioticLab/Salus).
-# 
+#
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
-# 
+#
 #    http://www.apache.org/licenses/LICENSE-2.0
-# 
+#
 # Unless required by applicable law or agreed to in writing, software
 # distributed under the License is distributed on an "AS IS" BASIS,
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -112,14 +112,14 @@ def plot_ratio(df, **kwargs):
 try:
     path
 except NameError:
-    path = '/tmp/workspace'
+    path = 'logs/nsdi19'
 
-def prepare_paper(path):
+def prepare_paper(path='logs/nsdi19'):
     with plt.style.context(['seaborn-paper', 'mypaper', 'gray']):
         df = load_data(path)
 
         fig, ax = plt.subplots()
-        fig.set_size_inches(3.25, 1.5, forward=True)
+        fig.set_size_inches(3.25, 1.2, forward=True)
 
         #plot_eval_pit_vs_speed(df, ax=ax)
         #ax.set_xlabel('Time (s)')

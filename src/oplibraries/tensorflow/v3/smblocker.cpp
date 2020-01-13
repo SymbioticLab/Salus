@@ -78,9 +78,11 @@ void salus_kernel_launch_callback(unsigned int gridDimX, unsigned int gridDimY, 
 
 namespace salus::oplib::tensorflow {
 
+double SMBlocker::m_scaleFactorSM = 0.0;
+
 SMBlocker &SMBlocker::instance()
 {
-    static SMBlocker blocker;
+    static SMBlocker blocker(scaleFactorSM());
     return blocker;
 }
 
@@ -95,9 +97,9 @@ SMUsage SMBlocker::queryAvailableSM()
     };
 }
 
-SMBlocker::SMBlocker()
-    : m_maxUsage{queryAvailableSM()}
-    , m_freeBlocks(m_maxUsage.blockCount)
+SMBlocker::SMBlocker(double factor)
+    : m_maxUsage{queryAvailableSM(), factor}
+    , m_freeBlocks(m_maxUsage.get().blockCount)
 {
 }
 
@@ -159,7 +161,7 @@ void SMBlocker::wait(uint64_t graphId, int nodeId, int priority)
     LogSMTracing() << "Wait at SMBlocker: graph " << graphId << " node " << nodeId
                << " sm " << smUsage << " priority " << priority;
     m_freeBlocks.wait(smUsage, priority);
-    LogSMTracing() << "Passed at SMBlocker: graph " << graphId << " node " << nodeId
+    LogSMTracing() << "Took at SMBlocker: graph " << graphId << " node " << nodeId
                << " sm " << smUsage << " priority " << priority;
 }
 
@@ -169,11 +171,13 @@ uint64_t SMBlocker::getUsageForKernel(uint64_t graphId, int nodeId)
 
     auto usage = sstl::getOrDefault(m_cache, {graphId, nodeId}, {});
 
-    return std::min(usage.blockCount, m_maxUsage.blockCount);
+    return std::min(usage.blockCount, m_maxUsage.get().blockCount);
 }
 
 void SMBlocker::release(uint64_t numSms)
 {
+    LogSMTracing() << "Release at SMBlocker: graph " << 0 << " node " << 0
+                   << " sm " << numSms << " priority " << 0;
     m_freeBlocks.post(numSms);
 }
 

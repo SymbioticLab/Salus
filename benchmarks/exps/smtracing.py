@@ -170,6 +170,31 @@ def tfmps(argv):
                    )
 
 
+def train_alone(argv):
+    """Run training workload alone take note of SM usage"""
+    sm_factors = [float(v) for v in argv]
+    if not sm_factors:
+        sm_factors = [1.0, 1.5, 2.0, 2.5, 3.0]
+
+    logger.info(f"Running Salus with sm factors: {sm_factors}")
+
+    # run salus
+    for factor in sm_factors:
+        with tempfile.TemporaryDirectory() as td:
+            scfg = maybe_forced_preset(presets.OpTracing)
+            scfg.logconf = 'smtracing'
+            scfg.extra_args += [
+                '--sm-factor', f'{factor:.2f}'
+            ]
+            logger.info(f"Running Salus with sm factor: {factor}")
+            # the background training job
+            wl, pipe = create_train(Executor.Salus, 0, td)
+            run_seq(scfg.copy(output_dir=FLAGS.save_dir / "alone" / f"{factor:.2f}"),
+                    wl,
+                    RunFn(lambda *args, **kwargs: wait_on_pipe(pipe)),
+                    RunFn(lambda *args, **kwargs: release_on_pipe(pipe)))
+
+
 @case_switch_main
 def main():
-    return salus, tfmps
+    return salus, tfmps, train_alone, salus_factor

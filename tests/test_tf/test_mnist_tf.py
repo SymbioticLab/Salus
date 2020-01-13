@@ -16,6 +16,8 @@ from .lib.datasets import fake_data
 
 
 def run_mnist_softmax(sess, batch_size=50):
+    batch_size = tfhelper.batch_size_from_env(batch_size)
+    print('Using batch_size {}'.format(batch_size))
     x_image, y_, num_classes = fake_data(batch_size, None, height=28, width=28, depth=1, num_classes=10)
     y_ = tf.one_hot(y_, num_classes)
     x = tf.reshape(x_image, [-1, 784])
@@ -73,6 +75,8 @@ def run_mnist_conv(sess, batch_size=50):
     def max_pool_2x2(x):
         return tf.nn.max_pool(x, ksize=[1, 2, 2, 1], strides=[1, 2, 2, 1], padding='SAME')
 
+    batch_size = tfhelper.batch_size_from_env(batch_size)
+    print('Using batch_size {}'.format(batch_size))
     x_image, y_, num_classes = fake_data(batch_size, None, height=28, width=28, depth=1, num_classes=10)
     y_ = tf.one_hot(y_, num_classes)
     keep_prob = tf.placeholder(tf.float32)
@@ -150,6 +154,8 @@ def run_mnist_large(sess, batch_size=50):
     def max_pool_2x2(x):
         return tf.nn.max_pool(x, ksize=[1, 2, 2, 1], strides=[1, 2, 2, 1], padding='SAME')
 
+    batch_size = tfhelper.batch_size_from_env(batch_size)
+    print('Using batch_size {}'.format(batch_size))
     x_image, y_, num_classes = fake_data(batch_size, None, height=28, width=28, depth=1, num_classes=10)
     y_ = tf.one_hot(y_, num_classes)
     keep_prob = tf.placeholder(tf.float32)

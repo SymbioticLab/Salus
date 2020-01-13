@@ -23,6 +23,8 @@ import itertools
 import time
 import re
 import logging
+import string
+import random
 from absl import flags
 from typing import Union, Iterable, List, TypeVar, Callable, Optional
 
@@ -379,3 +381,8 @@ def release_on_pipe(pipe):
 def sync_on_pipe(pipe):
     wait_on_pipe(pipe)
     release_on_pipe(pipe)
+
+
+def random_id(size=6, chars=string.ascii_uppercase + string.digits):
+    """Generate a random ID"""
+    return ''.join(random.choice(chars) for _ in range(size))

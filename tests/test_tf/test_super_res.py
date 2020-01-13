@@ -20,6 +20,7 @@ from .lib.datasets import fake_data_ex
 
 def run_superres(sess, input_data, batch_size=100, isEval=False):
     batch_size = tfhelper.batch_size_from_env(batch_size)
+    print("{}: Using batch size {}".format(datetime.now(), batch_size))
 
     input_images, target_images = input_data(batch_size=batch_size)
 

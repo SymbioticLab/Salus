@@ -1,16 +1,16 @@
 #!/usr/bin/env python3
 #
 # Copyright 2019 Peifeng Yu <peifeng@umich.edu>
-# 
+#
 # This file is part of Salus
 # (see https://github.com/SymbioticLab/Salus).
-# 
+#
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
-# 
+#
 #    http://www.apache.org/licenses/LICENSE-2.0
-# 
+#
 # Unless required by applicable law or agreed to in writing, software
 # distributed under the License is distributed on an "AS IS" BASIS,
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -35,6 +35,7 @@ import pandas as pd
 #import seaborn as sns
 import numpy as np
 import matplotlib.pyplot as plt
+import matplotlib.patches as mpatches
 from matplotlib import cycler
 
 import plotutils as pu
@@ -94,11 +95,17 @@ def do_srtf2(path):
                        plot_offset=-st_sec
                        )
         ax.set_xlim([0, ed_sec-st_sec])
+        
+        # add a legend
+        ax.legend(handles=[
+            mpatches.Patch(color='#b6b6b6', label='Queuing'),
+            mpatches.Patch(color='black', label='Active')
+        ], bbox_to_anchor=(0.85, 0.03), loc='lower right')
 
         ax.set_ylabel('Job #')
         ax.yaxis.set_ticks([0, 1, 2, 3, 4, 5])
 
-        fig.set_size_inches(4.875, 2, forward=True)
+        fig.set_size_inches(4.875, 1.5, forward=True)
         fig.savefig('/tmp/workspace/card274-srtf-compute.pdf', dpi=300,
                     bbox_inches='tight', pad_inches = .015)
         plt.close()
@@ -146,7 +153,7 @@ def do_srtf3(path):
         ax.legend().remove()
 
         #fig.tight_layout()
-        fig.set_size_inches(1.625, 2, forward=True)
+        fig.set_size_inches(1.625, 1.5, forward=True)
         fig.savefig('/tmp/workspace/card274-srtf-mem.pdf', dpi=300, bbox_inches='tight', pad_inches = .015)
         plt.close()
 

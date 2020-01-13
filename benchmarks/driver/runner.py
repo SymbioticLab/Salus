@@ -213,7 +213,8 @@ class UnittestRunner(Runner):
         else:
             output_file.parent.mkdir(exist_ok=True, parents=True)
             with output_file.open('w') as f:
-                return execute(cmd, cwd=str(cwd), env=env, stdout=f, stderr=sp.STDOUT)
+                # return execute(cmd, cwd=str(cwd), env=env, stdout=f, stderr=sp.STDOUT)
+                return execute(cmd, cwd=str(cwd), env=env, stdout=f, stderr=None)
 
     def _construct_test_name(self, executor):
         # type: (Executor) -> Tuple[str, str]
@@ -239,7 +240,7 @@ class UnittestRunner(Runner):
             })
         }
 
-        variable_batch_size_models = {'vae', 'superres'}
+        variable_batch_size_models = {'vae', 'superres', 'seq2seq', 'mnistsf', 'mnistcv', 'mnistlg'}
         if remove_suffix(self.wl.name, 'eval') not in variable_batch_size_models:
             if self.wl.batch_size not in self.wl.wtl.available_batch_sizes():
                 raise ValueError(f"Batch size `{self.wl.batch_size}' is not supported for {self.wl.name},"
@@ -273,6 +274,8 @@ class UnittestRunner(Runner):
             }
 
         postfix = names.get(self.wl.batch_size, '0')
+        if model_name == 'seq2seq' and postfix == '0':
+            postfix = '2_large'
 
         method = f'{cls}.{prefix}{postfix}'
         return pkg, method
