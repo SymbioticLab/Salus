@@ -163,12 +163,91 @@ class semaphore
 {
     std::mutex m_mu;
     std::condition_variable m_cv;
-    uint32_t m_count = 0; // Initialized as locked.
+    uint64_t m_count = 0;
 
 public:
-    void notify(uint32_t c = 1);
+    // Initialized as locked.
+    explicit semaphore(uint64_t init = 0) : m_count(init) {}
 
-    void wait(uint32_t c = 1);
+    void notify(uint64_t c = 1);
+
+    void wait(uint64_t c = 1);
+
+    bool may_block(uint64_t c = 1);
+};
+
+/**
+ * @brief Semaphore that can wait on count and with strict priority.
+ * As long as higher priority queue is not empty, lower priority reqeust will wait.
+ */
+template<uint8_t kMaxPriority, uint8_t kDefaultPriority = 0>
+class priority_semaphore
+{
+    std::mutex m_mu;
+    uint64_t m_pending[kMaxPriority]{};
+    std::condition_variable m_queues[kMaxPriority];
+    uint64_t m_count;
+
+public:
+    static_assert(kMaxPriority > 0, "Max priority must be greater than 0");
+    static_assert(kDefaultPriority < kMaxPriority, "Default priority must be in the range [0, kMaxPriority)");
+
+    explicit priority_semaphore(uint64_t init = 0) : m_count(init) {}
+
+    void post(uint64_t c = 1)
+    {
+        auto l = with_guard(m_mu);
+        m_count += c;
+        for (auto p = 0; p != kMaxPriority; ++p) {
+            if (m_pending[p] > 0) {
+                m_queues[p].notify_all();
+                break;
+            }
+        }
+    }
+
+    void wait(uint64_t c = 1, uint8_t p = kDefaultPriority)
+    {
+        auto lock = with_uguard(m_mu);
+        if (can_take(c, p)) {
+            m_count -= c;
+            return;
+        }
+        m_pending[p] += 1;
+        m_queues[p].wait(lock, [&]() { return can_take(c, p); });
+        m_pending[p] -= 1;
+        m_count -= c;
+    }
+
+    bool try_wait(uint64_t c = 1, uint8_t p = kDefaultPriority)
+    {
+        auto lock = with_guard(m_mu);
+        if (can_take(c, p)) {
+            m_count -= c;
+            return true;
+        }
+        return false;
+    }
+
+private:
+    /**
+     * @brief Must be called under lock of m_mu
+     * @param c
+     * @param p
+     * @return true if can take the resource at this p level
+     */
+    bool can_take(uint64_t c, uint8_t p)
+    {
+        for (auto i = 0; i != p; ++i) {
+            if (m_pending[i] > 0) {
+                return false;
+            }
+        }
+        // whether to skip current priority level's queue if it's available?
+        // yes. because, when waken up in cv's wait, m_pending is not subtracted yet,
+        // but we still need to proceed
+        return m_count >= c;
+    }
 };
 
 /**

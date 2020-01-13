@@ -26,6 +26,9 @@
 #include "utils/envutils.h"
 #include "utils/threadutils.h"
 
+#include <numeric>
+#include <algorithm>
+
 namespace tfgpu = perftools::gputools;
 
 namespace salus::oplib::tensorflow {
@@ -123,30 +126,48 @@ void LaneMgr::processRequests()
     processRequests(sstl::with_guard(m_mu));
 }
 
-void LaneMgr::processRequests(sstl::detail::Guard &&g)
+void LaneMgr::processRequests(sstl::detail::Guard &&)
 {
-    UNUSED(g);
-
     auto it = m_pending.begin();
     auto end = m_pending.end();
     while (it != end) {
         auto &req = *it;
+        const auto reqLen = req.layout.memoryLimits.size();
 
-        // TODO: the algorithm below assumes single GPU, to scale to multiple ones, a global lock is needed
-        CHECK_EQ(req.layout.memoryLimits.size(), 1_sz) << "Only single lane layout is supported";
+        CHECK_LE(reqLen, m_gpus.size()) << "Requested more GPU than available";
+
+        // use a greedy algorithm, sort requested layout in desc order, and try to fit the largest one first
+        std::vector<int> indices(reqLen);
+        std::iota(indices.begin(), indices.end(), 0);
+        std::sort(indices.begin(), indices.end(), [&req](const int a, const int b) {
+            if (req.layout.memoryLimits.at(a) == req.layout.memoryLimits.at(b)) {
+                return req.layout.persistentOccupation.at(a) < req.layout.persistentOccupation.at(b);
+            }
+            return req.layout.memoryLimits.at(a) < req.layout.memoryLimits.at(b);
+        });
 
         std::vector<std::shared_ptr<LaneHolder>> lanes;
-        auto &gcb = m_gpus.at(0);
+        for (auto idx : indices) {
+            std::shared_ptr<LaneHolder> lane{nullptr};
+            for (auto &gcb : m_gpus) {
+                lane = gcb.bestFitFor(req.layout.memoryLimits.at(idx), req.layout.persistentOccupation.at(idx));
+                if (lane) {
+                    break;
+                }
+            }
+            if (!lane) {
+                // can't find a suitable allocation
+                break;
+            }
+            lanes.emplace_back(std::move(lane));
+        }
 
-        // using a best fit policy
-        const auto firstIdx = 0;
-        auto lane = gcb.bestFitFor(req.layout.memoryLimits.at(firstIdx), req.layout.persistentOccupation.at(firstIdx));
-        if (!lane) {
-            // can't find a suitable allocation.
+        if (lanes.size() != reqLen) {
+            // no enough lanes
+            lanes.clear();
             ++it;
             continue;
         }
-        lanes.emplace_back(std::move(lane));
 
         req.cb(std::move(lanes));
 

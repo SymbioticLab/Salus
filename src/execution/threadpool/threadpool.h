@@ -33,16 +33,45 @@ struct ThreadPoolOptions
      */
     size_t numThreads = 0;
 
+    ThreadPoolOptions &setNumThreads(size_t num)
+    {
+        numThreads = num;
+        return *this;
+    }
+
     /**
      * Whether allow spinning wait in worker threads for lower latency
      */
     bool allowSpinning = true;
+
+    ThreadPoolOptions &setAllowSpinning(bool allow)
+    {
+        allowSpinning = allow;
+        return *this;
+    }
 
     /**
      * Times of tries for spin wait before go to wait.
      * Use -1 for default value, which is 5000 / numThreads
      */
     int spinCount = -1;
+
+    ThreadPoolOptions &setSpinCount(int count)
+    {
+        spinCount = count;
+        return *this;
+    }
+
+    /**
+     * @brief Optional worker thread name, truncated at 16 characters.
+     */
+    std::string workerName = "";
+
+    ThreadPoolOptions &setWorkerName(const std::string &name)
+    {
+        workerName = name;
+        return *this;
+    }
 
     ThreadPoolOptions();
     ThreadPoolOptions(const ThreadPoolOptions &) = default;

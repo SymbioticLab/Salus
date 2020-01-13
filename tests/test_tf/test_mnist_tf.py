@@ -16,6 +16,8 @@ from .lib.datasets import fake_data
 
 
 def run_mnist_softmax(sess, batch_size=50):
+    batch_size = tfhelper.batch_size_from_env(batch_size)
+    print('Using batch_size {}'.format(batch_size))
     x_image, y_, num_classes = fake_data(batch_size, None, height=28, width=28, depth=1, num_classes=10)
     y_ = tf.one_hot(y_, num_classes)
     x = tf.reshape(x_image, [-1, 784])
@@ -73,6 +75,8 @@ def run_mnist_conv(sess, batch_size=50):
     def max_pool_2x2(x):
         return tf.nn.max_pool(x, ksize=[1, 2, 2, 1], strides=[1, 2, 2, 1], padding='SAME')
 
+    batch_size = tfhelper.batch_size_from_env(batch_size)
+    print('Using batch_size {}'.format(batch_size))
     x_image, y_, num_classes = fake_data(batch_size, None, height=28, width=28, depth=1, num_classes=10)
     y_ = tf.one_hot(y_, num_classes)
     keep_prob = tf.placeholder(tf.float32)
@@ -150,6 +154,8 @@ def run_mnist_large(sess, batch_size=50):
     def max_pool_2x2(x):
         return tf.nn.max_pool(x, ksize=[1, 2, 2, 1], strides=[1, 2, 2, 1], padding='SAME')
 
+    batch_size = tfhelper.batch_size_from_env(batch_size)
+    print('Using batch_size {}'.format(batch_size))
     x_image, y_, num_classes = fake_data(batch_size, None, height=28, width=28, depth=1, num_classes=10)
     y_ = tf.one_hot(y_, num_classes)
     keep_prob = tf.placeholder(tf.float32)
@@ -266,8 +272,9 @@ class MnistConvBase(unittest.TestCase):
                         dev='/job:tfworker/device:GPU:0',
                         config=self._config(batch_size=batch_size))
 
-    def test_correctness(self):
-        actual, expected = run_on_rpc_and_gpu(self._runner(), config=self._config())
+    @parameterized.expand([(25,), (50,), (100,)])
+    def test_correctness(self, batch_size):
+        actual, expected = run_on_rpc_and_gpu(self._runner(batch_size), config=self._config())
         assertAllClose(actual, expected, rtol=1e-3)
 
 
@@ -293,6 +300,8 @@ class TestMnistConv(MnistConvBase):
         config.allow_soft_placement = True
         config.salus_options.resource_map.temporary['MEMORY:GPU'] = memusages[batch_size][0]
         config.salus_options.resource_map.persistant['MEMORY:GPU'] = memusages[batch_size][1]
+        config.salus_options.resource_map.temporary['MEMORY:GPU0'] = memusages[batch_size][0]
+        config.salus_options.resource_map.persistant['MEMORY:GPU0'] = memusages[batch_size][1]
         return config
 
 
@@ -313,6 +322,8 @@ class TestMnistLarge(MnistConvBase):
         config.allow_soft_placement = True
         config.salus_options.resource_map.temporary['MEMORY:GPU'] = memusages[batch_size][0]
         config.salus_options.resource_map.persistant['MEMORY:GPU'] = memusages[batch_size][1]
+        config.salus_options.resource_map.temporary['MEMORY:GPU0'] = memusages[batch_size][0]
+        config.salus_options.resource_map.persistant['MEMORY:GPU0'] = memusages[batch_size][1]
         return config
 
 

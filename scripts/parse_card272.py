@@ -1,16 +1,16 @@
 #!/usr/bin/env python3
 #
 # Copyright 2019 Peifeng Yu <peifeng@umich.edu>
-# 
+#
 # This file is part of Salus
 # (see https://github.com/SymbioticLab/Salus).
-# 
+#
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
-# 
+#
 #    http://www.apache.org/licenses/LICENSE-2.0
-# 
+#
 # Unless required by applicable law or agreed to in writing, software
 # distributed under the License is distributed on an "AS IS" BASIS,
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -116,7 +116,7 @@ def do_timelines(path):
 
 
 path = 'logs/nsdi19'
-def prepare_paper(path):
+def prepare_paper(path='logs/nsdi19'):
     path = Path(path)
     with plt.style.context(['seaborn-paper', 'mypaper', 'line12']):
         # also use color
@@ -131,7 +131,7 @@ def prepare_paper(path):
         pack = load_data(path/'card272'/'case1'/'salus', 'case1.output')
 
         fig, ax = plt.subplots()
-        fig.set_size_inches(3.25, 1.85, forward=True)
+        fig.set_size_inches(3.25, 1.5, forward=True)
 
         jcts = pd.DataFrame({'FIFO': fifo.JCT, 'SRTF': srtf.JCT, 'PACK': pack.JCT, 'FAIR': fair.JCT})
         plot_jcts(jcts, ax=ax, markevery=0.1, markersize=4, linewidth=1)

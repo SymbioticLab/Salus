@@ -1,0 +1,30 @@
+#! /bin/bash
+
+# Get current file directory
+SOURCE="${BASH_SOURCE[0]}"
+while [ -h "$SOURCE" ]; do # resolve $SOURCE until the file is no longer a symlink
+    DIR="$( cd -P "$( dirname "$SOURCE" )" >/dev/null 2>&1 && pwd )"
+    SOURCE="$(readlink "$SOURCE")"
+    [[ $SOURCE != /* ]] && SOURCE="$DIR/$SOURCE" # if $SOURCE was a relative symlink, we need to resolve it relative to the path where the symlink file was located
+done
+DIR="$( cd -P "$( dirname "$SOURCE" )" >/dev/null 2>&1 && pwd )"
+
+# Find salus executable, it should be in the same directory as this script
+SALUS_EXECUTABLE=$DIR/salus-server-exec
+# Find cudahook library, it should be either in ../lib/libcudahook.so,
+# or, if we are in the build tree, in ./cudahook/libcudahook.so
+LIBCUDAHOOK=$(realpath $DIR/../lib/libcudahook.so 2>/dev/null)
+if [[ ! -f "$LIBCUDAHOOK" ]]; then
+    LIBCUDAHOOK=$(realpath $DIR/cudahook/libcudahook.so 2>/dev/null)
+fi
+
+if [[ ! -f "$LIBCUDAHOOK" ]]; then
+    echo "libcudahook.so not found!" >2
+    exit -1
+fi
+
+TF_MIN_CPP_LOG_LEVEL=${TF_MIN_CPP_LOG_LEVEL:-4}
+CUDA_VISIBLE_DEVICES=${CUDA_VISIBLE_DEVICES:-2,3}
+
+export LD_PRELOAD=$LIBCUDAHOOK
+exec $SALUS_EXECUTABLE "$@"

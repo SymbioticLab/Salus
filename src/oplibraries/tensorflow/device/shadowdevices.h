@@ -111,6 +111,8 @@ public:
 
     ~ShadowDevice() override;
 
+    sstl::not_null<tf::Device *> base() const { return m_base; }
+
     // Hook allocators
     tf::Allocator *GetAllocator(tf::AllocatorAttributes attr) override;
     tf::Allocator *GetStepAllocator(tf::AllocatorAttributes attr,

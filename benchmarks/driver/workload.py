@@ -25,10 +25,10 @@ from builtins import super, str
 import csv
 import logging
 from collections import defaultdict
-from typing import Dict, Iterable, Type, Union
+from typing import Dict, Iterable, Type, Union, Optional
 
 from .runner import Runner, RunConfig, Popen, Executor
-from .runner import TFBenchmarkRunner, UnittestRunner, FathomRunner
+from .runner import TFBenchmarkRunner, UnittestRunner, FathomRunner, TFWebRunner, TFWebClientRunner
 from .utils import try_with_default, kill_tree, unique
 from .utils.compatiblity import pathlib
 
@@ -151,9 +151,6 @@ class WorkloadTemplate(object):
 
     def _create_from_rcfg(self, rcfg, executor=Executor.Salus):
         # type: (RunConfig, Executor) -> Workload
-        if rcfg.batch_size not in self.available_batch_sizes():
-            raise ValueError(f"Batch size `{rcfg.batch_size}' is not supported for {self.name},"
-                             f" available ones: {self.available_batch_sizes()}")
         return Workload(self, rcfg, executor, self.geometry(rcfg, executor).copy())
 
     @classmethod
@@ -360,8 +357,9 @@ class Workload(object):
         self.rcfg = rcfg
         self.executor = executor
         self._geo = geo
-        self.proc = None  # type: Popen
-        self.output_file = None  # type: Path
+        self.proc = None  # type: Optional[Popen]
+        self.output_file = None  # type: Optional[Path]
+        self.extra_args = []
 
     @property
     def name(self):
@@ -449,6 +447,30 @@ WorkloadTemplate.define('speecheval', [1, 5, 10], FathomRunner)
 WorkloadTemplate.define('vaeeval', [1, 5, 10], UnittestRunner)
 WorkloadTemplate.define('superreseval', [1, 5, 10], UnittestRunner)
 WorkloadTemplate.define('seq2seqeval', ['small', 'medium', 'large'], UnittestRunner)
+
+WorkloadTemplate.define('vgg11web', [1], TFWebRunner)
+WorkloadTemplate.define('vgg16web', [1], TFWebRunner)
+WorkloadTemplate.define('vgg19web', [1], TFWebRunner)
+WorkloadTemplate.define('resnet50web', [1], TFWebRunner)
+WorkloadTemplate.define('resnet101web', [1], TFWebRunner)
+WorkloadTemplate.define('resnet152web', [1], TFWebRunner)
+WorkloadTemplate.define('googlenetweb', [1], TFWebRunner)
+WorkloadTemplate.define('alexnetweb', [1], TFWebRunner)
+WorkloadTemplate.define('overfeatweb', [1], TFWebRunner)
+WorkloadTemplate.define('inception3web', [1], TFWebRunner)
+WorkloadTemplate.define('inception4web', [1], TFWebRunner)
+
+WorkloadTemplate.define('vgg11client', [1], TFWebClientRunner)
+WorkloadTemplate.define('vgg16client', [1], TFWebClientRunner)
+WorkloadTemplate.define('vgg19client', [1], TFWebClientRunner)
+WorkloadTemplate.define('resnet50client', [1], TFWebClientRunner)
+WorkloadTemplate.define('resnet101client', [1], TFWebClientRunner)
+WorkloadTemplate.define('resnet152client', [1], TFWebClientRunner)
+WorkloadTemplate.define('googlenetclient', [1], TFWebClientRunner)
+WorkloadTemplate.define('alexnetclient', [1], TFWebClientRunner)
+WorkloadTemplate.define('overfeatclient', [1], TFWebClientRunner)
+WorkloadTemplate.define('inception3client', [1], TFWebClientRunner)
+WorkloadTemplate.define('inception4client', [1], TFWebClientRunner)
 
 
 # noinspection PyUnusedLocal

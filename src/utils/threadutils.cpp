@@ -21,7 +21,7 @@
 
 namespace sstl {
 
-void semaphore::notify(uint32_t c)
+void semaphore::notify(uint64_t c)
 {
     {
         auto l = with_guard(m_mu);
@@ -31,7 +31,13 @@ void semaphore::notify(uint32_t c)
     m_cv.notify_all();
 }
 
-void semaphore::wait(uint32_t c)
+bool semaphore::may_block(uint64_t c)
+{
+    auto lock = with_guard(m_mu);
+    return m_count < c;
+}
+
+void semaphore::wait(uint64_t c)
 {
     auto lock = with_uguard(m_mu);
     m_cv.wait(lock, [&]() { return m_count >= c; });

@@ -9,6 +9,14 @@ import os
 import tensorflow as tf
 
 
+def batch_size_from_env(default=1):
+    """Get batch size from environment variable SALUS_BATCH_SIZE"""
+    try:
+        return int(os.environ.get('SALUS_BATCH_SIZE', ''))
+    except ValueError:
+        return default
+
+
 def iteration_num_from_env(default=20):
     """Get iteration number from environment variable EXEC_ITER_NUMBER"""
     try:

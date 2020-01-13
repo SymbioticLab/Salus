@@ -1,16 +1,16 @@
 #!/usr/bin/env python3
 #
 # Copyright 2019 Peifeng Yu <peifeng@umich.edu>
-# 
+#
 # This file is part of Salus
 # (see https://github.com/SymbioticLab/Salus).
-# 
+#
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
-# 
+#
 #    http://www.apache.org/licenses/LICENSE-2.0
-# 
+#
 # Unless required by applicable law or agreed to in writing, software
 # distributed under the License is distributed on an "AS IS" BASIS,
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -127,12 +127,11 @@ def plot_speeds(df, total_kws=None, **kwargs):
 
     ax.legend().remove()
     ax.set_xlabel('Time (s)')
-    ax.set_ylabel('Images per second')
+    ax.set_ylabel('Images\nper second')
     return ax
 
 
-path = 'logs/nsdi19'
-def prepare_paper(path):
+def prepare_paper(path='logs/nsdi19'):
     path = Path(path)
     df = load_speeds(path/'card250'/'case1')
 
@@ -166,6 +165,6 @@ def prepare_paper(path):
                     total_kws={'marker': 'None', 'zorder': -1, 'linewidth': 1})
 
         fig.tight_layout()
-        fig.set_size_inches(3.25, 2.35, forward=True)
-        fig.savefig('/tmp/workspace/card250.pdf', dpi=300)
+        fig.set_size_inches(3.25, 1.5, forward=True)
+        fig.savefig('/tmp/workspace/card250.pdf', dpi=300, bbox_inches='tight')
         plt.close()

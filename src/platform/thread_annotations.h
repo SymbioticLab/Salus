@@ -155,4 +155,11 @@ inline T &ts_unchecked_read(T &v) NO_THREAD_SAFETY_ANALYSIS
 }
 } // namespace salus::thread_safety_analysis
 
+#include <string_view>
+namespace salus::threading {
+
+void set_thread_name(std::string_view name);
+
+} // namespace salus::threading
+
 #endif // SALUS_PLATFORM_THREAD_ANNOTATIONS_H_

@@ -117,7 +117,7 @@ void initialize(const Params &params)
 
     // Force to create loggers here with default configuration
     // in non-performance sensitive code path.
-    for (auto tag : {logging::kAllocTag, logging::kOpTracing, logging::kPerfTag, logging::kDefTag}) {
+    for (auto tag : {logging::kSMTag, logging::kAllocTag, logging::kOpTracing, logging::kPerfTag, logging::kDefTag}) {
         auto logger = Loggers::getLogger(tag);
         DCHECK(logger);
     }

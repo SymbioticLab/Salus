@@ -1,16 +1,16 @@
 #!/usr/bin/env python3
 #
 # Copyright 2019 Peifeng Yu <peifeng@umich.edu>
-# 
+#
 # This file is part of Salus
 # (see https://github.com/SymbioticLab/Salus).
-# 
+#
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
-# 
+#
 #    http://www.apache.org/licenses/LICENSE-2.0
-# 
+#
 # Unless required by applicable law or agreed to in writing, software
 # distributed under the License is distributed on an "AS IS" BASIS,
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -73,20 +73,25 @@ pits = pits.reset_index().loc[pits.reset_index().groupby(['Model'])['BatchSize']
 pits = pits.drop(['index', 'BatchSize', 'Network'], axis=1)
 pits = pits.rename(columns={'Model': 'Network'}).set_index('Network')
 
+old_vae = pits.at['vae', 'Salus']
+pits.loc['vae', 'Salus'] = 1.2
+old_superres = pits.at['superres', 'Salus']
+pits.loc['superres', 'Salus'] = 1.2
+
 with plt.style.context(['seaborn-paper', 'mypaper', 'color3']):
     ax = pits.plot.bar(legend=None)
     pu.axhlines(1.0, ax=ax, color='k', linestyle='--', linewidth=1)
-    pu.bar_show_data(ax, pits.index.get_loc('superres'), pits.at['superres', 'Salus'])
-    pu.bar_show_data(ax, pits.index.get_loc('vae'), pits.at['vae', 'Salus'])
+    pu.bar_show_data(ax, pits.index.get_loc('superres'), 1.15, data_y=old_superres, fmt='{:.2f}')
+    pu.bar_show_data(ax, pits.index.get_loc('vae'), 1.13, data_y=old_vae, fmt='{:.2f}')
 
-    ax.set_ylim(0.9, 1.9)
+    ax.set_ylim(0.9, 1.15)
     ax.set_xlabel('Workloads')
-    ax.set_ylabel('Normalized Per Iteration\nTraining Time')
+    ax.set_ylabel('Normalized\nPer Iteration\nTraining Time')
     # ax.legend()
 
     ax.tick_params(axis='x', labelsize=7)
 
-    ax.figure.set_size_inches(3.25, 2.35, forward=True)
+    ax.figure.set_size_inches(3.25, 1.8, forward=True)
     ax.figure.tight_layout()
-    ax.figure.savefig('/tmp/workspace/exp17.pdf', dpi=300, bbox_inches='tight', pad_inches = .015)
+    ax.figure.savefig('/tmp/workspace/exp17.pdf', dpi=300, bbox_inches='tight', pad_inches=.015)
     plt.close()

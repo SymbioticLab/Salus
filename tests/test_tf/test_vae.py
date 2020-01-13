@@ -26,8 +26,11 @@ def run_vae(sess, args=None, isEval=False):
     if args is None:
         args = networks.vae.get_args()
 
+    batch_size = tfhelper.batch_size_from_env(args.batch_size)
+    print(f"Batch size: {batch_size}")
+
     dim_img = IMAGE_SIZE_MNIST ** 2  # number of pixels for a MNIST image
-    x_image, _, num_classes = fake_data(args.batch_size, None, height=IMAGE_SIZE_MNIST, width=IMAGE_SIZE_MNIST,
+    x_image, _, num_classes = fake_data(batch_size, None, height=IMAGE_SIZE_MNIST, width=IMAGE_SIZE_MNIST,
                                         depth=1, num_classes=10)
 
     with tf.name_scope('model'):
@@ -78,7 +81,7 @@ def run_vae(sess, args=None, isEval=False):
             last_end_time = end_time
 
             duration = end_time - start_time
-            examples_per_sec = args.batch_size / duration
+            examples_per_sec = batch_size / duration
             sec_per_batch = float(duration)
             speeds.append(sec_per_batch)
 
@@ -87,7 +90,7 @@ def run_vae(sess, args=None, isEval=False):
             print(fmt_str.format(datetime.now(), i,
                                  loss_value, examples_per_sec, sec_per_batch))
 
-            if isEval:
+            if isEval and eval_rand_factor != '0':
                 factor = 1
                 if eval_rand_factor != "1":
                     factor = random.randint(1, int(eval_rand_factor))
@@ -124,6 +127,8 @@ class TestVae(unittest.TestCase):
         config.allow_soft_placement = True
         config.salus_options.resource_map.temporary['MEMORY:GPU'] = memusages[args.batch_size][0]
         config.salus_options.resource_map.persistant['MEMORY:GPU'] = memusages[args.batch_size][1]
+        config.salus_options.resource_map.temporary['MEMORY:GPU0'] = memusages[args.batch_size][0]
+        config.salus_options.resource_map.persistant['MEMORY:GPU0'] = memusages[args.batch_size][1]
         return config
 
     @parameterized.expand([(1,), (5,), (10,)])

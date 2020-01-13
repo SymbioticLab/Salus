@@ -21,7 +21,7 @@ from __future__ import absolute_import, print_function, division, unicode_litera
 from builtins import super
 
 from absl import flags
-from copy import copy
+from copy import deepcopy
 
 from ...utils import maybe_path
 from ...utils.compatiblity import pathlib
@@ -77,7 +77,7 @@ class SalusConfig(object):
     def copy(self, **kwargs):
         # type: (...) -> SalusConfig
         """Return a new copy of the tuple"""
-        return copy(self).update(**kwargs)
+        return deepcopy(self).update(**kwargs)
 
     def update(self, d=None, **kwargs):
         # type: (...) -> SalusConfig

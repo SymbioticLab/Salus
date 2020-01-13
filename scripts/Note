@@ -9,3 +9,13 @@ Without aggregate mode, metrics shows up in CUPTI_ACTIVITY_KIND_METRIC table, ot
 The value field of these table is blob, which can be parsed as double
 
 tail -f server.output | egrep -e 'OpItem ExecTask' | egrep --color=always -e 'failures=[[:digit:]]+' -e '[[:digit:]]+ ms'
+
+bazel test $(bazel query --keep_going 'let base = //tensorflow/python/kernel_tests/...:all in kind(test, $base) intersect attr(tags, "cuda-py-test", $base)')
+
+nvprof --aggregate-mode off --metrics sm_efficiency --csv
+
+nvprof --aggregate-mode off --metrics sm_efficiency python test.py
+nvprof --print-gpu-trace python test.py
+
+All tests:
+bazel query --keep_going 'let base = //tensorflow/python/kernel_tests/...:all in kind(test, $base) intersect attr(tags, "cuda-py-test", $base)' | sed 's#//#bazel-bin/#;s#:#/#'

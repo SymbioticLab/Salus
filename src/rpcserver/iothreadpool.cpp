@@ -18,6 +18,7 @@
  */
 
 #include "iothreadpool.h"
+#include "platform/thread_annotations.h"
 
 #include <thread>
 
@@ -42,6 +43,7 @@ IOThreadPoolImpl::~IOThreadPoolImpl()
 
 void IOThreadPoolImpl::workerLoop()
 {
+    threading::set_thread_name("salus::IOThreadPoolWorker");
     m_context.run();
 }
 

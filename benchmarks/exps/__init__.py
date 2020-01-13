@@ -19,27 +19,32 @@
 #
 from __future__ import absolute_import, print_function, division, unicode_literals
 
+import itertools
 import time
 import re
 import logging
+import string
+import random
 from absl import flags
-from typing import Union, Iterable, List, TypeVar, Callable
+from typing import Union, Iterable, List, TypeVar, Callable, Optional
 
 import benchmarks.driver.utils.prompt as prompt
 from benchmarks.driver.runner import Executor
 from benchmarks.driver.server.config import presets
 from benchmarks.driver.server import SalusServer, SalusConfig
 from benchmarks.driver.tfserver import TFDistServer
-from benchmarks.driver.utils import atomic_directory, try_with_default, UsageError, kill_tree
+from benchmarks.driver.utils import atomic_directory, try_with_default, UsageError, kill_tree, unique
 from benchmarks.driver.utils.compatiblity import pathlib
 from benchmarks.driver.workload import Workload, WTL, ResourceGeometry
 
 Path = pathlib.Path
 T = TypeVar('T')
+TBatchSize = Union[str, int]
 logger = logging.getLogger(__name__)
 FLAGS = flags.FLAGS
 
 flags.DEFINE_boolean('ignore_error', False, 'Ignore error on workload')
+flags.DEFINE_string('logconf', None, 'Override default logconf in preset')
 
 
 class Pause(int):
@@ -70,7 +75,7 @@ class RunFn(object):
     __slots__ = '_fn'
 
     def __init__(self, fn):
-        # type: (Callable[Iterable[Workload], None]) -> None
+        # type: (Callable[[Iterable[Workload], *str], None]) -> None
         self._fn = fn
 
     def run(self, workloads, **kwargs):
@@ -234,11 +239,15 @@ def parse_actions_from_cmd(argv):
 def maybe_forced_preset(default):
     # type: (Callable[[], SalusConfig]) -> SalusConfig
     """Maybe return forced preset"""
+    preset_ctor = default
     if FLAGS.force_preset:
-        logger.info(f'Using server config preset: {FLAGS.force_preset}')
-        return getattr(presets, FLAGS.force_preset)()
-    logger.info(f'Using server config preset: {default.__name__}')
-    return default()
+        preset_ctor = getattr(presets, FLAGS.force_preset)
+    logger.info(f'Using server config preset: {preset_ctor.__name__}')
+    scfg = preset_ctor()
+    if FLAGS.logconf is not None:
+        logger.info(f'Using server logconf: {FLAGS.logconf}')
+        scfg.logconf = FLAGS.logconf
+    return scfg
 
 
 def parse_output_float(outputfile, pattern, group=1):
@@ -290,3 +299,90 @@ def update_jct(workload, update_global=False):
     workload.geometry.jct = jct
     if update_global:
         WTL.from_name(workload.name).add_geometry(workload.rcfg, workload.executor, ResourceGeometry(jct=jct))
+
+
+def select_workloads(argv,             # type: Iterable[str]
+                     batch_size=None,  # type: Optional[Union[Iterable[TBatchSize], TBatchSize]]
+                     batch_num=None,   # type: Optional[Union[Iterable[int], int]]
+                     executor=None     # type: Optional[Union[Iterable[Executor], Executor]]
+                     ):
+    # type: (...) -> Iterable[Workload]
+    """Select workloads based on commandline
+    Workloads can be separated by comma (',') or space (' ').
+    The workload name can include a undersocre ('_') separated batch size.
+
+    If no batch size part is included, batch sizes given in argument are selected.
+
+    If argv is empty, all available workloads are selected.
+
+    batch_size, batch_num, executor arguments expects a list of possible values, single value are converted into list.
+
+    Returns: list of created Workload instance
+
+    Example: alexnet_25,vgg11 inception3_75
+    """
+    if batch_size is not None:
+        if not isinstance(batch_size, list):
+            batch_size = [batch_size]
+
+    if batch_num is None:
+        batch_num = [1]
+    else:
+        if not isinstance(batch_num, list):
+            batch_num = [batch_num]
+
+    if executor is None:
+        executor = [Executor.Salus]
+    else:
+        if not isinstance(executor, list):
+            executor = [executor]
+
+    if not argv:
+        names = WTL.known_workloads.keys()
+    else:
+        names = unique((
+            name
+            for piece in argv
+            for name in piece.split(',')
+        ), stable=True)
+
+    def expandbs(name):
+        if '_' in name:
+            name, bs = name.split('_')
+            return [(name, int(bs))]
+        else:
+            avail = WTL.from_name(name).available_batch_sizes()
+            if batch_size is None:
+                bss = avail
+            else:
+                bss = [bs for bs in batch_size if bs in avail]
+            return zip([name] * len(bss), bss)
+
+    wls = [name_bs for name in names for name_bs in expandbs(name)]
+
+    wls = itertools.product(wls, batch_num, executor)
+
+    return [WTL.create(name, bs, bn, ex) for (name, bs), bn, ex in wls]
+
+
+def wait_on_pipe(pipe):
+    logger.info(f'Waiting workload to be ready on {pipe}')
+    with open(pipe, 'rb') as f:
+        f.read(1)
+
+
+def release_on_pipe(pipe):
+    logger.info(f'Signaling workload to continue on {pipe}')
+    with open(pipe, 'wb') as f:
+        f.write(b"a")
+    logger.info(f'Workload continued on {pipe}')
+
+
+def sync_on_pipe(pipe):
+    wait_on_pipe(pipe)
+    release_on_pipe(pipe)
+
+
+def random_id(size=6, chars=string.ascii_uppercase + string.digits):
+    """Generate a random ID"""
+    return ''.join(random.choice(chars) for _ in range(size))

@@ -116,6 +116,7 @@ constexpr const auto kAllocTag = "alloc";
 constexpr const auto kPerfTag = "performance";
 constexpr const auto kOpTracing = "optracing";
 constexpr const auto kDefTag = "default";
+constexpr const auto kSMTag = "smtracing";
 
 // logging configurations
 struct Params
@@ -133,6 +134,7 @@ void initialize(const Params &params);
 #define LogPerf() CLOG(TRACE, logging::kPerfTag)
 #define LogAlloc() CLOG(TRACE, logging::kAllocTag)
 #define LogOpTracing() CLOG(TRACE, logging::kOpTracing)
+#define LogSMTracing() CLOG(TRACE, logging::kSMTag)
 
 // Additional operator<< implementations
 MAKE_LOGGABLE(std::exception_ptr, ep, os);

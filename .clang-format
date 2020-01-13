@@ -96,10 +96,6 @@ PenaltyBreakString: 1000
 PenaltyExcessCharacter: 1000
 PenaltyReturnTypeOnItsOwnLine: 10000
 PointerAlignment: Right
-RawStringFormats: 
-  - Delimiter:       pb
-    Language:        TextProto
-    BasedOnStyle:    google
 ReflowComments:  true
 SortIncludes:    true
 SortUsingDeclarations: true

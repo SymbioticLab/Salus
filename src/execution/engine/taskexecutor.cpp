@@ -27,6 +27,7 @@
 #include "execution/scheduler/basescheduler.h"
 #include "execution/scheduler/operationitem.h"
 #include "utils/date.h"
+#include "platform/thread_annotations.h"
 
 using std::chrono::duration_cast;
 using std::chrono::microseconds;
@@ -134,6 +135,8 @@ void TaskExecutor::queueTask(POpItem &&opItem)
 
 void TaskExecutor::scheduleLoop()
 {
+    threading::set_thread_name("TaskExecutor");
+
     auto scheduler = SchedulerRegistary::instance().create(m_schedParam.scheduler, *this);
     DCHECK(scheduler);
     VLOG(2) << "Using scheduler: " << scheduler;

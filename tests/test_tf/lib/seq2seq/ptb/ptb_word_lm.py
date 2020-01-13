@@ -206,7 +206,7 @@ class PTBModel(object):
         state = session.run(self.initial_state)
 
         eval_interval = os.environ.get('SALUS_TFBENCH_EVAL_INTERVAL', '0.1')
-        eval_rand_factor = os.environ.get('SALUS_TFBENCH_EVAL_RAND_FACTOR', '5')
+        eval_rand_factor = os.environ.get('SALUS_TFBENCH_EVAL_RAND_FACTOR', None)
         eval_block = os.environ.get('SALUS_TFBENCH_EVAL_BLOCK', 'true')
 
         if eval_block != 'true':
@@ -242,10 +242,11 @@ class PTBModel(object):
                 print(fmt_str.format(datetime.now(), step, np.exp(costs / iters), local_speed, dur))
 
             if self._train_op is None:
-                factor = 1
-                if eval_rand_factor != "1":
-                    factor = random.randint(1, int(eval_rand_factor))
-                time.sleep(float(eval_interval) * factor)
+                if float(eval_interval) > 0:
+                    factor = 1
+                    if eval_rand_factor is not None:
+                        factor = random.randint(1, int(eval_rand_factor))
+                    time.sleep(float(eval_interval) * factor)
 
         return np.exp(costs / iters), speeds
 

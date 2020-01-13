@@ -91,34 +91,62 @@ void TFInstance::handleCreateSession(std::unique_ptr<tf::CreateSessionRequest> &
 
     LaneMgr::Layout layout;
     // Get resource estimation from client
-    constexpr const auto rt = "MEMORY:GPU";
-    const auto totalGPUMemory = m_laneMgr->totalMemoryForGPU(0);
-    size_t limit = 0;
-    size_t persistant = 0;
+    constexpr const char *rt[] = {
+        "MEMORY:GPU0",
+        "MEMORY:GPU1",
+        "MEMORY:GPU2",
+        "MEMORY:GPU3",
+        "MEMORY:GPU4",
+        nullptr,
+    };
     auto &m = req->config().salus_options().resource_map();
-    persistant = static_cast<size_t>(std::round(sstl::getOrDefault(m.persistant(), rt, 0.0)));
-    // HACK: scale up 10% to mitigate OOM and fragmentation
-    persistant = static_cast<size_t>(persistant * 1.1);
-    limit += persistant;
-    limit += static_cast<size_t>(std::round(sstl::getOrDefault(m.temporary(), rt, 0.0)));
+    for (auto iGpu = 0_sz; iGpu != m_laneMgr->numGPUs(); ++iGpu) {
+        const auto totalGPUMemory = m_laneMgr->totalMemoryForGPU(iGpu);
 
-    // HACK: Double the persistant and add to to temporary, just to be safe
-    limit = static_cast<size_t>(limit * 1.05); // and even more 10%
-    limit = std::min(limit, totalGPUMemory); // cap to max value
+        CHECK_NOTNULL(rt[iGpu]) << "We need more GPU strings";
 
-    if (limit == 0) {
-        limit = totalGPUMemory;
-        persistant = limit;
+        size_t limit = 0;
+        size_t persistant = 0;
+        auto p = sstl::optionalGet(m.persistant(), rt[iGpu]);
+        auto t = sstl::optionalGet(m.temporary(), rt[iGpu]);
+        if (!p || !t) {
+            break;
+        }
+        persistant = static_cast<size_t>(std::round(*p));
+        // HACK: scale persistent up 10% to mitigate OOM and fragmentation
+        persistant = static_cast<size_t>(persistant * 1.1);
+        limit += persistant;
+
+        limit += static_cast<size_t>(std::round(*t));
+
+        // HACK: scale the total up 5%, just to be safe
+        limit = static_cast<size_t>(limit * 1.05); // and even more 10%
+        limit = std::min(limit, totalGPUMemory); // cap to max value
+
+        layout.memoryLimits.push_back(limit);
+        layout.persistentOccupation.push_back(persistant);
+    }
+
+    if (layout.memoryLimits.empty()) {
+        auto limit = m_laneMgr->totalMemoryForGPU(0);
+        layout.memoryLimits.push_back(limit);
+        layout.persistentOccupation.push_back(limit);
         LOG(WARNING) << "No resource info for current session, assuming whole GPU allocation: " << limit;
     }
-    layout.memoryLimits.push_back(limit);
-    layout.persistentOccupation.push_back(persistant);
+
+    CHECK_EQ(layout.memoryLimits.size(), layout.persistentOccupation.size());
 
     auto totalRunningTime =
         static_cast<uint64_t>(std::round(sstl::getOrDefault(m.persistant(), "TIME:TOTAL", 0.0))) * 1000;
     ectx->setExpectedRunningTime(totalRunningTime);
 
-    m_laneMgr->requestLanes(std::move(layout), [&resp, cb = std::move(cb), req = std::move(req), ectx = std::move(ectx),
+    // smaller is higher priority
+    auto priority = static_cast<int>(sstl::getOrDefault(m.persistant(), "SCHED:PRIORITY", 20));
+
+    LOG(INFO) << "Accept session with priority " << priority;
+
+    m_laneMgr->requestLanes(std::move(layout), [&resp, priority,
+                                                cb = std::move(cb), req = std::move(req), ectx = std::move(ectx),
                                                 this](auto &&lanes) mutable {
         std::vector<tf::Device *> devices;
 
@@ -134,6 +162,7 @@ void TFInstance::handleCreateSession(std::unique_ptr<tf::CreateSessionRequest> &
         // NOTE: laneId on ectx is separated from actual lane implementation.
         // It is only used to have separate scheduling domain. So use first lane's id as the id
         // Revisit if later multi-lane for a job is implemented.
+        // TODO: support multiple lane id
         ectx->setLaneId(lanes.at(0)->id());
 
         auto session =
@@ -151,7 +180,7 @@ void TFInstance::handleCreateSession(std::unique_ptr<tf::CreateSessionRequest> &
                           });
         // Keep a reference for lanes on ectx's user data
         // which should outlive the TFSession.
-        ectx->setUserData(std::forward<decltype(lanes)>(lanes));
+        ectx->setUserData(TFExecutionCtxData{std::forward<decltype(lanes)>(lanes), priority});
 
         // Register force interrupt handler
         ectx->setInterruptCallback([this, handle]() { popSession(handle)->safeClose(); });

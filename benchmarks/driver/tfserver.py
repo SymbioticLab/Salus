@@ -29,7 +29,7 @@ import textwrap
 from datetime import datetime
 from absl import flags
 from contextlib import contextmanager
-from typing import List, Deque, Dict, Union
+from typing import List, Deque, Dict, Union, Optional
 
 from benchmarks.driver.utils import prompt, remove_prefix
 from benchmarks.driver.utils.prompt import pause
@@ -65,7 +65,7 @@ class TFDistServer(object):
 
         self._build_cmd()
 
-        self.proc = None  # type: Popen
+        self.proc = None  # type: Optional[Popen]
 
     def _build_cmd(self):
         # type: () -> List[str]
