@@ -1,16 +1,16 @@
 #!/usr/bin/env python3
 #
 # Copyright 2019 Peifeng Yu <peifeng@umich.edu>
-# 
+#
 # This file is part of Salus
 # (see https://github.com/SymbioticLab/Salus).
-# 
+#
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
-# 
+#
 #    http://www.apache.org/licenses/LICENSE-2.0
-# 
+#
 # Unless required by applicable law or agreed to in writing, software
 # distributed under the License is distributed on an "AS IS" BASIS,
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -37,6 +37,7 @@ import seaborn as sns
 import numpy as np
 import matplotlib.pyplot as plt
 import plotutils as pu
+import compmem as cm
 
 
 def parse_output_float(outputfile, pattern, group=1):
@@ -46,7 +47,7 @@ def parse_output_float(outputfile, pattern, group=1):
         raise ValueError(msg)
 
     ptn = re.compile(pattern)
-    with outputfile.open() as f:
+    with cm.open_file(outputfile) as f:
         for line in f:
             line = line.rstrip()
             m = ptn.match(line)
@@ -101,6 +102,7 @@ data = load_exp62(path)
 data = data[['Average JCT']]
 data = data[data.index != 'FIFO']
 
+pu.matplotlib_fixes()
 with plt.style.context(['seaborn-paper', 'mypaper', 'gray']):
 
     ax = data.plot.bar(hatch='////', color='w', edgecolor='k')

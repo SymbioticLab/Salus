@@ -69,6 +69,7 @@ def do_srtf2(path):
 
     #colors = ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd', '#8c564b', '#e377c2']
 
+    pu.matplotlib_fixes()
     with plt.style.context(['seaborn-paper', 'mypaper', 'color3']):
         # first do a refine plot to update 'Started' in srtf
         ax = plt.gca()
@@ -95,7 +96,7 @@ def do_srtf2(path):
                        plot_offset=-st_sec
                        )
         ax.set_xlim([0, ed_sec-st_sec])
-        
+
         # add a legend
         ax.legend(handles=[
             mpatches.Patch(color='#b6b6b6', label='Queuing'),
@@ -135,6 +136,7 @@ def do_srtf3(path):
     sess2Model['Label'] = sess2Model.apply(lambda x : '#{}: {}'.format(x[3],x[0]), axis=1)
     df['Sess'] = df.Sess.map(sess2Model.Label)
 
+    pu.matplotlib_fixes()
     with plt.style.context(['seaborn-paper', 'mypaper', 'line12']):
         fig, ax = plt.subplots()
 
@@ -188,6 +190,7 @@ def do_srtf(path):
 
     #colors = ['#1f77b4', '#ff7f0e', '#2ca02c']
 
+    pu.matplotlib_fixes()
     with plt.style.context(['seaborn-paper', 'mypaper', 'color3']):
         fig, axs = plt.subplots(nrows=2, sharex=True, gridspec_kw={'height_ratios':[1, 4]})
 
@@ -262,6 +265,7 @@ def do_fair(path):
 
     #colors = ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd', '#8c564b', '#e377c2']
 
+    pu.matplotlib_fixes()
     with plt.style.context(['seaborn-paper', 'mypaper', 'line12']):
         fig, ax = plt.subplots()
 
@@ -295,6 +299,7 @@ def do_fair(path):
         fig.savefig('/tmp/workspace/card274-fair.pdf', dpi=300, bbox_inches='tight', pad_inches = .015)
         #fig.close()
 
+
 try:
     path
 except NameError:
@@ -309,3 +314,7 @@ def prepare_paper(logpath=path):
     do_fair(logpath)
 
     plt.close('all')
+
+
+if __name__ == '__main__':
+    prepare_paper(path)

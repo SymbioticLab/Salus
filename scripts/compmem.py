@@ -1,16 +1,16 @@
 #!/usr/bin/env python3
 #
 # Copyright 2019 Peifeng Yu <peifeng@umich.edu>
-# 
+#
 # This file is part of Salus
 # (see https://github.com/SymbioticLab/Salus).
-# 
+#
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
-# 
+#
 #    http://www.apache.org/licenses/LICENSE-2.0
-# 
+#
 # Unless required by applicable law or agreed to in writing, software
 # distributed under the License is distributed on an "AS IS" BASIS,
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -29,6 +29,7 @@ import parse_log as pl
 import pandas as pd
 from datetime import datetime
 import json
+import bz2
 import multiprocessing as mp
 import subprocess as sp
 from tqdm import tqdm
@@ -40,8 +41,41 @@ import matplotlib.lines as mlines
 import plotutils as pu
 import itertools
 import memmap
-from contextlib import ExitStack
+from contextlib import ExitStack, contextmanager
 from pathlib import Path
+
+
+@contextmanager
+def open_file(path, mode='r', *args, **kwargs):
+    if path.suffix == '.bz2':
+        mode = {
+            'r': 'rt',
+            'w': 'wt',
+            'a': 'at',
+            'x': 'xt',
+        }[mode]
+        with bz2.open(path, mode, *args, **kwargs) as f:
+            yield f
+    else:
+        with path.open(mode, *args, **kwargs) as f:
+            yield f
+
+
+def find_file(path):
+    path = Path(path)
+    print('Counting file lines...')
+    # find the file
+    if not path.exists():
+        # try the compressed version
+        path = path.with_suffix(path.suffix + '.bz2')
+        if not path.exists():
+            # still not exists
+            raise ValueError(f'path {path} does not exist')
+        numLines = int(sp.check_output(["bash", "-c", f"cat {path} | bunzip2 | wc -l"]).split()[0])
+    else:
+        # count lines first
+        numLines = int(sp.check_output(["wc", "-l", path]).split()[0])
+    return path, numLines
 
 
 def _process_line_paral(line, event_filters, updater=None):
@@ -49,7 +83,11 @@ def _process_line_paral(line, event_filters, updater=None):
         if updater:
             stack.callback(updater)
 
+        assert isinstance(line, str), type(line)
         line = line.rstrip('\n')
+
+        if len(line) == 0:
+            return None
 
         if line[0] != '[':
             return None
@@ -91,9 +129,7 @@ def _process_line_paral(line, event_filters, updater=None):
 
 
 def load_generic(path, event_filters=None, task_per_cpu=20):
-    # count lines first
-    print('Counting file lines...')
-    numLines = int(sp.check_output(["wc", "-l", path]).split()[0])
+    path, numLines = find_file(path)
 
     # find optimal chunk size
     numCPU = os.cpu_count()
@@ -104,9 +140,8 @@ def load_generic(path, event_filters=None, task_per_cpu=20):
     if event_filters is not None:
         event_filters = set(event_filters)
 
-    path = Path(path)
     # the process
-    with path.open() as f, mp.Pool(processes=numCPU) as p,\
+    with open_file(path) as f, mp.Pool(processes=numCPU) as p,\
             tqdm(total=numLines, desc='Parsing {}'.format(path.name), unit='lines') as pb:
         def updater(log):
             pb.update()

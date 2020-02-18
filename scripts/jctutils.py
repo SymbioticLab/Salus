@@ -1,16 +1,16 @@
 #!/usr/bin/env python3
 #
 # Copyright 2019 Peifeng Yu <peifeng@umich.edu>
-# 
+#
 # This file is part of Salus
 # (see https://github.com/SymbioticLab/Salus).
-# 
+#
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
-# 
+#
 #    http://www.apache.org/licenses/LICENSE-2.0
-# 
+#
 # Unless required by applicable law or agreed to in writing, software
 # distributed under the License is distributed on an "AS IS" BASIS,
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -45,9 +45,11 @@ import compmem as cm
 
 
 def load_case(path):
-    df = pd.read_csv(path, header=None, sep=' ',
-                     names=['date', 'time', 'event', 'skip', 'Model'],
-                     parse_dates=[['date', 'time']])
+    path, _ = cm.find_file(path)
+    with cm.open_file(path) as f:
+        df = pd.read_csv(f, header=None, sep=' ',
+                         names=['date', 'time', 'event', 'skip', 'Model'],
+                         parse_dates=[['date', 'time']])
     df = df[['date_time', 'event', 'Model']]
     df['timestamp'] = df['date_time']
     df = df.drop('date_time', axis=1)
@@ -118,10 +120,11 @@ def load_trace(path, fifo=True):
 def load_refine(pathdir, evt='preempt_select_sess'):
     # load preempt select events
     with tempfile.NamedTemporaryFile() as f:
-        server_output = pathdir/'server.output'
-        sp.check_call(['grep', evt, str(server_output)], stdout=f)
-        f.flush()
-        df = cm.load_generic(f.name, event_filters=[evt])
+        #server_output = pathdir/'server.output'
+        #sp.check_call(['grep', evt, str(server_output)], stdout=f)
+        #f.flush()
+        #df = cm.load_generic(f.name, event_filters=[evt])
+        df = cm.load_generic(pathdir/'server.output', event_filters=[evt])
     df = df.drop(['evt', 'level', 'loc', 'thread', 'type'], axis=1)
 
     # convert UTC from server to local
@@ -130,12 +133,12 @@ def load_refine(pathdir, evt='preempt_select_sess'):
     sess2Model = {}
     # model name -> sess handle
     ptn = re.compile('Created session with handle (?P<sess>.+)$')
-    for fpath in pathdir.glob('*.*.*.*.output'):
-        with fpath.open() as f:
+    for fpath in pathdir.glob('*.*.*.*.output*'):
+        with cm.open_file(fpath) as f:
             for line in f:
                 m = ptn.search(line)
                 if m:
-                    sess2Model[m.group('sess')] = fpath.name.rstrip('.output')
+                    sess2Model[m.group('sess')] = fpath.name.rstrip('.bz2').rstrip('.output')
 
     # add model name info to it
     df['Model'] = df.Sess.map(sess2Model)
@@ -153,12 +156,12 @@ def load_serverevents(pathdir):
     # sess handle -> lane id
     with tempfile.NamedTemporaryFile() as f:
         server_output = pathdir/'server.output'
-        try:
-            sp.check_call(['grep', 'lane_assigned', str(server_output)], stdout=f)
-        except sp.CalledProcessError:
-            raise ValueError('No server event found')
-        f.flush()
-        df = cm.load_generic(f.name, event_filters=['lane_assigned'])
+        #try:
+        #    sp.check_call(['grep', 'lane_assigned', str(server_output)], stdout=f)
+        #except sp.CalledProcessError:
+        #    raise ValueError('No server event found')
+        #f.flush()
+        df = cm.load_generic(server_output, event_filters=['lane_assigned'])
     df = df.drop(['evt', 'level', 'loc', 'thread', 'type'], axis=1)
 
     # sess handles are unique
@@ -172,13 +175,14 @@ def load_serverevents(pathdir):
 
     # model name -> sess handle
     ptn = re.compile('Created session with handle (?P<sess>.+)$')
-    for fpath in pathdir.glob('*.*.*.*.output'):
-        with fpath.open() as f:
+    for fpath in pathdir.glob('*.*.*.*.output*'):
+        with cm.open_file(fpath) as f:
             for line in f:
                 m = ptn.search(line)
                 if m:
-                    df.loc[m.group('sess'), 'Model'] = fpath.name.rstrip('.output')
+                    df.loc[m.group('sess'), 'Model'] = fpath.name.rstrip('.bz2').rstrip('.output')
 
+    assert df.Model.isnull().sum() == 0, df.Model
     # reset index so we can use that later
     df = df.reset_index()
     return df

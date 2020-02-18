@@ -118,6 +118,7 @@ def do_timelines(path):
 path = 'logs/nsdi19'
 def prepare_paper(path='logs/nsdi19'):
     path = Path(path)
+    pu.matplotlib_fixes()
     with plt.style.context(['seaborn-paper', 'mypaper', 'line12']):
         # also use color
 
@@ -142,3 +143,7 @@ def prepare_paper(path='logs/nsdi19'):
         plt.close()
 
     return fifo, srtf, srtf_refine, fair, pack
+
+
+if __name__ == '__main__':
+    prepare_paper()

@@ -115,6 +115,7 @@ except NameError:
     path = 'logs/nsdi19'
 
 def prepare_paper(path='logs/nsdi19'):
+    pu.matplotlib_fixes()
     with plt.style.context(['seaborn-paper', 'mypaper', 'gray']):
         df = load_data(path)
 
@@ -133,3 +134,7 @@ def prepare_paper(path='logs/nsdi19'):
         fig.tight_layout()
         fig.savefig('/tmp/workspace/card260.pdf', dpi=300, bbox_inches='tight', pad_inches = .015)
         plt.close()
+
+
+if __name__ == '__main__':
+    prepare_paper(path)

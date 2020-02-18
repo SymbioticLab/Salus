@@ -78,6 +78,7 @@ pits.loc['vae', 'Salus'] = 1.2
 old_superres = pits.at['superres', 'Salus']
 pits.loc['superres', 'Salus'] = 1.2
 
+pu.matplotlib_fixes()
 with plt.style.context(['seaborn-paper', 'mypaper', 'color3']):
     ax = pits.plot.bar(legend=None)
     pu.axhlines(1.0, ax=ax, color='k', linestyle='--', linewidth=1)

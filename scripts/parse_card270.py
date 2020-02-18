@@ -1,16 +1,16 @@
 #!/usr/bin/env python3
 #
 # Copyright 2019 Peifeng Yu <peifeng@umich.edu>
-# 
+#
 # This file is part of Salus
 # (see https://github.com/SymbioticLab/Salus).
-# 
+#
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
-# 
+#
 #    http://www.apache.org/licenses/LICENSE-2.0
-# 
+#
 # Unless required by applicable law or agreed to in writing, software
 # distributed under the License is distributed on an "AS IS" BASIS,
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -88,13 +88,13 @@ def load_cardlog(path):
     ptn = re.compile('Average excluding first iteration: (?P<latency>[\d.]+) sec/batch')
     models = []
     latencies = []
-    for file in (path/'card270'/'case1').glob('*.*.*.*.output'):
+    for file in (path/'card270'/'case1').glob('*.*.*.*.output*'):
         model = file.name.split('.')[0]
         model = model.replace('small', '1')
         model = model.replace('medium', '5')
         model = model.replace('large', '10')
         latency = None
-        with file.open() as f:
+        with cm.open_file(file) as f:
             for line in f:
                 m = ptn.search(line)
                 if m:
@@ -136,6 +136,7 @@ def prepare_paper(path):
     #df = df.query('not index.str.contains("speech")')
     df = df[~df.index.str.contains("speech")]
 
+    pu.matplotlib_fixes()
     with plt.style.context(['seaborn-paper', 'mypaper', 'hatchbar']):
 
         # add color to the cycler
@@ -175,3 +176,7 @@ def prepare_paper(path):
         fig.tight_layout()
         fig.savefig('/tmp/workspace/card270.pdf', dpi=300, bbox_inches='tight', pad_inches = .005)
         plt.close()
+
+
+if __name__ == '__main__':
+    prepare_paper(path)

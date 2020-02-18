@@ -50,8 +50,8 @@ def load_data(path):
     # for all cases
     data = []
     for case in path.iterdir():
-        slog = case/'server.output'
-        with slog.open() as f:
+        slog, _ = cm.find_file(case/'server.output')
+        with cm.open_file(slog) as f:
             st = None
             ed = None
             ptn_exec = re.compile(r"""^\[(?P<timestamp>\d+-\d+-\d+\s\d+:\d+:\d+\.\d{6}) (\d{3})?\]\s
@@ -77,13 +77,13 @@ def load_data(path):
         salus_makespan = ed - st
 
         # find num of salus jobs
-        njobs = len(list(case.glob('*.salus.*.*.output')))
+        njobs = len(list(case.glob('*.salus.*.*.output*')))
 
         # find jct of tf job
         tfjct = None
         network = None
-        for fpath in case.glob('*.tfdist.*.*.output'):
-            with fpath.open() as f:
+        for fpath in case.glob('*.tfdist.*.*.output*'):
+            with cm.open_file(fpath) as f:
                 ptn = re.compile('^JCT: (?P<jct>[\d.]+) s')
                 for line in f:
                     m = ptn.search(line)
@@ -131,6 +131,7 @@ def plot_makespan(df, **kwargs):
 
 def prepare_paper(path='logs/nsdi19'):
     path = Path(path)
+    pu.matplotlib_fixes()
     with plt.style.context(['seaborn-paper', 'mypaper', 'color3']):
         # fifo = ju.load_trace(path/'card266'/'salus'/'trace.csv')
         df = load_data(path/'card271')
@@ -150,3 +151,7 @@ def prepare_paper(path='logs/nsdi19'):
         fig.savefig('/tmp/workspace/card271.pdf', dpi=300)
         plt.close()
     return df
+
+
+if __name__ == '__main__':
+    prepare_paper()

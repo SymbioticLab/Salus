@@ -1,16 +1,16 @@
 #!/usr/bin/env python3
 #
 # Copyright 2019 Peifeng Yu <peifeng@umich.edu>
-# 
+#
 # This file is part of Salus
 # (see https://github.com/SymbioticLab/Salus).
-# 
+#
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
-# 
+#
 #    http://www.apache.org/licenses/LICENSE-2.0
-# 
+#
 # Unless required by applicable law or agreed to in writing, software
 # distributed under the License is distributed on an "AS IS" BASIS,
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -89,9 +89,13 @@ def _process_line_paral(line, updater=None):
 
 
 def load_pytorch(path, task_per_cpu=20):
-    # count lines first
-    print('Counting file lines...')
-    numLines = int(sp.check_output(["wc", "-l", path]).split()[0])
+    # check if we already have it
+    if path.with_suffix(path.suffix + '.csv'):
+        df = pd.read_csv(path.with_suffix(path.suffix + '.csv'))
+        df['timestamp'] = pd.to_timedelta(df.timestamp)
+        return df
+
+    path, numLines = cm.find_file(path)
 
     # find optimal chunk size
     numCPU = os.cpu_count()
@@ -99,9 +103,8 @@ def load_pytorch(path, task_per_cpu=20):
     if chunkSize == 0:
         chunkSize = 1
 
-    path = Path(path)
     # the process
-    with path.open() as f, mp.Pool(processes=numCPU) as p,\
+    with cm.open_file(path) as f, mp.Pool(processes=numCPU) as p,\
             tqdm(total=numLines, desc='Parsing {}'.format(path.name), unit='lines') as pb:
         def updater(log):
             pb.update()
@@ -116,9 +119,12 @@ def load_pytorch(path, task_per_cpu=20):
     return df
 
 
-
 def parse_to_csv(path):
     path = Path(path)
+
+    csv_file = path.with_suffix('.csv')
+    if csv_file.exists():
+        return pd.read_csv(csv_file)
 
     data = []
     for file in path.glob('*_output.txt'):
@@ -155,8 +161,10 @@ def plot_mem(df, **kwargs):
 
 
 def do_membar(path):
+    df = parse_to_csv(path/'mem-pytorch')
+
+    pu.matplotlib_fixes()
     with plt.style.context(['seaborn-paper', 'mypaper', 'color3']):
-        df = parse_to_csv(path/'mem-pytorch')
 
         # only draw one batch size: the largest one
         df['Model'], df['BatchSize'] = df.Network.str.split('_').str
@@ -189,9 +197,11 @@ def do_membar(path):
 
 
 def do_singlemem(path):
+    # a single mem
+    df = load_pytorch(path/'mem-pytorch'/'resnet101_75_output.txt')
+
+    pu.matplotlib_fixes()
     with plt.style.context(['seaborn-paper', 'mypaper', 'line12']):
-        # a single mem
-        df = load_pytorch(path/'mem-pytorch'/'resnet101_75_output.txt')
         ax = mem.plot_cs(df.set_index('timestamp').act * 1024**2, linewidth=.5,
                          markevery=200, color='k')
         ax.set_xlabel('Time (s)')
@@ -216,6 +226,11 @@ try:
 except NameError:
     path = Path('logs/nsdi19')
 
+
 def prepare_paper(path):
     do_membar(path)
     do_singlemem(path)
+
+
+if __name__ == '__main__':
+    prepare_paper(path)

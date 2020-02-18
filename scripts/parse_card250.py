@@ -48,9 +48,9 @@ ptn_iter = re.compile(r"""(?P<timestamp>.+): \s [sS]tep \s (?P<Step>\d+),\s
                           (?P<Duration>[\d.]+) \s sec/batch\)?""", re.VERBOSE)
 
 def parse_iterations(path):
-    path = Path(path)
+    path, _ = cm.find_file(path)
     iterations = []
-    with path.open() as f:
+    with cm.open_file(path) as f:
         for line in f:
             line = line.rstrip('\n')
 
@@ -95,8 +95,8 @@ def load_speeds(path, key='Speed'):
     path = Path(path)
 
     speeds = {}
-    for f in path.glob('*.*.*.*.output'):
-        model, executor, iterstr, runid, _ = f.name.split('.')
+    for f in path.glob('*.*.*.*.output*'):
+        model, executor, iterstr, runid, _ = f.name.rstrip('.bz2').split('.')
         s = parse_iterations(f)
 
         speeds['{}.{}'.format(model, runid)] = s.set_index('timestamp')[key]
@@ -168,3 +168,7 @@ def prepare_paper(path='logs/nsdi19'):
         fig.set_size_inches(3.25, 1.5, forward=True)
         fig.savefig('/tmp/workspace/card250.pdf', dpi=300, bbox_inches='tight')
         plt.close()
+
+
+if __name__ == '__main__':
+    prepare_paper()

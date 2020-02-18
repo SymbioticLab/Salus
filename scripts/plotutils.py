@@ -146,6 +146,14 @@ def human2bytes(s):
     return int(num * prefix[letter])
 
 
+def matplotlib_fixes():
+    # force to find normal weight times new roman
+    # this is necessary until matplotlib 3.2.0
+    if 'roman' in mpl.font_manager.weight_dict:
+        del mpl.font_manager.weight_dict['roman']
+        mpl.font_manager._rebuild()
+
+
 class BytesLocator(Locator):
     """
     Set a tick on whole values of B or KB or MB, etc.

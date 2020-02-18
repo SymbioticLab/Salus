@@ -1,16 +1,16 @@
 #!/usr/bin/env python3
 #
 # Copyright 2019 Peifeng Yu <peifeng@umich.edu>
-# 
+#
 # This file is part of Salus
 # (see https://github.com/SymbioticLab/Salus).
-# 
+#
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
-# 
+#
 #    http://www.apache.org/licenses/LICENSE-2.0
-# 
+#
 # Unless required by applicable law or agreed to in writing, software
 # distributed under the License is distributed on an "AS IS" BASIS,
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -102,17 +102,18 @@ def prepare_paper(path=path):
     ephemeral = sAlloc[sAlloc.Size >= MB]
     framework = sAlloc[sAlloc.Size < MB]
 
+    pu.matplotlib_fixes()
     with plt.style.context(['seaborn-paper', 'mypaper', 'color3']):
         fig, axs = plt.subplots(ncols=2, nrows=1, squeeze=False, gridspec_kw={'width_ratios':[3,2]})
         fig.set_size_inches(3.25, 1.5, forward=True)
 
         plot_size_cdf(framework, axs[0][0], axs[0][1], label='Framework',
-                      marker=',', markevery=0.1, linestyle=':', linewidth=2)
+                      marker=None, markevery=0.1, linestyle='dashed', linewidth=1)
         plot_size_cdf(model, axs[0][0], axs[0][1], label='Model',
-                      marker='.', markevery=0.1, linestyle='-.', linewidth=1,
+                      marker=None, markevery=0.1, linestyle='dotted', linewidth=1,
                       cumsum_kws={'zorder': 10})
         plot_size_cdf(ephemeral, axs[0][0], axs[0][1], label='Ephemeral',
-                      marker='^', markevery=0.05, linestyle='-', markersize=3, linewidth=1)
+                      marker=None, markevery=0.05, linestyle='-', markersize=3, linewidth=1)
 
         axs[0][0].set_xlim(left=1)
         axs[0][0].set_xscale('log', basex=2)
