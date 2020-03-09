@@ -18,19 +18,16 @@
 #
 # Cache Variables: (not for direct use in CMakeLists.txt)
 #  ZeroMQ_LIBRARY
-#  ZeroMQ_STATIC_LIBRARY
 #  ZeroMQ_INCLUDE_DIR
 #
 # Non-cache variables you might use in your CMakeLists.txt:
 #  ZeroMQ_FOUND
 #  ZeroMQ_LIBRARIES - Libraries to link for consumer targets
-#  ZeroMQ_STATIC_LIBRARIES - Libraries to link for consumer targets
 #  ZeroMQ_INCLUDE_DIRS - Include directories
 #
 # Adds the following targets:
 #  ZeroMQ::zmq - alias to dynamic linked library
 #  ZeroMQ::zmq-shared - dynamic linked library
-#  ZeroMQ::zmq-static - static library
 #
 # Use this module this way:
 #  find_package(ZeroMQ)
@@ -44,9 +41,13 @@ unset(ZeroMQ_FOUND)
 
 find_path(ZeroMQ_INCLUDE_DIR NAMES zmq.h)
 find_library(ZeroMQ_LIBRARY NAMES libzmq.so)
-find_library(ZeroMQ_STATIC_LIBRARY NAMES libzmq.a)
 
-if(ZeroMQ_INCLUDE_DIR)
+find_package_handle_standard_args(ZeroMQ FOUND_VAR ZeroMQ_FOUND
+    REQUIRED_VARS ZeroMQ_INCLUDE_DIR ZeroMQ_LIBRARY
+    VERSION_VAR ZeroMQ_VERSION)
+mark_as_advanced(ZeroMQ_INCLUDE_DIR ZeroMQ_LIBRARY)
+
+if (ZeroMQ_FOUND)
     set(_ZeroMQ_H ${ZeroMQ_INCLUDE_DIR}/zmq.h)
 
     function(_zmqver_EXTRACT _ZeroMQ_VER_COMPONENT _ZeroMQ_VER_OUTPUT)
@@ -62,7 +63,6 @@ if(ZeroMQ_INCLUDE_DIR)
     _zmqver_EXTRACT("ZMQ_VERSION_PATCH" ZeroMQ_VERSION_PATCH)
 
     set(ZeroMQ_LIBRARIES ${ZeroMQ_LIBRARY})
-    set(ZeroMQ_STATIC_LIBRARIES ${ZeroMQ_STATIC_LIBRARY})
     set(ZeroMQ_INCLUDE_DIRS ${ZeroMQ_INCLUDE_DIR})
 
     # We should provide version to find_package_handle_standard_args in the same format as it was requested,
@@ -82,23 +82,8 @@ if(ZeroMQ_INCLUDE_DIR)
         IMPORTED_LOCATION "${ZeroMQ_LIBRARY}"
     )
 
-    add_library(ZeroMQ::zmq-static STATIC IMPORTED)
-    set_target_properties(ZeroMQ::zmq-static PROPERTIES
-        INTERFACE_INCLUDE_DIRECTORIES "${ZeroMQ_INCLUDE_DIRS}"
-        IMPORTED_LOCATION "${ZeroMQ_STATIC_LIBRARY}"
-    )
-
     add_library(ZeroMQ::zmq INTERFACE IMPORTED)
     set_target_properties(ZeroMQ::zmq PROPERTIES
         INTERFACE_LINK_LIBRARIES ZeroMQ::zmq-shared
     )
-endif(ZeroMQ_INCLUDE_DIR)
-
-find_package_handle_standard_args(ZeroMQ FOUND_VAR ZeroMQ_FOUND
-    REQUIRED_VARS ZeroMQ_INCLUDE_DIRS ZeroMQ_LIBRARIES ZeroMQ_STATIC_LIBRARIES
-    VERSION_VAR ZeroMQ_VERSION)
-
-if (ZeroMQ_FOUND)
-    mark_as_advanced(ZeroMQ_INCLUDE_DIRS ZeroMQ_LIBRARIES ZeroMQ_VERSION
-        ZeroMQ_VERSION_MAJOR ZeroMQ_VERSION_MINOR ZeroMQ_VERSION_PATCH)
-endif()
+endif(ZeroMQ_FOUND)

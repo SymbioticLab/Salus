@@ -43,6 +43,36 @@ option(WITH_EXCLUSIVE_ITER "Each iteration runs exclusively" ON)
 option(WITH_TIMEOUT_WARNING "Enable timeout warning. Note that the logging function should be enabled seperately" OFF)
 
 #---------------------------------------------------------------------------------------
+# Manage dependency via Conan
+#---------------------------------------------------------------------------------------
+# Download automatically
+if(NOT EXISTS "${CMAKE_BINARY_DIR}/conan.cmake")
+    message(STATUS "Downloading conan.cmake from https://github.com/conan-io/cmake-conan")
+    file(DOWNLOAD "https://github.com/conan-io/cmake-conan/raw/v0.15/conan.cmake"
+        "${CMAKE_BINARY_DIR}/conan.cmake")
+endif()
+include(${CMAKE_BINARY_DIR}/conan.cmake)
+
+conan_add_remote(
+    NAME salus-conan
+    URL https://api.bintray.com/conan/symbioticlab/salus-conan
+)
+conan_cmake_run(
+    REQUIRES
+        boost/1.72.0
+        zeromq/4.3.2
+        cppzmq/4.6.0
+        nlohmann_json/3.7.3@symbioticlab/stable
+        protobuf/3.4.1@symbioticlab/stable
+        gperftools/2.7@symbioticlab/stable
+        tensorflow-devel/1.5.1@symbioticlab/stable
+    OPTIONS
+        zeromq:shared=True
+        libsodium:shared=True
+    BASIC_SETUP
+)
+
+#---------------------------------------------------------------------------------------
 # Find packages
 #---------------------------------------------------------------------------------------
 # Protobuf
@@ -71,7 +101,7 @@ find_package(ZeroMQ REQUIRED)
 set_package_properties(ZeroMQ PROPERTIES TYPE REQUIRED PURPOSE "For communication")
 
 # Boost
-find_package(Boost 1.66 EXACT REQUIRED COMPONENTS
+find_package(Boost 1.66 REQUIRED COMPONENTS
     thread
 )
 set_package_properties(Boost PROPERTIES TYPE REQUIRED PURPOSE "For lock free queue and some utilities")

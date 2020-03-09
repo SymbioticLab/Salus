@@ -2,41 +2,48 @@
 ARG APP_ENV=dev
 ARG BUILD_TYPE=Debug
 
-FROM scratch as spackbc
-
 #-----------------------------------
 # Base image
 #-----------------------------------
-FROM registry.gitlab.com/salus/tensorflow-salus AS base-prod
+FROM nvidia/cuda:9.0-cudnn7-devel-ubuntu16.04 AS base
 
-# make gcc-7 and ld.gold the default
-RUN update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-5 10 \
-    && update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-7 20 \
+# hold gcc 5 which otherwise will be upgraded in ubuntu-toolchain-r/test
+# install gcc-7 and ld.gold and make them the default
+RUN DEBIAN_FRONTEND=noninteractive apt-get update \
+    && (echo 'debconf debconf/frontend select Noninteractive' | debconf-set-selections) \
+    && apt-get install -y --no-install-recommends software-properties-common gnupg-curl ca-certificates apt-transport-https \
+    && apt-mark hold g++-5 \
+    && apt-mark hold gcc-5 \
+    && add-apt-repository -y ppa:ubuntu-toolchain-r/test \
+    && apt-get update \
+    && apt-get install -y g++-9 gcc-9 \
+    && update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-5 10 \
+    && update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-9 20 \
     && update-alternatives --install /usr/bin/g++ g++ /usr/bin/g++-5 10 \
-    && update-alternatives --install /usr/bin/g++ g++ /usr/bin/g++-7 20 \
+    && update-alternatives --install /usr/bin/g++ g++ /usr/bin/g++-9 20 \
     && update-alternatives --install /usr/bin/cc cc /usr/bin/gcc 30 \
     && update-alternatives --set cc /usr/bin/gcc \
     && update-alternatives --install /usr/bin/c++ c++ /usr/bin/g++ 30 \
     && update-alternatives --set c++ /usr/bin/g++ \
     && update-alternatives --install /usr/bin/ld ld /usr/bin/ld.gold 20 \
-    && update-alternatives --install /usr/bin/ld ld /usr/bin/ld.bfd 10
+    && update-alternatives --install /usr/bin/ld ld /usr/bin/ld.bfd 10 \
+    && apt-get install -y cmake git python3-dev python3-pip python3-wheel rsync curl \
+    && rm -rf /var/lib/apt/lists/* \
+    && pip3 install --no-cache -U pip
 
-ENV SALUS_DEPS_DIR=/opt/salus-deps
+# Install python utilities
+RUN pip3 install --no-cache conan invoke
 
 #-----------------------------------
 # Additional build server for CLion in base
 #-----------------------------------
 
-FROM base-prod AS base-dev
+FROM base AS base-dev
 
 # Install ssh server and other development tools
 RUN DEBIAN_FRONTEND=noninteractive apt-get update \
     && (echo 'debconf debconf/frontend select Noninteractive' | debconf-set-selections) \
-    && apt-get install -y openssh-server
-
-RUN spack install gdb \
-    && spack view -d false -v add $SPACK_PACKAGES gdb \
-    && spack-pin gdb
+    && apt-get install -y openssh-server gdb
 
 # Config the sshd server, the root password is 'root'.
 # For development use ONLY, NEVER expose this to the Internet!!!

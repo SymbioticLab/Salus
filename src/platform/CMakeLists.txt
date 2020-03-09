@@ -25,6 +25,9 @@ target_link_libraries(platform
     protos_gen
     Threads::Threads
 )
+if(nlohmann_json_FOUND)
+    target_link_libraries(platform PRIVATE nlohmann_json::nlohmann_json)
+endif(nlohmann_json_FOUND)
 
 if(NOT WIN32)
     # POSIX
