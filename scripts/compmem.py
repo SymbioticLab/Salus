@@ -243,11 +243,15 @@ def plot_marker(df, cs, **kwargs):
     return ax
 
 
-def plot_mem(df, marker=False, offset=None, return_offset=False, **kwargs):
+def plot_mem(df, use_marker=False, marker=False, offset=None, return_offset=False, **kwargs):
     df, offset = normalize_time(df, offset)
 
     cumsum = calc_cumsum(df)
-    ax = plot_cs(cumsum, **kwargs)
+    if not use_marker:
+        ax = plot_cs(cumsum, marker='', **kwargs)
+    else:
+        ax = plot_cs(cumsum, **kwargs)
+
     if isinstance(marker, bool) and marker:
         ax = plot_marker(df, cumsum, ax=ax)
     pu.cleanup_axis_bytes(ax.yaxis)

@@ -144,7 +144,7 @@ def do_srtf3(path):
         #next(ax._get_lines.prop_cycler)
 
         # renormalize offset when plot
-        cm.plot_all(df, ax=ax, linewidth=1, markersize=3, markevery=0.2)
+        cm.plot_all(df, ax=ax, linewidth=1, marker='')
         ax.set_ylim(bottom=0)
 
         ax.xaxis.set_major_locator(pu.MaxNLocator(nbins=3))
@@ -270,6 +270,7 @@ def do_fair(path):
         fig, ax = plt.subplots()
 
         cm.plot_all(df, offset=offset_server, ax=ax,
+                    mem_kws={'use_marker': True},
                     markevery=0.05,
                     linestyle='-',
                     linewidth=.75)
@@ -309,8 +310,8 @@ def prepare_paper(logpath=path):
     logpath = Path(logpath)
 
     #do_srtf(Path('/opt/desktop'))
-    do_srtf2(logpath)
-    do_srtf3(logpath)
+    #do_srtf2(logpath)
+    #do_srtf3(logpath)
     do_fair(logpath)
 
     plt.close('all')

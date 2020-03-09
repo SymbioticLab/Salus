@@ -135,11 +135,10 @@ def prepare_paper(path='logs/nsdi19'):
         fig.set_size_inches(3.25, 1.5, forward=True)
 
         jcts = pd.DataFrame({'FIFO': fifo.JCT, 'SRTF': srtf.JCT, 'PACK': pack.JCT, 'FAIR': fair.JCT})
-        plot_jcts(jcts, ax=ax, markevery=0.1, markersize=4, linewidth=1)
-
+        plot_jcts(jcts, ax=ax, marker='', linewidth=1)
 
         fig.tight_layout()
-        fig.savefig('/tmp/workspace/card272-jct.pdf', dpi=300)
+        fig.savefig('/tmp/workspace/card272-jct.pdf', dpi=300, bbox_inches='tight', pad_inches=.015)
         plt.close()
 
     return fifo, srtf, srtf_refine, fair, pack

@@ -202,8 +202,8 @@ def do_singlemem(path):
 
     pu.matplotlib_fixes()
     with plt.style.context(['seaborn-paper', 'mypaper', 'line12']):
-        ax = mem.plot_cs(df.set_index('timestamp').act * 1024**2, linewidth=.5,
-                         markevery=200, color='k')
+        ax = mem.plot_cs(df.set_index('timestamp').act * 1024**2, linewidth=.8,
+                         marker='', color='k')
         ax.set_xlabel('Time (s)')
         ax.set_ylabel('PyTorch\nMemory Usage')
         pu.cleanup_axis_bytes(ax.yaxis, maxN=5)

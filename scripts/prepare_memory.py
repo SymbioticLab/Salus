@@ -117,7 +117,7 @@ def do_singlemem(path):
     with plt.style.context(['seaborn-paper', 'mypaper', 'line12']):
         # a single mem
         df = cm.load_mem(path/'exp1'/'alloc.output')
-        ax = cm.plot_mem(df, linewidth=.5, markevery=400, color='k')
+        ax = cm.plot_mem(df, linewidth=.8, color='k')
         pu.cleanup_axis_bytes(ax.yaxis, maxN=4)
         ax.set_xlabel('Time (s)')
         ax.set_ylabel('TensorFlow\nMemory Usage')

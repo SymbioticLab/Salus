@@ -155,7 +155,7 @@ def prepare_paper(path='logs/nsdi19'):
         fig, ax = plt.subplots()
         cycler = (mpl.cycler('color', ['ed7d31', '000000', '244185', '8cb5df'])
                 + mpl.cycler('linestyle', ['-', '-.', ':', '--'])
-                + mpl.cycler('marker', ['X', '*', '^', 'o'])
+                # + mpl.cycler('marker', ['X', '*', '^', 'o'])
                 + mpl.cycler('markersize', [4, 5, 3, 2.5]))
         ax.set_prop_cycle(cycler)
         plot_speeds(df, ax=ax,
@@ -166,7 +166,7 @@ def prepare_paper(path='logs/nsdi19'):
 
         fig.tight_layout()
         fig.set_size_inches(3.25, 1.5, forward=True)
-        fig.savefig('/tmp/workspace/card250.pdf', dpi=300, bbox_inches='tight')
+        fig.savefig('/tmp/workspace/card250.pdf', dpi=300, bbox_inches='tight', pad_inches=.015)
         plt.close()
 
 
