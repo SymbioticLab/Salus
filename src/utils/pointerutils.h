@@ -20,7 +20,6 @@
 #ifndef SALUS_SSTL_POINTERUTILS_H
 #define SALUS_SSTL_POINTERUTILS_H
 
-#include "platform/logging.h"
 #include "utils/macros.h"
 #include "utils/type_traits.h"
 
@@ -297,13 +296,13 @@ public:
     constexpr not_null(U &&u)
         : ptr_(std::forward<U>(u))
     {
-        DCHECK(ptr_ != nullptr);
+//        DCHECK(ptr_ != nullptr);
     }
 
     template <typename = std::enable_if_t<!std::is_same<std::nullptr_t, T>::value>>
     constexpr explicit not_null(T u) : ptr_(u)
     {
-        DCHECK(ptr_ != nullptr);
+//        DCHECK(ptr_ != nullptr);
     }
 
     template<typename U, typename = std::enable_if_t<std::is_convertible<U, T>::value>>
@@ -318,7 +317,7 @@ public:
 
     constexpr T get() const
     {
-        DCHECK(ptr_ != nullptr);
+//        DCHECK(ptr_ != nullptr);
         return ptr_;
     }
 

@@ -55,7 +55,7 @@ MultiPartMessage MultiPartMessage::clone()
     MultiPartMessage mpm;
     for (auto &m : m_parts) {
         mpm->emplace_back();
-        mpm->back().copy(&m);
+        mpm->back().copy(m);
     }
     return mpm;
 }

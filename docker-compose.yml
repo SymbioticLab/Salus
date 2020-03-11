@@ -1,0 +1,20 @@
+version: '3.7'
+services:
+  builder:
+    build:
+      context: ./docker
+      dockerfile: ci.Dockerfile
+      target: clion
+      cache_from:
+        - "salus-clion"
+    image: "salus-clion"
+    container_name: "salus-clion"
+    cap_add:
+      - SYS_PTRACE
+    ports:
+      - "127.0.0.1:32771:22"
+    volumes:
+      # - .:/repo
+      - roothome:/root
+volumes:
+  roothome:

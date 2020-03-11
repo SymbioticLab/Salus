@@ -72,7 +72,7 @@ void ForwardingAllocator::postAllocation(void *ptr, size_t alignment, size_t num
 {
     if (ptr) {
         LogAlloc() << "event: alloc "
-                   << nlohmann::json({
+                   << as_json({
                           {"ptr", reinterpret_cast<uint64_t>(ptr)},
                           {"size", num_bytes},
                           {"alignment", alignment},
@@ -84,7 +84,7 @@ void ForwardingAllocator::postAllocation(void *ptr, size_t alignment, size_t num
 void ForwardingAllocator::preDeallocation(void *ptr)
 {
     LogAlloc() << "event: dealloc "
-               << nlohmann::json({
+               << as_json({
                                      {"ptr", reinterpret_cast<uint64_t>(ptr)},
                                      {"size", RequestedSize(ptr)},
                                      {"allocator", Name()},

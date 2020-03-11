@@ -49,7 +49,7 @@ void SessionAllocator::postAllocation(void *ptr, size_t alignment, size_t num_by
     }
     UNUSED(maybeMemmap);
     LogAlloc() << "event: alloc "
-               << nlohmann::json({
+               << as_json({
                       {"ptr", reinterpret_cast<uint64_t>(ptr)},
                       {"sess", m_sessHandle},
                       {"size", num_bytes},
@@ -62,7 +62,7 @@ void SessionAllocator::postAllocation(void *ptr, size_t alignment, size_t num_by
 void SessionAllocator::preDeallocation(void *ptr)
 {
     LogAlloc() << "event: dealloc "
-               << nlohmann::json({
+               << as_json({
                       {"ptr", reinterpret_cast<uint64_t>(ptr)},
                       {"sess", m_sessHandle},
                       {"size", RequestedSize(ptr)},

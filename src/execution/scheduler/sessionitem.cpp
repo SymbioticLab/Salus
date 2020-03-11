@@ -19,6 +19,8 @@
 
 #include "sessionitem.h"
 
+#include "platform/logging.h"
+
 using namespace salus;
 
 SessionItem::~SessionItem()

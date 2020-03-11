@@ -20,8 +20,6 @@
 #ifndef SALUS_SSTL_OBJECTPOOL_H
 #define SALUS_SSTL_OBJECTPOOL_H
 
-#include "platform/logging.h"
-
 #include <concurrentqueue.h>
 
 #include <memory>
@@ -44,15 +42,11 @@ private:
         void operator()(T *ptr) noexcept
         {
             if (auto pool_ptr = m_pool.lock()) {
-                try {
-                    pool_ptr->add(std::unique_ptr<T>{ptr});
-                    return;
-                } catch (...) {
-                    LOG(ERROR) << "Error when adding back objecto to pool";
-                }
+                pool_ptr->add(std::unique_ptr<T>{ptr});
+            } else {
+                // object pool goes out of scope before the object
+                std::default_delete<T>{}(ptr);
             }
-            LOG(WARNING) << "Object pool goes out of scope before objects";
-            std::default_delete<T>{}(ptr);
         }
 
     private:

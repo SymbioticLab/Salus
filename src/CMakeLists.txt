@@ -30,20 +30,10 @@ set(SRC_LIST
     "rpcserver/rpcservercore.cpp"
     "rpcserver/zmqserver.cpp"
 
-    "utils/protoutils.cpp"
-    "utils/pointerutils.cpp"
-    "utils/stringutils.cpp"
-    "utils/threadutils.cpp"
-    "utils/envutils.cpp"
-    "utils/zmqutils.cpp"
-    "utils/containerutils.cpp"
-    "utils/cpp17.cpp"
-    "utils/debugging.cpp"
-    "utils/objectpool.cpp"
-
     "main.cpp"
 )
 
+add_subdirectory(utils)
 add_subdirectory(platform)
 
 if(USE_TENSORFLOW)
@@ -79,13 +69,13 @@ add_executable(salus-server-exec ${SRC_LIST})
 target_link_libraries(salus-server-exec
     protos_gen
     platform
+    utils
 
     protobuf::libprotobuf
-    ZeroMQ::zmq
+    CONAN_PKG::cppzmq
     Boost::boost
     Boost::thread
     docopt_s
-    moodycamel::concurrentqueue
 )
 
 if(USE_TENSORFLOW)

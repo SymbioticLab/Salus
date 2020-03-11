@@ -63,7 +63,7 @@ void ZmqServer::start(const std::string& address)
     m_sendThread = std::make_unique<std::thread>(std::bind(&ZmqServer::sendLoop, this));
 }
 
-bool ZmqServer::pollWithCheck(const std::vector<zmq::pollitem_t> &items, long timeout)
+bool ZmqServer::pollWithCheck(std::vector<zmq::pollitem_t> &items, long timeout)
 {
     try {
         zmq::poll(items, timeout);
@@ -156,14 +156,21 @@ void ZmqServer::proxyRecvLoop(const std::string &feAddr)
         // forward any send message
         if (needSendOut && canSendOut) {
             VLOG(2) << "Forwarding message out";
-            zmq::message_t msg;
+            zmq::message_t msg{};
             bool more = false;
             while (true) {
                 try {
-                    m_backend_sock.recv(&msg);
+                    const auto ret = m_backend_sock.recv(msg);
+                    if (!ret) {
+                        continue;
+                    }
                     VLOG(2) << "Forwarding message part: " << msg;
                     more = m_backend_sock.getsockopt<int64_t>(ZMQ_RCVMORE);
-                    m_frontend_sock.send(msg, more ? ZMQ_SNDMORE : 0);
+                    auto flags = zmq::send_flags::none;
+                    if (more) {
+                        flags = zmq::send_flags::sndmore;
+                    }
+                    m_frontend_sock.send(msg, flags);
                     if (!more)
                         break;
                 } catch (zmq::error_t &err) {
@@ -186,20 +193,24 @@ void ZmqServer::proxyRecvLoop(const std::string &feAddr)
 
 void ZmqServer::dispatch(zmq::socket_t &sock)
 {
-    MultiPartMessage identities;
-    zmq::message_t evenlop;
-    zmq::message_t body;
+    MultiPartMessage identities{};
+    zmq::message_t evenlop{};
+    zmq::message_t body{};
     try {
         VLOG(2) << "==============================================================";
         // First receive all identity frames added by ZMQ_ROUTER socket
         identities->emplace_back();
-        sock.recv(&identities->back());
+        while (!sock.recv(identities->back())) {
+            // EAGAIN
+        }
         VLOG(2) << "Received identity frame " << (identities->size() - 1) << ": " << identities->back();
         // Identity frames stop at an empty message
         // ZMQ_RCVMORE is a int64_t according to doc, not a bool
         while (identities->back().size() != 0 && sock.getsockopt<int64_t>(ZMQ_RCVMORE)) {
             identities->emplace_back();
-            sock.recv(&identities->back());
+            while (!sock.recv(identities->back())) {
+                // EAGAIN
+            }
             VLOG(2) << "Received identity frame " << (identities->size() - 1) << ": " << identities->back();
         }
         if (!sock.getsockopt<int64_t>(ZMQ_RCVMORE)) {
@@ -207,14 +218,18 @@ void ZmqServer::dispatch(zmq::socket_t &sock)
             return;
         }
         // Now receive our message
-        sock.recv(&evenlop);
+        while (!sock.recv(evenlop)) {
+            // EAGAIN
+        }
         VLOG(2) << "Received evenlop frame: " << evenlop;
         if (!sock.getsockopt<int64_t>(ZMQ_RCVMORE)) {
             LOG(ERROR) << "Skipped one iteration due to no body message part found after identity frames";
             return;
         }
         // NOTE: we only assume there's only one body part.
-        sock.recv(&body);
+        while (!sock.recv(body)) {
+            // EAGAIN
+        }
         VLOG(2) << "Received body frame: " << body;
     } catch (zmq::error_t &err) {
         LOG(ERROR) << "Skipped one iteration due to error while receiving: " << err;
@@ -300,7 +315,7 @@ void ZmqServer::sendLoop()
     VLOG(2) << "Sending loop started";
 
     while (m_keepRunning) {
-        SendItem item;
+        SendItem item{};
         if(!m_sendQueue.pop(item)) {
             std::this_thread::sleep_for(1ms);
             continue;
@@ -310,9 +325,13 @@ void ZmqServer::sendLoop()
         try {
             for (size_t i = 0; i != parts->size() - 1; ++i) {
                 auto &msg = parts->at(i);
-                sock.send(msg, ZMQ_SNDMORE);
+                while (!sock.send(msg, zmq::send_flags::sndmore)) {
+                    // EAGAIN
+                }
             }
-            sock.send(parts->back());
+            while (!sock.send(parts->back(), zmq::send_flags::none)) {
+                // EAGAIN
+            }
             VLOG(2) << "Response sent on internal socket";
         } catch (zmq::error_t &err) {
             LOG(ERROR) << "Sending error: " << err;

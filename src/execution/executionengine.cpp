@@ -293,7 +293,7 @@ int ExecutionEngine::scheduleOnQueue(LaneQueue &lctx, IterQueue &staging)
             if (lctx.lastSessionItem != sessItem.get()) {
                 lctx.lastSessionItem = sessItem.get();
                 LOG(INFO) << "event: fifo_select_sess "
-                          << nlohmann::json({
+                          << as_json({
                                                 {"sess", sessItem->sessHandle},
                                                 {"laneId", lctx.id},
                                             });
@@ -337,7 +337,7 @@ int ExecutionEngine::scheduleOnQueue(LaneQueue &lctx, IterQueue &staging)
             if (lctx.lastSessionItem != sessItem.get()) {
                 lctx.lastSessionItem = sessItem.get();
                 LOG(INFO) << "event: preempt_select_sess "
-                          << nlohmann::json({
+                          << as_json({
                                                 {"sess", sessItem->sessHandle},
                                                 {"totalRunningTime", sessItem->totalRunningTime},
                                                 {"usedRunningTime", sessItem->usedRunningTime.load()},
@@ -416,7 +416,7 @@ bool ExecutionEngine::runIter(IterationItem &iterItem, ExecutionContext &ectx, L
     VLOG(2) << "Try iteration " << ectx.m_item->sessHandle << ":" << iterItem.iter->graphId();
     if (!checkIter(iterItem, ectx, lctx)) {
         VLOG(2) << "event: skip_iter "
-                << nlohmann::json({{"sess", ectx.m_item->sessHandle},
+                << as_json({{"sess", ectx.m_item->sessHandle},
                                    {"graphId", iterItem.iter->graphId()},
                                    {"reason", "unavailable resources"}});
         return false;
@@ -425,7 +425,7 @@ bool ExecutionEngine::runIter(IterationItem &iterItem, ExecutionContext &ectx, L
     // FUTURE: support other devices
     if (!iterItem.iter->prepare()) {
         VLOG(2) << "event: skip_iter "
-                << nlohmann::json({{"sess", ectx.m_item->sessHandle},
+                << as_json({{"sess", ectx.m_item->sessHandle},
                                    {"graphId", iterItem.iter->graphId()},
                                    {"reason", "failed prepare"}});
         return false;
@@ -441,7 +441,7 @@ bool ExecutionEngine::runIter(IterationItem &iterItem, ExecutionContext &ectx, L
                                                            sessItem.usedRunningTime += usedTime;
                                                            ++sessItem.numFinishedIters;
                                                            if (VLOG_IS_ON(1)) {
-                                                               LogOpTracing() << "event: sess_add_time " << nlohmann::json({
+                                                               LogOpTracing() << "event: sess_add_time " << as_json({
                                                                    {"sess", sessItem.sessHandle},
                                                                    {"usedRunningTime", sessItem.usedRunningTime.load()},
                                                                    {"totalRunningTime", sessItem.totalRunningTime},

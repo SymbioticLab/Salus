@@ -99,7 +99,7 @@ private:
     /**
      * Poll on items with check
      */
-    bool pollWithCheck(const std::vector<zmq::pollitem_t> &items, long timeout);
+    bool pollWithCheck(std::vector<zmq::pollitem_t> &items, long timeout);
 
     /**
      * Read a whole message from m_frontend_sock, and dispatch using m_pLogic

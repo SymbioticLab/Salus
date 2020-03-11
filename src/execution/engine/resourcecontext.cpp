@@ -20,6 +20,7 @@
 #include "execution/engine/resourcecontext.h"
 
 #include "execution/engine/allocationlistener.h"
+#include "platform/logging.h"
 #include "utils/containerutils.h"
 #include "utils/threadutils.h"
 

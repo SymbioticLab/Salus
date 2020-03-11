@@ -171,7 +171,7 @@ void TFInstance::handleCreateSession(std::unique_ptr<tf::CreateSessionRequest> &
 
         auto &lane = lanes.at(0);
         LOG(INFO) << "event: lane_assigned "
-                       << nlohmann::json({
+                       << as_json({
                               {"sess", handle},
                               {"laneId", lane->id()},
                               {"laneSize", lane->totalMemory()},

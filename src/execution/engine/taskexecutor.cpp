@@ -28,6 +28,7 @@
 #include "execution/scheduler/operationitem.h"
 #include "utils/date.h"
 #include "platform/thread_annotations.h"
+#include "platform/logging.h"
 
 using std::chrono::duration_cast;
 using std::chrono::microseconds;

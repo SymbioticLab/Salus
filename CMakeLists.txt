@@ -24,8 +24,6 @@ include(cmake/BuildTypes.cmake)
 #---------------------------------------------------------------------------------------
 option(WITH_TENSORFLOW "Build TensorFlow operation library" ON)
 
-option(WITH_TESTS "Build test suite in default target" OFF)
-
 option(WITH_TCMALLOC "Build with tcmalloc" ON)
 
 option(WITH_TF_REFINER "Enable ShapeRefiner in TF oplibrary" OFF)
@@ -59,17 +57,19 @@ conan_add_remote(
 )
 conan_cmake_run(
     REQUIRES
-        boost/1.72.0
-        zeromq/4.3.2
-        cppzmq/4.6.0
-        nlohmann_json/3.7.3@symbioticlab/stable
+        nlohmann_json/3.7.3
+        boost/1.72.0@symbioticlab/stable
+        tensorflow-devel/1.5.1@symbioticlab/stable
+        zeromq/4.3.2@symbioticlab/stable
+        cppzmq/4.6.0@symbioticlab/stable
         protobuf/3.4.1@symbioticlab/stable
         gperftools/2.7@symbioticlab/stable
-        tensorflow-devel/1.5.1@symbioticlab/stable
     OPTIONS
         zeromq:shared=True
         libsodium:shared=True
     BASIC_SETUP
+        CMAKE_TARGETS # make conan create targets instead of messing around with global
+        BUILD missing
 )
 
 #---------------------------------------------------------------------------------------
@@ -96,10 +96,6 @@ else(WITH_TENSORFLOW)
 endif(WITH_TENSORFLOW)
 set_package_properties(TensorFlow PROPERTIES TYPE RECOMMENDED PURPOSE "For TensorFlow operation library")
 
-# ZeroMQ
-find_package(ZeroMQ REQUIRED)
-set_package_properties(ZeroMQ PROPERTIES TYPE REQUIRED PURPOSE "For communication")
-
 # Boost
 find_package(Boost 1.66 REQUIRED COMPONENTS
     thread
@@ -112,9 +108,6 @@ if(WITH_TCMALLOC)
     set_package_properties(Gperftools PROPERTIES TYPE REQUIRED PURPOSE "For gperftools cpu profiler and/or tcmalloc")
 endif(WITH_TCMALLOC)
 
-find_package(nlohmann_json)
-set_package_properties(nlohmann_json PROPERTIES TYPE OPTIONAL PURPOSE "For OpTracing logging")
-
 set(THREADS_PREFER_PTHREAD_FLAG)
 find_package(Threads)
 
@@ -124,7 +117,6 @@ add_subdirectory(thirdparty)
 # Print summary
 #---------------------------------------------------------------------------------------
 add_feature_info(WITH_TENSORFLOW USE_TENSORFLOW "build TensorFlow operation library")
-add_feature_info(WITH_TESTS WITH_TESTS "build test suite with default target")
 add_feature_info(WITH_TCMALLOC WITH_TCMALLOC "build with tcmalloc")
 add_feature_info(WITH_TF_REFINER WITH_TF_REFINER "enable ShapeRefiner in TF oplibrary")
 add_feature_info(WITH_PARALLEL_SCHED WITH_WITH_PARALLEL_SCHED "enable parallel processing in scheduler")
@@ -147,11 +139,6 @@ include(cmake/CheckCXXFeature.cmake)
 check_cxx_feature(cxx_enum_hash HAS_CXX_ENUM_HASH)
 check_cxx_feature(cxx_aligned_alloc HAS_CXX_ALIGNED_ALLOC)
 check_cxx_feature(cxx_builtin_expect HAS_CXX_BUILTIN_EXPECT)
-
-# Handle optional packages
-if(nlohmann_json_FOUND)
-    set(SALUS_ENABLE_JSON_LOG 1)
-endif()
 
 # Set feature macros
 if(WITH_TF_REFINER)
@@ -222,8 +209,3 @@ add_subdirectory(protos)
 
 add_subdirectory(src)
 
-if(WITH_TESTS)
-    add_subdirectory(tests)
-else()
-    add_subdirectory(tests EXCLUDE_FROM_ALL)
-endif()

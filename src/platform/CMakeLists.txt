@@ -23,11 +23,10 @@ target_link_libraries(platform
 
     PRIVATE
     protos_gen
+    utils
     Threads::Threads
 )
-if(nlohmann_json_FOUND)
-    target_link_libraries(platform PRIVATE nlohmann_json::nlohmann_json)
-endif(nlohmann_json_FOUND)
+target_link_libraries(platform PUBLIC CONAN_PKG::nlohmann_json)
 
 if(NOT WIN32)
     # POSIX

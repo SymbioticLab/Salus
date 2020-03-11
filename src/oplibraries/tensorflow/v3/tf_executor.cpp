@@ -486,7 +486,7 @@ Status ExecutorImpl::Initialize()
     struct ExecutorImplTag;
     if (sstl::fromEnvVarCached<ExecutorImplTag>("DumpGraph", false)) {
         LogOpTracing() << "event: new_graph "
-                       << nlohmann::json({
+                       << as_json({
                                              {"sess", params_.session},
                                              {"mainIter", is_main_iter},
                                              {"graphId", graph_id_},
@@ -1357,7 +1357,7 @@ void ExecutorState::runAsync(std::shared_ptr<IterationContext> &&ictx) noexcept
     ictx_->setGraphId(impl_->graph_id_);
 
     LogAlloc() << "event: start_iter "
-               << nlohmann::json({
+               << as_json({
                       {"sess", impl_->params_.session},
                       {"stepId", step_id_},
                       {"mainIter", impl_->is_main_iter},
@@ -1381,7 +1381,7 @@ void ExecutorState::runAsync(std::shared_ptr<IterationContext> &&ictx) noexcept
         DCHECK(n->in_edges().empty());
         if (vlog_) {
             LogOpTracing() << "event: queued "
-                           << nlohmann::json({
+                           << as_json({
                                                  {"name", n->name()},
                                                  {"type", n->type_string()},
                                                  {"session", impl_->params_.session},
@@ -1529,7 +1529,7 @@ void ExecutorState::Process(TaggedNode tagged_node, tf::int64)
             VLOG(2) << "Process node: " << id << " step " << params.step_id << " " << SummarizeNode(*node)
                     << " is dead: " << tagged_node.is_dead;
             LogOpTracing() << "event: running "
-                           << nlohmann::json({
+                           << as_json({
                                                  {"name", tagged_node.node->name()},
                                                  {"type", tagged_node.node->type_string()},
                                                  {"session", impl_->params_.session},
@@ -1938,7 +1938,7 @@ void ExecutorState::PropagateOutputs(const TaggedNode &tagged_node, const NodeIt
     if (vlog_) {
         for (const auto &n : *ready) {
             LogOpTracing() << "event: queued "
-                           << nlohmann::json({
+                           << as_json({
                                                  {"name", n.node->name()},
                                                  {"type", n.node->type_string()},
                                                  {"session", impl_->params_.session},
@@ -2004,7 +2004,7 @@ bool ExecutorState::NodeDone(const Status &s, const tf::Node *node, const Tagged
 
     if (vlog_) {
         LogOpTracing() << "event: done "
-                       << nlohmann::json({
+                       << as_json({
                                              {"name", node->name()},
                                              {"type", node->type_string()},
                                              {"session", impl_->params_.session},
@@ -2091,12 +2091,12 @@ void ExecutorState::Finish()
     }
 
     LogAlloc() << "event: end_iter "
-               << nlohmann::json({{"sess", impl_->params_.session},
-                                  {"graphId", impl_->graph_id_},
-                                  {"stepId", step_id_},
-                                  {"mainIter", impl_->is_main_iter},
-                                  {"device", impl_->params_.device->name()},
-//                                  {"memMap", TFInstance::instance().maybeDumpGPUMemoryMap(impl_->params_.device)},
+               << as_json({{"sess", impl_->params_.session},
+                           {"graphId", impl_->graph_id_},
+                           {"stepId", step_id_},
+                           {"mainIter", impl_->is_main_iter},
+                           {"device", impl_->params_.device->name()},
+//                         {"memMap", TFInstance::instance().maybeDumpGPUMemoryMap(impl_->params_.device)},
                });
     if (impl_->is_main_iter) {
         impl_->params_.ins->dropExlusiveMode();

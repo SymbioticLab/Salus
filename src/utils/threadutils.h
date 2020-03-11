@@ -20,7 +20,6 @@
 #ifndef SALUS_SSTL_THREADUTILS_H
 #define SALUS_SSTL_THREADUTILS_H
 
-#include "platform/logging.h"
 #include "utils/macros.h"
 
 #include <boost/iterator/indirect_iterator.hpp>
@@ -72,9 +71,10 @@ public:
 
     void unlock()
     {
-        auto was_own = g.owns_lock();
+//        auto was_own = g.owns_lock();
         g.unlock();
-        released = std::chrono::steady_clock::now();
+//        released = std::chrono::steady_clock::now();
+        /*
         // print time usage
         if (was_own) {
             using namespace std::chrono;
@@ -82,6 +82,7 @@ public:
                       << duration_cast<microseconds>(locked - prelock).count() << "us, locking "
                       << duration_cast<microseconds>(released - locked).count() << "us";
         }
+         */
     }
 
     ~TGuard()

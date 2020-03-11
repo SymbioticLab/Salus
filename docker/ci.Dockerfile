@@ -7,7 +7,7 @@ FROM nvidia/cuda:9.0-cudnn7-devel-ubuntu16.04 AS builder
 ENV CUDA_HOME=/usr/local/cuda
 
 # Hold gcc 5 which otherwise will be upgraded in ubuntu-toolchain-r/test
-# Install gcc-7 and ld.gold and make them the default
+# Install gcc-9 and ld.gold and make them the default
 RUN DEBIAN_FRONTEND=noninteractive apt-get update \
     && (echo 'debconf debconf/frontend select Noninteractive' | debconf-set-selections) \
     && apt-get install -y --no-install-recommends software-properties-common gnupg-curl ca-certificates apt-transport-https curl \
