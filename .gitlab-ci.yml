@@ -10,6 +10,7 @@ variables:
   DOCKER_DRIVER: overlay2
   IMAGE_TAG: $CI_REGISTRY_IMAGE:$CI_COMMIT_REF_SLUG
   LATEST_TAG: $CI_REGISTRY_IMAGE:latest
+  INVOKE_RUN_SHELL: "/bin/sh"
 
 image: python:3-alpine
 services:
