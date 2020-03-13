@@ -60,16 +60,18 @@ conan_cmake_run(
         nlohmann_json/3.7.3
         boost/1.72.0@symbioticlab/stable
         tensorflow-devel/1.5.1@symbioticlab/stable
-        zeromq/4.3.2@symbioticlab/stable
         cppzmq/4.6.0@symbioticlab/stable
         protobuf/3.4.1@symbioticlab/stable
         gperftools/2.7@symbioticlab/stable
     OPTIONS
         zeromq:shared=True
         libsodium:shared=True
+    IMPORTS
+        "lib, *.so* -> ./conanlibs"
     BASIC_SETUP
-        CMAKE_TARGETS # make conan create targets instead of messing around with global
-        BUILD missing
+    UPDATE
+    CMAKE_TARGETS # make conan create targets instead of messing around with global
+    BUILD missing
 )
 
 #---------------------------------------------------------------------------------------

@@ -1,0 +1,8 @@
+benchmarks
+build
+scripts
+tests
+docker/*.Dockerfile
+docker/Dockerfile
+*.pyc
+__pycache__

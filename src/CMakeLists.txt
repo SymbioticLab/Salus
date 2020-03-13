@@ -129,24 +129,21 @@ install(PROGRAMS ${CMAKE_CURRENT_BINARY_DIR}/salus-server
 #---------------------------------------------------------------------------------------
 # Installation
 #---------------------------------------------------------------------------------------
-#set_target_properties(salus-server-exec PROPERTIES
-#    INSTALL_RPATH "${SALUS_DEPS_PATH}/lib"
-#)
+set_target_properties(salus-server-exec PROPERTIES
+    INSTALL_RPATH "${CMAKE_INSTALL_PREFIX}/lib"
+)
 
 install(TARGETS salus-server-exec
     RUNTIME DESTINATION bin
 )
 
-
 # also install dependencies in spack-packages
-#if (DEFINED SALUS_DEPS_PATH)
-#    if (EXISTS ${SALUS_DEPS_PATH}/lib)
-#        install(DIRECTORY ${SALUS_DEPS_PATH}/lib/ DESTINATION DESTINATION lib
-#            USE_SOURCE_PERMISSIONS
-#            FILES_MATCHING
-#            PATTERN "*.so.*"
-#            PATTERN "*.so"
-#            PATTERN "pkgconfig" EXCLUDE
-#        )
-#    endif()
-#endif()
+if (EXISTS ${PROJECT_BINARY_DIR}/conanlibs)
+    install(DIRECTORY ${PROJECT_BINARY_DIR}/conanlibs/ DESTINATION DESTINATION lib
+        USE_SOURCE_PERMISSIONS
+        FILES_MATCHING
+        PATTERN "*.so.*"
+        PATTERN "*.so"
+        PATTERN "pkgconfig" EXCLUDE
+    )
+endif()

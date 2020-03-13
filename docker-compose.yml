@@ -3,7 +3,7 @@ services:
   builder:
     build:
       context: ./docker
-      dockerfile: ci.Dockerfile
+      dockerfile: Dockerfile
       target: clion
       cache_from:
         - "salus-clion"

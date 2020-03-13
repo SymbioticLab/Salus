@@ -11,29 +11,19 @@ variables:
   IMAGE_TAG: $CI_REGISTRY_IMAGE:$CI_COMMIT_REF_SLUG
   LATEST_TAG: $CI_REGISTRY_IMAGE:latest
 
-build:
-  image: docker:latest
-  stage: build
-  services:
-    - docker:dind
-  tags:
-    - gpu
-  script:
-    - docker login -u gitlab-ci-token -p $CI_JOB_TOKEN $CI_REGISTRY
-    - docker pull $IMAGE_TAG || docker pull $LATEST_TAG || true
-    - docker build --cache-from $IMAGE_TAG --cache-from $LATEST_TAG -t $IMAGE_TAG --build-arg APP_ENV=prod .
-    - docker push $IMAGE_TAG
+image: docker:latest
+services:
+  - docker:dind
 
-test-cuda-gpu:
-  stage: test
-  image: $IMAGE_TAG
-  tags:
-    - gpu
+build:
+  stage: build
   script:
-    - nvidia-smi
+    - chmod +x ci/build.sh
+    - ci/build.sh
 
 test-sanity:
   stage: test
+  # need nvidia runtime, which cannot be done in dind
   image: $IMAGE_TAG
   tags:
     - gpu
@@ -42,8 +32,6 @@ test-sanity:
 
 release:
   stage: release
-  services:
-    - docker:dind
   script:
     - docker login -u gitlab-ci-token -p $CI_JOB_TOKEN $CI_REGISTRY
     - docker pull $IMAGE_TAG
