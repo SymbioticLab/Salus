@@ -15,8 +15,34 @@ def dev(ctx):
     ctx.run('docker run -p 32771:22 --name salus-dev --rm salus-dev')
 
 
-@task
-def build(ctx):
-    ctx.run('docker build -t registry.gitlab.com/salus/salus:latest --build-arg APP_ENV=prod .',
-            env={'DOCKER_BUILDKIT': '1'})
+def docker_login(ctx, registry, token):
+    """Login to registry"""
+    ctx.run(f"docker login -u gitlab-ci-token -p {token} {registry}")
 
+
+@task
+def ci(ctx, registry, token, image_tag, latest_tag):
+    docker_login(ctx, registry, token)
+    ctx.run(f"docker pull {image_tag} || docker pull {latest_tag} || true")
+
+    build_cmd = [
+        "docker",
+        "build",
+        "-f", "docker/Dockerfile",
+        "--target", "prod",
+        "--cache-from", image_tag, "--cache-from", latest_tag,
+        "-t", image_tag,
+        ".",
+    ]
+    ctx.run(" ".join(build_cmd), env={"DOCKER_BUILDKIT": "1"})
+
+    ctx.run(f"docker push image_tag")
+
+
+@task
+def ci_release(ctx, registry, token, image_tag, latest_tag):
+    docker_login(ctx, registry, token)
+
+    ctx.run(f"docker pull {image_tag}")
+    ctx.run(f"docker tag {image_tag} {latest_tag}")
+    ctx.run(f"docker push {latest_tag}")

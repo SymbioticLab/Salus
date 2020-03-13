@@ -11,20 +11,26 @@ variables:
   IMAGE_TAG: $CI_REGISTRY_IMAGE:$CI_COMMIT_REF_SLUG
   LATEST_TAG: $CI_REGISTRY_IMAGE:latest
 
-image: docker:latest
+image: python:3-alpine
 services:
   - docker:dind
+
+default:
+  before_script:
+    - apk add docker
+    - pip install invoke
 
 build:
   stage: build
   script:
-    - chmod +x ci/build.sh
-    - ci/build.sh
+    - inv ci --token $CI_JOB_TOKEN --registry $CI_REGISTRY --image_tag $IMAGE_TAG --latest_tag $LATEST_TAG
 
 test-sanity:
   stage: test
   # need nvidia runtime, which cannot be done in dind
   image: $IMAGE_TAG
+  services: []
+  before_script: []
   tags:
     - gpu
   script:
@@ -33,9 +39,6 @@ test-sanity:
 release:
   stage: release
   script:
-    - docker login -u gitlab-ci-token -p $CI_JOB_TOKEN $CI_REGISTRY
-    - docker pull $IMAGE_TAG
-    - docker tag $IMAGE_TAG $LATEST_TAG
-    - docker push $LATEST_TAG
+    - inv ci-release --token $CI_JOB_TOKEN --registry $CI_REGISTRY --image_tag $IMAGE_TAG --latest_tag $LATEST_TAG
   only:
     - master
