@@ -23,7 +23,7 @@ default:
 build:
   stage: build
   script:
-    - inv ci --token $CI_JOB_TOKEN --registry $CI_REGISTRY --image_tag $IMAGE_TAG --latest_tag $LATEST_TAG
+    - inv ci --token $CI_JOB_TOKEN --registry $CI_REGISTRY --image-tag $IMAGE_TAG --latest-tag $LATEST_TAG
 
 test-sanity:
   stage: test
@@ -39,6 +39,6 @@ test-sanity:
 release:
   stage: release
   script:
-    - inv ci-release --token $CI_JOB_TOKEN --registry $CI_REGISTRY --image_tag $IMAGE_TAG --latest_tag $LATEST_TAG
+    - inv ci-release --token $CI_JOB_TOKEN --registry $CI_REGISTRY --image-tag $IMAGE_TAG --latest-tag $LATEST_TAG
   only:
     - master
